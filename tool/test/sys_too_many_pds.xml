@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+  <protection_domain name="test00"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test01"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test02"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test03"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test04"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test05"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test06"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test07"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test08"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test09"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test10"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test11"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test12"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test13"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test14"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test15"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test16"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test17"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test18"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test19"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test20"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test21"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test22"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test23"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test24"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test25"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test26"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test27"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test28"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test29"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test30"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test31"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test32"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test33"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test34"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test35"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test36"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test37"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test38"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test39"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test40"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test41"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test42"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test43"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test44"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test45"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test46"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test47"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test48"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test49"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test50"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test51"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test52"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test53"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test54"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test55"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test56"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test57"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test58"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test59"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test60"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test61"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test62"><program_image path="foo" /></protection_domain>
+  <protection_domain name="test63"><program_image path="foo" /></protection_domain>
+</system>

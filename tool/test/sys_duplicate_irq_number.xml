@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="test1">
+        <program_image path="test" />
+        <irq irq="112" id="3" />
+    </protection_domain>
+    <protection_domain name="test2">
+        <program_image path="test" />
+        <irq irq="112" id="3" />
+    </protection_domain>
+</system>

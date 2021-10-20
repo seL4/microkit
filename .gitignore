@@ -1,0 +1,7 @@
+__pycache__
+*-sdk-*/
+build/
+env/
+release/
+tmp_build/
+

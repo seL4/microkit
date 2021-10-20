@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="eth_outer_output" size="0x200_000" page_size="0x200_000" page_count="123" />
+    <protection_domain name="test"><program_image path="test" /></protection_domain>
+</system>

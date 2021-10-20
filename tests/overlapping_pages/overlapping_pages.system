@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+
+    <memory_region name="large0" size="0x200_000" page_size="0x200_000" />
+    <memory_region name="small0" size="0x1_000" page_size="0x1_000" />
+
+    <protection_domain name="simplemrs" priority="250">
+        <program_image path="tests/overlapping_pages/overlapping_pages.elf" />
+
+        <map mr="large0" vaddr="0x400000" perms="rw" cached="true" setvar_vaddr="p"/>
+        <map mr="small0" vaddr="0x500000" perms="rw" cached="true" setvar_vaddr="q"/>
+
+    </protection_domain>
+</system>
