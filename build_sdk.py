@@ -14,12 +14,15 @@ from os import popen, system
 from shutil import copy
 from pathlib import Path
 from dataclasses import dataclass
+from sys import executable
 from tarfile import open as tar_open, TarInfo
 
 from typing import Dict, Union
 
 NAME = "sel4cp"
 VERSION = "1.2.6"
+
+ENV_BIN_DIR = Path(executable).parent
 
 SEL4CP_EPOCH = 1616367257
 
@@ -99,13 +102,16 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
 
 def test_tool() -> None:
     r = system(
-        "./env/bin/python -m unittest discover -s tool -v"
+        f"{executable} -m unittest discover -s tool -v"
     )
     assert r == 0
 
 def build_tool(tool_target: Path) -> None:
+    pyoxidizer = ENV_BIN_DIR / "pyoxidizer"
+    if not pyoxidizer.exists():
+        raise Exception("pyoxidizer does not appear to be installed in your Python environment")
     r = system(
-        "./env/bin/pyoxidizer build --release --path tool --target-triple x86_64-unknown-linux-musl"
+        f"{pyoxidizer} build --release --path tool --target-triple x86_64-unknown-linux-musl"
     )
     assert r == 0
 

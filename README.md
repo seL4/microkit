@@ -15,6 +15,7 @@ This repository is the source for the sel4cp SDK.
 If you are *developing* sel4cp itself this is the repo you want!
 
 If you are a system designer and want to *use* the sel4cp SDK please download a pre-built SDK.
+Please see the manual in the SDK for instructions on using the SDK itself.
 
 The remainder of this README is for sel4cp developers.
 
@@ -44,7 +45,7 @@ To use this:
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
 
-    $ python3.8 -m venv pyenv
+    $ python3.9 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
