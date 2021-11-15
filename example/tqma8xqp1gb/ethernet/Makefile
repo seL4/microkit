@@ -7,6 +7,18 @@ ifeq ($(strip $(BUILD_DIR)),)
 $(error BUILD_DIR must be specified)
 endif
 
+ifeq ($(strip $(SEL4CP_SDK)),)
+$(error SEL4CP_SDK must be specified)
+endif
+
+ifeq ($(strip $(SEL4CP_BOARD)),)
+$(error SEL4CP_BOARD must be specified)
+endif
+
+ifeq ($(strip $(SEL4CP_CONFIG)),)
+$(error SEL4CP_CONFIG must be specified)
+endif
+
 TOOLCHAIN := aarch64-none-elf
 
 CPU := cortex-a35
