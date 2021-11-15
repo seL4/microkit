@@ -2,6 +2,7 @@ __pycache__
 *-sdk-*/
 build/
 env/
+pyenv/
 release/
 tmp_build/
 
