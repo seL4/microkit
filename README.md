@@ -82,6 +82,27 @@ Testing has been performed using commit `c8ef493d038b81cc43f82c0190788e4b3bdb4d9
 
     $ ./env/bin/python build_sdk.py --sel4=<path to sel4>
 
+## Using the SDK
+
+After building the SDK you probably want to build a system!
+Please see the SDK user manual for documentation on the SDK itself.
+
+When developing the SDK it is helpful to be able to build examples system quickly for testing purposes.
+The `dev_build.py` script can be used for this purpose.
+This script is not included in the SDK and is just meant for use of use of sel4cp developers.
+
+By default `dev_build.py` will use the example source directly from the source directory.
+In some cases you may want to test that the example source has been correctly included into the SDK.
+To test this pass `--example-from-sdk` to the build script.
+
+By default `dev_build.py` will use the the sel4cp tool directory from source (in `tool/sel4coreplat`).
+However, in some cases it is desirable to test the sel4cp tool built into the SDK.
+In this case pass `--tool-from-sdk` to use the tool that is built into the SDK.
+
+Finally, by default the `dev_build.py` script relies on the default Makefile dependecy resolution.
+However, in some cases it is useful to force a rebuild while doing SDK development.
+For example, the `Makefile` can't know about the state of the sel4cp tool source code.
+To support this a `--rebuild` option is provided.
 
 ## SDK Layout
 
