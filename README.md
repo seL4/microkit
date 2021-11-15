@@ -15,6 +15,7 @@ This repository is the source for the sel4cp SDK.
 If you are *developing* sel4cp itself this is the repo you want!
 
 If you are a system designer and want to *use* the sel4cp SDK please download a pre-built SDK.
+Please see the manual in the SDK for instructions on using the SDK itself.
 
 The remainder of this README is for sel4cp developers.
 
