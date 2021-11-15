@@ -44,7 +44,7 @@ To use this:
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
 
-    $ python3.8 -m venv pyenv
+    $ python3.9 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
