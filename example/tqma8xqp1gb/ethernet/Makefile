@@ -39,8 +39,10 @@ CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g3 -O3 -Wall  -W
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lsel4cp -Tsel4cp.ld
 
+IMAGE_FILE = $(BUILD_DIR)/loader.img
+REPORT_FILE = $(BUILD_DIR)/report.txt
 
-all: $(BUILD_DIR)/loader.img
+all: $(IMAGE_FILE)
 
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -57,5 +59,5 @@ $(BUILD_DIR)/pass.elf: $(addprefix $(BUILD_DIR)/, $(PASS_OBJS))
 $(BUILD_DIR)/gpt.elf: $(addprefix $(BUILD_DIR)/, $(GPT_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/loader.img: $(addprefix $(BUILD_DIR)/, $(IMAGES)) ethernet.system
-	$(SEL4CP_TOOL) ethernet.system --search-path $(BUILD_DIR) --board $(SEL4CP_BOARD) --config $(SEL4CP_CONFIG) -o $@
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) ethernet.system
+	$(SEL4CP_TOOL) ethernet.system --search-path $(BUILD_DIR) --board $(SEL4CP_BOARD) --config $(SEL4CP_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
