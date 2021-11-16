@@ -7,3 +7,5 @@ pyoxidizer==0.17.0
 mypy==0.910
 black==21.7b0
 flake8==3.9.2
+ply==3.11
+Jinja2==3.0.3

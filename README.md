@@ -76,7 +76,7 @@ Please clone seL4 from:
 
 The correct branch to use is `sel4cp-core-support`.
 
-Testing has been performed using commit `c8ef493d038b81cc43f82c0190788e4b3bdb4d9d`.
+Testing has been performed using commit `92f0f3ab28f00c97851512216c855f4180534a60`.
 
 ## Building the SDK
 
