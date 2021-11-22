@@ -114,6 +114,12 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
+#elif defined(BOARD_zcu102)
+static void
+putc(uint8_t ch)
+{
+    *((volatile uint32_t *)(0x00FF000030)) = ch;
+}
 #else
 #error Board not defined
 #endif

@@ -58,7 +58,22 @@ SUPPORTED_BOARDS = (
         examples = {
             "ethernet": Path("example/tqma8xqp1gb/ethernet")
         }
-),)
+    ),
+    BoardInfo(
+        name="zcu102",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options = {
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "zcu102",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {
+            "hello": Path("example/zcu102/hello")
+        }
+    )
+)
 
 SUPPORTED_CONFIGS = (
     ConfigInfo(
