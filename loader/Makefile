@@ -11,12 +11,22 @@ ifeq ($(strip $(GCC_CPU)),)
 $(error GCC_CPU must be specified)
 endif
 
+ifeq ($(strip $(BOARD)),)
+$(error BOARD must be specified)
+endif
+
+ifeq ($(strip $(LINK_ADDRESS)),)
+$(error LINK_ADDRESS must be specified)
+endif
+
+
 TOOLCHAIN := aarch64-none-elf-
-CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Werror
+CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o util64.o
-LINKSCRIPT := loader.ld
+LINKSCRIPT_INPUT := loader.ld
+LINKSCRIPT := $(BUILD_DIR)/link.ld
 
 $(BUILD_DIR)/%.o : src/%.S
 	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g3  -mcpu=$(GCC_CPU)  $< -o $@
@@ -31,5 +41,8 @@ OBJPROG = $(addprefix $(BUILD_DIR)/, $(PROGS))
 
 all: $(OBJPROG)
 
-$(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS))
-	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $^ -o $@
+$(LINKSCRIPT): $(LINKSCRIPT_INPUT)
+	$(TOOLCHAIN)cpp -DLINK_ADDRESS=$(LINK_ADDRESS) $< | grep -v "^#" > $@
+
+$(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS)) $(LINKSCRIPT)
+	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $(addprefix $(BUILD_DIR)/, $(OBJECTS)) -o $@
