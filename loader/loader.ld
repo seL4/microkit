@@ -5,15 +5,11 @@
  */
 PHDRS
 {
-/*    all PT_LOAD AT (0x51fa0000) ; */
-/*     all PT_LOAD AT (0x80000) ; */
     all PT_LOAD AT (0x80280000);
 }
 
 SECTIONS
 {
-/*   . = 0x51fa0000; */
-/*    . = 0x80000; */
     . = 0x80280000;
 
     .text :
