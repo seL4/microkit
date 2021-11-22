@@ -129,7 +129,7 @@ class DisjointMemoryRegion:
             if base >= region.base and end <= region.end:
                 break
         else:
-            raise Exception("Attempting to remove region that is not currently covered")
+            raise ValueError(f"Attempting to remove region (0x{base:x}-0x{end:x}) that is not currently covered")
 
         if region.base == base and region.end == end:
             # Covers exactly, so just remove
