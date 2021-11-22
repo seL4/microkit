@@ -5,12 +5,12 @@
  */
 PHDRS
 {
-    all PT_LOAD AT (0x80280000);
+    all PT_LOAD AT (LINK_ADDRESS);
 }
 
 SECTIONS
 {
-    . = 0x80280000;
+    . = LINK_ADDRESS;
 
     .text :
     {

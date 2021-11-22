@@ -107,12 +107,16 @@ memcpy(void *dst, const void *src, size_t sz)
     }
 }
 
+#if defined(BOARD_tqma8xqp1gb)
 static void
 putc(uint8_t ch)
 {
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
+#else
+#error Board not defined
+#endif
 
 static void
 puts(const char *s)
