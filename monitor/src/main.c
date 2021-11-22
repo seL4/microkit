@@ -191,7 +191,7 @@ check_untypeds_match(seL4_BootInfo *bi)
 {
     /* Check that untypeds list generate from build matches the kernel */
     if (untyped_info.cap_start != bi->untyped.start) {
-        puts("ERROR: cap start mismatch. Expected cap start: ");
+        puts("MON|ERROR: cap start mismatch. Expected cap start: ");
         puthex32(untyped_info.cap_start);
         puts("  boot info cap start: ");
         puthex32(bi->untyped.start);
@@ -200,7 +200,7 @@ check_untypeds_match(seL4_BootInfo *bi)
     }
 
     if (untyped_info.cap_end != bi->untyped.end) {
-        puts("ERROR: cap end mismatch. Expected cap end: ");
+        puts("MON|ERROR: cap end mismatch. Expected cap end: ");
         puthex32(untyped_info.cap_end);
         puts("  boot info cap end: ");
         puthex32(bi->untyped.end);
@@ -210,7 +210,7 @@ check_untypeds_match(seL4_BootInfo *bi)
 
     for (unsigned i = 0; i < untyped_info.cap_end - untyped_info.cap_start; i++) {
         if (untyped_info.regions[i].paddr != bi->untypedList[i].paddr) {
-            puts("ERROR: paddr mismatch for untyped region: ");
+            puts("MON|ERROR: paddr mismatch for untyped region: ");
             puthex32(i);
             puts("  expected paddr: ");
             puthex64(untyped_info.regions[i].paddr);
@@ -227,7 +227,7 @@ check_untypeds_match(seL4_BootInfo *bi)
         }
     }
 
-    puts("INFO: untyped matches\n");
+    puts("MON|INFO: bootinfo untyped list matches expected list\n");
 }
 
 static unsigned
@@ -521,7 +521,7 @@ void
 main(seL4_BootInfo *bi)
 {
     __sel4_ipc_buffer = bi->ipcBuffer;
-    puts("seL4 Core Platform Bootstrap\n");
+    puts("MON|INFO: seL4 Core Platform Bootstrap\n");
 
 #if 1
     dump_bootinfo(bi);
@@ -529,11 +529,11 @@ main(seL4_BootInfo *bi)
 
     check_untypeds_match(bi);
 
-    puts("INFO: Number of bootstrap invocations: ");
+    puts("MON|INFO: Number of bootstrap invocations: ");
     puthex32(bootstrap_invocation_count);
     puts("\n");
 
-    puts("INFO: Number of system invocations:    ");
+    puts("MON|INFO: Number of system invocations:    ");
     puthex32(system_invocation_count);
     puts("\n");
 #if 0
@@ -554,14 +554,14 @@ main(seL4_BootInfo *bi)
     for (unsigned idx = 0; idx < bootstrap_invocation_count; idx++) {
         offset = perform_invocation(bootstrap_invocation_data, offset, idx);
     }
-    puts("INFO: completed bootstrap invocations\n");
+    puts("MON|INFO: completed bootstrap invocations\n");
 
     offset = 0;
     for (unsigned idx = 0; idx < system_invocation_count; idx++) {
         offset = perform_invocation(system_invocation_data, offset, idx);
     }
 
-    puts("INFO: completed system invocations\n");
+    puts("MON|INFO: completed system invocations\n");
 
     monitor();
 }
