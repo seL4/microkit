@@ -12,11 +12,6 @@ from sys import executable
 CWD = Path.cwd()
 BUILD_DIR = CWD / "tmp_build"
 
-# TODO: We don't have many examples currently, so these
-# are hardcoded, in future when doing development it will
-# be useful to allow these to be supplied on the command line
-sel4cp_board = "tqma8xqp1gb"
-example = "ethernet"
 sel4cp_config = "debug"
 
 
@@ -60,6 +55,14 @@ def main():
         default=False,
         help="Build the using the tool from the SDK rather than directly from the Python source",
     )
+    parser.add_argument(
+        "--board",
+        help="Target board"
+    )
+    parser.add_argument(
+        "--example",
+        help="Example to build"
+    )
     args = parser.parse_args()
 
     # TODO: Support choosing a release by specifying on command line
@@ -74,15 +77,15 @@ def main():
 
     make_env = environ.copy()
     make_env["BUILD_DIR"] = str(BUILD_DIR.absolute())
-    make_env["SEL4CP_BOARD"] = sel4cp_board
+    make_env["SEL4CP_BOARD"] = args.board
     make_env["SEL4CP_CONFIG"] = sel4cp_config
     make_env["SEL4CP_SDK"] = str(release)
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
-        f"{release}/board/{sel4cp_board}/example/{example}"
+        f"{release}/board/{args.board}/example/{args.example}"
         if args.example_from_sdk
-        else f"{CWD.absolute()}/example/{sel4cp_board}/{example}"
+        else f"{CWD.absolute()}/example/{args.board}/{args.example}"
     )
 
     if not args.tool_from_sdk:
