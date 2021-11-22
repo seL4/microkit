@@ -78,6 +78,7 @@ typedef void (*sel4_entry)(
 );
 
 void switch_to_el1(void);
+void switch_to_el2(void);
 void el1_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
@@ -329,9 +330,16 @@ ensure_correct_el(void)
     puts(el_to_string(el));
     puts("\n");
 
-    if (el == EL0 || el == EL3) {
-        puts("ERROR: Unsupported initial exception level\n");
+    if (el == EL0) {
+        puts("LDR|ERROR: Unsupported initial exception level\n");
         return 1;
+    }
+
+    if (el == EL3) {
+        puts("LDR|INFO: Dropping from EL3 to EL2(NS)\n");
+        switch_to_el2();
+        puts("LDR|INFO: Dropped from EL3 to EL2(NS)\n");
+        el = EL2;
     }
 
     if (loader_data->flags & FLAG_SEL4_HYP) {

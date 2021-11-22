@@ -15,6 +15,11 @@
 #define PSR_MODE_EL2h     0x00000009
 #define PSR_MODE_SVC_32   0x00000013
 
+#define SCR_RW_BIT        0x00000400
+#define SCR_SMD_BIT       0x00000080
+#define SCR_RES_BITS      0x00000030
+#define SCR_NS_BIT        0x00000001
+
 #define MT_DEVICE_nGnRnE  0
 #define MT_DEVICE_nGnRE   1
 #define MT_DEVICE_GRE     2
@@ -234,6 +239,31 @@ BEGIN_FUNC(switch_to_el1)
     msr     elr_el2, x30
     eret
 END_FUNC(switch_to_el1)
+
+
+BEGIN_FUNC(switch_to_el2)
+    /*
+     * RW => run as AArch64
+     * SMD => disable secure monitor calls
+     * RES => reserved set as 1
+     * NS => run as non-secure
+     */
+    mov    x9, #(SCR_RW_BIT | SCR_SMD_BIT | SCR_RES_BITS | SCR_NS_BIT)
+    msr    scr_el3, x9
+
+    /* Set SPSR for EL3
+     */
+    mov     x9, #(PSR_MODE_EL2h)
+    msr     spsr_el3, x9
+
+    /* Reuse the stack */
+    mov     x10, sp
+    msr     sp_el2, x10
+
+    /* set ELR so RET returns to caller */
+    msr     elr_el3, x30
+    eret
+END_FUNC(switch_to_el2)
 
 
 BEGIN_FUNC(el1_mmu_enable)
