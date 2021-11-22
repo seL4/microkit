@@ -82,7 +82,7 @@ class Loader:
         self._elf = ElfFile.from_path(loader_elf_path)
         sz = self._elf.word_size
 
-        self._header_struct_fmt = "<IIIIIIIIII" if sz == 32 else "<QQQQqQQQQQ"
+        self._header_struct_fmt = "<IIIIIiIIII" if sz == 32 else "<QQQQQqQQQQ"
         self._region_struct_fmt = "<IIII" if sz == 32 else "<QQQQ"
         self._magic = 0x5e14dead if sz== 32 else 0x5e14dead14de5ead
 
