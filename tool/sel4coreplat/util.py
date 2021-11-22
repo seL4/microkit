@@ -129,7 +129,7 @@ class DisjointMemoryRegion:
             if base >= region.base and end <= region.end:
                 break
         else:
-            raise Exception("Attempting to remove region that is not currently covered")
+            raise ValueError(f"Attempting to remove region (0x{base:x}-0x{end:x}) that is not currently covered")
 
         if region.base == base and region.end == end:
             # Covers exactly, so just remove
@@ -152,3 +152,22 @@ class DisjointMemoryRegion:
         for region in self._regions:
             r += region.aligned_power_of_two_regions()
         return r
+
+    def allocate(self, size: int) -> int:
+        """Allocate region of 'size' bytes, returning the base address.
+
+        The allocated region is removed from the disjoint memory region."""
+
+        # Allocation policy is simple first fit.
+        # Possibly a 'best fit' policy would be better.
+        # 'best' may be something that best matches a power-of-two
+        # allocation
+        for region in self._regions:
+            if size <= region.size:
+                break
+        else:
+            raise ValueError(f"Unable to allocate {size} bytes.")
+
+        self.remove_region(region.base, region.base + size)
+
+        return region.base

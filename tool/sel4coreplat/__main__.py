@@ -69,6 +69,7 @@ from sel4coreplat.sel4 import (
     Sel4IrqHandlerSetNotification,
     Sel4SchedControlConfigureFlags,
     emulate_kernel_boot,
+    emulate_kernel_boot_partial,
     UntypedObject,
     KernelConfig,
     KernelBootInfo,
@@ -276,8 +277,6 @@ def phys_mem_regions_from_elf(elf: ElfFile, alignment: int) -> List[MemoryRegion
 
     The returned region shall be extended (if necessary) so that the start
     and end are congruent with the specified alignment (usually a page size).
-
-    Note: Only supports ELF files with a single segment.
     """
     assert alignment > 0
     return [
@@ -298,6 +297,34 @@ def phys_mem_region_from_elf(elf: ElfFile, alignment: int) -> MemoryRegion:
     assert alignment > 0
     assert len(elf.segments) == 1
     return phys_mem_regions_from_elf(elf, alignment)[0]
+
+
+def virt_mem_regions_from_elf(elf: ElfFile, alignment: int) -> List[MemoryRegion]:
+    """Determine the virtual memory regions for an ELF file with a given
+    alignment.
+
+    The returned region shall be extended (if necessary) so that the start
+    and end are congruent with the specified alignment (usually a page size).
+    """
+    assert alignment > 0
+    return [
+        MemoryRegion(
+            round_down(segment.virt_addr, alignment),
+            round_up(segment.virt_addr + len(segment.data), alignment)
+        )
+        for segment in elf.segments
+    ]
+
+
+def virt_mem_region_from_elf(elf: ElfFile, alignment: int) -> MemoryRegion:
+    """Determine a single virtual memory region for an ELF.
+
+    Works as per virt_mem_regions_from_elf, but checks the ELF has a single
+    segment, and returns the region covering the first segment.
+    """
+    assert alignment > 0
+    assert len(elf.segments) == 1
+    return virt_mem_regions_from_elf(elf, alignment)[0]
 
 
 class PageOverlap(Exception):
@@ -533,6 +560,16 @@ class InitSystem:
         return kernel_objects
 
 
+@dataclass(frozen=True)
+class Region:
+    name: str
+    addr: int
+    data: bytearray
+
+    def __repr__(self):
+        return f"<Region name={self.name} addr=0x{self.addr:x} size={len(self.data)}>"
+
+
 @dataclass
 class BuiltSystem:
     number_of_system_caps: int
@@ -545,8 +582,10 @@ class BuiltSystem:
     reply_cap_address: int
     cap_lookup: Dict[int, str]
     tcb_caps: List[int]
-    regions: List[Tuple[int, bytearray]]
+    regions: List[Region]
     kernel_objects: List[KernelObject]
+    initial_task_virt_region: MemoryRegion
+    initial_task_phys_region: MemoryRegion
 
 
 def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
@@ -587,7 +626,7 @@ def build_system(
     # Emulate kernel boot
 
     ## Determine physical memory region used by the monitor
-    initial_task_region = phys_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size)
+    initial_task_size = phys_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size).size
 
     ## Get the elf files for each pd:
     pd_elf_files = {
@@ -597,17 +636,36 @@ def build_system(
     ### Here we should validate that ELF files
 
     ## Determine physical memory region for 'reserved' memory.
+    #
+    # The 'reserved' memory region will not be touched by seL4 during boot
+    # and allows the monitor (initial task) to create memory regions
+    # from this area, which can then be made available to the appropriate
+    # protection domains
     pd_elf_size = sum([
         sum([r.size for r in phys_mem_regions_from_elf(elf, kernel_config.minimum_page_size)])
         for elf in pd_elf_files.values()
     ])
     reserved_size = invocation_table_size + pd_elf_size
 
-    # FIXME: This should actually be an allocation, but right now it is hard coded
-    reserved_base = 0x0000_0000_8140_0000
+    # Now that the size is determine, find a free region in the physical memory
+    # space.
+    available_memory = emulate_kernel_boot_partial(
+        kernel_config,
+        kernel_elf,
+    )
+
+    reserved_base = available_memory.allocate(reserved_size)
+    initial_task_phys_base = available_memory.allocate(initial_task_size)
+    # The kernel relies on this ordering. The previous allocation functions do *NOT* enforce
+    # this though, should fix that.
+    assert reserved_base < initial_task_phys_base
+
+    initial_task_phys_region = MemoryRegion(initial_task_phys_base, initial_task_phys_base + initial_task_size)
+    initial_task_virt_region = virt_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size)
+
     reserved_region = MemoryRegion(reserved_base, reserved_base + reserved_size)
 
-    # Now that the reserved region has been allocated we can determine the specifi
+    # Now that the reserved region has been allocated we can determine the specific
     # region of physical memory required for the inovcation table itself, and
     # all the ELF segments
     invocation_table_region = MemoryRegion(reserved_base, reserved_base + invocation_table_size)
@@ -654,7 +712,8 @@ def build_system(
     kernel_boot_info = emulate_kernel_boot(
         kernel_config,
         kernel_elf,
-        initial_task_region,
+        initial_task_phys_region,
+        initial_task_virt_region,
         reserved_region
     )
 
@@ -900,7 +959,7 @@ def build_system(
 
     phys_addr_next = reserved_base + invocation_table_size
     # Now we create additional MRs (and mappings) for the ELF files.
-    regions: List[Tuple[int, bytearray]] = []
+    regions: List[Region] = []
     extra_mrs = []
     pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in system.protection_domains}
     for pd in system.protection_domains:
@@ -909,7 +968,7 @@ def build_system(
             if not segment.loadable:
                 continue
 
-            regions.append((phys_addr_next, segment.data))
+            regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", phys_addr_next, segment.data))
 
             perms = ""
             if segment.is_readable:
@@ -1436,7 +1495,9 @@ def build_system(
         cap_lookup = cap_address_names,
         tcb_caps = tcb_caps,
         regions = regions,
-        kernel_objects = init_system._objects
+        kernel_objects = init_system._objects,
+        initial_task_phys_region = initial_task_phys_region,
+        initial_task_virt_region = initial_task_virt_region,
     )
 
 
@@ -1598,7 +1659,7 @@ def main() -> int:
         system_invocation_data += system_invocation._get_raw_invocation()
 
     regions: List[Tuple[int, Union[bytes, bytearray]]] = [(built_system.reserved_region.base, system_invocation_data)]
-    regions += built_system.regions
+    regions += [(r.addr, r.data) for r in built_system.regions]
 
     tcb_caps = built_system.tcb_caps
     monitor_elf.write_symbol("fault_ep", pack("<Q", built_system.fault_ep_cap_address))
@@ -1625,6 +1686,14 @@ def main() -> int:
         f.write(f"    # of page table caps: {built_system.kernel_boot_info.paging_cap_count:8,d}\n")
         f.write(f"    # of page caps      : {built_system.kernel_boot_info.page_cap_count:8,d}\n")
         f.write(f"    # of untyped objects: {len(built_system.kernel_boot_info.untyped_objects):8,d}\n")
+        f.write("\n")
+        f.write("# Loader Regions\n\n")
+        for region in built_system.regions:
+            f.write(f"       {region}\n")
+        f.write("\n")
+        f.write("# Monitor (Initial Task) Info\n\n")
+        f.write(f"     virtual memory : {built_system.initial_task_virt_region}\n")
+        f.write(f"     physical memory: {built_system.initial_task_phys_region}\n")
         f.write("\n")
         f.write("# Allocated Kernel Objects Summary\n\n")
         f.write(f"     # of allocated objects: {len(built_system.kernel_objects):,d}\n")
@@ -1654,6 +1723,7 @@ def main() -> int:
         loader_elf_path,
         kernel_elf,
         monitor_elf,
+        built_system.initial_task_phys_region.base,
         built_system.reserved_region,
         regions,
     )

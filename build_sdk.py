@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
 
-from typing import Dict, Union
+from typing import Dict, Union, List, Tuple
 
 NAME = "sel4cp"
 VERSION = "1.2.6"
@@ -33,6 +33,7 @@ KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 class BoardInfo:
     name: str
     gcc_cpu: str
+    loader_link_address: int
     kernel_options: KERNEL_CONFIG_TYPE
     examples: Dict[str, Path]
 
@@ -48,6 +49,7 @@ SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
         gcc_cpu="cortex-a35",
+        loader_link_address=0x80280000,
         kernel_options = {
             "KernelPlatform": "tqma8xqp1gb",
             "KernelIsMCS": True,
@@ -56,7 +58,22 @@ SUPPORTED_BOARDS = (
         examples = {
             "ethernet": Path("example/tqma8xqp1gb/ethernet")
         }
-),)
+    ),
+    BoardInfo(
+        name="zcu102",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options = {
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "zcu102",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {
+            "hello": Path("example/zcu102/hello")
+        }
+    )
+)
 
 SUPPORTED_CONFIGS = (
     ConfigInfo(
@@ -203,6 +220,7 @@ def build_elf_component(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
+    defines: List[Tuple[str, str]]
 ) -> None:
     """Build a specific ELF component.
 
@@ -211,8 +229,9 @@ def build_elf_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
+    defines_str = " ".join(f"{k}={v}" for k, v in defines)
     r = system(
-        f"BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make  -C {component_name}"
+        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
     )
     if r != 0:
         raise Exception(
@@ -338,8 +357,11 @@ def main() -> None:
     for board in SUPPORTED_BOARDS:
         for config in SUPPORTED_CONFIGS:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
-            build_elf_component("loader", root_dir, build_dir, board, config)
-            build_elf_component("monitor", root_dir, build_dir, board, config)
+            loader_defines = [
+                ("LINK_ADDRESS", hex(board.loader_link_address))
+            ]
+            build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
+            build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)
         # Setup the examples
         for example, example_path in board.examples.items():

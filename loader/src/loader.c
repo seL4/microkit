@@ -78,6 +78,7 @@ typedef void (*sel4_entry)(
 );
 
 void switch_to_el1(void);
+void switch_to_el2(void);
 void el1_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
@@ -106,12 +107,22 @@ memcpy(void *dst, const void *src, size_t sz)
     }
 }
 
+#if defined(BOARD_tqma8xqp1gb)
 static void
 putc(uint8_t ch)
 {
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
+#elif defined(BOARD_zcu102)
+static void
+putc(uint8_t ch)
+{
+    *((volatile uint32_t *)(0x00FF000030)) = ch;
+}
+#else
+#error Board not defined
+#endif
 
 static void
 puts(const char *s)
@@ -271,29 +282,29 @@ print_flags(void)
 static void
 print_loader_data(void)
 {
-    puts("INFO: Flags:                ");
+    puts("LDR|INFO: Flags:                ");
     puthex64(loader_data->flags);
     puts("\n");
     print_flags();
-    puts("INFO: Kernel:      entry:   ");
+    puts("LDR|INFO: Kernel:      entry:   ");
     puthex64(loader_data->kernel_entry);
     puts("\n");
 
-    puts("INFO: Root server: physmem: ");
+    puts("LDR|INFO: Root server: physmem: ");
     puthex64(loader_data->ui_p_reg_start);
     puts(" -- ");
     puthex64(loader_data->ui_p_reg_end);
-    puts("\nINFO:              virtmem: ");
+    puts("\nLDR|INFO:              virtmem: ");
     puthex64(loader_data->ui_p_reg_start - loader_data->pv_offset);
     puts(" -- ");
     puthex64(loader_data->ui_p_reg_end - loader_data->pv_offset);
-    puts("\nINFO:              entry  : ");
+    puts("\nLDR|INFO:              entry  : ");
     puthex64(loader_data->v_entry);
     puts("\n");
 
     for (uint32_t i = 0; i < loader_data->num_regions; i++) {
         const struct region *r = &loader_data->regions[i];
-        puts("INFO: region: ");
+        puts("LDR|INFO: region: ");
         puthex32(i);
         puts("   addr: ");
         puthex64(r->load_addr);
@@ -313,7 +324,7 @@ copy_data(void)
     const void *base = &loader_data->regions[loader_data->num_regions];
     for (uint32_t i = 0; i < loader_data->num_regions; i++) {
         const struct region *r = &loader_data->regions[i];
-        puts("INFO: copying region ");
+        puts("LDR|INFO: copying region ");
         puthex32(i);
         puts("\n");
         memcpy((void *)(uintptr_t)r->load_addr, base + r->offset, r->size);
@@ -325,34 +336,41 @@ ensure_correct_el(void)
 {
     enum el el = current_el();
 
-    puts("INFO: CurrentEL=");
+    puts("LDR|INFO: CurrentEL=");
     puts(el_to_string(el));
     puts("\n");
 
-    if (el == EL0 || el == EL3) {
-        puts("ERROR: Unsupported initial exception level\n");
+    if (el == EL0) {
+        puts("LDR|ERROR: Unsupported initial exception level\n");
         return 1;
+    }
+
+    if (el == EL3) {
+        puts("LDR|INFO: Dropping from EL3 to EL2(NS)\n");
+        switch_to_el2();
+        puts("LDR|INFO: Dropped from EL3 to EL2(NS)\n");
+        el = EL2;
     }
 
     if (loader_data->flags & FLAG_SEL4_HYP) {
         if (el != EL2) {
-            puts("ERROR: seL4 configured as a hypervisor, but not in EL2\n");
+            puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
         }
     } else {
         if (el == EL2) {
             /* seL4 relies on the timer to be set to a useful value */
-            puts("INFO: Resetting CNTVOFF\n");
+            puts("LDR|INFO: Resetting CNTVOFF\n");
             asm volatile("msr cntvoff_el2, xzr");
-            puts("INFO: Dropping from EL2 to EL1\n");
+            puts("LDR|INFO: Dropping from EL2 to EL1\n");
             switch_to_el1();
-            puts("INFO: CurrentEL=");
+            puts("LDR|INFO: CurrentEL=");
             el = current_el();
             puts(el_to_string(el));
             puts("\n");
             if (el == EL1) {
-                puts("INFO: Dropped to EL1 successfully\n");
+                puts("LDR|INFO: Dropped to EL1 successfully\n");
             } else {
-                puts("ERROR: Failed to switch to EL1\n");
+                puts("LDR|ERROR: Failed to switch to EL1\n");
                 return 1;
             }
         }
@@ -381,11 +399,10 @@ main(void)
 {
     int r;
 
-    puts("INFO: altloader for seL4 starting\n");
-
+    puts("LDR|INFO: altloader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
     if (loader_data->magic != MAGIC) {
-        puts("ERROR: mismatch on loader data structure magic number\n");
+        puts("LDR|ERROR: mismatch on loader data structure magic number\n");
         return 1;
     }
 
@@ -401,13 +418,13 @@ main(void)
         goto fail;
     }
 
-    puts("INFO: enabling MMU\n");
+    puts("LDR|INFO: enabling MMU\n");
     el1_mmu_enable();
 
-    puts("INFO: jumping to kernel\n");
+    puts("LDR|INFO: jumping to kernel\n");
     start_kernel();
 
-    puts("ERROR: seL4 Loader: Error - KERNEL RETURNED\n");
+    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED\n");
 
 fail:
     /* Note: can't usefully return to U-Boot once we are here. */
@@ -422,7 +439,7 @@ void
 exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
 {
     uintptr_t ec = (esr >> 26) & 0x3f;
-    puts("ERROR: loader trapped kernel exception: ");
+    puts("LDR|ERROR: loader trapped kernel exception: ");
     puts(ex_to_string(ex));
     puts("   ec=");
     puts(ec_to_string(ec));
