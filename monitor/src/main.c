@@ -318,7 +318,7 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
             puts(".");
             puthex32(i);
             puts("\n");
-            fail("error calling");
+            fail("invocation error");
         }
 #if 0
         puts("Done invocation: ");
