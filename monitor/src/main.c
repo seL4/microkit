@@ -539,20 +539,7 @@ main(seL4_BootInfo *bi)
     puts("MON|INFO: Number of system invocations:    ");
     puthex32(system_invocation_count);
     puts("\n");
-#if 0
-    {
-        puts("Doing the CNode dance\n");
-        uint32_t ident_cap1;
-        uint32_t ident_capX;
-        ident_cap1 = seL4_DebugCapIdentify(0x5);
-        ident_capX = seL4_DebugCapIdentify(12 << 12);
-        puts("cap1: ");
-        puthex32(ident_cap1);
-        puts("\ncapX: ");
-        puthex32(ident_capX);
-        puts("\n");
-    }
-#endif
+
     unsigned offset = 0;
     for (unsigned idx = 0; idx < bootstrap_invocation_count; idx++) {
         offset = perform_invocation(bootstrap_invocation_data, offset, idx);
