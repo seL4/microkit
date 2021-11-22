@@ -31,5 +31,5 @@ OBJPROG = $(addprefix $(BUILD_DIR)/, $(PROGS))
 
 all: $(OBJPROG)
 
-$(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS))
-	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $^ -o $@
+$(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS)) $(LINKSCRIPT)
+	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $(addprefix $(BUILD_DIR)/, $(OBJECTS)) -o $@
