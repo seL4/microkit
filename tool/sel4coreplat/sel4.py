@@ -8,7 +8,7 @@ from enum import IntEnum
 from typing import List, Optional, Set, Tuple
 from struct import pack, Struct
 
-from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, lsb, round_down, round_up
+from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
 
 
@@ -675,6 +675,13 @@ class KernelConfig:
     fan_out_limit: int
 
 
+@dataclass
+class _KernelPartialBootInfo:
+    device_memory: DisjointMemoryRegion
+    normal_memory: DisjointMemoryRegion
+    boot_region: MemoryRegion
+
+
 def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
     """Extra the physical address of all kernel (only) devices"""
     kernel_devices = []
@@ -730,14 +737,15 @@ def _rootserver_max_size_bits() -> int:
     return max(cnode_size_bits, vspace_bits)
 
 
-def emulate_kernel_boot(
+def _kernel_partial_boot(
         kernel_config: KernelConfig,
-        kernel_elf: ElfFile,
-        initial_task_region: MemoryRegion,
-        reserved_region: MemoryRegion) -> KernelBootInfo:
-    """Emulate what happens during a kernel boot, generating a
-    representation of the BootInfo struct."""
+        kernel_elf: ElfFile) -> _KernelPartialBootInfo:
+    """Emulate what happens during a kernel boot, up to the point
+    where the reserved region is allocated.
 
+    This factors the common parts of 'emulate_kernel_boot' and
+    'emulate_kernel_boot_partial' to avoid code duplication.
+    """
     # Determine the untyped caps of the system
     # This lets allocations happen correctly.
     device_memory = DisjointMemoryRegion()
@@ -767,13 +775,42 @@ def emulate_kernel_boot(
     # FIXME: Why calcaultae it now if we add it back later?
     boot_region = _kernel_boot_mem(kernel_elf)
 
-    # Remove the initial task region
-    normal_memory.remove_region(initial_task_region.base, initial_task_region.end)
+    return _KernelPartialBootInfo(device_memory, normal_memory, boot_region)
+
+
+def emulate_kernel_boot_partial(
+        kernel_config: KernelConfig,
+        kernel_elf: ElfFile,
+    ) -> DisjointMemoryRegion:
+    """Return the memory available after a 'partial' boot emulation.
+
+    This allows the caller to allocation a reserved memory region at an
+    appropriate location.
+    """
+    partial_info = _kernel_partial_boot(kernel_config, kernel_elf)
+    return partial_info.normal_memory
+
+
+def emulate_kernel_boot(
+        kernel_config: KernelConfig,
+        kernel_elf: ElfFile,
+        initial_task_phys_region: MemoryRegion,
+        initial_task_virt_region: MemoryRegion,
+        reserved_region: MemoryRegion) -> KernelBootInfo:
+    """Emulate what happens during a kernel boot, generating a
+    representation of the BootInfo struct."""
     # And the the reserved region
+    assert initial_task_phys_region.size == initial_task_virt_region.size
+    partial_info = _kernel_partial_boot(kernel_config, kernel_elf)
+    normal_memory = partial_info.normal_memory
+    device_memory = partial_info.device_memory
+    boot_region = partial_info.boot_region
+
+    normal_memory.remove_region(initial_task_phys_region.base, initial_task_phys_region.end)
     normal_memory.remove_region(reserved_region.base, reserved_region.end)
 
     # Now, the tricky part! determine which memory is used for the initial task objects
-    initial_objects_size = calculate_rootserver_size(initial_task_region)
+    initial_objects_size = calculate_rootserver_size(initial_task_virt_region)
     initial_objects_align = _rootserver_max_size_bits()
 
     # Find an appropriate region of normal memory to allocate the objects
@@ -789,8 +826,8 @@ def emulate_kernel_boot(
 
     fixed_cap_count = 0xf
     sched_control_cap_count = 1
-    paging_cap_count = _get_arch_n_paging(initial_task_region)
-    page_cap_count = initial_task_region.size // kernel_config.minimum_page_size
+    paging_cap_count = _get_arch_n_paging(initial_task_virt_region)
+    page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
     first_untyped_cap = fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count
     schedcontrol_cap = fixed_cap_count + paging_cap_count
 

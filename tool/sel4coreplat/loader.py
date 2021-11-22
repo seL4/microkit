@@ -68,9 +68,16 @@ class Loader:
         loader_elf_path: Path,
         kernel_elf: ElfFile,
         initial_task_elf: ElfFile,
+        initial_task_phys_base: Optional[int],
         reserved_region: MemoryRegion,
         regions: List[Tuple[int, bytes]]
     ) -> None:
+        """
+
+        Note: If initial_task_phys_base is not None, then it just this address
+        as the base physical address of the initial task, rather than the address
+        that comes from the initial_task_elf file.
+        """
             # Setup the pagetable data structures (directly embedded in the loader)
         self._elf = ElfFile.from_path(loader_elf_path)
         sz = self._elf.word_size
@@ -121,36 +128,28 @@ class Loader:
                 ))
 
 
-        inittask_first_vaddr: Optional[int] = None
-        inittask_last_vaddr: Optional[int] = None
-
-        inittask_first_paddr: Optional[int] = None
-        inittask_p_v_offset: Optional[int] = None
 
         assert kernel_first_paddr is not None
 
-        for segment in initial_task_elf.segments:
-            if segment.loadable:
-                if inittask_first_vaddr is None or segment.virt_addr < inittask_first_vaddr:
-                    inittask_first_vaddr = segment.virt_addr
+        # Note: This could be extended to support multi-segment ELF files
+        # (and indeed initial did support multi-segment ELF files). However
+        # it adds significant complexity, and the calling functions enforce
+        # only single-segment ELF files, so we keep things simple here.
+        assert len(initial_task_elf.segments) == 1
+        segment = initial_task_elf.segments[0]
+        assert segment.loadable
 
-                if inittask_last_vaddr is None or segment.virt_addr + segment.mem_size > inittask_last_vaddr:
-                    inittask_last_vaddr = round_up(segment.virt_addr + segment.mem_size, kb(4))
+        inittask_first_vaddr = segment.virt_addr
+        inittask_last_vaddr = round_up(segment.virt_addr + segment.mem_size, kb(4))
 
-                if inittask_first_paddr is None or segment.phys_addr < kernel_first_paddr:
-                    inittask_first_paddr = segment.phys_addr
+        inittask_first_paddr = segment.phys_addr if initial_task_phys_base is None else initial_task_phys_base
+        inittask_p_v_offset = inittask_first_vaddr - inittask_first_paddr
 
-                if inittask_p_v_offset is None:
-                    inittask_p_v_offset = segment.virt_addr - segment.phys_addr
-                else:
-                    if inittask_p_v_offset != segment.virt_addr - segment.phys_addr:
-                        raise Exception("Init task does not have constistent phys to virt offset")
-
-                # NOTE: For now we include any zeroes. We could optimize in the future
-                self._regions.append((
-                    segment.phys_addr,
-                    segment.data
-                ))
+        # NOTE: For now we include any zeroes. We could optimize in the future
+        self._regions.append((
+            inittask_first_paddr,
+            segment.data
+        ))
 
         # Determine the pagetable variables
         assert kernel_first_vaddr is not None
