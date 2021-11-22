@@ -561,6 +561,13 @@ Rather than typing these each time you can create a U-Boot script:
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
+
+## ZCU102
+
+Initial support is available for the ZCU102.
+
+**FIXME:** Additional documentation required here.
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.
