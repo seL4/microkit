@@ -100,7 +100,7 @@ This document attempts to clearly describe all of these terms, however as the co
 ## System {#system}
 
 At the most basic level sel4cp provides the platform for running a *system* on a specific board.
-As a *user* of sel4cp you use the platform to create a softare system that implements your use case.
+As a *user* of sel4cp you use the platform to create a software system that implements your use case.
 The system is described in a declarative configuration file, and the sel4cp tool takes this system description as an input and produces an appropriate system image that can be loaded on the target board.
 
 The key elements that make up a system are *protection domains*, *memory regions* and *channels*.
@@ -140,7 +140,7 @@ The overall computational model for an sel4cp system is a set of isolated compon
 
 ### Scheduling
 
-The PD has a number of scheduling attrbites that are configured in the system description:
+The PD has a number of scheduling attributes that are configured in the system description:
 
 * priority (0 -- 254)
 * period (microseconds)
@@ -197,7 +197,7 @@ For example if PDs **A** and **B** are connected by a channel, **A** may refer t
 PDs can only refer to other PDs indirectly if there is a channel between them.
 In this case the channel identifier is effectively a proxy identifier for the other PD.
 So, to extend the prior example, **A** can indirectly refer to **B** via the channel identifier **37**.
-Similary, **B** can refer to **A** via the channel identifier **42**.
+Similarly, **B** can refer to **A** via the channel identifier **42**.
 
 The system supports a maximum up 64 channels and interrupts per protection domain.
 
@@ -306,7 +306,7 @@ Usage:
 
     sel4cp [-h] [-o OUTPUT] [-r REPORT] system
 
-The path to the sytem description file must be provided.
+The path to the system description file must be provided.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
@@ -622,4 +622,4 @@ The limitation on the number of protection domains in the system is relatively a
 Based on experience with the system and the types of systems being built it is possible for this to be increased in the future.
 
 The limitation on the number of channels for a protection domain is based on the size of the notification object in seL4.
-Changing this to be large than 64 would most likely require changes to seL4.
+Changing this to be larger than 64 would most likely require changes to seL4.
