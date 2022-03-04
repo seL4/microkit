@@ -441,13 +441,18 @@ class InitSystem:
         self._cap_address_names = cap_address_names
         self._objects: List[KernelObject] = []
 
-    def reserve(self, region: MemoryRegion) -> None:
-        for ut in self._device_untyped:
-            if region.base in ut:
-                break
-        else:
-            raise Exception(f"{region.base=:x} not in any device untyped")
-        ut.watermark = region.end
+    def reserve(self, allocations: List[Tuple[UntypedObject, int]]) -> None:
+        for alloc_ut, alloc_phys_addr in allocations:
+            for ut in self._device_untyped:
+                if alloc_ut == ut._ut:
+                    break
+            else:
+                raise Exception(f"Allocation {alloc_ut} ({alloc_phys_addr:x}) not in any device untyped")
+
+            if not (ut._ut.region.base <= alloc_phys_addr <= ut._ut.region.end):
+                raise Exception(f"Allocation {alloc_ut} ({alloc_phys_addr:x}) not in untyped region {ut._ut.region}")
+
+            ut.watermark = alloc_phys_addr
 
 
     def allocate_fixed_objects(self, phys_address: int, object_type: int, count: int, names: List[str]) -> List[KernelObject]:
@@ -883,6 +888,7 @@ def build_system(
     # invocations required to set up the address space
     pages_required= invocation_table_size // kernel_config.minimum_page_size
     remaining_pages = pages_required
+    invocation_table_allocations = []
     phys_addr = invocation_table_region.base
     base_page_cap = 0
     for pta in range(base_page_cap, base_page_cap + pages_required):
@@ -907,6 +913,7 @@ def build_system(
         remaining_pages -= retype_page_count
         cap_slot += retype_page_count
         phys_addr += retype_page_count * kernel_config.minimum_page_size
+        invocation_table_allocations.append((ut, phys_addr))
         if remaining_pages == 0:
             break
 
@@ -1008,7 +1015,7 @@ def build_system(
 
     system_invocations: List[Sel4Invocation] = []
     init_system = InitSystem(kernel_config, root_cnode_cap, system_cap_address_mask, cap_slot, kao, kernel_boot_info, system_invocations, cap_address_names)
-    init_system.reserve(invocation_table_region)
+    init_system.reserve(invocation_table_allocations)
 
     SUPPORTED_PAGE_SIZES = (0x1_000, 0x200_000)
     SUPPORTED_PAGE_OBJECTS = (SEL4_SMALL_PAGE_OBJECT, SEL4_LARGE_PAGE_OBJECT)
