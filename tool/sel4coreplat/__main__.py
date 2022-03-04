@@ -104,6 +104,7 @@ from sel4coreplat.sel4 import (
     SEL4_ARM_PAGE_CACHEABLE,
     SEL4_LARGE_PAGE_SIZE,
     SEL4_PAGE_TABLE_SIZE,
+    SEL4_OBJECT_TYPE_NAMES,
 )
 from sel4coreplat.sysxml import ProtectionDomain, xml2system, SystemDescription, PlatformDescription
 from sel4coreplat.sysxml import SysMap, SysMemoryRegion # This shouldn't be needed here as such
@@ -247,6 +248,15 @@ def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
             nm = f"{nm} (cap)"
         elif nm == "vaddr":
             val_str = hex(val)
+        elif nm == "size_bits":
+            val_str = f"{val} (0x{1 << val:x})"
+        elif nm == "object_type":
+            object_size = FIXED_OBJECT_SIZES.get(val)
+            object_type_name = SEL4_OBJECT_TYPE_NAMES[val]
+            if object_size is None:
+                val_str = f"{val} ({object_type_name} - variable size)"
+            else:
+                val_str = f"{val} ({object_type_name} - 0x{object_size:x})"
         else:
             val_str = str(val)
         arg_strs.append(f"         {nm:20s} {val_str}")
