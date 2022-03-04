@@ -568,6 +568,19 @@ Initial support is available for the ZCU102.
 
 **FIXME:** Additional documentation required here.
 
+The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
+
+An QEMU command line:
+
+    $ qemu-system-aarch64 \
+       -m 4G  \
+       -M arm-generic-fdt \
+       -nographic \
+       -hw-dtb [PATH TO zcu102-arm.dtb] \
+       -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
+       -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
+       -serial mon:stdio
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.
