@@ -249,7 +249,10 @@ def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
         elif nm == "vaddr":
             val_str = hex(val)
         elif nm == "size_bits":
-            val_str = f"{val} (0x{1 << val:x})"
+            if val == 0:
+                val_str = f"{val} (N/A)"
+            else:
+                val_str = f"{val} (0x{1 << val:x})"
         elif nm == "object_type":
             object_size = FIXED_OBJECT_SIZES.get(val)
             object_type_name = SEL4_OBJECT_TYPE_NAMES[val]
