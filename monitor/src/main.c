@@ -279,6 +279,9 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
     }
 
     for (unsigned i = 0; i < iterations; i++) {
+#if 0
+        puts("Preparing invocation:\n");
+#endif
         /* Set all the caps */
         seL4_Word call_service = service;
         if (i > 0) {
@@ -289,6 +292,13 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
             if (i > 0) {
                 cap += invocation_data[cap_incr_offset + j] * i;
             }
+#if 0
+            puts("   SetCap: ");
+            puthex32(j);
+            puts(" ");
+            puthex64(cap);
+            puts("\n");
+#endif
             seL4_SetCap(j, cap);
         }
 
@@ -297,6 +307,13 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
             if (i > 0) {
                 mr += invocation_data[mr_incr_offset + j] * i;
             }
+#if 0
+            puts("   SetMR: ");
+            puthex32(j);
+            puts(" ");
+            puthex64(mr);
+            puts("\n");
+#endif
             switch (j) {
                 case 0: mr0 = mr; break;
                 case 1: mr1 = mr; break;
