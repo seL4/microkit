@@ -794,16 +794,28 @@ def build_system(
     # First up create the root cnode
     bootstrap_invocations: List[Sel4Invocation] = []
 
+    # Z: A CNode is an array of optional capabilities.
+    # Z: A CSlot is an optional capability...
+    # Z:   either empty (null)
+    # Z:   or else full (contains a capability to a kernel resource)
+
     bootstrap_invocations.append(Sel4UntypedRetype(
-            root_cnode_allocation.untyped_cap_address,
-            SEL4_CNODE_OBJECT,
-            root_cnode_bits,
-            INIT_CNODE_CAP_ADDRESS,
-            0,
-            0,
-            root_cnode_cap,
-            1
+            root_cnode_allocation.untyped_cap_address, # Z: parent (cap to retype)
+            SEL4_CNODE_OBJECT,                         # Z: type to retype into
+            root_cnode_bits,                           # Z: size
+            INIT_CNODE_CAP_ADDRESS,                    # Z: root
+            0,                                         # Z: node index
+            0,                                         # Z: node depth
+            root_cnode_cap,                            # Z: node offset
+            1                                          # Z: number of caps
     ))
+
+    # Z: Calling Sel4UntypedRetype with second argument equal to SEL4_UNTYPED_OBJECT
+    # Z: simply resizes the given untyped.
+    # Z: However, calling it with SEL4_CNODE_OBJECT creates a new CNode kernel object.
+
+    # Z: CapDL corresponding to invocation above should be something
+    # Z: objects { root_cnode = cnode (`root_cnode_bits` bits) }
 
     # 2.1.4: Now insert a cap to the initial Cnode into slot zero of the newly
     # allocated root Cnode. It uses sufficient guard bits to ensure it is
@@ -813,15 +825,21 @@ def build_system(
     # which for out purposes is always zero.
     guard = kernel_config.cap_address_bits - root_cnode_bits - kernel_config.init_cnode_bits
     bootstrap_invocations.append(Sel4CnodeMint(
-        root_cnode_cap,
-        0,
-        root_cnode_bits,
-        INIT_CNODE_CAP_ADDRESS,
-        INIT_CNODE_CAP_ADDRESS,
-        kernel_config.cap_address_bits,
-        SEL4_RIGHTS_ALL,
-        guard
+        root_cnode_cap,                                # Z: destination CNode
+        0,                                             # Z: destination index
+        root_cnode_bits,                               # Z: destination depth
+        INIT_CNODE_CAP_ADDRESS,                        # Z: source CNode
+        INIT_CNODE_CAP_ADDRESS,                        # Z: source CSlot index
+        kernel_config.cap_address_bits,                # Z: source depth
+        SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
+        guard                                          # Z: badge
     ))
+    # Z: caps {  }
+    # Z: objects { root_cnode = cnode (`root_cnode_bits` bits) }
+
+    # Z: According to the seL4 docs, the 0th CSlot of a CNode is always kept empty.
+    # Z: What gives? Probably means that it's initially kept empty (as opposed to
+    # Z: being uninitialized?) 
 
     # 2.1.5: Now it is possible to switch our root Cnode to the newly create
     # root cnode. We have a zero sized guard. This Cnode represents the top
@@ -829,12 +847,12 @@ def build_system(
     #
     root_guard = 0
     bootstrap_invocations.append(Sel4TcbSetSpace(
-        INIT_TCB_CAP_ADDRESS,
-        INIT_NULL_CAP_ADDRESS,
-        root_cnode_cap,
-        root_guard,
-        INIT_VSPACE_CAP_ADDRESS,
-        0
+        INIT_TCB_CAP_ADDRESS,                          # Z: TCB operated on
+        INIT_NULL_CAP_ADDRESS,                         # Z: fault endpoint
+        root_cnode_cap,                                # Z: root CNode of new CSpace
+        root_guard,                                    # Z: guard and guard size to set
+        INIT_VSPACE_CAP_ADDRESS,                       # Z: root of new VSpace
+        0                                              # Z: no effect
     ))
 
     # 2.1.6: Now we can create our new system Cnode. We will place it into
@@ -849,6 +867,9 @@ def build_system(
         system_cnode_cap,
         1
     ))
+    # Z: objects { system_cnode = cnode (`system_cnode_bits` bits) }
+
+    # Z: caps { system_cnode { 1: ??? 2: ??? } }
 
     # 2.1.7: Now that the we have create the object, we can 'mutate' it
     # to the correct place:
@@ -856,15 +877,18 @@ def build_system(
     guard = kernel_config.cap_address_bits - root_cnode_bits - system_cnode_bits
     system_cap_address_mask = 1 << (kernel_config.cap_address_bits - 1)
     bootstrap_invocations.append(Sel4CnodeMint(
-        root_cnode_cap,
-        1,
-        root_cnode_bits,
-        INIT_CNODE_CAP_ADDRESS,
-        system_cnode_cap,
-        kernel_config.cap_address_bits,
-        SEL4_RIGHTS_ALL,
-        guard
+        root_cnode_cap,                                # Z: destination CNode
+        1,                                             # Z: destination index
+        root_cnode_bits,                               # Z: destination depth
+        INIT_CNODE_CAP_ADDRESS,                        # Z: source CNode
+        system_cnode_cap,                              # Z: source CSlot index
+        kernel_config.cap_address_bits,                # Z: source depth
+        SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
+        guard                                          # Z: badge
     ))
+
+    # Z: i.e. here we moved the cap to the system CNode into the root CNode 
+
 
     # 2.2 At this point it is necessary to get the frames containing the
     # main system invocations into the virtual address space. (Remember the
@@ -886,13 +910,18 @@ def build_system(
     # page size. It would be good in the future to use super pages (when
     # it makes sense to - this would reduce memory usage, and the number of
     # invocations required to set up the address space
-    pages_required= invocation_table_size // kernel_config.minimum_page_size
+    pages_required = invocation_table_size // kernel_config.minimum_page_size
     remaining_pages = pages_required
     invocation_table_allocations = []
     phys_addr = invocation_table_region.base
     base_page_cap = 0
     for pta in range(base_page_cap, base_page_cap + pages_required):
-        cap_address_names[system_cap_address_mask | pta] = "SmallPage: monitor invocation table"
+        cap_address_names[system_cap_address_mask | pta] = ("SmallPage: monitor invocation table Z:%s" % repr(pta))
+
+    # Z: the pages are mapped much later, straight before step 3
+    # Z: this is because we first need to alloc the page tables,
+    # Z: map them into a vspace
+    # Z: there is no loop there; the invocation repeat functionality is used
 
     cap_slot = base_page_cap
     for ut in (ut for ut in kernel_boot_info.untyped_objects if ut.is_device):
@@ -917,6 +946,8 @@ def build_system(
         if remaining_pages == 0:
             break
 
+    # Z: based on sel4.py I guess these should just be 4k frames
+
     # 2.2.1: Now that physical pages have been allocated it is possible to setup
     # the virtual memory objects so that the pages can be mapped into virtual memory
     # At this point we map into the arbitrary address of 0x0.8000.0000 (i.e.: 2GiB)
@@ -931,6 +962,10 @@ def build_system(
 
     for pta in range(base_page_table_cap, base_page_table_cap + page_tables_required):
         cap_address_names[system_cap_address_mask | pta] = "PageTable: monitor"
+    # Z: we don't need to do anything here
+    # Z: above, we used the KernelObjectAllocator to alloc the required page tables,
+    # Z: here we just remember the addresses, should we need them in the report.
+    # Z: the next UntypedRetype will create the page table objects 
 
     assert page_tables_required <= kernel_config.fan_out_limit
     bootstrap_invocations.append(Sel4UntypedRetype(
@@ -945,18 +980,72 @@ def build_system(
     ))
     cap_slot += page_tables_required
 
+    # Z: VSpace: virtual memory address space, which can be shared between threads.
+    # Z: The representation of a VSpace is architecture-defined, on aarch64 we have
+    # Z: hardware-provided page tables, and we need the following  hardware VM objects:
+    # Z: seL4_PageGlobalDirectory, seL4_PageUpperDirectory, seL4_PageDirectory, seL4_PageTable
+
     # Now that the page tables are allocated they can be mapped into vspace
     vaddr = 0x8000_0000
-    invocation = Sel4PageTableMap(system_cap_address_mask | base_page_table_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_ARM_DEFAULT_VMATTRIBUTES)
+    invocation = Sel4PageTableMap(
+      system_cap_address_mask | base_page_table_cap, # Z: cap to the page table operated on
+      INIT_VSPACE_CAP_ADDRESS,                       # Z: cap to VSpace (pagedir) to contain the mapping
+      vaddr,                                         # Z: virt address to map the page into
+      SEL4_ARM_DEFAULT_VMATTRIBUTES                  # Z: (set non/executable, enable parity check)
+    )
     invocation.repeat(page_tables_required, page_table=1, vaddr=SEL4_LARGE_PAGE_SIZE)
     bootstrap_invocations.append(invocation)
 
+    # Z: a pagedir can be used as a vspace - but mapping into the INIT_VSPACE? Is that a problem?
+
     # Finally, once the page tables are allocated the pages can be mapped
     vaddr = 0x8000_0000
-    invocation = Sel4PageMap(system_cap_address_mask | base_page_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_RIGHTS_READ, SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER)
+    invocation = Sel4PageMap( # Z: TODO document this!
+      system_cap_address_mask | base_page_cap, 
+      INIT_VSPACE_CAP_ADDRESS,
+      vaddr,
+      SEL4_RIGHTS_READ,
+      SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER
+    )
     invocation.repeat(pages_required, page=1, vaddr=kernel_config.minimum_page_size)
     bootstrap_invocations.append(invocation)
 
+
+    # Z: WRITE A CAPDL SPEC HERE
+    #
+    #
+    # arch aarch64
+    #
+    # objects {
+    #   root_cnode = cnode (`root_cnode_bits` bits)
+    #   system_cnode = cnode (`system_cnode_bits` bits)
+    #
+    #   root_tcb = tcb (init: [???], dom: ???)     /* what the heck is a TCB dom? */
+    #   root_pagedir = pd  /* what about that INIT_VSPACE?! */
+    #
+    #   invtable_frames[`pages_required`] = frame (4k)
+    #   invtable_pagetab = pt
+    #   
+    # }
+    # caps {
+    #   root_cnode {
+    #     0: ??? /* minted in step 2.1 */
+    #     1: system_cnode 
+    #   }
+    # 
+    #   root_tcb { /* will root_cnode need to contain a cap for this? */
+    #     vspace: root_pagedir
+    #     cspace: root_cnode
+    #   }
+    #
+    #   invtable_pagetab {
+    #     `vaddr`: invtable_frames  /* check this, what about repeat? */
+    #   }
+    #
+    #   root_pagedir {
+    #     `vaddr`: invtable_pagetab  /* how do these addrs interact with pagetab?! */
+    #   }
+    # }
 
     # 3. Now we can start setting up the system based on the information
     # the user provided in the system xml.
