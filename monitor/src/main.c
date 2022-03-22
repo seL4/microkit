@@ -361,7 +361,7 @@ monitor(void)
 
         seL4_Word tcb_cap = tcbs[badge];
 
-        puts("received message ");
+        puts("MON|ERROR: received message ");
         puthex32(label);
         puts("  badge: ");
         puthex64(badge);
@@ -370,7 +370,7 @@ monitor(void)
         puts("\n");
 
         if (badge < MAX_PDS && pd_names[badge][0] != 0) {
-            puts("faulting PD: ");
+            puts("MON|ERROR: faulting PD: ");
             puts(pd_names[badge]);
             puts("\n");
         } else {
@@ -385,35 +385,35 @@ monitor(void)
         }
 
         // FIXME: Would be good to print the whole register set
-        puts("Registers: \n");
-        puts("pc : ");
+        puts("MON|ERROR: Registers: \n");
+        puts("MON|ERROR: pc : ");
         puthex64(regs.pc);
         puts("\n");
-        puts("spsr : ");
+        puts("MON|ERROR: spsr : ");
         puthex64(regs.spsr);
         puts("\n");
-        puts("x0 : ");
+        puts("MON|ERROR: x0 : ");
         puthex64(regs.x0);
         puts("\n");
-        puts("x1 : ");
+        puts("MON|ERROR: x1 : ");
         puthex64(regs.x1);
         puts("\n");
-        puts("x2 : ");
+        puts("MON|ERROR: x2 : ");
         puthex64(regs.x2);
         puts("\n");
-        puts("x3 : ");
+        puts("MON|ERROR: x3 : ");
         puthex64(regs.x3);
         puts("\n");
-        puts("x4 : ");
+        puts("MON|ERROR: x4 : ");
         puthex64(regs.x4);
         puts("\n");
-        puts("x5 : ");
+        puts("MON|ERROR: x5 : ");
         puthex64(regs.x5);
         puts("\n");
-        puts("x6 : ");
+        puts("MON|ERROR: x6 : ");
         puthex64(regs.x6);
         puts("\n");
-        puts("x7 : ");
+        puts("MON|ERROR: x7 : ");
         puthex64(regs.x7);
         puts("\n");
 
@@ -428,7 +428,7 @@ monitor(void)
                 seL4_Word guard_found = seL4_GetMR(seL4_CapFault_GuardMismatch_GuardFound);
                 seL4_Word guard_bits_found = seL4_GetMR(seL4_CapFault_GuardMismatch_BitsFound);
 
-                puts("CapFault: ip=");
+                puts("MON|ERROR: CapFault: ip=");
                 puthex64(ip);
                 puts("  fault_addr=");
                 puthex64(fault_addr);
@@ -466,7 +466,7 @@ monitor(void)
                 break;
             }
             case seL4_Fault_UserException: {
-                puts("UserException\n");
+                puts("MON|ERROR: UserException\n");
                 break;
             }
             case seL4_Fault_VMFault: {
@@ -477,7 +477,7 @@ monitor(void)
                 seL4_Word ec = fsr >> 26;
                 seL4_Word il = fsr >> 25 & 1;
                 seL4_Word iss = fsr & 0x1ffffffUL;
-                puts("VMFault: ip=");
+                puts("MON|ERROR: VMFault: ip=");
                 puthex64(ip);
                 puts("  fault_addr=");
                 puthex64(fault_addr);
@@ -486,7 +486,7 @@ monitor(void)
                 puts("  ");
                 puts(is_instruction ? "(instruction fault)" : "(data fault)");
                 puts("\n");
-                puts("   ec: ");
+                puts("MON|ERROR:    ec: ");
                 puthex32(ec);
                 puts("  ");
                 puts(ec_to_string(ec));
@@ -505,7 +505,7 @@ monitor(void)
                     bool cm = (iss >> 8) & 1;
                     bool s1ptw = (iss >> 7) & 1;
                     bool wnr = (iss >> 6) & 1;
-                    puts("   dfsc = ");
+                    puts("MON|ERROR:    dfsc = ");
                     puts(data_abort_dfsc_to_string(dfsc));
                     puts(" (");
                     puthex32(dfsc);
