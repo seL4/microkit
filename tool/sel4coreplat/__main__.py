@@ -593,7 +593,7 @@ class Region:
     addr: int
     data: bytearray
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Region name={self.name} addr=0x{self.addr:x} size={len(self.data)}>"
 
 
