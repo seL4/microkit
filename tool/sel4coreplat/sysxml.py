@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-2-Clause
 #
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 # See: https://stackoverflow.com/questions/6949395/is-there-a-way-to-get-a-line-number-from-an-elementtree-element
 # Force use of Python elementtree to avoid overloading
@@ -91,6 +91,7 @@ class ProtectionDomain:
     irqs: Tuple[SysIrq, ...]
     setvars: Tuple[SysSetVar, ...]
     child_pds: Tuple["ProtectionDomain", ...]
+    parent: Optional["ProtectionDomain"]
     element: ET.Element
 
 
@@ -112,10 +113,20 @@ class Channel:
     element: ET.Element
 
 
+def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
+    new_root_pd = replace(root_pd, child_pds=tuple(), parent=parent_pd)
+    new_child_pds = sum((_pd_tree_to_list(child_pd, new_root_pd) for child_pd in root_pd.child_pds), tuple())
+    return (new_root_pd, ) + new_child_pds
+
+
 def _pd_flatten(pds: Iterable[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
     """Given an iterable of protection domains flatten the tree representation
-    into a flat tuple."""
-    return tuple(pds) + sum((_pd_flatten(pd.child_pds) for pd in pds), ())
+    into a flat tuple.
+
+    In doing so the representation is changed from "Node with list of children",
+    to each node having a parent link instead.
+    """
+    return sum((_pd_tree_to_list(pd, None) for pd in pds), tuple())
 
 
 class SystemDescription:
@@ -301,6 +312,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         tuple(irqs),
         tuple(setvars),
         tuple(child_pds),
+        None,
         pd_xml
     )
 
