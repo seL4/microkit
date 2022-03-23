@@ -158,6 +158,7 @@ REPLY_CAP_IDX = 4
 BASE_OUTPUT_NOTIFICATION_CAP = 10
 BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
+BASE_TCB_CAP = BASE_IRQ_CAP + 64
 MAX_SYSTEM_INVOCATION_SIZE = mb(128)
 PD_CAPTABLE_BITS = 12
 PD_CAP_SIZE = 256
@@ -1318,6 +1319,23 @@ def build_system(
                     SEL4_RIGHTS_ALL,
                     0)
             )
+
+    ## Mint access to the child TCB in the PD Cspace
+    for cnode_obj, pd in zip(cnode_objects, system.protection_domains):
+        for maybe_child_tcb, maybe_child_pd in zip(tcb_objects, system.protection_domains):
+            if maybe_child_pd.parent is pd:
+                cap_idx = BASE_TCB_CAP + maybe_child_pd.pd_id
+                system_invocations.append(
+                    Sel4CnodeMint(
+                        cnode_obj.cap_addr,
+                        cap_idx,
+                        PD_CAP_BITS,
+                        root_cnode_cap,
+                        maybe_child_tcb.cap_addr,
+                        kernel_config.cap_address_bits,
+                        SEL4_RIGHTS_ALL,
+                        0)
+                )
 
     for cc in system.channels:
         pd_a = system.pd_by_name[cc.pd_a]
