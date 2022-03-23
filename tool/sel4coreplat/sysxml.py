@@ -91,7 +91,12 @@ class ProtectionDomain:
     setvars: Tuple[SysSetVar, ...]
     child_pds: Tuple["ProtectionDomain", ...]
     parent: Optional["ProtectionDomain"]
+    has_children: bool
     element: ET.Element
+
+    @property
+    def needs_ep(self) -> bool:
+        return self.pp or self.has_children
 
 
 @dataclass(frozen=True, eq=True)
@@ -327,6 +332,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         tuple(setvars),
         tuple(child_pds),
         None,
+        len(child_pds) > 0,
         pd_xml
     )
 
