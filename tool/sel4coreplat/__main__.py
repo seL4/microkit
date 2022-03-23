@@ -1080,8 +1080,8 @@ def build_system(
     tcb_caps = [tcb_obj.cap_addr for tcb_obj in tcb_objects]
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
     schedcontext_objects = init_system.allocate_objects(SEL4_SCHEDCONTEXT_OBJECT, schedcontext_names, size=PD_SCHEDCONTEXT_SIZE)
-    pp_protection_domains = [pd for pd in system.protection_domains if pd.pp]
-    endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pp_protection_domains]
+    pds_with_endpoints = [pd for pd in system.protection_domains if pd.needs_ep]
+    endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pds_with_endpoints]
     reply_names = ["Reply: Monitor"]+ [f"Reply: PD={pd.name}" for pd in system.protection_domains]
     reply_objects = init_system.allocate_objects(SEL4_REPLY_OBJECT, reply_names)
     reply_object = reply_objects[0]
@@ -1089,7 +1089,7 @@ def build_system(
     pd_reply_objects = reply_objects[1:]
     endpoint_objects = init_system.allocate_objects(SEL4_ENDPOINT_OBJECT, endpoint_names)
     fault_ep_endpoint_object = endpoint_objects[0]
-    pp_ep_endpoint_objects = dict(zip(pp_protection_domains, endpoint_objects[1:]))
+    pd_endpoint_objects = dict(zip(pds_with_endpoints, endpoint_objects[1:]))
     notification_names = [f"Notification: PD={pd.name}" for pd in system.protection_domains]
     notification_objects = init_system.allocate_objects(SEL4_NOTIFICATION_OBJECT, notification_names)
     notification_objects_by_pd = dict(zip(system.protection_domains, notification_objects))
@@ -1245,17 +1245,39 @@ def build_system(
             badged_irq_caps[pd].append(badged_cap_address)
             cap_slot += 1
 
-    invocation = Sel4CnodeMint(system_cnode_cap, cap_slot, system_cnode_bits, root_cnode_cap, fault_ep_endpoint_object.cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 1)
-    invocation.repeat(len(system.protection_domains), dest_index=1, badge=1)
-    system_invocations.append(invocation)
+    # Create a fault endpoint cap for each protection domain.
+    # For root PDs this shall be the system fault_ep_endpoint_object.
+    # For non-root PDs this shall be the parent endpoint.
     badged_fault_ep = system_cap_address_mask | cap_slot
-    cap_slot += len(system.protection_domains)
+    for idx, pd in enumerate(system.protection_domains, 1):
+        is_root = pd.parent is None
+        if is_root:
+            fault_ep_cap = fault_ep_endpoint_object.cap_addr
+            badge = idx
+        else:
+            assert pd.pd_id is not None
+            assert pd.parent is not None
+            fault_ep_cap = pd_endpoint_objects[pd.parent].cap_addr
+            badge =  (1 << 62) | pd.pd_id
+
+        invocation = Sel4CnodeMint(
+            system_cnode_cap,
+            cap_slot,
+            system_cnode_bits,
+            root_cnode_cap,
+            fault_ep_cap,
+            kernel_config.cap_address_bits,
+            SEL4_RIGHTS_ALL,
+            badge
+        )
+        system_invocations.append(invocation)
+        cap_slot += 1
 
     final_cap_slot = cap_slot
 
     ## Minting in the address space
     for pd, notification_obj, cnode_obj in zip(system.protection_domains, notification_objects, cnode_objects):
-        obj = pp_ep_endpoint_objects[pd] if pd.pp else notification_obj
+        obj = pd_endpoint_objects[pd] if pd.needs_ep else notification_obj
         assert INPUT_CAP_IDX < PD_CAP_SIZE
         system_invocations.append(
             Sel4CnodeMint(
@@ -1304,8 +1326,8 @@ def build_system(
         pd_b_cnode_obj = cnode_objects_by_pd[pd_b]
         pd_a_notification_obj = notification_objects_by_pd[pd_a]
         pd_b_notification_obj = notification_objects_by_pd[pd_b]
-        pd_a_endpoint_obj = pp_ep_endpoint_objects.get(pd_a)
-        pd_b_endpoint_obj = pp_ep_endpoint_objects.get(pd_b)
+        pd_a_endpoint_obj = pd_endpoint_objects.get(pd_a)
+        pd_b_endpoint_obj = pd_endpoint_objects.get(pd_b)
 
         # Set up the notification baps
         pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a
