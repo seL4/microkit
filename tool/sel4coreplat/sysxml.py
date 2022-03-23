@@ -81,6 +81,7 @@ class SysSetVar:
 
 @dataclass(frozen=True, eq=True)
 class ProtectionDomain:
+    pd_id: Optional[int]
     name: str
     priority: int
     budget: int
@@ -114,6 +115,13 @@ class Channel:
 
 
 def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
+    # Check child PDs have unique identifiers
+    child_ids = set()
+    for child_pd in root_pd.child_pds:
+        if child_pd.pd_id in child_ids:
+            raise UserError(f"duplicate pd_id: {child_pd.pd_id} in protection domain: '{root_pd.name}' @ {child_pd.element._loc_str}")  # type: ignore
+        child_ids.add(child_pd.pd_id)
+
     new_root_pd = replace(root_pd, child_pds=tuple(), parent=parent_pd)
     new_child_pds = sum((_pd_tree_to_list(child_pd, new_root_pd) for child_pd in root_pd.child_pds), tuple())
     return (new_root_pd, ) + new_child_pds
@@ -243,7 +251,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
     root_attrs = ("name", "priority", "pp", "budget", "period")
-    child_attrs = root_attrs + ("channel_id", )
+    child_attrs = root_attrs + ("pd_id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
     program_image: Optional[Path] = None
     name = checked_lookup(pd_xml, "name")
@@ -253,6 +261,13 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
 
     budget = int(pd_xml.attrib.get("budget", "1000"), base=0)
     period = int(pd_xml.attrib.get("period", str(budget)), base=0)
+    pd_id = None
+    if is_child:
+        pd_id = int(checked_lookup(pd_xml, "pd_id"), base=0)
+        if pd_id < 0 or pd_id > 255:
+            raise ValueError("pd_id must be between 0 and 255")
+    else:
+        pd_id = None
 
     if budget > period:
         raise ValueError(f"budget ({budget}) must be less than, or equal to, period ({period})")
@@ -302,6 +317,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         raise ValueError("program_image must be specified")
 
     return ProtectionDomain(
+        pd_id,
         name,
         priority,
         budget,
