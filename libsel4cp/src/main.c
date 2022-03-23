@@ -17,6 +17,9 @@
 
 #define NOTIFICATION_BITS 57
 
+#define PD_MASK 0xff
+#define CHANNEL_MASK 0x3f
+
 char _stack[4096]  __attribute__((__aligned__(16)));
 
 char sel4cp_name[16];
@@ -33,6 +36,10 @@ __attribute__((weak)) sel4cp_msginfo protected(sel4cp_channel ch, sel4cp_msginfo
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
 
+__attribute__((weak)) void fault(sel4cp_pd pd, sel4cp_msginfo msginfo)
+{
+}
+
 static void
 run_init_funcs(void)
 {
@@ -45,7 +52,7 @@ run_init_funcs(void)
 static void
 handler_loop(void)
 {
-    bool have_reply = false;
+    bool have_reply;
     seL4_MessageInfo_t reply_tag;
 
     for (;;) {
@@ -59,13 +66,17 @@ handler_loop(void)
         }
 
         uint64_t is_endpoint = badge >> 63;
+        uint64_t is_fault = (badge >> 62) & 1;
 
-        if (is_endpoint) {
+        have_reply = false;
+
+        if (is_fault) {
+            fault(badge & PD_MASK, tag);
+        } else if (is_endpoint) {
             have_reply = true;
-            reply_tag = protected(badge & 0x3f, tag);
+            reply_tag = protected(badge & CHANNEL_MASK, tag);
         } else {
             unsigned int idx = 0;
-            have_reply = false;
             do  {
                 if (badge & 1) {
                     notified(idx);
