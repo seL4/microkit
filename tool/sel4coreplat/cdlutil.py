@@ -1,3 +1,8 @@
+# Copyright 2022, University of New South Wales, Sydney
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+
 import capdl
 
 from typing import (Any, NamedTuple, Optional, Tuple, Union)
