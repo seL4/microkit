@@ -636,7 +636,6 @@ def build_system(
 
     invocation: Sel4Invocation
 
-    # Z: CapDL stuff starts here
     register_aarch64_sizes()
     cdl_spec = capdl.Spec("aarch64")
     ko_to_cdlo = {}  # dicts for moving between kernel and CDL objects
@@ -806,10 +805,6 @@ def build_system(
     # First up create the root cnode
     bootstrap_invocations: List[Sel4Invocation] = []
 
-    # Z: A CNode is an array of optional capabilities.
-    # Z: A CSlot is an optional capability...
-    # Z:   either empty (null)
-    # Z:   or else full (contains a capability to a kernel resource)
 
     bootstrap_invocations.append(Sel4UntypedRetype(
             root_cnode_allocation.untyped_cap_address, # Z: parent (cap to retype)
@@ -825,9 +820,6 @@ def build_system(
     # Z: Calling Sel4UntypedRetype with second argument equal to SEL4_UNTYPED_OBJECT
     # Z: simply resizes the given untyped.
     # Z: However, calling it with SEL4_CNODE_OBJECT creates a new CNode kernel object.
-
-    # Z: CapDL corresponding to invocation above should be something
-    # Z: objects { root_cnode = cnode (`root_cnode_bits` bits) }
 
     # 2.1.4: Now insert a cap to the initial Cnode into slot zero of the newly
     # allocated root Cnode. It uses sufficient guard bits to ensure it is
@@ -846,8 +838,6 @@ def build_system(
         SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
         guard                                          # Z: badge
     ))
-    # Z: caps {  }
-    # Z: objects { root_cnode = cnode (`root_cnode_bits` bits) }
 
     # Z: According to the seL4 docs, the 0th CSlot of a CNode is always kept empty.
     # Z: What gives? Probably means that it's initially kept empty (as opposed to
@@ -879,9 +869,6 @@ def build_system(
         system_cnode_cap,
         1
     ))
-    # Z: objects { system_cnode = cnode (`system_cnode_bits` bits) }
-
-    # Z: caps { system_cnode { 1: ??? 2: ??? } }
 
     # 2.1.7: Now that the we have create the object, we can 'mutate' it
     # to the correct place:
@@ -961,7 +948,6 @@ def build_system(
     # Z: do we need to care about device untypeds at all, or is this
     # Z: something that the capdl_loader will know how to deal with?
     # Z: TODO: Ask Corey
-    # Z: based on sel4.py I guess these should just be 4k frames
 
     # 2.2.1: Now that physical pages have been allocated it is possible to setup
     # the virtual memory objects so that the pages can be mapped into virtual memory
@@ -1025,43 +1011,6 @@ def build_system(
     invocation.repeat(pages_required, page=1, vaddr=kernel_config.minimum_page_size)
     bootstrap_invocations.append(invocation)
 
-
-    # Z: WRITE A CAPDL SPEC HERE
-    #
-    #
-    # arch aarch64
-    #
-    # objects {
-    #   root_cnode = cnode (`root_cnode_bits` bits)
-    #   system_cnode = cnode (`system_cnode_bits` bits)
-    #
-    #   root_tcb = tcb (init: [???], dom: ???)     /* what the heck is a TCB dom? */
-    #   root_pagedir = pd  /* what about that INIT_VSPACE?! */
-    #
-    #   invtable_frames[`pages_required`] = frame (4k)
-    #   invtable_pagetab = pt
-    #   
-    # }
-    # caps {
-    #   root_cnode {
-    #     0: ??? /* minted in step 2.1 */
-    #     1: system_cnode 
-    #   }
-    # 
-    #   root_tcb { /* will root_cnode need to contain a cap for this? */
-    #     vspace: root_pagedir
-    #     cspace: root_cnode
-    #   }
-    #
-    #   invtable_pagetab {
-    #     `vaddr`: invtable_frames  /* check this, what about repeat? */
-    #   }
-    #
-    #   root_pagedir {
-    #     `vaddr`: invtable_pagetab  /* how do these addrs interact with pagetab?! */
-    #   }
-    # }
-
     # 3. Now we can start setting up the system based on the information
     # the user provided in the system xml.
     #
@@ -1119,7 +1068,6 @@ def build_system(
             pd_extra_maps[pd] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
-    print('Z: got all_mrs %r' % repr(all_mrs))
     all_mr_by_name = {mr.name: mr for mr in all_mrs}
 
     system_invocations: List[Sel4Invocation] = []
@@ -1160,7 +1108,6 @@ def build_system(
                 fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (pif.pd_name, pif.index*4096)
                 cdlo.set_fill([fill])
             cdl_spec.add_object(cdlo) 
-            print('Z: added object %r' % ko)
 
     ipc_buffer_objects = page_objects[0x1000][:len(system.protection_domains)]
 
@@ -1199,13 +1146,9 @@ def build_system(
         name = f"{obj_type_name}: MR={mr.name} @ {phys_addr:x}"
         page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, names=[name])[0]
         mr_pages[mr].append(page)
-        print('Z: Final HIT')
-        print('Z: Final HIT cdlinfo_of_mr %r' % repr(cdlinfo_of_mr))
         mri = cdlinfo_of_mr.get(mr, MRInfoNotELF())
         cdlo = capdl.Frame(cdlsafe(page.name), paddr=phys_addr)
-        print('Z: Final HIT mri %r' % repr(mri))
         if isinstance(mri, MRInfoELF):
-            print('Z: Final HIT page %r' % repr(page))
             # Z: FIXME this offset is not quite right for multiple protection domains
             fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (mri.pd_name, phys_addr - all_mrs[0].phys_addr)
             cdlo.set_fill([fill])
@@ -1233,7 +1176,6 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-        print('Z: added object %r' % ko)
 
     pp_protection_domains = [pd for pd in system.protection_domains if pd.pp]
     endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pp_protection_domains]
@@ -1253,7 +1195,6 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-        print('Z: added object %r' % ko)
 
     # Determine number of upper directory / directory / page table objects required
     #
@@ -1281,25 +1222,17 @@ def build_system(
         # in, and then make sure this is set
         vaddrs = [(ipc_buffer_vaddr, 0x1000)]
         for map in (pd.maps + pd_extra_maps[pd]):
-            print('Z: !!START')
-            print('Z: !!  on %r' % map)
             mr = all_mr_by_name[map.mr]
-            print('Z: !!  found mr = %r' % mr)
             vaddr = map.vaddr
-            print('Z: !!  found vaddr = %s' % vaddr)
             for _ in range(mr.page_count):
                 vaddrs.append((vaddr, mr.page_size))
                 vaddr += mr_page_bytes(mr)
-            print('Z: !!END with vaddrs = %s' % vaddrs)
 
         for vaddr, page_size in vaddrs:
             upper_directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9 + 9))
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
-        print('Z: upper_dir %s' % upper_directory_vaddrs)
-        print('Z: lower_dir %s' % directory_vaddrs)
-        print('Z: ptable_ad %s' % page_table_vaddrs)
         uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
         pts += [(pd_idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
@@ -1313,16 +1246,12 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-        print('Z: added object %r' % ko)
 
 
     ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
     ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
 
     for ko, pd_idx, vaddr in zip(ud_objects, [pd_idx for (pd_idx, _) in uds], [vaddr for (pd_idx, vaddr) in uds]):
-        print('Z:    UD %s' % repr(ko))
-        print('Z:    UD pd idx %s' % pd_idx)
-        print('Z:    UD vaddr %s' % pd_idx)
         cdlo = PUD(cdlsafe(ko.name))
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
@@ -1335,19 +1264,12 @@ def build_system(
         container_cdlo = ko_to_cdlo[container_ko]
         container_mte = parent_mte_of(mte)
         mte_to_cdlo[container_mte] = container_cdlo
-        print('Z:    UD cdlo %s' % cdlo)
-        print('Z:    UD mte %s' % repr(mte))
-        print('Z:    UD container_cdlo %s' % container_cdlo)
-        print('Z:    UD container_mte %s' % repr(container_mte))
-        print('Z: added object %r' % ko)
 
 
     d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
     d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
 
     for ko, vaddr in zip(d_objects, [vaddr for (_, vaddr) in ds]):
-        print('Z:    D %s' % repr(ko))
-        print('Z:    D vaddr %s' % pd_idx)
         cdlo = PageDirectory(cdlsafe(ko.name))
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
@@ -1358,11 +1280,6 @@ def build_system(
 
         container_mte = parent_mte_of(mte)
         container_cdlo = mte_to_cdlo[parent_mte_of(mte)]
-        print('Z:    D cdlo %s' % cdlo)
-        print('Z:    D mte %s' % repr(mte))
-        print('Z:    D contaner_mte %s' % repr(container_mte))
-        print('Z:    D contaner_cdlo %s' % container_cdlo)
-        print('Z: added object %r' % ko)
 
     pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, pt_names)
@@ -1379,11 +1296,6 @@ def build_system(
         
         container_mte = parent_mte_of(mte)
         container_cdlo = mte_to_cdlo[parent_mte_of(mte)]
-        print('Z:    PT cdlo %s' % cdlo)
-        print('Z:    PT mte %s' % repr(mte))
-        print('Z:    PT contaner_mte %s' % repr(container_mte))
-        print('Z:    PT contaner_cdlo %s' % container_cdlo)
-        print('Z: added object %r' % ko)
 
     # Create CNodes - all CNode objects are the same size: 128 slots.
     cnode_names = [f"CNode: PD={pd.name}" for pd in system.protection_domains]
@@ -1395,7 +1307,6 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-        print('Z: added object %r' % ko)
 
     cap_slot = init_system._cap_slot
 
@@ -1478,7 +1389,6 @@ def build_system(
             page_descriptors.append(new_descriptor)
             page_desc_cdlinfo[new_descriptor] = [(mr, mrp) for mrp in mr_pages[mr]]
 
-            print('Z: PADS: %s' % [repr(pad) for pad in page_descriptors]  )
 
             for idx in range(len(mr_pages[mr])):
                 cap_address_names[system_cap_address_mask | (cap_slot + idx)] = cap_address_names[mr_pages[mr][0].cap_addr + idx] + " (derived)"
@@ -1679,7 +1589,6 @@ def build_system(
 
 
     # All minting is complete at this point
-    print("Z: Minting is complete:")
     print(cdl_spec)
 
 
@@ -1697,8 +1606,6 @@ def build_system(
         (Sel4PageDirectoryMap, vaddr_to_d, ds, d_objects),
         (Sel4PageTableMap, vaddr_to_pt, pts, pt_objects),
     ]:
-        print("Z: on (domain,vaddr) %r" % descriptors)
-        print("Z: with objects %r" % objects)
 
         # Z: Here we need to maintain the mapping table. A vaddr
         # Z: is a number that consists of multiple segments,
@@ -1724,7 +1631,6 @@ def build_system(
             container_cdlo = mte_to_cdlo[container_mte]
             container_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo)
 
-    print('Z: VSpace initialization is complete...')
     print(cdl_spec)
 
     # Now maps all the pages
@@ -1748,19 +1654,12 @@ def build_system(
             parent_cdlo = mte_to_cdlo[parent_mte_of(mte)]
             parent_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo, read=True, write=True, grant=True)
             vaddr_tmp = vaddr_tmp + vaddr_incr
-            print("Z: WRNG mr %r" % repr(mr))
-            print("Z: WRNG ko %r" % repr(ko))
-            print("Z: WRNG cdlo %r" % repr(cdlo))
-            print("Z: WRNG vaddr %r" % repr(vaddr_tmp))
-            print("Z: WRNG mte %r" % repr(mte))
-            print("Z: %r" % repr(mte_to_cdlo))
 
         #for pn in range(count):
         #    cdlo = RTReply(cdlsafe(ko.name))
         #    cdlo_to_ko[cdlo] = ko
         #    ko_to_cdlo[ko] = cdlo
         #    cdl_spec.add_object(cdlo)
-        print('Z: WARNING added object %r' % ko)
 
 
     # And, finally, map all the IPC buffers
@@ -1781,7 +1680,6 @@ def build_system(
         parent_cdlo = mte_to_cdlo[parent_mte_of(mte)]
         parent_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo, read=True, write=True)
 
-    print('Z: All page mapping is complete...')
     print(cdl_spec)
 
 
@@ -1848,8 +1746,6 @@ def build_system(
     system_invocations.append(invocation)
 
     for ko, pd, cspace, vspace, ipc_buffer_obj in zip(tcb_objects, system.protection_domains, cnode_objects, vspace_objects, ipc_buffer_objects):
-        print("Z: grand finale %s" % repr(ko))
-        print("Z: grand finale %s" % repr(pd))
         ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
 
         cdlo = TCB(
@@ -1867,10 +1763,8 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-        print('Z: added object %r' % ko)
 
 
-    print('Z: CapDL construction is complete...')
     print(cdl_spec)
 
 
@@ -2035,7 +1929,6 @@ def main() -> int:
     def cdlid(x):
         return cdlsafe(x)
     
-    print('Z: Dumping object-only built-system CDL for comparison')
     for ko in built_system.kernel_objects:
         if ko.object_type == SEL4_SMALL_PAGE_OBJECT:
             obj = capdl.Frame(cdlid(ko.name ), paddr=ko.phys_addr)
