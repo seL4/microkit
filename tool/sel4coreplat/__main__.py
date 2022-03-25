@@ -1060,15 +1060,16 @@ def build_system(
     monitor_vspace.slots[0] = capdl.Cap(monitor_pud)
     monitor_pud.slots[2] = capdl.Cap(monitor_pd)
     monitor_pd.slots[0x50] = capdl.Cap(monitor_pt)
-    for i in range(7):
+    monitor_pages_required = initial_task_virt_region.size // kernel_config.minimum_page_size
+    for i in range(monitor_pages_required):
         page = capdl.Frame(f"monitor_page_{i}")
         cdl_spec.add_object(page)
+        page.set_fill(['{0 %s CDL_FrameFill_FileData "monitor.elf" %s}' % (kernel_config.minimum_page_size, i * kernel_config.minimum_page_size)])
         monitor_pt.slots[i] = capdl.Cap(page, read=True, write=True, grant=True)
-    # FIXME: find proper way to get monitor ipc buffer range [0x8a00_7000, 0x8a00_8000)
     monitor_ipc_buf = capdl.Frame("monitor_ipc_buf")
     cdl_spec.add_object(monitor_ipc_buf)
-    monitor_pt.slots[7] = capdl.Cap(monitor_ipc_buf, read=True, write=True)
-    monitor_tcb.addr = 0x8a00_7000
+    monitor_pt.slots[monitor_pages_required] = capdl.Cap(monitor_ipc_buf, read=True, write=True)
+    monitor_tcb.addr = 0x8a00_0000 + monitor_pages_required*kernel_config.minimum_page_size
 
     # 3. Now we can start setting up the system based on the information
     # the user provided in the system xml.
