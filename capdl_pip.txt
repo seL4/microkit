@@ -1,0 +1,12 @@
+
+from setuptools import setup
+setup(name='capdl',
+version='0.2.1',
+description='CapDL-tool',
+url='https://docs.sel4.systems/projects/capdl/',
+author='Gerwin Klein',
+author_email='gerwin.klein@proofcraft.systems',
+license='MIT',
+packages=['capdl'],
+zip_safe=False)
+

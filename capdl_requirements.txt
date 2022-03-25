@@ -1,0 +1,11 @@
+#
+# Copyright 2022, University of New South Wales, Sydney
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+six==1.16.0
+aenum==3.1.8
+future==0.18.2
+pyelftools==0.28
+sortedcontainers==2.4.0
+
