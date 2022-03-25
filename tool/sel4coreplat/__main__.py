@@ -44,7 +44,7 @@ from os import environ
 from math import log2, ceil
 from sys import argv, executable, stderr
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import capdl
 from capdl.Object import (TCB, SC, RTReply, Endpoint, Notification, PUD, PGD, PageDirectory, PageTable, CNode)
@@ -610,6 +610,7 @@ class BuiltSystem:
     kernel_objects: List[KernelObject]
     initial_task_virt_region: MemoryRegion
     initial_task_phys_region: MemoryRegion
+    cdl_spec: Optional[Any]
 
 
 def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
@@ -1589,7 +1590,6 @@ def build_system(
 
 
     # All minting is complete at this point
-    print(cdl_spec)
 
 
     # Z: Skipped for now, no IRQ support in CapDL prototype
@@ -1631,7 +1631,6 @@ def build_system(
             container_cdlo = mte_to_cdlo[container_mte]
             container_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo)
 
-    print(cdl_spec)
 
     # Now maps all the pages
     for page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
@@ -1679,8 +1678,6 @@ def build_system(
         mte = vaddr_to_pf(vaddr_tmp, 0x1000)
         parent_cdlo = mte_to_cdlo[parent_mte_of(mte)]
         parent_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo, read=True, write=True)
-
-    print(cdl_spec)
 
 
     # Initialise the TCBs
@@ -1752,7 +1749,7 @@ def build_system(
             cdlsafe(ko.name),
             ipc_buffer_vaddr=ipc_buffer_vaddr,
             ip=pd_elf_files[pd].entry,
-            sp=0x0,
+            sp=pd_elf_files[pd].find_symbol('_stack')[0],
             prio=pd.priority,
             max_prio=pd.priority,
             fault_ep_slot=0xDEADBEEF, # FIXME: with monitor support
@@ -1763,9 +1760,6 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-
-
-    print(cdl_spec)
 
 
     # All of the objects are created at this point; we don't need to both
@@ -1813,6 +1807,7 @@ def build_system(
         kernel_objects = init_system._objects,
         initial_task_phys_region = initial_task_phys_region,
         initial_task_virt_region = initial_task_virt_region,
+        cdl_spec = cdl_spec
     )
 
 
@@ -1841,6 +1836,7 @@ def main() -> int:
     parser.add_argument("system", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=Path("loader.img"))
     parser.add_argument("-r", "--report", type=Path, default=Path("report.txt"))
+    parser.add_argument("-c", "--capdl", type=Path, default=Path("system.cdl"))
     parser.add_argument("--board", required=True, choices=available_boards)
     parser.add_argument("--config", required=True)
     parser.add_argument("--search-path", nargs='*', type=Path)
@@ -1924,38 +1920,6 @@ def main() -> int:
 
         invocation_table_size = max(invocation_table_size, new_invocation_table_size)
         system_cnode_size = max(system_cnode_size, new_system_cnode_size)
-
-    cdl_spec = capdl.Spec("aarch64")
-    def cdlid(x):
-        return cdlsafe(x)
-    
-    for ko in built_system.kernel_objects:
-        if ko.object_type == SEL4_SMALL_PAGE_OBJECT:
-            obj = capdl.Frame(cdlid(ko.name ), paddr=ko.phys_addr)
-        elif ko.object_type == SEL4_TCB_OBJECT:
-            obj = TCB(cdlid(ko.name ))
-        elif ko.object_type == SEL4_SCHEDCONTEXT_OBJECT:
-            obj = SC(cdlid(ko.name ))
-        elif ko.object_type == SEL4_REPLY_OBJECT:
-            obj = RTReply(cdlid(ko.name ))
-        elif ko.object_type == SEL4_ENDPOINT_OBJECT:
-            obj = Endpoint(cdlid(ko.name ))
-        elif ko.object_type == SEL4_NOTIFICATION_OBJECT:
-            obj = Notification(cdlid(ko.name ))
-        elif ko.object_type == SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT:
-            obj = PGD(cdlid(ko.name ))
-        elif ko.object_type == SEL4_PAGE_UPPER_DIRECTORY_OBJECT:
-            obj = PUD(cdlid(ko.name ))
-        elif ko.object_type == SEL4_PAGE_DIRECTORY_OBJECT:
-            obj = PageDirectory(cdlid(ko.name ))
-        elif ko.object_type == SEL4_PAGE_TABLE_OBJECT:
-            obj = PageTable(cdlid(ko.name ))
-        elif ko.object_type == SEL4_CNODE_OBJECT:
-            obj = CNode(cdlid(ko.name ))
-        else:
-            raise Exception("unknown object type {}".format(SEL4_OBJECT_TYPE_NAMES[ko.object_type]))
-        cdl_spec.add_object(obj)
-    print(cdl_spec)
 
     # At this point we just need to patch the files (in memory) and write out the final image.
 
@@ -2064,6 +2028,10 @@ def main() -> int:
         f.write("# System Kernel Invocations Detail\n\n")
         for idx, invocation in enumerate(built_system.system_invocations):
             f.write(f"    0x{idx:04x} {invocation_to_str(invocation, cap_lookup)}\n")
+
+    with args.capdl.open("w") as f:
+        f.write('%s' % built_system.cdl_spec)
+
 
     # FIXME: Verify that the regions do not overlap!
     loader = Loader(
