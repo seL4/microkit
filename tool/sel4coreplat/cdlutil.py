@@ -8,6 +8,11 @@ from sel4coreplat.util import (MemoryRegion)
 from sel4coreplat.sysxml import (ProtectionDomain)
 from sel4coreplat.sysxml import (SysMap, SysMemoryRegion)
 
+
+def cdlsafe(string: str) -> str:
+    '''Turns a string into an object name that can be safely used in CapDL specs.'''
+    return ''.join(c.lower() if c.isalnum() else '_' for c in string)
+
 aarch64_sizes = {
     ObjectType.seL4_TCBObject: 11,
     ObjectType.seL4_EndpointObject: 4,
@@ -47,8 +52,8 @@ aarch64_sizes = {
 def register_aarch64_sizes() -> None:
     register_object_sizes(aarch64_sizes)
 
-def cdlsafe(string: str) -> str:
-    return ''.join(c.lower() if c.isalnum() else '_' for c in string)
+
+# Structured objects for keeping track of CDL-specific info in __main__:
 
 MRInfoNotELF = NamedTuple('MRInfoNotELF', [])
 MRInfoELF = NamedTuple('MRInfoELF', [('pd_name', str), ('seg_index', int)])
@@ -62,6 +67,17 @@ def mrinfo_to_pageinfo(mri: MRInfo, index: int) -> PageInfo:
     if isinstance(mri, MRInfoELF):
         return PageInfoELF(mri.pd_name, mri.seg_index, index)
     return PageInfoNotELF()
+
+# Structured objects for keeping track of the mapping table.
+# A mapping table is required because the capdl initialiser sort of reverses
+# how sel4 expects things to be mapped. In sel4 you provide a vaddr that is
+# resolved from the top of the vspace. Think of the vaddr as providing the
+# path to get from the top-level paging structure (the pgd), all the way to
+# the specific slot. While in capdl you construct this vaddr from its
+# components (the slot being mapped to in the current level, and the slots
+# that the various structures are mapped to in the higher levels).
+# Hence, to generate the CapDL, we need the mapping table to reverse this
+# mapping.
 
 GlobalDir = NamedTuple('GlobalDir', [('pd_index', int)])
 UpperDir = NamedTuple('UpperDir', [('pd_index',int)])
@@ -132,30 +148,9 @@ def parent_mte_of(mte: MTE) -> MTE:
     raise ValueError()
 
 def mapping_slot_of(current_mte: MTE) -> int:
+    '''Returns the slot number of an MTE inside its parent in the CapDL.'''
     parent_mte = parent_mte_of(current_mte)
     slot = current_mte.vaddr - parent_mte.vaddr
     alignment = alignment_of_mte(current_mte)
     return (slot >> alignment)
 
-
-
-
-#       root_cnode_cap,                                # Z: destination CNode
-#       0,                                             # Z: destination index
-#       root_cnode_bits,                               # Z: destination depth
-#       INIT_CNODE_CAP_ADDRESS,                        # Z: source CNode
-#       INIT_CNODE_CAP_ADDRESS,                        # Z: source CSlot index
-#       kernel_config.cap_address_bits,                # Z: source depth
-#       SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
-#       guard                                          # Z: badge
-
-
-# client_client_0_control_tcb = tcb (
-#   addr: 0x53e000,
-#   ip: 0x405fe8,
-#   sp: 0x53c000,
-#   prio: 254,
-#   max_prio: 254,
-#   affinity: 0,
-#   init: [1],
-#   fault_ep: 0x00000002)
