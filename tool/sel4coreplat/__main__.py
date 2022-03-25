@@ -1,4 +1,3 @@
-#
 # Copyright 2021, Breakaway Consulting Pty. Ltd.
 #
 # SPDX-License-Identifier: BSD-2-Clause
@@ -47,6 +46,12 @@ from sys import argv, executable, stderr
 
 from typing import Dict, List, Optional, Tuple, Union
 
+import capdl
+from capdl.Object import (TCB, SC, RTReply, Endpoint, Notification, PUD, PGD, PageDirectory, PageTable, CNode)
+from sel4coreplat.cdlutil import (register_aarch64_sizes, cdlsafe, MTE, GlobalDir, UpperDir, LowerDir, PTable, PFrame,
+                                  vaddr_to_ud, vaddr_to_d, vaddr_to_pt, vaddr_to_pf, parent_mte_of, mapping_slot_of,
+                                  MRInfoNotELF, MRInfoELF, MRInfo, PageInfoNotELF, PageInfoELF, PageInfo, mrinfo_to_pageinfo)
+
 from sel4coreplat.elf import ElfFile
 from sel4coreplat.util import kb, mb, lsb, msb, round_up, round_down, mask_bits, is_power_of_two, MemoryRegion, UserError
 from sel4coreplat.sel4 import (
@@ -82,6 +87,7 @@ from sel4coreplat.sel4 import (
     SEL4_ENDPOINT_OBJECT,
     SEL4_NOTIFICATION_OBJECT,
     SEL4_VSPACE_OBJECT,
+    SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT,
     SEL4_PAGE_UPPER_DIRECTORY_OBJECT,
     SEL4_PAGE_DIRECTORY_OBJECT,
     SEL4_SMALL_PAGE_OBJECT,
@@ -233,7 +239,7 @@ class KernelObjectAllocator:
                 ut.allocations.append(allocation)
                 return allocation
 
-        raise Exception("Can't alloc - nos pace")
+        raise Exception("Can't alloc - no space")
 
 
 def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
@@ -614,7 +620,6 @@ def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
     else:
         raise UserError(f"Error: unable to find program image: '{filename}'")
 
-
 def build_system(
         kernel_config: KernelConfig,
         kernel_elf: ElfFile,
@@ -630,6 +635,13 @@ def build_system(
     assert invocation_table_size <= MAX_SYSTEM_INVOCATION_SIZE
 
     invocation: Sel4Invocation
+
+    # Z: CapDL stuff starts here
+    register_aarch64_sizes()
+    cdl_spec = capdl.Spec("aarch64")
+    ko_to_cdlo = {}  # dicts for moving between kernel and CDL objects
+    cdlo_to_ko = {}
+    mte_to_cdlo = dict()  # mapping table
 
     cap_address_names = {}
     cap_address_names[INIT_NULL_CAP_ADDRESS] = "null"
@@ -946,6 +958,9 @@ def build_system(
         if remaining_pages == 0:
             break
 
+    # Z: do we need to care about device untypeds at all, or is this
+    # Z: something that the capdl_loader will know how to deal with?
+    # Z: TODO: Ask Corey
     # Z: based on sel4.py I guess these should just be 4k frames
 
     # 2.2.1: Now that physical pages have been allocated it is possible to setup
@@ -1066,6 +1081,9 @@ def build_system(
     #     as needed by protection domains based on mappings required
 
 
+    # Z: keeps track of ELF origins
+    cdlinfo_of_mr = dict()
+
     phys_addr_next = reserved_base + invocation_table_size
     # Now we create additional MRs (and mappings) for the ELF files.
     regions: List[Region] = []
@@ -1076,7 +1094,7 @@ def build_system(
         for segment in pd_elf_files[pd].segments:
             if not segment.loadable:
                 continue
-
+            print("Handling segment_idx %s - in segment %s" % (repr(seg_idx),repr(segment)))
             regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", phys_addr_next, segment.data))
 
             perms = ""
@@ -1092,6 +1110,7 @@ def build_system(
             aligned_size = end_vaddr - base_vaddr
             name = f"ELF:{pd.name}-{seg_idx}"
             mr = SysMemoryRegion(name, aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
+            cdlinfo_of_mr[mr] = MRInfoELF(pd.name, seg_idx)
             seg_idx += 1
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
@@ -1100,6 +1119,7 @@ def build_system(
             pd_extra_maps[pd] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
+    print('Z: got all_mrs %r' % repr(all_mrs))
     all_mr_by_name = {mr.name: mr for mr in all_mrs}
 
     system_invocations: List[Sel4Invocation] = []
@@ -1113,17 +1133,34 @@ def build_system(
     page_names_by_size: Dict[int, List[str]] = {
         page_size: [] for page_size in SUPPORTED_PAGE_SIZES
     }
+    page_cdlinfo_by_size = {
+      page_size: [] for page_size in SUPPORTED_PAGE_SIZES
+    }
     page_names_by_size[0x1000] += [f"Page({human_size_strict(0x1000)}): IPC Buffer PD={pd.name}" for pd in system.protection_domains]
+    page_cdlinfo_by_size[0x1000] += [PageInfoNotELF() for pd in system.protection_domains]
+
     for mr in all_mrs:
         if mr.phys_addr is not None:
             continue
+        mri = cdlinfo_of_mr.get(mr, MRInfoNotELF())
+ 
         page_size_human = human_size_strict(mr.page_size)
         page_names_by_size[mr.page_size] +=  [f"Page({page_size_human}): MR={mr.name} #{idx}" for idx in range(mr.page_count)]
+        page_cdlinfo_by_size[mr.page_size] += [mrinfo_to_pageinfo(mri, idx) for idx in range(mr.page_count)]
 
     page_objects: Dict[int, List[KernelObject]] = {}
 
     for page_size, page_object in reversed(list(zip(SUPPORTED_PAGE_SIZES, SUPPORTED_PAGE_OBJECTS))):
         page_objects[page_size] = init_system.allocate_objects(page_object, page_names_by_size[page_size])
+        for (ko, pif) in zip(page_objects[page_size], page_cdlinfo_by_size[page_size]):
+            cdlo = capdl.Frame(cdlsafe(ko.name), size=page_size)
+            cdlo_to_ko[cdlo] = ko
+            ko_to_cdlo[ko] = cdlo
+            if isinstance(pif, PageInfoELF):
+                fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (pif.pd_name, pif.index*4096)
+                cdlo.set_fill([fill])
+            cdl_spec.add_object(cdlo) 
+            print('Z: added object %r' % ko)
 
     ipc_buffer_objects = page_objects[0x1000][:len(system.protection_domains)]
 
@@ -1162,25 +1199,61 @@ def build_system(
         name = f"{obj_type_name}: MR={mr.name} @ {phys_addr:x}"
         page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, names=[name])[0]
         mr_pages[mr].append(page)
+        print('Z: Final HIT')
+        print('Z: Final HIT cdlinfo_of_mr %r' % repr(cdlinfo_of_mr))
+        mri = cdlinfo_of_mr.get(mr, MRInfoNotELF())
+        cdlo = capdl.Frame(cdlsafe(page.name), paddr=phys_addr)
+        print('Z: Final HIT mri %r' % repr(mri))
+        if isinstance(mri, MRInfoELF):
+            print('Z: Final HIT page %r' % repr(page))
+            # Z: FIXME this offset is not quite right for multiple protection domains
+            fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (mri.pd_name, phys_addr - all_mrs[0].phys_addr)
+            cdlo.set_fill([fill])
+        ko_to_cdlo[page] = cdlo
+        cdlo_to_ko[cdlo] = page
+        cdl_spec.add_object(cdlo)
 
     tcb_names = [f"TCB: PD={pd.name}" for pd in system.protection_domains]
     tcb_objects = init_system.allocate_objects(SEL4_TCB_OBJECT, tcb_names)
     tcb_caps = [tcb_obj.cap_addr for tcb_obj in tcb_objects]
+
+    # Z: We postpone cdlo creation for TCBs until we have the necessary eps and scs
+    
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
     schedcontext_objects = init_system.allocate_objects(SEL4_SCHEDCONTEXT_OBJECT, schedcontext_names, size=PD_SCHEDCONTEXT_SIZE)
-    pp_protection_domains = [pd for pd in system.protection_domains if pd.pp]
-    endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pp_protection_domains]
+
     reply_names = ["Reply: Monitor"]+ [f"Reply: PD={pd.name}" for pd in system.protection_domains]
     reply_objects = init_system.allocate_objects(SEL4_REPLY_OBJECT, reply_names)
     reply_object = reply_objects[0]
     # FIXME: Probably only need reply objects for PPs
     pd_reply_objects = reply_objects[1:]
+
+    for ko in pd_reply_objects:
+        cdlo = RTReply(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+        print('Z: added object %r' % ko)
+
+    pp_protection_domains = [pd for pd in system.protection_domains if pd.pp]
+    endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pp_protection_domains]
     endpoint_objects = init_system.allocate_objects(SEL4_ENDPOINT_OBJECT, endpoint_names)
     fault_ep_endpoint_object = endpoint_objects[0]
     pp_ep_endpoint_objects = dict(zip(pp_protection_domains, endpoint_objects[1:]))
+
+    # Z: We will add fault_ep endpoint here once monitor is supported.
+    # Z: Skipped other endpoints (no protected procedure support in CDL prototype)
+
     notification_names = [f"Notification: PD={pd.name}" for pd in system.protection_domains]
     notification_objects = init_system.allocate_objects(SEL4_NOTIFICATION_OBJECT, notification_names)
     notification_objects_by_pd = dict(zip(system.protection_domains, notification_objects))
+
+    for ko in notification_objects:
+        cdlo = Endpoint(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+        print('Z: added object %r' % ko)
 
     # Determine number of upper directory / directory / page table objects required
     #
@@ -1205,45 +1278,128 @@ def build_system(
 
         # For each page, in each map determine we determine
         # which upper directory, directory and page table is resides
-        # in, and then page sure this is set
+        # in, and then make sure this is set
         vaddrs = [(ipc_buffer_vaddr, 0x1000)]
         for map in (pd.maps + pd_extra_maps[pd]):
+            print('Z: !!START')
+            print('Z: !!  on %r' % map)
             mr = all_mr_by_name[map.mr]
+            print('Z: !!  found mr = %r' % mr)
             vaddr = map.vaddr
+            print('Z: !!  found vaddr = %s' % vaddr)
             for _ in range(mr.page_count):
                 vaddrs.append((vaddr, mr.page_size))
                 vaddr += mr_page_bytes(mr)
+            print('Z: !!END with vaddrs = %s' % vaddrs)
 
         for vaddr, page_size in vaddrs:
             upper_directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9 + 9))
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
+        print('Z: upper_dir %s' % upper_directory_vaddrs)
+        print('Z: lower_dir %s' % directory_vaddrs)
+        print('Z: ptable_ad %s' % page_table_vaddrs)
         uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
         pts += [(pd_idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
 
-    pd_names = [pd.name for p in system.protection_domains]
+    pd_names = [pd.name for pd in system.protection_domains]
     vspace_names = [f"VSpace: PD={pd.name}" for pd in system.protection_domains]
-
     vspace_objects = init_system.allocate_objects(SEL4_VSPACE_OBJECT, vspace_names)
+
+    for ko in vspace_objects:
+        cdlo = PGD(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+        print('Z: added object %r' % ko)
+
 
     ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
     ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
 
+    for ko, pd_idx, vaddr in zip(ud_objects, [pd_idx for (pd_idx, _) in uds], [vaddr for (pd_idx, vaddr) in uds]):
+        print('Z:    UD %s' % repr(ko))
+        print('Z:    UD pd idx %s' % pd_idx)
+        print('Z:    UD vaddr %s' % pd_idx)
+        cdlo = PUD(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+                
+        mte = vaddr_to_ud(vaddr)
+        mte_to_cdlo[mte] = cdlo
+
+        container_ko = vspace_objects[pd_idx]
+        container_cdlo = ko_to_cdlo[container_ko]
+        container_mte = parent_mte_of(mte)
+        mte_to_cdlo[container_mte] = container_cdlo
+        print('Z:    UD cdlo %s' % cdlo)
+        print('Z:    UD mte %s' % repr(mte))
+        print('Z:    UD container_cdlo %s' % container_cdlo)
+        print('Z:    UD container_mte %s' % repr(container_mte))
+        print('Z: added object %r' % ko)
+
+
     d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
     d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
 
+    for ko, vaddr in zip(d_objects, [vaddr for (_, vaddr) in ds]):
+        print('Z:    D %s' % repr(ko))
+        print('Z:    D vaddr %s' % pd_idx)
+        cdlo = PageDirectory(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+
+        mte = vaddr_to_d(vaddr)
+        mte_to_cdlo[mte] = cdlo
+
+        container_mte = parent_mte_of(mte)
+        container_cdlo = mte_to_cdlo[parent_mte_of(mte)]
+        print('Z:    D cdlo %s' % cdlo)
+        print('Z:    D mte %s' % repr(mte))
+        print('Z:    D contaner_mte %s' % repr(container_mte))
+        print('Z:    D contaner_cdlo %s' % container_cdlo)
+        print('Z: added object %r' % ko)
+
     pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, pt_names)
+
+    for ko, vaddr in zip(pt_objects, [vaddr for (_, vaddr) in pts]):
+        cdlo = PageTable(cdlsafe(ko.name))
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+
+
+        mte = vaddr_to_pt(vaddr)
+        mte_to_cdlo[mte] = cdlo
+        
+        container_mte = parent_mte_of(mte)
+        container_cdlo = mte_to_cdlo[parent_mte_of(mte)]
+        print('Z:    PT cdlo %s' % cdlo)
+        print('Z:    PT mte %s' % repr(mte))
+        print('Z:    PT contaner_mte %s' % repr(container_mte))
+        print('Z:    PT contaner_cdlo %s' % container_cdlo)
+        print('Z: added object %r' % ko)
 
     # Create CNodes - all CNode objects are the same size: 128 slots.
     cnode_names = [f"CNode: PD={pd.name}" for pd in system.protection_domains]
     cnode_objects = init_system.allocate_objects(SEL4_CNODE_OBJECT, cnode_names, size=PD_CAP_SIZE)
     cnode_objects_by_pd = dict(zip(system.protection_domains, cnode_objects))
 
+    for ko in cnode_objects:
+        cdlo = CNode(cdlsafe(ko.name), size_bits=7)
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+        print('Z: added object %r' % ko)
+
     cap_slot = init_system._cap_slot
 
+    # Z: Skipped for now, no IRQ support in CapDL prototype
     # Create all the necessary interrupt handler objects. These aren't
     # created through retype though!
     irq_cap_addresses: Dict[ProtectionDomain, List[int]] = {pd: [] for pd in system.protection_domains}
@@ -1264,6 +1420,8 @@ def build_system(
             cap_address_names[cap_address] = f"IRQ Handler: irq={sysirq.irq:d}"
             irq_cap_addresses[pd].append(cap_address)
 
+
+    # Z: capdl-loader should account for this
     # This has to be done prior to minting!
     # for vspace_obj in vspace_objects:
     #     system_invocations.append(Sel4AsidPoolAssign(INIT_ASID_POOL_CAP_ADDRESS, vspace_obj.cap_addr))
@@ -1276,6 +1434,7 @@ def build_system(
     # Mint copies of required pages, while also determing what's required
     # for later mapping
     page_descriptors = []
+    page_desc_cdlinfo = dict()
     for pd_idx, pd in enumerate(system.protection_domains):
         for mp in (pd.maps + pd_extra_maps[pd]):
             vaddr = mp.vaddr
@@ -1294,11 +1453,19 @@ def build_system(
             assert len(mr_pages[mr]) > 0
             assert_objects_adjacent(mr_pages[mr])
 
-            invocation = Sel4CnodeMint(system_cnode_cap, cap_slot, system_cnode_bits, root_cnode_cap, mr_pages[mr][0].cap_addr, kernel_config.cap_address_bits, rights, 0)
+            invocation = Sel4CnodeMint(
+                system_cnode_cap,
+                cap_slot,
+                system_cnode_bits,
+                root_cnode_cap,
+                mr_pages[mr][0].cap_addr,
+                kernel_config.cap_address_bits,
+                rights,
+                0)
             invocation.repeat(len(mr_pages[mr]), dest_index=1, src_obj=1)
             system_invocations.append(invocation)
 
-            page_descriptors.append((
+            new_descriptor = (
                 system_cap_address_mask | cap_slot,
                 pd_idx,
                 vaddr,
@@ -1306,7 +1473,12 @@ def build_system(
                 attrs,
                 len(mr_pages[mr]),
                 mr_page_bytes(mr)
-            ))
+            )
+
+            page_descriptors.append(new_descriptor)
+            page_desc_cdlinfo[new_descriptor] = [(mr, mrp) for mrp in mr_pages[mr]]
+
+            print('Z: PADS: %s' % [repr(pad) for pad in page_descriptors]  )
 
             for idx in range(len(mr_pages[mr])):
                 cap_address_names[system_cap_address_mask | (cap_slot + idx)] = cap_address_names[mr_pages[mr][0].cap_addr + idx] + " (derived)"
@@ -1333,7 +1505,15 @@ def build_system(
             badged_irq_caps[pd].append(badged_cap_address)
             cap_slot += 1
 
-    invocation = Sel4CnodeMint(system_cnode_cap, cap_slot, system_cnode_bits, root_cnode_cap, fault_ep_endpoint_object.cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 1)
+    invocation = Sel4CnodeMint(
+        system_cnode_cap,
+        cap_slot,
+        system_cnode_bits,
+        root_cnode_cap,
+        fault_ep_endpoint_object.cap_addr,
+        kernel_config.cap_address_bits,
+        SEL4_RIGHTS_ALL,
+        1)
     invocation.repeat(len(system.protection_domains), dest_index=1, badge=1)
     system_invocations.append(invocation)
     badged_fault_ep = system_cap_address_mask | cap_slot
@@ -1356,18 +1536,48 @@ def build_system(
                 SEL4_RIGHTS_ALL,
                 0)
         )
+        cnode_cdlo = ko_to_cdlo[cnode_obj]
+        obj_cdlo = ko_to_cdlo[obj]
+        cnode_cdlo[INPUT_CAP_IDX] = capdl.Cap(obj_cdlo, read=True, write=True)
 
     assert REPLY_CAP_IDX < PD_CAP_SIZE
-    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr, REPLY_CAP_IDX, PD_CAP_BITS, root_cnode_cap, pd_reply_objects[0].cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 1)
+    invocation = Sel4CnodeMint(
+      cnode_objects[0].cap_addr,
+      REPLY_CAP_IDX,
+      PD_CAP_BITS,
+      root_cnode_cap,
+      pd_reply_objects[0].cap_addr,
+      kernel_config.cap_address_bits,
+      SEL4_RIGHTS_ALL,
+      1)
     invocation.repeat(len(system.protection_domains), cnode=1, src_obj=1)
     system_invocations.append(invocation)
+
+    for cnode_ko, pd_reply_ko in zip(cnode_objects, pd_reply_objects):
+        cnode_cdlo = ko_to_cdlo[cnode_ko]
+        pd_reply_cdlo = ko_to_cdlo[pd_reply_ko]
+        cnode_cdlo[REPLY_CAP_IDX] = capdl.Cap(pd_reply_cdlo, read=True, write=True, badge=1)
 
     ## Mint access to the vspace cap
     assert VSPACE_CAP_IDX < PD_CAP_SIZE
-    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr, VSPACE_CAP_IDX, PD_CAP_BITS, root_cnode_cap, vspace_objects[0].cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 0)
+    invocation = Sel4CnodeMint(
+        cnode_objects[0].cap_addr,
+        VSPACE_CAP_IDX,
+        PD_CAP_BITS,
+        root_cnode_cap,
+        vspace_objects[0].cap_addr,
+        kernel_config.cap_address_bits,
+        SEL4_RIGHTS_ALL,
+        0)
     invocation.repeat(len(system.protection_domains), cnode=1, src_obj=1)
     system_invocations.append(invocation)
 
+    for cnode_ko, vspace_ko in zip(cnode_objects, vspace_objects):
+        cnode_cdlo = ko_to_cdlo[cnode_ko]
+        vspace_cdlo = ko_to_cdlo[vspace_ko]
+        cnode_cdlo[VSPACE_CAP_IDX] = capdl.Cap(vspace_cdlo)
+
+    # Z: Skipped for now, no IRQ support in CDL
     ## Mint access to interrupt handlers in the PD Cspace
     for cnode_obj, pd in zip(cnode_objects, system.protection_domains):
         for sysirq, irq_cap_address in zip(pd.irqs, irq_cap_addresses[pd]):
@@ -1385,6 +1595,8 @@ def build_system(
                     0)
             )
 
+
+    # Z: Skipped for now, no channel support in CDL (assume channels empty)
     for cc in system.channels:
         pd_a = system.pd_by_name[cc.pd_a]
         pd_b = system.pd_by_name[cc.pd_b]
@@ -1467,7 +1679,11 @@ def build_system(
 
 
     # All minting is complete at this point
+    print("Z: Minting is complete:")
+    print(cdl_spec)
 
+
+    # Z: Skipped for now, no IRQ support in CapDL prototype
     # Associate badges
     # FIXME: This could use repeat
     for notification_obj, pd in zip(notification_objects, system.protection_domains):
@@ -1476,28 +1692,76 @@ def build_system(
 
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
-    for map_cls, descriptors, objects in [
-        (Sel4PageUpperDirectoryMap, uds, ud_objects),
-        (Sel4PageDirectoryMap, ds, d_objects),
-        (Sel4PageTableMap, pts, pt_objects),
+    for map_cls, vaddr_to_mte, descriptors, objects in [
+        (Sel4PageUpperDirectoryMap, vaddr_to_ud, uds, ud_objects),
+        (Sel4PageDirectoryMap, vaddr_to_d, ds, d_objects),
+        (Sel4PageTableMap, vaddr_to_pt, pts, pt_objects),
     ]:
-        for ((pd_idx, vaddr), obj) in zip(descriptors, objects):
+        print("Z: on (domain,vaddr) %r" % descriptors)
+        print("Z: with objects %r" % objects)
+
+        # Z: Here we need to maintain the mapping table. A vaddr
+        # Z: is a number that consists of multiple segments,
+        # Z: the first segment from the left determines the PGD,
+        # Z: the next segment the PUD, and so on, in order of
+        # Z: precedence. By the time we map a PD, the PUD in the vaddr
+        # Z: will have to have been mapped already.
+
+        for ((pd_idx, vaddr), ko) in zip(descriptors, objects):
             vspace_obj = vspace_objects[pd_idx]
             system_invocations.append(
                 map_cls(
-                    obj.cap_addr,
+                    ko.cap_addr,
                     vspace_obj.cap_addr,
                     vaddr,
                     SEL4_ARM_DEFAULT_VMATTRIBUTES
                 )
             )
 
+            cdlo = ko_to_cdlo[ko]
+            mte = vaddr_to_mte(vaddr)
+            container_mte = parent_mte_of(mte)
+            container_cdlo = mte_to_cdlo[container_mte]
+            container_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo)
+
+    print('Z: VSpace initialization is complete...')
+    print(cdl_spec)
+
     # Now maps all the pages
     for page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
         vspace_obj = vspace_objects[pd_idx]
-        invocation = Sel4PageMap(page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
+        invocation = Sel4PageMap(
+            page_cap_address,
+            vspace_obj.cap_addr,
+            vaddr,
+            rights,
+            attrs)
         invocation.repeat(count, page=1, vaddr=vaddr_incr)
         system_invocations.append(invocation)
+
+        pcdli = page_desc_cdlinfo[(page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr)] 
+
+        vaddr_tmp = vaddr
+        for (mr, ko) in pcdli:
+            cdlo = ko_to_cdlo[ko]
+            mte = vaddr_to_pf(vaddr_tmp, vaddr_incr)
+            parent_cdlo = mte_to_cdlo[parent_mte_of(mte)]
+            parent_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo, read=True, write=True, grant=True)
+            vaddr_tmp = vaddr_tmp + vaddr_incr
+            print("Z: WRNG mr %r" % repr(mr))
+            print("Z: WRNG ko %r" % repr(ko))
+            print("Z: WRNG cdlo %r" % repr(cdlo))
+            print("Z: WRNG vaddr %r" % repr(vaddr_tmp))
+            print("Z: WRNG mte %r" % repr(mte))
+            print("Z: %r" % repr(mte_to_cdlo))
+
+        #for pn in range(count):
+        #    cdlo = RTReply(cdlsafe(ko.name))
+        #    cdlo_to_ko[cdlo] = ko
+        #    ko_to_cdlo[ko] = cdlo
+        #    cdl_spec.add_object(cdlo)
+        print('Z: WARNING added object %r' % ko)
+
 
     # And, finally, map all the IPC buffers
     for vspace_obj, pd, ipc_buffer_obj in zip(vspace_objects, system.protection_domains, ipc_buffer_objects):
@@ -1511,6 +1775,15 @@ def build_system(
                 attrs
             )
         )
+
+        cdlo = ko_to_cdlo[ipc_buffer_obj]
+        mte = vaddr_to_pf(vaddr_tmp, 0x1000)
+        parent_cdlo = mte_to_cdlo[parent_mte_of(mte)]
+        parent_cdlo[mapping_slot_of(mte)] = capdl.Cap(cdlo, read=True, write=True)
+
+    print('Z: All page mapping is complete...')
+    print(cdl_spec)
+
 
     # Initialise the TCBs
     #
@@ -1530,10 +1803,22 @@ def build_system(
         )
 
     for tcb_obj, schedcontext_obj, pd in zip(tcb_objects, schedcontext_objects, system.protection_domains):
-        system_invocations.append(Sel4TcbSetSchedParams(tcb_obj.cap_addr, INIT_TCB_CAP_ADDRESS, pd.priority, pd.priority, schedcontext_obj.cap_addr, fault_ep_endpoint_object.cap_addr))
+        system_invocations.append(Sel4TcbSetSchedParams(
+            tcb_obj.cap_addr,
+            INIT_TCB_CAP_ADDRESS,
+            pd.priority,
+            pd.priority,
+            schedcontext_obj.cap_addr,
+            fault_ep_endpoint_object.cap_addr))
 
     # set vspace / cspace (SetSpace)
-    invocation = Sel4TcbSetSpace(tcb_objects[0].cap_addr, badged_fault_ep, cnode_objects[0].cap_addr, kernel_config.cap_address_bits - PD_CAP_BITS, vspace_objects[0].cap_addr, 0)
+    invocation = Sel4TcbSetSpace(
+      tcb_objects[0].cap_addr,
+      badged_fault_ep,
+      cnode_objects[0].cap_addr,
+      kernel_config.cap_address_bits - PD_CAP_BITS,
+      vspace_objects[0].cap_addr,
+      0)
     invocation.repeat(len(system.protection_domains), tcb=1, fault_ep=1, cspace_root=1, vspace_root=1)
     system_invocations.append(invocation)
 
@@ -1561,6 +1846,33 @@ def build_system(
     invocation = Sel4TcbResume(tcb_objects[0].cap_addr)
     invocation.repeat(count=len(system.protection_domains), tcb=1)
     system_invocations.append(invocation)
+
+    for ko, pd, cspace, vspace, ipc_buffer_obj in zip(tcb_objects, system.protection_domains, cnode_objects, vspace_objects, ipc_buffer_objects):
+        print("Z: grand finale %s" % repr(ko))
+        print("Z: grand finale %s" % repr(pd))
+        ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
+
+        cdlo = TCB(
+            cdlsafe(ko.name),
+            ipc_buffer_vaddr=ipc_buffer_vaddr,
+            ip=pd_elf_files[pd].entry,
+            sp=0x0,
+            prio=pd.priority,
+            max_prio=pd.priority,
+            fault_ep_slot=0xDEADBEEF, # FIXME: with monitor support
+            resume=True)
+        cdlo['cspace'] = capdl.Cap(ko_to_cdlo[cspace])
+        cdlo['vspace'] = capdl.Cap(ko_to_cdlo[vspace])
+        cdlo['ipc_buffer_slot'] = capdl.Cap(ko_to_cdlo[ipc_buffer_obj], read=True, write=True)
+        cdlo_to_ko[cdlo] = ko
+        ko_to_cdlo[ko] = cdlo
+        cdl_spec.add_object(cdlo)
+        print('Z: added object %r' % ko)
+
+
+    print('Z: CapDL construction is complete...')
+    print(cdl_spec)
+
 
     # All of the objects are created at this point; we don't need to both
     # the allocators from here.
@@ -1718,6 +2030,39 @@ def main() -> int:
 
         invocation_table_size = max(invocation_table_size, new_invocation_table_size)
         system_cnode_size = max(system_cnode_size, new_system_cnode_size)
+
+    cdl_spec = capdl.Spec("aarch64")
+    def cdlid(x):
+        return cdlsafe(x)
+    
+    print('Z: Dumping object-only built-system CDL for comparison')
+    for ko in built_system.kernel_objects:
+        if ko.object_type == SEL4_SMALL_PAGE_OBJECT:
+            obj = capdl.Frame(cdlid(ko.name ), paddr=ko.phys_addr)
+        elif ko.object_type == SEL4_TCB_OBJECT:
+            obj = TCB(cdlid(ko.name ))
+        elif ko.object_type == SEL4_SCHEDCONTEXT_OBJECT:
+            obj = SC(cdlid(ko.name ))
+        elif ko.object_type == SEL4_REPLY_OBJECT:
+            obj = RTReply(cdlid(ko.name ))
+        elif ko.object_type == SEL4_ENDPOINT_OBJECT:
+            obj = Endpoint(cdlid(ko.name ))
+        elif ko.object_type == SEL4_NOTIFICATION_OBJECT:
+            obj = Notification(cdlid(ko.name ))
+        elif ko.object_type == SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT:
+            obj = PGD(cdlid(ko.name ))
+        elif ko.object_type == SEL4_PAGE_UPPER_DIRECTORY_OBJECT:
+            obj = PUD(cdlid(ko.name ))
+        elif ko.object_type == SEL4_PAGE_DIRECTORY_OBJECT:
+            obj = PageDirectory(cdlid(ko.name ))
+        elif ko.object_type == SEL4_PAGE_TABLE_OBJECT:
+            obj = PageTable(cdlid(ko.name ))
+        elif ko.object_type == SEL4_CNODE_OBJECT:
+            obj = CNode(cdlid(ko.name ))
+        else:
+            raise Exception("unknown object type {}".format(SEL4_OBJECT_TYPE_NAMES[ko.object_type]))
+        cdl_spec.add_object(obj)
+    print(cdl_spec)
 
     # At this point we just need to patch the files (in memory) and write out the final image.
 
