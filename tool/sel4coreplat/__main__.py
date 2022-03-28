@@ -1064,7 +1064,7 @@ def build_system(
     for i in range(monitor_pages_required):
         page = capdl.Frame(f"monitor_page_{i}")
         cdl_spec.add_object(page)
-        page.set_fill(['{0 %s CDL_FrameFill_FileData "monitor.elf" %s}' % (kernel_config.minimum_page_size, i * kernel_config.minimum_page_size)])
+        page.set_fill(['0 %s CDL_FrameFill_FileData "monitor.elf" %s' % (kernel_config.minimum_page_size, i * kernel_config.minimum_page_size)])
         monitor_pt.slots[i] = capdl.Cap(page, read=True, write=True, grant=True)
     monitor_ipc_buf = capdl.Frame("monitor_ipc_buf")
     cdl_spec.add_object(monitor_ipc_buf)
@@ -1165,7 +1165,7 @@ def build_system(
             cdlo_to_ko[cdlo] = ko
             ko_to_cdlo[ko] = cdlo
             if isinstance(pif, PageInfoELF):
-                fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (pif.pd_name, pif.index*4096)
+                fill = '0 4096 CDL_FrameFill_FileData "%s.elf" %s' % (pif.pd_name, pif.index*4096)
                 cdlo.set_fill([fill])
             cdl_spec.add_object(cdlo) 
 
@@ -1210,7 +1210,7 @@ def build_system(
         cdlo = capdl.Frame(cdlsafe(page.name), paddr=phys_addr)
         if isinstance(mri, MRInfoELF):
             # Z: FIXME this offset is not quite right for multiple protection domains
-            fill = '{0 4096 CDL_FrameFill_FileData "%s.elf" %s}' % (mri.pd_name, phys_addr - all_mrs[0].phys_addr)
+            fill = '0 4096 CDL_FrameFill_FileData "%s.elf" %s' % (mri.pd_name, phys_addr - all_mrs[0].phys_addr)
             cdlo.set_fill([fill])
         ko_to_cdlo[page] = cdlo
         cdlo_to_ko[cdlo] = page
