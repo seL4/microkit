@@ -1,0 +1,3 @@
+[submodule "capdl"]
+	path = capdl
+	url = https://github.com/seL4/capdl
