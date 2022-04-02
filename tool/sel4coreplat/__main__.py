@@ -642,20 +642,6 @@ def build_system(
     ko_to_cdlo = {}  # dicts for moving between kernel and CDL objects
     cdlo_to_ko = {}
     mte_to_cdlo = dict()  # mapping table
-    monitor_cnode = capdl.CNode("monitor_cnode")
-    cdl_spec.add_object(monitor_cnode)
-    monitor_tcb = capdl.TCB("monitor_tcb")
-    cdl_spec.add_object(monitor_tcb)
-    # on aarch64, vspace is PageGlobalDirectory
-    monitor_vspace = capdl.PGD("monitor_vspace")
-    cdl_spec.add_object(monitor_vspace)
-    monitor_cnode.slots[INIT_TCB_CAP_ADDRESS] = capdl.Cap(monitor_tcb)
-    monitor_cnode.slots[INIT_CNODE_CAP_ADDRESS] = capdl.Cap(monitor_cnode)
-    monitor_cnode.slots[INIT_VSPACE_CAP_ADDRESS] = capdl.Cap(monitor_vspace)
-    monitor_tcb.slots["vspace"] = capdl.Cap(monitor_vspace)
-    monitor_tcb.ip = monitor_elf.entry
-    # obtained from address of _stack and reading monitor/src/crt0.s
-    monitor_tcb.sp = 0x8a005138 + 0xff0
 
     cap_address_names = {}
     cap_address_names[INIT_NULL_CAP_ADDRESS] = "null"
@@ -831,9 +817,6 @@ def build_system(
             root_cnode_cap,                            # Z: node offset
             1                                          # Z: number of caps
     ))
-    root_cnode = capdl.CNode("root_cnode", size_bits=root_cnode_bits)
-    cdl_spec.add_object(root_cnode)
-    monitor_cnode.slots[root_cnode_cap] = capdl.Cap(root_cnode)
 
     # Z: Calling Sel4UntypedRetype with second argument equal to SEL4_UNTYPED_OBJECT
     # Z: simply resizes the given untyped.
@@ -856,9 +839,6 @@ def build_system(
         SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
         guard                                          # Z: badge
     ))
-    cap = capdl.Cap(monitor_cnode) 
-    cap.set_guard(guard)
-    root_cnode.slots[0] = cap
 
     # Z: According to the seL4 docs, the 0th CSlot of a CNode is always kept empty.
     # Z: What gives? Probably means that it's initially kept empty (as opposed to
@@ -877,7 +857,6 @@ def build_system(
         INIT_VSPACE_CAP_ADDRESS,                       # Z: root of new VSpace
         0                                              # Z: no effect
     ))
-    monitor_tcb.slots["cspace"] = capdl.Cap(root_cnode)
 
     # 2.1.6: Now we can create our new system Cnode. We will place it into
     # a temporary cap slot in the initial CNode to start with.
@@ -891,9 +870,6 @@ def build_system(
         system_cnode_cap,
         1
     ))
-    system_cnode = capdl.CNode("system_cnode", size_bits=system_cnode_bits)
-    cdl_spec.add_object(system_cnode)
-    monitor_cnode.slots[system_cnode_cap] = capdl.Cap(system_cnode)
 
     # 2.1.7: Now that the we have create the object, we can 'mutate' it
     # to the correct place:
@@ -910,9 +886,6 @@ def build_system(
         SEL4_RIGHTS_ALL,                               # Z: rights inherited by minted cap
         guard                                          # Z: badge
     ))
-    cap = capdl.Cap(system_cnode)
-    cap.set_guard(guard)
-    root_cnode.slots[1] = cap
 
     # Z: i.e. here we moved the cap to the system CNode into the root CNode 
 
@@ -1041,35 +1014,6 @@ def build_system(
     )
     invocation.repeat(pages_required, page=1, vaddr=kernel_config.minimum_page_size)
     bootstrap_invocations.append(invocation)
-
-    # capdl systems don't have memory given to them unlike the init task, so we
-    # need to map the range [8a00_0000, 8a00_7000). this range was obtained by
-    # examining the arguments ui_p_reg_start, ui_p_reg_end, pv_offset of
-    # init_kernel, and calculating 
-    # [ui_p_reg_start - pv_offset, ui_p_reg_end - pv_offset)
-    # this range can also be obtained from initial_task_virt_region
-    monitor_pud = capdl.PUD("monitor_pud")
-    cdl_spec.add_object(monitor_pud)
-    monitor_pd = capdl.PageDirectory("monitor_pd")
-    cdl_spec.add_object(monitor_pd)
-    monitor_pt = capdl.PageTable("monitor_pt")
-    cdl_spec.add_object(monitor_pt)
-    # vaddr -> $pgd_slot-$pud_slot-$pd_slot-$pt_slot
-    # 0x8a00_0000 -> 0x0-0x2-0x50-0x0
-    # 0x8a00_7000 -> 0x0-0x2-0x50-0x7
-    monitor_vspace.slots[0] = capdl.Cap(monitor_pud)
-    monitor_pud.slots[2] = capdl.Cap(monitor_pd)
-    monitor_pd.slots[0x50] = capdl.Cap(monitor_pt)
-    monitor_pages_required = initial_task_virt_region.size // kernel_config.minimum_page_size
-    for i in range(monitor_pages_required):
-        page = capdl.Frame(f"monitor_page_{i}")
-        cdl_spec.add_object(page)
-        page.set_fill(['0 %s CDL_FrameFill_FileData "monitor.elf" %s' % (kernel_config.minimum_page_size, i * kernel_config.minimum_page_size)])
-        monitor_pt.slots[i] = capdl.Cap(page, read=True, write=True, grant=True)
-    monitor_ipc_buf = capdl.Frame("monitor_ipc_buf")
-    cdl_spec.add_object(monitor_ipc_buf)
-    monitor_pt.slots[monitor_pages_required] = capdl.Cap(monitor_ipc_buf, read=True, write=True)
-    monitor_tcb.addr = 0x8a00_0000 + monitor_pages_required*kernel_config.minimum_page_size
 
     # 3. Now we can start setting up the system based on the information
     # the user provided in the system xml.
@@ -1228,9 +1172,6 @@ def build_system(
     reply_names = ["Reply: Monitor"]+ [f"Reply: PD={pd.name}" for pd in system.protection_domains]
     reply_objects = init_system.allocate_objects(SEL4_REPLY_OBJECT, reply_names)
     reply_object = reply_objects[0]
-    monitor_reply = capdl.RTReply("monitor_reply")
-    cdl_spec.add_object(monitor_reply)
-    system_cnode.slots[reply_object.cap_slot] = capdl.Cap(monitor_reply)
     # FIXME: Probably only need reply objects for PPs
     pd_reply_objects = reply_objects[1:]
 
@@ -1244,10 +1185,6 @@ def build_system(
     endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pp_protection_domains]
     endpoint_objects = init_system.allocate_objects(SEL4_ENDPOINT_OBJECT, endpoint_names)
     fault_ep_endpoint_object = endpoint_objects[0]
-    monitor_fault_ep = capdl.Endpoint("monitor_fault_ep")
-    cdl_spec.add_object(monitor_fault_ep)
-    monitor_tcb.set_fault_ep_slot(fault_ep_endpoint_object.cap_addr)
-    system_cnode.slots[fault_ep_endpoint_object.cap_slot] = capdl.Cap(monitor_fault_ep)
     pp_ep_endpoint_objects = dict(zip(pp_protection_domains, endpoint_objects[1:]))
 
     # Z: We will add fault_ep endpoint here once monitor is supported.
@@ -1818,6 +1755,7 @@ def build_system(
             sp=pd_elf_files[pd].find_symbol('_stack')[0],
             prio=pd.priority,
             max_prio=pd.priority,
+            # FIXME capdl-loader booted system needs a fault handler
             fault_ep_slot=FAULT_EP_CAP_IDX,
             resume=True)
         cdlo['cspace'] = capdl.Cap(ko_to_cdlo[cspace])
@@ -1826,12 +1764,6 @@ def build_system(
         cdlo_to_ko[cdlo] = ko
         ko_to_cdlo[ko] = cdlo
         cdl_spec.add_object(cdlo)
-
-    # create caps to monitor fault eps for each pd in capdl since tcb fault ep
-    # slot is specified as a cspace address
-    for cko, tko in zip(cnode_objects, tcb_objects):
-        ko_to_cdlo[cko][FAULT_EP_CAP_IDX] = capdl.Cap(monitor_fault_ep, read=True, write=True)
-        ko_to_cdlo[tko].fault_ep_slot = FAULT_EP_CAP_IDX
 
     # All of the objects are created at this point; we don't need to both
     # the allocators from here.
@@ -1907,7 +1839,7 @@ def main() -> int:
     parser.add_argument("system", type=Path)
     parser.add_argument("-o", "--output", type=Path, default=Path("loader.img"))
     parser.add_argument("-r", "--report", type=Path, default=Path("report.txt"))
-    parser.add_argument("-c", "--capdl", type=Path, default=Path("system.cdl"))
+    parser.add_argument("-c", "--capdl", type=Path)
     parser.add_argument("--board", required=True, choices=available_boards)
     parser.add_argument("--config", required=True)
     parser.add_argument("--search-path", nargs='*', type=Path)
@@ -1991,6 +1923,10 @@ def main() -> int:
 
         invocation_table_size = max(invocation_table_size, new_invocation_table_size)
         system_cnode_size = max(system_cnode_size, new_system_cnode_size)
+
+    if args.capdl:
+        with args.capdl.open("w") as f:
+            f.write('%s' % built_system.cdl_spec)
 
     # At this point we just need to patch the files (in memory) and write out the final image.
 
@@ -2099,9 +2035,6 @@ def main() -> int:
         f.write("# System Kernel Invocations Detail\n\n")
         for idx, invocation in enumerate(built_system.system_invocations):
             f.write(f"    0x{idx:04x} {invocation_to_str(invocation, cap_lookup)}\n")
-
-    with args.capdl.open("w") as f:
-        f.write('%s' % built_system.cdl_spec)
 
 
     # FIXME: Verify that the regions do not overlap!
