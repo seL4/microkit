@@ -39,6 +39,7 @@ LIBS := -lsel4cp -Tsel4cp.ld
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
+CDL_FILE = $(BUILD_DIR)/hello.cdl
 
 all: $(IMAGE_FILE)
 
@@ -51,5 +52,5 @@ $(BUILD_DIR)/%.o: %.s Makefile
 $(BUILD_DIR)/hello.elf: $(addprefix $(BUILD_DIR)/, $(HELLO_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hello.system
+$(IMAGE_FILE) $(REPORT_FILE) $(CDL_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hello.system
 	$(SEL4CP_TOOL) hello.system --search-path $(BUILD_DIR) --board $(SEL4CP_BOARD) --config $(SEL4CP_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE) -c $(BUILD_DIR)/hello.cdl
