@@ -672,14 +672,14 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         tcb["vspace"] = capdl.Cap(vspace)
         cdl_spec.merge(elf_spec)
 
-        notif = capdl.Notification(f"notif_{pd.name}")
-        cdl_spec.add_object(notif)
-
         cspace = capdl.CNode(f"cspace_{pd.name}", size_bits=7)
         cdl_spec.add_object(cspace)
-        cspace[INPUT_CAP_IDX] = capdl.Cap(notif)
         cspace[VSPACE_CAP_IDX] = capdl.Cap(vspace)
-        tcb["cspace"] = capdl.Cap(cspace)
+        tcb["cspace"] = capdl.Cap(cspace, guard_size=64-7)
+
+        ntfn = capdl.Notification(f"ntfn_{pd.name}")
+        cdl_spec.add_object(ntfn)
+        cspace[INPUT_CAP_IDX] = capdl.Cap(ntfn, read=True, write=True)
 
         sc = capdl.SC(f"sc_{pd.name}")
         cdl_spec.add_object(sc)
