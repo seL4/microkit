@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="hello" priority="254">
+        <program_image path="hello.elf" />
+    </protection_domain>
+    <protection_domain name="goodbye" priority="254">
+        <program_image path="goodbye.elf" />
+    </protection_domain>
+    <channel>
+        <end pd="hello" id="0"/>
+        <end pd="goodbye" id="0"/>
+    </channel>
+</system>

@@ -669,6 +669,8 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
     register_aarch64_sizes()
     cdl_spec = capdl.Spec(arch="aarch64")
 
+    pd_to_cspace = {}
+    pd_to_ntfn = {}
     # capdl for pds
     for pd in system.protection_domains:
         path = _get_full_path(pd.program_image, search_paths).resolve()
@@ -680,14 +682,16 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         tcb["vspace"] = capdl.Cap(vspace)
         cdl_spec.merge(elf_spec)
 
-        cspace = capdl.CNode(f"cspace_{pd.name}", size_bits=7)
+        cspace = capdl.CNode(f"cspace_{pd.name}", size_bits=PD_CAP_BITS)
         cdl_spec.add_object(cspace)
         cspace[VSPACE_CAP_IDX] = capdl.Cap(vspace)
-        tcb["cspace"] = capdl.Cap(cspace, guard_size=64 - 7)
+        tcb["cspace"] = capdl.Cap(cspace, guard_size=64 - PD_CAP_BITS)
+        pd_to_cspace[pd] = cspace
 
         ntfn = capdl.Notification(f"ntfn_{pd.name}")
         cdl_spec.add_object(ntfn)
         cspace[INPUT_CAP_IDX] = capdl.Cap(ntfn, read=True, write=True)
+        pd_to_ntfn[pd] = ntfn
 
         sc = capdl.SC(f"sc_{pd.name}")
         cdl_spec.add_object(sc)
@@ -705,6 +709,26 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
             cdl_spec.add_object(reply)
             raise Exception("FIXME: deal with pds with pps")
             cspace[REPLY_CAP_IDX] = capdl.Cap(reply)
+
+    for cc in system.channels:
+        pd_a = system.pd_by_name[cc.pd_a]
+        pd_b = system.pd_by_name[cc.pd_b]
+        pd_a_cspace = pd_to_cspace[pd_a]
+        pd_b_cspace = pd_to_cspace[pd_b]
+        pd_a_ntfn = pd_to_ntfn[pd_a]
+        pd_b_ntfn = pd_to_ntfn[pd_b]
+
+        pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a
+        pd_a_badge = 1 << cc.id_b
+        # FIXME: check rights
+        pd_a_cspace[pd_a_cap_idx] = capdl.Cap(pd_b_ntfn, read=True, write=True, badge=pd_a_badge)
+
+        pd_b_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_b
+        pd_b_badge = 1 << cc.id_a
+        # FIXME: check rights
+        pd_b_cspace[pd_b_cap_idx] = capdl.Cap(pd_a_ntfn, read=True, write=True, badge=pd_b_badge)
+
+        # FIXME: deal with cases where pd_a or pd_b have pps
 
     return cdl_spec
 

@@ -59,15 +59,15 @@ set(CDL_TARGET "${CMAKE_CURRENT_BINARY_DIR}/hello.cdl")
 add_custom_target(cdl_target DEPENDS "${CDL_TARGET}")
 # from https://stackoverflow.com/a/55184207
 add_custom_command(OUTPUT "${CDL_TARGET}"
-                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello/hello.cdl
+                   COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello-goodbye/hello.cdl
                                                     "${CDL_TARGET}"
-                   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello/hello.cdl)
+                   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello-goodbye/hello.cdl)
 CapDLToolCFileGen(capdl_c_spec_target capdl_spec.c ${CapDLStaticAlloc} "$<TARGET_PROPERTY:object_sizes,FILE_PATH>" "${CDL_TARGET}" "${CAPDL_TOOL_BINARY}"
     DEPENDS cdl_target install_capdl_tool "${CAPDL_TOOL_BINARY}")
 
 # FIXME: don't hardcode elfs. maybe detect from some dir?
-set(CDL_ELF_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello/hello.elf")
-set(CDL_ELFS "${CMAKE_CURRENT_BINARY_DIR}/hello.elf")
+set(CDL_ELF_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello-goodbye/hello.elf" "${CMAKE_CURRENT_SOURCE_DIR}/tmp_build/hello-goodbye/goodbye.elf")
+set(CDL_ELFS "${CMAKE_CURRENT_BINARY_DIR}/hello.elf" "${CMAKE_CURRENT_BINARY_DIR}/goodbye.elf")
 add_custom_target(copy_elfs DEPENDS ${CDL_ELFS})
 add_custom_command(OUTPUT ${CDL_ELFS}
                    COMMAND ${CMAKE_COMMAND} -E copy ${CDL_ELF_SOURCES} "${CMAKE_CURRENT_BINARY_DIR}"
