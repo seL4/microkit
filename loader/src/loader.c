@@ -125,6 +125,12 @@ putc(uint8_t ch)
 {
     *((volatile uint32_t *)(0x00FF000030)) = ch;
 }
+#elif defined(BOARD_qemuarmvirt)
+static void
+putc(uint8_t ch)
+{
+    // this is just so the SDK builds, don't actually need this
+}
 #else
 #error Board not defined
 #endif

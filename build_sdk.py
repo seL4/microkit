@@ -72,6 +72,19 @@ SUPPORTED_BOARDS = (
         examples = {
             "hello": Path("example/zcu102/hello")
         }
+    ),
+    BoardInfo(
+        name="qemuarmvirt",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x50000000,
+        kernel_options = {
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {
+            "hello": Path("example/qemuarmvirt/hello")
+        }
     )
 )
 

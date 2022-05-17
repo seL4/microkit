@@ -16,7 +16,10 @@ list(
         "${CMAKE_CURRENT_LIST_DIR}/seL4_tools/elfloader-tool"
 )
 
-set(PLATFORM "zynqmp")
+if("${PLATFORM}" STREQUAL "")
+  set(PLATFORM "zynqmp")
+endif()
+
 set(KernelIsMCS ON)
 set(CROSS_COMPILER_PREFIX "aarch64-none-elf-")
 # zf_log_debug
@@ -80,3 +83,8 @@ OUTPUT capdl-loader)
 
 include(rootserver)
 DeclareRootserver(capdl-loader)
+
+if("${PLATFORM}" STREQUAL "qemu-arm-virt")
+  include(simulation)
+  GenerateSimulateScript()
+endif()
