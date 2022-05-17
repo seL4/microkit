@@ -2,22 +2,21 @@
 	path = capdl
 	url = https://github.com/seL4/capdl
 
-[submodule "seL4"]
-    path = kernel
-    url = https://github.com/seL4/seL4
-
-[submodule "musllibc"]
-    path = musllibc
-    url = https://github.com/seL4/musllibc
-
-[submodule "seL4_libs"]
-    path = seL4_libs
-    url = https://github.com/seL4/seL4_libs
-
-[submodule "util_libs"]
-    path = util_libs
-    url = https://github.com/seL4/util_libs
-
+[submodule "kernel"]
+	path = kernel
+	url = git@github.com:seL4/seL4.git
 [submodule "seL4_tools"]
-    path = seL4_tools
-    url = https://github.com/seL4/seL4_tools
+	path = seL4_tools
+	url = git@github.com:seL4/seL4_tools.git
+[submodule "musllibc"]
+	path = musllibc
+	url = git@github.com:seL4/musllibc.git
+[submodule "util_libs"]
+	path = util_libs
+	url = git@github.com:seL4/util_libs.git
+[submodule "sel4runtime"]
+	path = sel4runtime
+	url = git@github.com:seL4/sel4runtime.git
+[submodule "seL4_libs"]
+	path = seL4_libs
+	url = git@github.com:seL4/seL4_libs.git
