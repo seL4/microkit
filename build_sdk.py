@@ -377,6 +377,7 @@ def main() -> None:
                 copy(p, dest)
                 dest.chmod(0o444)
 
+    """
     # At this point we create a tar.gz file
     with tar_open(tar_file, "w:gz") as tar:
         tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
@@ -389,6 +390,7 @@ def main() -> None:
     with tar_open(source_tar_file, "w:gz") as tar:
         for filename in filenames:
             tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+    """
 
 if __name__ == "__main__":
     main()
