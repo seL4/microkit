@@ -1,6 +1,6 @@
 [submodule "capdl"]
 	path = capdl
-	url = https://github.com/seL4/capdl
+	url = git@github.com:1000teslas/capdl.git
 
 [submodule "kernel"]
 	path = kernel
