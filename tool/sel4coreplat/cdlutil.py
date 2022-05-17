@@ -3,11 +3,9 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 
-from sel4coreplat import capdl
-
 from typing import (Any, NamedTuple, Optional, Tuple, Union)
 
-from sel4coreplat.capdl.Object import (register_object_sizes, ObjectType)
+from capdl.Object import (register_object_sizes, ObjectType)
 
 from sel4coreplat.util import (MemoryRegion)
 from sel4coreplat.sysxml import (ProtectionDomain)

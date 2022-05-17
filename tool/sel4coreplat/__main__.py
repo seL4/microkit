@@ -46,7 +46,7 @@ from sys import argv, executable, stderr
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from sel4coreplat import capdl
+import capdl
 from sel4coreplat.cdlutil import register_aarch64_sizes, cdlsafe, UpperDir, LowerDir, PTable, PFrame, alignment_of_sort
 
 from sel4coreplat.elf import ElfFile
