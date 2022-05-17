@@ -1,3 +1,23 @@
 [submodule "capdl"]
 	path = capdl
 	url = https://github.com/seL4/capdl
+
+[submodule "seL4"]
+    path = kernel
+    url = https://github.com/seL4/seL4
+
+[submodule "musllibc"]
+    path = musllibc
+    url = https://github.com/seL4/musllibc
+
+[submodule "seL4_libs"]
+    path = seL4_libs
+    url = https://github.com/seL4/seL4_libs
+
+[submodule "util_libs"]
+    path = util_libs
+    url = https://github.com/seL4/util_libs
+
+[submodule "seL4_tools"]
+    path = seL4_tools
+    url = https://github.com/seL4/seL4_tools
