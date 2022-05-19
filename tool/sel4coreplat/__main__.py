@@ -634,37 +634,39 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
     def get_pt_slot(x: int) -> int:
         return (x >> alignment_of_sort[PFrame]) & ((1 << 9) - 1)
 
-    def map_page(cdl_spec: capdl.Spec, vspace: capdl.PGD, page: capdl.Frame, vaddr: int, read: bool, write: bool, new_pud_name: str, new_pagedir_name: str, new_pt_name: str) -> capdl.Cap:
+    def map_page(cdl_spec: capdl.Spec, pd_name: str, vspace: capdl.PGD, page_cap: capdl.Cap, vaddr: int):
+        assert isinstance(page_cap.referent, capdl.Frame)
+
         pgd_slot = get_pgd_slot(vaddr)
         try:
-            pud = vspace[pgd_slot]
+            pud = vspace[pgd_slot].referent
         except KeyError:
-            pud = capdl.PUD(cdlsafe(new_pud_name))
+            pud = capdl.PUD(f"pud_{pd_name}_0x{mask_bits(vaddr, 12 + 9 + 9 + 9):x}")
             cdl_spec.add_object(pud)
-            vspace[pgd_slot] = pud
-        pud = pud.referent
+            vspace[pgd_slot] = capdl.Cap(pud)
+        assert isinstance(pud, capdl.PUD)
 
         pud_slot = get_pud_slot(vaddr)
         try:
-            pagedir = pud[pud_slot]
+            pagedir = pud[pud_slot].referent
         except KeyError:
-            pagedir = capdl.PageDirectory(cdlsafe(new_pagedir_name))
+            pagedir = capdl.PageDirectory(f"pagedir_{pd_name}_0x{mask_bits(vaddr, 12 + 9 + 9):x}")
             cdl_spec.add_object(pagedir)
-            pud[pud_slot] = pagedir
-        pagedir = pagedir.referent
+            pud[pud_slot] = capdl.Cap(pagedir)
+        assert isinstance(pagedir, capdl.PageDirectory)
 
         pagedir_slot = get_pagedir_slot(vaddr)
         try:
-            pt = pagedir[pagedir_slot]
+            pt = pagedir[pagedir_slot].referent
         except KeyError:
-            pt = capdl.PageTable(cdlsafe(new_pt_name))
+            pt = capdl.PageTable(f"pt_{pd_name}_0x{mask_bits(vaddr, 12 + 9):x}")
             cdl_spec.add_object(pt)
-        pt = pt.referent
+            pagedir[pagedir_slot] = capdl.Cap(pt)
+        assert isinstance(pt, capdl.PageTable)
 
         pt_slot = get_pt_slot(vaddr)
-        cap = capdl.Cap(page, read=read, write=write)
+        assert pt.slots.get(pt_slot) is None, f"page already mapped at virtual address {vaddr}"
         pt[pt_slot] = cap
-        return cap
 
     register_aarch64_sizes()
     cdl_spec = capdl.Spec(arch="aarch64")
@@ -701,14 +703,15 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         tcb.addr = vaddr
         page = capdl.Frame(f"ipcbuf_{pd.name}")
         cdl_spec.add_object(page)
-        cap = map_page(cdl_spec, vspace, page, vaddr, read=True, write=True, new_pud_name=f"pud_{path.name}_ipc", new_pagedir_name=f"pagedir_{path.name}_ipc", new_pt_name=f"pt_{path.name}_ipc")
+        cap = capdl.Cap(page, read=True, write=True)
+        map_page(cdl_spec, pd.name, vspace, cap, vaddr)
         tcb["ipc_buffer_slot"] = cap
 
         if pd.pp:
             reply = capdl.RTReply(f"reply_{pd.name}")
             cdl_spec.add_object(reply)
-            raise Exception("FIXME: deal with pds with pps")
             cspace[REPLY_CAP_IDX] = capdl.Cap(reply)
+            raise Exception("FIXME: deal with pds with pps")
 
     for cc in system.channels:
         pd_a = system.pd_by_name[cc.pd_a]
@@ -1836,8 +1839,8 @@ def main() -> int:
             search_paths,
         )
         print(f"BUILT: {system_cnode_size=} {built_system.number_of_system_caps=} {invocation_table_size=} {built_system.invocation_data_size=}")
-        if (built_system.number_of_system_caps <= system_cnode_size
-                and built_system.invocation_data_size <= invocation_table_size):
+        if (built_system.number_of_system_caps <= system_cnode_size and
+                built_system.invocation_data_size <= invocation_table_size):
             break
 
         # Recalculate the sizes for the next iteration
