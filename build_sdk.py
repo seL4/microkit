@@ -192,11 +192,10 @@ def build_sel4(
         config_strs.append(s)
     config_str = " ".join(config_strs)
 
-    platform = board.name
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "\
         f" -DPYTHON3={executable} " \
-        f" -DKernelPlatform={platform} {config_str} " \
+        f" {config_str} " \
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
     r = system(cmd)
