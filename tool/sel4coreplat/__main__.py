@@ -1603,7 +1603,7 @@ def main() -> int:
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
     if len(monitor_elf.segments) > 1:
-        raise Exception("monitor ({monitor_elf_path}) has {len(monitor_elf.segments)} segments; must only have one")
+        raise Exception(f"monitor ({monitor_elf_path}) has {len(monitor_elf.segments)} segments; must only have one")
 
     invocation_table_size = kernel_config.minimum_page_size
     system_cnode_size = 2

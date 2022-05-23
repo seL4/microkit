@@ -120,7 +120,7 @@ class Loader:
                     kernel_p_v_offset = segment.virt_addr - segment.phys_addr
                 else:
                     if kernel_p_v_offset != segment.virt_addr - segment.phys_addr:
-                        raise Exception("Kernel does not have constistent phys to virt offset")
+                        raise Exception("Kernel does not have consistent phys to virt offset")
 
                 self._regions.append((
                     segment.phys_addr,
