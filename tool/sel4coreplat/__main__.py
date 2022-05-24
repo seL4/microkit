@@ -708,6 +708,22 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         map_page(cdl_spec, pd.name, vspace, cap, vaddr)
         tcb["ipc_buffer_slot"] = cap
 
+        # FIXME: this modifies the input elfs
+        # FIXME: symbols must have space reserved for them e.g. in .data, but not .bss
+        with open(path, "r+b") as f:
+            for setvar in pd.setvars: 
+                if setvar.region_paddr is not None:
+                    raise Exception("FIXME: deal with setvar element")
+                elif setvar.vaddr is not None:
+                    value = setvar.vaddr
+                symbol = elf._elf.get_section_by_name(".symtab").get_symbol_by_name(setvar.symbol)[0]
+                section = elf._elf.get_section(symbol["st_shndx"])
+                segment = next(s for s in elf._elf.iter_segments() if s.section_in_segment(section))
+                offset = segment["p_offset"] + (symbol.entry["st_value"] - segment.header["p_vaddr"])
+                f.seek(offset)
+                # FIXME: this assumes addresses are 64 bits
+                f.write(pack("<Q", value))
+
         if pd.pp:
             reply = capdl.RTReply(f"reply_{pd.name}")
             cdl_spec.add_object(reply)
