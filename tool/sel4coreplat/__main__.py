@@ -735,6 +735,14 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
                 cap = capdl.Cap(page, read="r" in map.perms, write="w" in map.perms, grant="x" in map.perms, cached=map.cached)
                 map_page(cdl_spec, pd.name, vspace, cap, vaddr=map.vaddr + i * mr.page_size)
 
+        for sysirq in pd.irqs:
+            irq = capdl.IRQ(f"irq_{sysirq.irq}", number=sysirq.irq)
+            cdl_spec.add_object(irq)
+            cspace[BASE_IRQ_CAP + sysirq.id_] = capdl.Cap(irq, read=True)
+            cap = capdl.Cap(ntfn, read=True)
+            cap.set_badge(1 << sysirq.id_)
+            irq[0] = cap
+
         if pd.pp:
             reply = capdl.RTReply(f"reply_{pd.name}")
             cdl_spec.add_object(reply)
