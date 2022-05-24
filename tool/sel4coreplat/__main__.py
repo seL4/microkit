@@ -724,6 +724,17 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
                 # FIXME: this assumes addresses are 64 bits
                 f.write(pack("<Q", value))
 
+        mr_by_name = {mr.name: mr for mr in system.memory_regions}
+        for map in pd.maps:
+            mr = mr_by_name[map.mr]
+            assert mr.page_size == kb(4), "FIXME: support page sizes other than 4KiB"
+            for i in range(mr.page_count):
+                paddr = None if mr.phys_addr is None else mr.phys_addr + i * mr.page_size
+                page = capdl.Frame(f"mr_{map.mr}_{i}", paddr=paddr)
+                cdl_spec.add_object(page)
+                cap = capdl.Cap(page, read="r" in map.perms, write="w" in map.perms, grant="x" in map.perms, cached=map.cached)
+                map_page(cdl_spec, pd.name, vspace, cap, vaddr=map.vaddr + i * mr.page_size)
+
         if pd.pp:
             reply = capdl.RTReply(f"reply_{pd.name}")
             cdl_spec.add_object(reply)
