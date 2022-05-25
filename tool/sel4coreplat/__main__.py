@@ -690,10 +690,7 @@ def build_system(
 
     phys_addr_next = invocation_table_region.end
     # Now we create additional MRs (and mappings) for the ELF files.
-    pd_elf_regions = {}
     for pd in system.protection_domains:
-        elf_regions: List[Tuple[int, bytearray, str]] = []
-        seg_idx = 0
         for segment in pd_elf_files[pd].segments:
             if not segment.loadable:
                 continue
@@ -706,7 +703,6 @@ def build_system(
             if segment.is_executable:
                 perms += "x"
 
-            elf_regions.append((phys_addr_next, segment.data, perms))
             phys_addr_next = round_up(phys_addr_next + len(segment.data), kernel_config.minimum_page_size)
 
             # base_vaddr = round_down(segment.virt_addr, kernel_config.minimum_page_size)
@@ -721,7 +717,6 @@ def build_system(
 
             # mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True)
             # pd.maps.append(mp)
-        pd_elf_regions[pd] = tuple(elf_regions)
 
 
     # 1.3 With both the initial task region and reserved region determined the kernel
