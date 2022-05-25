@@ -260,6 +260,15 @@ def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
                 val_str = f"{val} ({object_type_name} - variable size)"
             else:
                 val_str = f"{val} ({object_type_name} - 0x{object_size:x})"
+        elif nm == "regs":
+            regs = vars(inv.regs)
+            val_str = ""
+            for i, reg in enumerate(regs.items()):
+                reg_value = 0 if reg[1] is None else reg[1]
+                if i == 0:
+                    val_str = f"{reg[0]} : 0x{reg_value:016x}"
+                else:
+                    val_str += f"\n{' ':30s}{reg[0]} : 0x{reg_value:016x}"
         else:
             val_str = str(val)
         arg_strs.append(f"         {nm:20s} {val_str}")
