@@ -621,7 +621,7 @@ def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
         raise UserError(f"Error: unable to find program image: '{filename}'")
 
 
-def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl.Spec:
+def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_config: KernelConfig) -> capdl.Spec:
     def get_pgd_slot(x: int) -> int:
         return (x >> alignment_of_sort[UpperDir]) & ((1 << 9) - 1)
 
@@ -715,19 +715,21 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         tcb["ipc_buffer_slot"] = cap
 
         # FIXME: this modifies the input elfs
-        # FIXME: symbols must have space reserved for them e.g. in .data, but not .bss
         with open(path, "r+b") as f:
             for setvar in pd.setvars: 
                 if setvar.region_paddr is not None:
                     raise Exception("FIXME: deal with setvar element")
                 elif setvar.vaddr is not None:
                     value = setvar.vaddr
+                assert setvar.region_paddr is not None or setvar.vaddr is not None, setvar
                 symbol = elf._elf.get_section_by_name(".symtab").get_symbol_by_name(setvar.symbol)[0]
                 section = elf._elf.get_section(symbol["st_shndx"])
+                assert section["sh_type"] == "SHT_PROGBITS", "FIXME: symbols must have space reserved for them e.g. in .data, but not .bss"
                 segment = next(s for s in elf._elf.iter_segments() if s.section_in_segment(section))
                 offset = segment["p_offset"] + (symbol.entry["st_value"] - segment.header["p_vaddr"])
                 f.seek(offset)
-                # FIXME: this assumes addresses are 64 bits
+                assert value.bit_length() <= kernel_config.word_size
+                assert kernel_config.word_size == 64, "FIXME: we assume addresses are 64 bits"
                 f.write(pack("<Q", value))
 
         mr_by_name = {mr.name: mr for mr in system.memory_regions}
@@ -1890,7 +1892,7 @@ def main() -> int:
         system_cnode_size = max(system_cnode_size, new_system_cnode_size)
 
     if args.capdl:
-        cdl_spec = generate_capdl(system_description, search_paths)
+        cdl_spec = generate_capdl(system_description, search_paths, kernel_config)
         with args.capdl.open("w") as f:
             f.write('%s' % cdl_spec)
 
