@@ -700,6 +700,10 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         cdl_spec.add_object(sc)
         tcb["sc_slot"] = capdl.Cap(sc)
 
+        reply = capdl.RTReply(f"reply_{pd.name}")
+        cdl_spec.add_object(reply)
+        cspace[REPLY_CAP_IDX] = capdl.Cap(reply)
+
         vaddr = elf.get_symbol_vaddr("__sel4_ipc_buffer_obj")
         tcb.addr = vaddr
         page = capdl.Frame(f"ipcbuf_{pd.name}")
@@ -744,9 +748,6 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
             irq[0] = cap
 
         if pd.pp:
-            reply = capdl.RTReply(f"reply_{pd.name}")
-            cdl_spec.add_object(reply)
-            cspace[REPLY_CAP_IDX] = capdl.Cap(reply)
             raise Exception("FIXME: deal with pds with pps")
 
     for cc in system.channels:
