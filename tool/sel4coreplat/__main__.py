@@ -745,7 +745,7 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
             cspace[BASE_IRQ_CAP + sysirq.id_] = capdl.Cap(irq, read=True)
             cap = capdl.Cap(ntfn, read=True)
             cap.set_badge(1 << sysirq.id_)
-            irq[0] = cap
+            irq.set_notification(cap)
 
         if pd.pp:
             raise Exception("FIXME: deal with pds with pps")
