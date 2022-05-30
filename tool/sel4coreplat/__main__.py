@@ -699,6 +699,8 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path]) -> capdl
         sc = capdl.SC(f"sc_{pd.name}")
         cdl_spec.add_object(sc)
         tcb["sc_slot"] = capdl.Cap(sc)
+        sc.budget = pd.budget
+        sc.period = pd.period
 
         reply = capdl.RTReply(f"reply_{pd.name}")
         cdl_spec.add_object(reply)
