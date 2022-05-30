@@ -610,6 +610,7 @@ class BuiltSystem:
     kernel_objects: List[KernelObject]
     initial_task_virt_region: MemoryRegion
     initial_task_phys_region: MemoryRegion
+    mr_pages: dict[SysMemoryRegion, List[KernelObject]]
 
 
 def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
@@ -621,7 +622,7 @@ def _get_full_path(filename: Path, search_paths: List[Path]) -> Path:
         raise UserError(f"Error: unable to find program image: '{filename}'")
 
 
-def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_config: KernelConfig) -> capdl.Spec:
+def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_config: KernelConfig, mr_pages: dict[SysMemoryRegion, List[KernelObject]]) -> capdl.Spec:
     def get_pgd_slot(x: int) -> int:
         return (x >> alignment_of_sort[UpperDir]) & ((1 << 9) - 1)
 
@@ -634,8 +635,11 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
     def get_pt_slot(x: int) -> int:
         return (x >> alignment_of_sort[PFrame]) & ((1 << 9) - 1)
 
-    def map_page(cdl_spec: capdl.Spec, pd_name: str, vspace: capdl.PGD, page_cap: capdl.Cap, vaddr: int):
+    def arm_map_page(cdl_spec: capdl.Spec, pd_name: str, vspace: capdl.PGD, page_cap: capdl.Cap, vaddr: int):
         assert isinstance(page_cap.referent, capdl.Frame)
+        page_size = page_cap.referent.size
+        assert page_size in [1 << 12, 1 << (12 + 9), 1 << (12 + 9 + 9)]
+        assert vaddr % page_size == 0, f"vaddr 0x{vaddr:x} not aligned to page size ({human_size_strict(page_size)})"
 
         pgd_slot = get_pgd_slot(vaddr)
         try:
@@ -647,6 +651,10 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         assert isinstance(pud, capdl.PUD)
 
         pud_slot = get_pud_slot(vaddr)
+        if page_size == (1 << 30):
+            assert pud.slots.get(pud_slot) is None, f"1GiB page already mapped at virtual address {vaddr}"
+            pud[pud_slot] = page_cap
+            return
         try:
             pagedir = pud[pud_slot].referent
         except KeyError:
@@ -656,6 +664,10 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         assert isinstance(pagedir, capdl.PageDirectory)
 
         pagedir_slot = get_pagedir_slot(vaddr)
+        if page_size == (1 << 21):
+            assert pagedir.slots.get(pagedir_slot) is None, f"2MiB page already mapped at virtual address {vaddr}"
+            pagedir[pagedir_slot] = page_cap
+            return
         try:
             pt = pagedir[pagedir_slot].referent
         except KeyError:
@@ -665,8 +677,8 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         assert isinstance(pt, capdl.PageTable)
 
         pt_slot = get_pt_slot(vaddr)
-        assert pt.slots.get(pt_slot) is None, f"page already mapped at virtual address {vaddr}"
-        pt[pt_slot] = cap
+        assert pt.slots.get(pt_slot) is None, f"4KiB page already mapped at virtual address {vaddr}"
+        pt[pt_slot] = page_cap
 
     register_aarch64_sizes()
     cdl_spec = capdl.Spec(arch="aarch64")
@@ -711,14 +723,15 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         page = capdl.Frame(f"ipcbuf_{pd.name}")
         cdl_spec.add_object(page)
         cap = capdl.Cap(page, read=True, write=True)
-        map_page(cdl_spec, pd.name, vspace, cap, vaddr)
+        arm_map_page(cdl_spec, pd.name, vspace, cap, vaddr)
         tcb["ipc_buffer_slot"] = cap
 
         # FIXME: this modifies the input elfs
         with open(path, "r+b") as f:
-            for setvar in pd.setvars: 
+            for setvar in pd.setvars:
                 if setvar.region_paddr is not None:
-                    raise Exception("FIXME: deal with setvar element")
+                    mr = next(mr for mr in system.memory_regions if mr.name == setvar.region_paddr)
+                    value = mr_pages[mr][0].phys_addr
                 elif setvar.vaddr is not None:
                     value = setvar.vaddr
                 assert setvar.region_paddr is not None or setvar.vaddr is not None, setvar
@@ -735,13 +748,12 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         mr_by_name = {mr.name: mr for mr in system.memory_regions}
         for map in pd.maps:
             mr = mr_by_name[map.mr]
-            assert mr.page_size == kb(4), "FIXME: support page sizes other than 4KiB"
             for i in range(mr.page_count):
                 paddr = None if mr.phys_addr is None else mr.phys_addr + i * mr.page_size
-                page = capdl.Frame(f"mr_{map.mr}_{i}", paddr=paddr)
+                page = capdl.Frame(f"mr_{map.mr}_{i}", paddr=paddr, size=mr.page_size)
                 cdl_spec.add_object(page)
                 cap = capdl.Cap(page, read="r" in map.perms, write="w" in map.perms, grant="x" in map.perms, cached=map.cached)
-                map_page(cdl_spec, pd.name, vspace, cap, vaddr=map.vaddr + i * mr.page_size)
+                arm_map_page(cdl_spec, pd.name, vspace, cap, vaddr=map.vaddr + i * mr.page_size)
 
         for sysirq in pd.irqs:
             irq = capdl.IRQ(f"irq_{sysirq.irq}", number=sysirq.irq)
@@ -1778,6 +1790,7 @@ def build_system(
         kernel_objects=init_system._objects,
         initial_task_phys_region=initial_task_phys_region,
         initial_task_virt_region=initial_task_virt_region,
+        mr_pages=mr_pages,
     )
 
 
@@ -1880,8 +1893,8 @@ def main() -> int:
             search_paths,
         )
         print(f"BUILT: {system_cnode_size=} {built_system.number_of_system_caps=} {invocation_table_size=} {built_system.invocation_data_size=}")
-        if (built_system.number_of_system_caps <= system_cnode_size and
-                built_system.invocation_data_size <= invocation_table_size):
+        if (built_system.number_of_system_caps <= system_cnode_size
+                and built_system.invocation_data_size <= invocation_table_size):
             break
 
         # Recalculate the sizes for the next iteration
@@ -1892,7 +1905,7 @@ def main() -> int:
         system_cnode_size = max(system_cnode_size, new_system_cnode_size)
 
     if args.capdl:
-        cdl_spec = generate_capdl(system_description, search_paths, kernel_config)
+        cdl_spec = generate_capdl(system_description, search_paths, kernel_config, built_system.mr_pages)
         with args.capdl.open("w") as f:
             f.write('%s' % cdl_spec)
 
