@@ -700,7 +700,7 @@ def generate_capdl(system: SystemDescription, search_paths: List[Path], kernel_c
         cspace = capdl.CNode(f"cspace_{pd.name}", size_bits=PD_CAP_BITS)
         cdl_spec.add_object(cspace)
         cspace[VSPACE_CAP_IDX] = capdl.Cap(vspace)
-        tcb["cspace"] = capdl.Cap(cspace, guard_size=64 - PD_CAP_BITS)
+        tcb["cspace"] = capdl.Cap(cspace, guard_size=kernel_config.cap_address_bits - PD_CAP_BITS)
         pd_to_cspace[pd] = cspace
 
         ntfn = capdl.Notification(f"ntfn_{pd.name}")
