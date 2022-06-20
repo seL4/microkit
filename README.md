@@ -80,7 +80,7 @@ Testing has been performed using commit `92f0f3ab28f00c97851512216c855f4180534a6
 
 ## Building the SDK
 
-    $ ./env/bin/python build_sdk.py --sel4=<path to sel4>
+    $ ./pyenv/bin/python build_sdk.py --sel4=<path to sel4>
 
 ## Using the SDK
 
