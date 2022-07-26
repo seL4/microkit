@@ -15,12 +15,14 @@
 
 typedef unsigned int sel4cp_channel;
 typedef unsigned int sel4cp_pd;
+typedef unsigned int sel4cp_vm;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
 #define BASE_TCB_CAP 202
+#define BASE_VCPU_CAP 264 // @ivanv: change
 
 #define SEL4CP_MAX_CHANNELS 63
 
@@ -127,4 +129,11 @@ static uint64_t
 sel4cp_mr_get(uint8_t mr)
 {
     return seL4_GetMR(mr);
+}
+
+// @ivanv: inline or nah?
+static uint64_t
+sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
+{
+    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
 }
