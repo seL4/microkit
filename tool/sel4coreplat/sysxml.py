@@ -93,6 +93,7 @@ class ProtectionDomain:
     setvars: Tuple[SysSetVar, ...]
     child_pds: Tuple["ProtectionDomain", ...]
     parent: Optional["ProtectionDomain"]
+    virtual_machines: Tuple["VirtualMachine"]
     has_children: bool
     element: ET.Element
 
@@ -119,6 +120,14 @@ class Channel:
     element: ET.Element
 
 
+@dataclass(frozen=True, eq=True)
+class VirtualMachine:
+    name: str
+    vm_id: int
+    image: Path
+    dtb: Path
+
+
 def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
     # Check child PDs have unique identifiers
     child_ids = set()
@@ -133,7 +142,8 @@ def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDo
 
 
 def _pd_flatten(pds: Iterable[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
-    """Given an iterable of protection domains flatten the tree representation
+    """
+    Given an iterable of protection domains flatten the tree representation
     into a flat tuple.
 
     In doing so the representation is changed from "Node with list of children",
@@ -153,6 +163,11 @@ class SystemDescription:
         self.protection_domains = _pd_flatten(protection_domains)
         self.channels = tuple(channels)
 
+        # @ivanv: need to add checks for each VM
+        # * How many per each PD?
+        # * Check every field
+        # * What child tags can a VM have?
+
         # Note: These could be dict comprehensions, but
         # we want to perform duplicate checks as we
         # build the data structure
@@ -166,15 +181,22 @@ class SystemDescription:
         if len(self.protection_domains) > 63:
             raise UserError(f"Too many protection domains ({len(self.protection_domains)}) defined. Maximum is 63.")
 
+        # Ensure no duplicate PDs
         for pd in protection_domains:
             if pd.name in self.pd_by_name:
                 raise UserError(f"Duplicate protection domain name '{pd.name}'.")
             self.pd_by_name[pd.name] = pd
 
+        # Ensure no duplicate MRs
         for mr in memory_regions:
             if mr.name in self.mr_by_name:
                 raise UserError(f"Duplicate memory region name '{mr.name}'.")
             self.mr_by_name[mr.name] = mr
+
+        # Ensure no duplicate VMs
+        # @ivanv
+        # for vm in protection_domains:
+
 
         # Ensure all CCs make senses
         for cc in self.channels:
@@ -221,6 +243,11 @@ class SystemDescription:
                 if extra != 0:
                     raise UserError(f"Invalid vaddr alignment on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
 
+        # Ensure that VM image and DTB are different
+        # for vm in self.virtual_machines:
+        #     if vm.image == vm.dtb:
+        #         # @ivanv: come back to
+        #         raise UserError(f"The image and dtb have the same path")
 
         # Note: Overlapping memory is checked in the build.
 
@@ -283,6 +310,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
     irqs = []
     setvars = []
     child_pds = []
+    virtual_machines = []
     for child in pd_xml:
         try:
             if child.tag == "program_image":
@@ -313,6 +341,8 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
                 setvars.append(SysSetVar(symbol, region_paddr=region_paddr))
             elif child.tag == "protection_domain":
                 child_pds.append(xml2pd(child, is_child=True))
+            elif child.tag == "virtual_machine":
+                virtual_machines.append(xml2vm(child))
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
         except ValueError as e:
@@ -334,6 +364,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         tuple(setvars),
         tuple(child_pds),
         None,
+        tuple(virtual_machines),
         len(child_pds) > 0,
         pd_xml
     )
@@ -363,6 +394,38 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
     return Channel(ends[0][0], ends[0][1], ends[1][0], ends[1][1], ch_xml)
 
+
+def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
+    # @ivanv: should check that there are no children
+    _check_attrs(vm_xml, ("name", "vm_id", "image", "dtb"))
+    name = checked_lookup(vm_xml, "name")
+
+    vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
+    if vm_id < 0 or vm_id > 255:
+        raise ValueError("vm_id must be between 0 and 255")
+
+    # @ivanv: could rename this to be linux_image/dtb or vm_image/dtb etc
+    image = Path(checked_lookup(vm_xml, "image"))
+    dtb = Path(checked_lookup(vm_xml, "dtb"))
+
+    # for child in vm_xml:
+    #     try:
+    #         if child.tag == "image":
+    #             _check_attrs(child, ("path"))
+    #             if image is not None:
+    #                 raise ValueError("image must only be specified once")
+    #             image = Path(checked_lookup(child, "path"))
+    #         elif child.tag == "dtb":
+    #             _check_attrs(child, ("path"))
+    #             if dtb is not None:
+    #                 raise ValueError("dtb must only be specified once")
+    #             dtb = Path(checked_lookup(child, "path"))
+    #         else:
+    #             raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
+    #     except ValueError as e:
+    #         raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
+
+    return VirtualMachine(name, vm_id, image, dtb)
 
 
 def _check_no_text(el: ET.Element) -> None:

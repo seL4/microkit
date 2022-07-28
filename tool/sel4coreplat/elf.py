@@ -265,7 +265,9 @@ class ElfFile:
         with path.open("rb") as f:
             magic = f.read(4)
             if magic != ELF_MAGIC:
-                raise InvalidElf("Incorrect magic")
+                # @ivanv: enable this
+                # raise InvalidElf("Incorrect magic")
+                pass
             class_ = f.read(1)[0]
             if class_ == 1:
                 hdr_fmt = ELF_HEADER32

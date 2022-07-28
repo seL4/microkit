@@ -649,6 +649,9 @@ def build_system(
 
     # Emulate kernel boot
 
+    print(f"VMs: {system.protection_domains[0].virtual_machines}")
+    pds_and_vms = list(system.protection_domains) + [vm for pd in system.protection_domains for vm in pd.virtual_machines]
+
     ## Determine physical memory region used by the monitor
     initial_task_size = phys_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size).size
 
@@ -657,7 +660,14 @@ def build_system(
         pd: ElfFile.from_path(_get_full_path(pd.program_image, search_paths))
         for pd in system.protection_domains
     }
-    ### Here we should validate that ELF files
+    vm_elf_files = {
+        vm: ElfFile.from_path(_get_full_path(vm.image, search_paths))
+        for pd in system.protection_domains for vm in pd.virtual_machines
+    }
+    pd_elf_files = dict(pd_elf_files, **vm_elf_files)
+    print("== ALL ELFS:")
+    print(pd_elf_files)
+    ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
     ## Determine physical memory region for 'reserved' memory.
     #
@@ -697,6 +707,7 @@ def build_system(
     phys_addr_next = invocation_table_region.end
     # Now we create additional MRs (and mappings) for the ELF files.
     pd_elf_regions = {}
+    # @ivanv: change
     for pd in system.protection_domains:
         elf_regions: List[Tuple[int, bytearray, str]] = []
         seg_idx = 0
@@ -995,6 +1006,7 @@ def build_system(
     regions: List[Region] = []
     extra_mrs = []
     pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in system.protection_domains}
+    # @ivanv: change
     for pd in system.protection_domains:
         seg_idx = 0
         for segment in pd_elf_files[pd].segments:
@@ -1095,9 +1107,11 @@ def build_system(
         mr_pages[mr].append(page)
 
     tcb_names = [f"TCB: PD={pd.name}" for pd in system.protection_domains]
+    tcb_names += [f"TCB: VM={vm.name}" for pd in system.protection_domains for vm in pd.virtual_machines]
     tcb_objects = init_system.allocate_objects(SEL4_TCB_OBJECT, tcb_names)
     tcb_caps = [tcb_obj.cap_addr for tcb_obj in tcb_objects]
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
+    schedcontext_names += [f"SchedContext: VM={vm.name}" for pd in system.protection_domains for vm in pd.virtual_machines]
     schedcontext_objects = init_system.allocate_objects(SEL4_SCHEDCONTEXT_OBJECT, schedcontext_names, size=PD_SCHEDCONTEXT_SIZE)
     pds_with_endpoints = [pd for pd in system.protection_domains if pd.needs_ep]
     endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pds_with_endpoints]
@@ -1556,11 +1570,15 @@ def build_system(
             )
         )
     # bind the notification object
+    # @ivanv: change, don't want VM TCB to have a notif object
     invocation = Sel4TcbBindNotification(tcb_objects[0].cap_addr, notification_objects[0].cap_addr)
     invocation.repeat(count=len(system.protection_domains), tcb=1, notification=1)
     system_invocations.append(invocation)
 
-    # Resume (start) all the threads
+    invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, )
+
+    # Resume (start) all the threads that are not virtual machines
+    # @ivanv: change
     invocation = Sel4TcbResume(tcb_objects[0].cap_addr)
     invocation.repeat(count=len(system.protection_domains), tcb=1)
     system_invocations.append(invocation)
