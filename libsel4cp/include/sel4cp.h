@@ -132,8 +132,18 @@ sel4cp_mr_get(uint8_t mr)
 }
 
 // @ivanv: inline or nah?
+#ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
 static uint64_t
 sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
     return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
 }
+
+static uint64_t
+sel4cp_vm_start(sel4cp_vm vm)
+{
+    // @ivanv: probably wrong but something like this is what we want.
+    // @ivanv: I'm unsure if we want sel4cp_vm_start or sel4cp_vcpu_start?
+    return seL4_TCB_Resume(BASE_VCPU_CAP + vm);
+}
+#endif
