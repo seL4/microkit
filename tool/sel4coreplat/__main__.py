@@ -953,13 +953,20 @@ def build_system(
 
     # Now that the page tables are allocated they can be mapped into vspace
     vaddr = 0x8000_0000
-    invocation = Sel4PageTableMap(system_cap_address_mask | base_page_table_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_ARM_DEFAULT_VMATTRIBUTES)
+    invocation = Sel4PageTableMap(system_cap_address_mask | base_page_table_cap,
+                                  INIT_VSPACE_CAP_ADDRESS,
+                                  vaddr,
+                                  SEL4_ARM_DEFAULT_VMATTRIBUTES)
     invocation.repeat(page_tables_required, page_table=1, vaddr=SEL4_LARGE_PAGE_SIZE)
     bootstrap_invocations.append(invocation)
 
     # Finally, once the page tables are allocated the pages can be mapped
     vaddr = 0x8000_0000
-    invocation = Sel4PageMap(system_cap_address_mask | base_page_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_RIGHTS_READ, SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER)
+    invocation = Sel4PageMap(system_cap_address_mask | base_page_cap,
+                             INIT_VSPACE_CAP_ADDRESS,
+                             vaddr,
+                             SEL4_RIGHTS_READ,
+                             SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER)
     invocation.repeat(pages_required, page=1, vaddr=kernel_config.minimum_page_size)
     bootstrap_invocations.append(invocation)
 
@@ -1020,7 +1027,14 @@ def build_system(
     all_mr_by_name = {mr.name: mr for mr in all_mrs}
 
     system_invocations: List[Sel4Invocation] = []
-    init_system = InitSystem(kernel_config, root_cnode_cap, system_cap_address_mask, cap_slot, kao, kernel_boot_info, system_invocations, cap_address_names)
+    init_system = InitSystem(kernel_config,
+                             root_cnode_cap,
+                             system_cap_address_mask,
+                             cap_slot,
+                             kao,
+                             kernel_boot_info,
+                             system_invocations,
+                             cap_address_names)
     init_system.reserve(invocation_table_allocations)
 
     SUPPORTED_PAGE_SIZES = (0x1_000, 0x200_000)
@@ -1213,7 +1227,14 @@ def build_system(
             assert len(mr_pages[mr]) > 0
             assert_objects_adjacent(mr_pages[mr])
 
-            invocation = Sel4CnodeMint(system_cnode_cap, cap_slot, system_cnode_bits, root_cnode_cap, mr_pages[mr][0].cap_addr, kernel_config.cap_address_bits, rights, 0)
+            invocation = Sel4CnodeMint(system_cnode_cap,
+                                       cap_slot,
+                                       system_cnode_bits,
+                                       root_cnode_cap,
+                                       mr_pages[mr][0].cap_addr,
+                                       kernel_config.cap_address_bits,
+                                       rights,
+                                       0)
             invocation.repeat(len(mr_pages[mr]), dest_index=1, src_obj=1)
             system_invocations.append(invocation)
 
@@ -1299,13 +1320,27 @@ def build_system(
         )
 
     assert REPLY_CAP_IDX < PD_CAP_SIZE
-    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr, REPLY_CAP_IDX, PD_CAP_BITS, root_cnode_cap, pd_reply_objects[0].cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 1)
+    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr,
+                               REPLY_CAP_IDX,
+                               PD_CAP_BITS,
+                               root_cnode_cap,
+                               pd_reply_objects[0].cap_addr,
+                               kernel_config.cap_address_bits,
+                               SEL4_RIGHTS_ALL,
+                               1)
     invocation.repeat(len(system.protection_domains), cnode=1, src_obj=1)
     system_invocations.append(invocation)
 
     ## Mint access to the vspace cap
     assert VSPACE_CAP_IDX < PD_CAP_SIZE
-    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr, VSPACE_CAP_IDX, PD_CAP_BITS, root_cnode_cap, vspace_objects[0].cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL, 0)
+    invocation = Sel4CnodeMint(cnode_objects[0].cap_addr,
+                               VSPACE_CAP_IDX,
+                               PD_CAP_BITS,
+                               root_cnode_cap,
+                               vspace_objects[0].cap_addr,
+                               kernel_config.cap_address_bits,
+                               SEL4_RIGHTS_ALL,
+                               0)
     invocation.repeat(len(system.protection_domains), cnode=1, src_obj=1)
     system_invocations.append(invocation)
 
@@ -1488,10 +1523,20 @@ def build_system(
         )
 
     for tcb_obj, schedcontext_obj, pd in zip(tcb_objects, schedcontext_objects, system.protection_domains):
-        system_invocations.append(Sel4TcbSetSchedParams(tcb_obj.cap_addr, INIT_TCB_CAP_ADDRESS, pd.priority, pd.priority, schedcontext_obj.cap_addr, fault_ep_endpoint_object.cap_addr))
+        system_invocations.append(Sel4TcbSetSchedParams(tcb_obj.cap_addr,
+                                                        INIT_TCB_CAP_ADDRESS,
+                                                        pd.priority,
+                                                        pd.priority,
+                                                        schedcontext_obj.cap_addr,
+                                                        fault_ep_endpoint_object.cap_addr))
 
     # set vspace / cspace (SetSpace)
-    invocation = Sel4TcbSetSpace(tcb_objects[0].cap_addr, badged_fault_ep, cnode_objects[0].cap_addr, kernel_config.cap_address_bits - PD_CAP_BITS, vspace_objects[0].cap_addr, 0)
+    invocation = Sel4TcbSetSpace(tcb_objects[0].cap_addr,
+                                 badged_fault_ep,
+                                 cnode_objects[0].cap_addr,
+                                 kernel_config.cap_address_bits - PD_CAP_BITS,
+                                 vspace_objects[0].cap_addr,
+                                 0)
     invocation.repeat(len(system.protection_domains), tcb=1, fault_ep=1, cspace_root=1, vspace_root=1)
     system_invocations.append(invocation)
 
@@ -1703,7 +1748,8 @@ def main() -> int:
     _, untyped_info_size = monitor_elf.find_symbol(MONITOR_CONFIG.untyped_info_symbol_name)
     max_untyped_objects = MONITOR_CONFIG.max_untyped_objects(untyped_info_size)
     if len(built_system.kernel_boot_info.untyped_objects) > max_untyped_objects:
-        raise Exception(f"Too many untyped objects: monitor ({monitor_elf_path}) supports {max_untyped_objects:,d} regions. System has {len(built_system.kernel_boot_info.untyped_objects):,d} objects.")
+        raise Exception(f"Too many untyped objects: monitor ({monitor_elf_path}) supports {max_untyped_objects:,d} regions."
+                        f"System has {len(built_system.kernel_boot_info.untyped_objects):,d} objects.")
     untyped_info_header = MONITOR_CONFIG.untyped_info_header_struct.pack(
             built_system.kernel_boot_info.untyped_objects[0].cap,
             built_system.kernel_boot_info.untyped_objects[-1].cap + 1
