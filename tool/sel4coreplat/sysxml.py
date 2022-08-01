@@ -93,7 +93,7 @@ class ProtectionDomain:
     setvars: Tuple[SysSetVar, ...]
     child_pds: Tuple["ProtectionDomain", ...]
     parent: Optional["ProtectionDomain"]
-    virtual_machines: Tuple["VirtualMachine"]
+    virtual_machine: Optional["VirtualMachine"]
     has_children: bool
     element: ET.Element
 
@@ -310,7 +310,6 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
     irqs = []
     setvars = []
     child_pds = []
-    virtual_machines = []
     for child in pd_xml:
         try:
             if child.tag == "program_image":
@@ -342,7 +341,8 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
             elif child.tag == "protection_domain":
                 child_pds.append(xml2pd(child, is_child=True))
             elif child.tag == "virtual_machine":
-                virtual_machines.append(xml2vm(child))
+                # @ivanv: check we don't have more than one VM
+                virtual_machine = xml2vm(child)
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
         except ValueError as e:
