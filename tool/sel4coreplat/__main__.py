@@ -92,6 +92,7 @@ from sel4coreplat.sel4 import (
     SEL4_SMALL_PAGE_OBJECT,
     SEL4_LARGE_PAGE_OBJECT,
     SEL4_PAGE_TABLE_OBJECT,
+    SEL4_VCPU_OBJECT,
     SLOT_BITS,
     SLOT_SIZE,
     INIT_NULL_CAP_ADDRESS,
@@ -1106,15 +1107,24 @@ def build_system(
         page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, names=[name])[0]
         mr_pages[mr].append(page)
 
+    virtual_machines = [pd.virtual_machine for pd in system.protection_domains if pd.virtual_machine is not None]
+    # TCBs
     tcb_names = [f"TCB: PD={pd.name}" for pd in system.protection_domains]
-    tcb_names += [f"TCB: VM={vm.name}" for pd in system.protection_domains for vm in pd.virtual_machines]
+    tcb_names += [f"TCB: VM={vm.name}" for vm in virtual_machines]
     tcb_objects = init_system.allocate_objects(SEL4_TCB_OBJECT, tcb_names)
     tcb_caps = [tcb_obj.cap_addr for tcb_obj in tcb_objects]
+    # VCPUs
+    vcpu_names = [f"VCPU: VM={vm.name}" for vm in virtual_machines]
+    vcpu_objects = init_system.allocate_objects(SEL4_VCPU_OBJECT, vcpu_names)
+    vcpu_caps = [vcpu_obj.cap_addr for vcpu_obj in vcpu_objects]
+    # SchedContexts
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
-    schedcontext_names += [f"SchedContext: VM={vm.name}" for pd in system.protection_domains for vm in pd.virtual_machines]
+    schedcontext_names += [f"SchedContext: VM={vm.name}" for vm in virtual_machines]
     schedcontext_objects = init_system.allocate_objects(SEL4_SCHEDCONTEXT_OBJECT, schedcontext_names, size=PD_SCHEDCONTEXT_SIZE)
+    # Endpoints
     pds_with_endpoints = [pd for pd in system.protection_domains if pd.needs_ep]
     endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pds_with_endpoints]
+    # Replies
     reply_names = ["Reply: Monitor"]+ [f"Reply: PD={pd.name}" for pd in system.protection_domains]
     reply_objects = init_system.allocate_objects(SEL4_REPLY_OBJECT, reply_names)
     reply_object = reply_objects[0]
@@ -1575,7 +1585,8 @@ def build_system(
     invocation.repeat(count=len(system.protection_domains), tcb=1, notification=1)
     system_invocations.append(invocation)
 
-    invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, )
+    # For all the virtual machines, we want to bind the TCB to the VCPU
+    invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[0].cap_addr)
 
     # Resume (start) all the threads that are not virtual machines
     # @ivanv: change
