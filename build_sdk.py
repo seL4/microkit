@@ -96,6 +96,9 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "qemu-arm-virt",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "ARM_HYP": True,
+            "KernelRetypeFanOutLimit": 1024,
         },
         examples = {
             "hello": Path("example/qemu_arm_virt/hello")
