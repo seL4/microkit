@@ -136,7 +136,7 @@ FIXED_OBJECT_SIZES = {
     SEL4_LARGE_PAGE_OBJECT: SEL4_LARGE_PAGE_SIZE,
     SEL4_SMALL_PAGE_OBJECT: SEL4_SMALL_PAGE_SIZE,
 
-    SEL4_VCPU_OBJECT: SEL4_VCPU_OBJECT,
+    SEL4_VCPU_OBJECT: SEL4_VCPU_SIZE,
 }
 
 VARIABLE_SIZE_OBJECTS = {
@@ -778,21 +778,10 @@ class Sel4SchedControlConfigureFlags(Sel4Invocation):
 class Sel4ArmVcpuSetTcb(Sel4Invocation):
     _object_type = "VCPU"
     _method_name = "Set TCB"
-    _extra_caps = ("vcpu", )
+    _extra_caps = ("tcb", )
     label = Sel4Label.ARMVCPUSetTCB
+    vcpu: int
     tcb: int
-
-
-@dataclass
-class Sel4ArmVcpuInjectIrq(Sel4Invocation):
-    _object_type = "VCPU"
-    _method_name = "Inject IRQ"
-    _extra_caps = ("vcpu", )
-    label = Sel4Label.ARMVCPUInjectIRQ
-    virq: int
-    priority: int
-    group: int
-    index: int
 
 
 def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:

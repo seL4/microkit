@@ -73,6 +73,7 @@ from sel4coreplat.sel4 import (
     Sel4IrqControlGet,
     Sel4IrqHandlerSetNotification,
     Sel4SchedControlConfigureFlags,
+    Sel4ArmVcpuSetTcb,
     emulate_kernel_boot,
     emulate_kernel_boot_partial,
     UntypedObject,
@@ -362,6 +363,9 @@ class FixedUntypedAlloc:
     def __str__(self) -> str:
         return f"FixedUntypedAlloc(self._ut={self._ut}"
 
+    def __repr__(self) -> str:
+        return str(self)
+
     def __contains__(self, address: int) -> bool:
         return self._ut.region.base <= address < self._ut.region.end
 
@@ -650,8 +654,7 @@ def build_system(
 
     # Emulate kernel boot
 
-    print(f"VMs: {system.protection_domains[0].virtual_machines}")
-    pds_and_vms = list(system.protection_domains) + [vm for pd in system.protection_domains for vm in pd.virtual_machines]
+    virtual_machines = [pd.virtual_machine for pd in system.protection_domains if pd.virtual_machine is not None]
 
     ## Determine physical memory region used by the monitor
     initial_task_size = phys_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size).size
@@ -663,11 +666,9 @@ def build_system(
     }
     vm_elf_files = {
         vm: ElfFile.from_path(_get_full_path(vm.image, search_paths))
-        for pd in system.protection_domains for vm in pd.virtual_machines
+        for vm in virtual_machines
     }
-    pd_elf_files = dict(pd_elf_files, **vm_elf_files)
-    print("== ALL ELFS:")
-    print(pd_elf_files)
+    pd_elf_files.update(vm_elf_files)
     ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
     ## Determine physical memory region for 'reserved' memory.
@@ -708,8 +709,8 @@ def build_system(
     phys_addr_next = invocation_table_region.end
     # Now we create additional MRs (and mappings) for the ELF files.
     pd_elf_regions = {}
-    # @ivanv: change
-    for pd in system.protection_domains:
+    print(system.protection_domains)
+    for pd in list(system.protection_domains) + virtual_machines:
         elf_regions: List[Tuple[int, bytearray, str]] = []
         seg_idx = 0
         for segment in pd_elf_files[pd].segments:
@@ -1006,9 +1007,8 @@ def build_system(
     # Now we create additional MRs (and mappings) for the ELF files.
     regions: List[Region] = []
     extra_mrs = []
-    pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in system.protection_domains}
-    # @ivanv: change
-    for pd in system.protection_domains:
+    pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in list(system.protection_domains) + virtual_machines}
+    for pd in list(system.protection_domains):
         seg_idx = 0
         for segment in pd_elf_files[pd].segments:
             if not segment.loadable:
@@ -1035,6 +1035,35 @@ def build_system(
 
             mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True, element=None)
             pd_extra_maps[pd] += (mp, )
+
+    for vm in virtual_machines:
+        seg_idx = 0
+        vm_phys_addr_next = vm.load_addr
+        for segment in pd_elf_files[vm].segments:
+            if not segment.loadable:
+                continue
+
+            regions.append(Region(f"VM-ELF {vm.name}-{seg_idx}", vm_phys_addr_next, segment.data))
+
+            perms = ""
+            if segment.is_readable:
+                perms += "r"
+            if segment.is_writable:
+                perms += "w"
+            if segment.is_executable:
+                perms += "x"
+
+            base_vaddr = round_down(segment.virt_addr, kernel_config.minimum_page_size)
+            end_vaddr = round_up(segment.virt_addr + segment.mem_size, kernel_config.minimum_page_size)
+            aligned_size = end_vaddr - base_vaddr
+            name = f"ELF:{vm.name}-{seg_idx}"
+            mr = SysMemoryRegion(name, aligned_size, 0x1000, aligned_size // 0x1000, vm_phys_addr_next)
+            seg_idx += 1
+            vm_phys_addr_next += aligned_size
+            extra_mrs.append(mr)
+
+            mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True, element=None)
+            pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
     all_mr_by_name = {mr.name: mr for mr in all_mrs}
@@ -1071,6 +1100,7 @@ def build_system(
 
     ipc_buffer_objects = page_objects[0x1000][:len(system.protection_domains)]
 
+    # @ivanv: revisit this for VM
     pg_idx: Dict[int, int] = {sz: 0 for sz in SUPPORTED_PAGE_SIZES}
     pg_idx[0x1000] = len(system.protection_domains)
     mr_pages: Dict[SysMemoryRegion, List[KernelObject]] = {mr: [] for mr in all_mrs}
@@ -1107,7 +1137,6 @@ def build_system(
         page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, names=[name])[0]
         mr_pages[mr].append(page)
 
-    virtual_machines = [pd.virtual_machine for pd in system.protection_domains if pd.virtual_machine is not None]
     # TCBs
     tcb_names = [f"TCB: PD={pd.name}" for pd in system.protection_domains]
     tcb_names += [f"TCB: VM={vm.name}" for vm in virtual_machines]
@@ -1116,7 +1145,6 @@ def build_system(
     # VCPUs
     vcpu_names = [f"VCPU: VM={vm.name}" for vm in virtual_machines]
     vcpu_objects = init_system.allocate_objects(SEL4_VCPU_OBJECT, vcpu_names)
-    vcpu_caps = [vcpu_obj.cap_addr for vcpu_obj in vcpu_objects]
     # SchedContexts
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
     schedcontext_names += [f"SchedContext: VM={vm.name}" for vm in virtual_machines]
@@ -1152,6 +1180,7 @@ def build_system(
     uds = []
     ds = []
     pts = []
+    # @ivanv: change
     for pd_idx, pd in enumerate(system.protection_domains):
         ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
         upper_directory_vaddrs = set()
@@ -1180,8 +1209,8 @@ def build_system(
         pts += [(pd_idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
 
     pd_names = [pd.name for p in system.protection_domains]
+    # @ivanv: change
     vspace_names = [f"VSpace: PD={pd.name}" for pd in system.protection_domains]
-
     vspace_objects = init_system.allocate_objects(SEL4_VSPACE_OBJECT, vspace_names)
 
     if not kernel_config.hyp_mode:
@@ -1569,6 +1598,11 @@ def build_system(
         ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
         system_invocations.append(Sel4TcbSetIpcBuffer(tcb_obj.cap_addr, ipc_buffer_vaddr, ipc_buffer_obj.cap_addr,))
 
+    print("PD ELF entries:")
+    for pd in list(system.protection_domains) + virtual_machines:
+        print(pd)
+        print(f"pd.entry: {hex(pd_elf_files[pd].entry)}")
+
     # set register (entry point)
     for tcb_obj, pd in zip(tcb_objects, system.protection_domains):
         system_invocations.append(
@@ -1580,16 +1614,21 @@ def build_system(
             )
         )
     # bind the notification object
-    # @ivanv: change, don't want VM TCB to have a notif object
     invocation = Sel4TcbBindNotification(tcb_objects[0].cap_addr, notification_objects[0].cap_addr)
     invocation.repeat(count=len(system.protection_domains), tcb=1, notification=1)
     system_invocations.append(invocation)
 
     # For all the virtual machines, we want to bind the TCB to the VCPU
-    invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[0].cap_addr)
+    if len(virtual_machines) > 0:
+        print("TCB objects:")
+        print(tcb_objects)
+        print("TCB objects for VMs:")
+        print(tcb_objects[len(system.protection_domains)])
+        invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[len(system.protection_domains)].cap_addr)
+        invocation.repeat(count=len(virtual_machines), vcpu=1, tcb=1)
+        system_invocations.append(invocation)
 
     # Resume (start) all the threads that are not virtual machines
-    # @ivanv: change
     invocation = Sel4TcbResume(tcb_objects[0].cap_addr)
     invocation.repeat(count=len(system.protection_domains), tcb=1)
     system_invocations.append(invocation)
