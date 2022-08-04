@@ -125,7 +125,8 @@ class VirtualMachine:
     name: str
     vm_id: int
     image: Path
-    load_addr: int
+    maps: Tuple[SysMap, ...]
+    # load_addr: int
 
 
 def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
@@ -255,7 +256,7 @@ class SystemDescription:
         # warnings, not errors
         check_mrs = set(self.mr_by_name.keys())
         for pd in self.protection_domains:
-            for m in pd.maps:
+            for m in (pd.maps + pd.virtual_machine.maps):
                 if m.mr in check_mrs:
                     check_mrs.remove(m.mr)
 
@@ -398,7 +399,8 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
 def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
     # @ivanv: should check that there are no children
-    _check_attrs(vm_xml, ("name", "vm_id", "image", "load_addr"))
+    _check_attrs(vm_xml, ("name", "vm_id", "image"))
+    # _check_attrs(vm_xml, ("name", "vm_id", "image", "load_addr"))
     name = checked_lookup(vm_xml, "name")
 
     vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
@@ -407,7 +409,7 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
 
     # @ivanv: could rename this to be linux_image/dtb or vm_image/dtb etc
     image = Path(checked_lookup(vm_xml, "image"))
-    load_addr = int(checked_lookup(vm_xml, "load_addr"), base=16)
+    # load_addr = int(checked_lookup(vm_xml, "load_addr"), base=16)
 
     # for child in vm_xml:
     #     try:
@@ -426,7 +428,23 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
     #     except ValueError as e:
     #         raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
 
-    return VirtualMachine(name, vm_id, image, load_addr)
+    maps = []
+    for child in vm_xml:
+        try:
+            if child.tag == "map":
+                _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
+                mr = checked_lookup(child, "mr")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                perms = child.attrib.get("perms", "rw")
+                cached = str_to_bool(child.attrib.get("cached", "true"))
+                maps.append(SysMap(mr, vaddr, perms, cached, child))
+            else:
+                raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
+        except ValueError as e:
+            raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
+
+    # return VirtualMachine(name, vm_id, image, load_addr)
+    return VirtualMachine(name, vm_id, image, tuple(maps))
 
 
 def _check_no_text(el: ET.Element) -> None:
