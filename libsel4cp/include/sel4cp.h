@@ -22,7 +22,7 @@ typedef seL4_MessageInfo_t sel4cp_msginfo;
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
 #define BASE_TCB_CAP 202
-#define BASE_VCPU_CAP 264 // @ivanv: change
+#define BASE_TCB_VCPU_CAP 264 // @ivanv: change
 
 #define SEL4CP_MAX_CHANNELS 63
 
@@ -96,7 +96,7 @@ sel4cp_pd_stop(sel4cp_pd pd)
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
     if (err != seL4_NoError) {
-        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_dbg_puts("sel4cp_pd_stop: error suspending TCB\n");
         sel4cp_internal_crash(err);
     }
 }
@@ -132,11 +132,11 @@ sel4cp_mr_get(uint8_t mr)
 }
 
 // @ivanv: inline or nah?
-#ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
+#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static uint64_t
 sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
-    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
+    return seL4_ARM_VCPU_InjectIRQ(BASE_TCB_VCPU_CAP + vm, irq, priority, group, index);
 }
 
 static uint64_t
@@ -144,6 +144,37 @@ sel4cp_vm_start(sel4cp_vm vm)
 {
     // @ivanv: probably wrong but something like this is what we want.
     // @ivanv: I'm unsure if we want sel4cp_vm_start or sel4cp_vcpu_start?
-    return seL4_TCB_Resume(BASE_VCPU_CAP + vm);
+    return seL4_TCB_Resume(BASE_TCB_VCPU_CAP + vm);
+}
+
+static inline void
+sel4cp_vm_restart(sel4cp_pd pd, uintptr_t entry_point)
+{
+    seL4_Error err;
+    seL4_UserContext ctxt = {0};
+    ctxt.pc = entry_point;
+    err = seL4_TCB_WriteRegisters(
+        BASE_TCB_CAP + pd,
+        true,
+        0, /* No flags */
+        1, /* writing 1 register */
+        &ctxt
+    );
+
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_internal_crash(err);
+    }
+}
+
+static void
+sel4cp_vm_stop(sel4cp_vm vm)
+{
+    seL4_Error err;
+    err = seL4_TCB_Suspend(BASE_TCB_VCPU_CAP + vm);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_vm_stop: error suspending TCB\n");
+        sel4cp_internal_crash(err);
+    }
 }
 #endif
