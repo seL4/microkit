@@ -1066,9 +1066,9 @@ def build_system(
     # groups to optimize allocation
 
     for phys_addr, mr in fixed_pages:
-        if page_size not in SUPPORTED_PAGE_SIZES:
+        if mr.page_size not in SUPPORTED_PAGE_SIZES:
             raise Exception(f"Invalid page_size: 0x{mr.page_size:x} for mr {mr}")
-        obj_type = PAGE_OBJECT_BY_SIZE[page_size]
+        obj_type = PAGE_OBJECT_BY_SIZE[mr.page_size]
         obj_type_name = f"Page({human_size_strict(mr.page_size)})"
         name = f"{obj_type_name}: MR={mr.name} @ {phys_addr:x}"
         page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, names=[name])[0]
