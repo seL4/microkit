@@ -99,6 +99,7 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "ARM_HYP": True,
             "KernelRetypeFanOutLimit": 1024,
+            "QEMU_MEMORY": 2048,
         },
         examples = {
             "hello": Path("example/qemu_arm_virt/hello")
