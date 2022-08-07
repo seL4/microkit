@@ -1109,7 +1109,7 @@ def build_system(
 
     # @ivanv: revisit this for VM
     pg_idx: Dict[int, int] = {sz: 0 for sz in SUPPORTED_PAGE_SIZES}
-    pg_idx[0x1000] = len(system.protection_domains) + len(virtual_machines)
+    pg_idx[0x1000] = len(system.protection_domains)
     mr_pages: Dict[SysMemoryRegion, List[KernelObject]] = {mr: [] for mr in all_mrs}
     for mr in all_mrs:
         if mr.phys_addr is not None:

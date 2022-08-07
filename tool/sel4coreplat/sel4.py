@@ -430,6 +430,7 @@ class Sel4Label(Enum):
             # ARM Page Upper Directory
             Sel4Label.ARMPageUpperDirectoryMap: 40,
             Sel4Label.ARMPageUpperDirectoryUnmap: 41,
+            # ARM Page Directory
             Sel4Label.ARMPageDirectoryMap: 42,
             Sel4Label.ARMPageDirectoryUnmap: 43,
             # ARM Page table
@@ -455,7 +456,7 @@ class Sel4Label(Enum):
             Sel4Label.ARMVSpaceInvalidate_Data: 37,
             Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
             Sel4Label.ARMVSpaceUnify_Instruction: 39,
-            # ARM Page Upper Directory
+            # ARM Page Directory
             Sel4Label.ARMPageDirectoryMap: 40,
             Sel4Label.ARMPageDirectoryUnmap: 41,
             # ARM Page table
