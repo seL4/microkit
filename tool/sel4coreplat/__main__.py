@@ -1199,7 +1199,6 @@ def build_system(
         # in, and then page sure this is set
         if pd_idx < len(system.protection_domains):
             vaddrs = [(ipc_buffer_vaddr, 0x1000)]
-            print(f" ========= here, pd_idx: {pd_idx}")
         else:
             vaddrs = []
         for map in (pd.maps + pd_extra_maps[pd]):
@@ -1210,15 +1209,11 @@ def build_system(
                 vaddrs.append((vaddr, mr.page_size))
                 vaddr += mr_page_bytes(mr)
 
-        if (0x200000, 0x1000) in vaddrs and pd_idx == 1:
-            print(f"here, pd_idx: {pd_idx}")
         for vaddr, page_size in vaddrs:
             upper_directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9 + 9))
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
-                if vaddr == 0x200000:
-                    print(f"Adding PageTable vaddr: {hex(vaddr)}")
         if not kernel_config.hyp_mode:
             uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
