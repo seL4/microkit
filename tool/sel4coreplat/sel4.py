@@ -29,10 +29,10 @@ SEL4_NOTIFICATION_SIZE = (1 << 6)
 SEL4_REPLY_SIZE = (1 << 5)
 SEL4_PAGE_TABLE_SIZE = (1 << 12)
 SEL4_PAGE_DIRECTORY_SIZE = (1 << 12)
-SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 12)
+SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 13) # @ivanv: only for hyp mode
 SEL4_LARGE_PAGE_SIZE = (2 * 1024 * 1024)
 SEL4_SMALL_PAGE_SIZE = (4 * 1024)
-SEL4_VSPACE_SIZE = (4 * 1024) # @ivanv: check this
+SEL4_VSPACE_SIZE = SEL4_PAGE_UPPER_DIRECTORY_SIZE # @ivanv: note, only for hyp mode
 SEL4_ASID_POOL_SIZE = (1 << 12)
 SEL4_VCPU_SIZE = (1 << 12)
 
@@ -193,7 +193,7 @@ def _get_arch_n_paging(region: MemoryRegion, config: KernelConfig) -> int:
     # but can't remember, double check in kernel
     PT_INDEX_OFFSET  =  12
     PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
-    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 10)
+    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 10) # @ivanv: hyp specific
     PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
 
     if config.hyp_mode:
