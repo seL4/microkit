@@ -84,6 +84,8 @@ sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
         &ctxt
     );
 
+    sel4cp_dbg_puts("restarted pd\n");
+
     if (err != seL4_NoError) {
         sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
         sel4cp_internal_crash(err);
@@ -139,13 +141,29 @@ sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t gro
     return seL4_ARM_VCPU_InjectIRQ(BASE_VM_TCB_CAP + vm, irq, priority, group, index);
 }
 
-static uint64_t
-sel4cp_vm_start(sel4cp_vm vm)
-{
-    // @ivanv: probably wrong but something like this is what we want.
-    // @ivanv: I'm unsure if we want sel4cp_vm_start or sel4cp_vcpu_start?
-    return seL4_TCB_Resume(BASE_VM_TCB_CAP + vm);
-}
+// static uint64_t
+// sel4cp_vm_start(sel4cp_vm vm)
+// {
+//     // @ivanv: probably wrong but something like this is what we want.
+//     // @ivanv: I'm unsure if we want sel4cp_vm_start or sel4cp_vcpu_start?
+//     // return seL4_TCB_Resume(BASE_VM_TCB_CAP + vm);
+
+//     seL4_Error err;
+//     seL4_UserContext ctxt = {0};
+//     ctxt.pc = entry_point;
+//     err = seL4_TCB_WriteRegisters(
+//         BASE_VM_TCB_CAP + vm,
+//         true,
+//         0, /* No flags */
+//         1, /* writing 1 register */
+//         &ctxt
+//     );
+
+//     if (err != seL4_NoError) {
+//         sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+//         sel4cp_internal_crash(err);
+//     }
+// }
 
 static inline void
 sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)

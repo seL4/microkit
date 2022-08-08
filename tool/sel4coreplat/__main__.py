@@ -42,6 +42,7 @@ The following abreviations are used in the source code:
 """
 import cProfile
 import sys
+import os
 from argparse import ArgumentParser
 from pathlib import Path
 from dataclasses import dataclass
@@ -668,13 +669,14 @@ def build_system(
         pd: ElfFile.from_path(_get_full_path(pd.program_image, search_paths))
         for pd in system.protection_domains
     }
-    vm_elf_files = {
-        vm: ElfFile.from_path(_get_full_path(vm.image, search_paths))
+    vm_images = {
+        vm: _get_full_path(vm.program_image, search_paths)
         for vm in virtual_machines
     }
-    # for vm in virtual_machines:
-    #     vm_elf_files[vm].entry = vm.load_addr
-    pd_elf_files.update(vm_elf_files)
+    vm_device_trees = {
+        vm: _get_full_path(vm.device_tree, search_paths)
+        for vm in virtual_machines if vm.device_tree is not None
+    }
     ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
     ## Determine physical memory region for 'reserved' memory.
@@ -687,7 +689,16 @@ def build_system(
         sum([r.size for r in phys_mem_regions_from_elf(elf, kernel_config.minimum_page_size)])
         for elf in pd_elf_files.values()
     ])
-    reserved_size = invocation_table_size + pd_elf_size
+    vm_image_size = sum([
+        round_up(os.path.getsize(image), kernel_config.minimum_page_size)
+        for image in vm_images.values()
+    ])
+    vm_image_size += sum([
+        round_up(os.path.getsize(device_tree), kernel_config.minimum_page_size)
+        for device_tree in vm_device_trees.values() if device_tree is not None
+    ])
+    reserved_size = invocation_table_size + pd_elf_size + vm_image_size
+    print(f"Reserved size: {reserved_size}")
 
     # Now that the size is determine, find a free region in the physical memory
     # space.
@@ -715,7 +726,7 @@ def build_system(
     phys_addr_next = invocation_table_region.end
     # Now we create additional MRs (and mappings) for the ELF files.
     pd_elf_regions = {}
-    for pd in list(system.protection_domains) + virtual_machines:
+    for pd in system.protection_domains:
         elf_regions: List[Tuple[int, bytearray, str]] = []
         seg_idx = 0
         for segment in pd_elf_files[pd].segments:
@@ -746,6 +757,11 @@ def build_system(
             # mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True)
             # pd.maps.append(mp)
         pd_elf_regions[pd] = tuple(elf_regions)
+
+    for vm in virtual_machines:
+        phys_addr_next += round_up(os.path.getsize(vm.program_image), kernel_config.minimum_page_size)
+        if vm.device_tree is not None:
+            phys_addr_next += round_up(os.path.getsize(vm.device_tree), kernel_config.minimum_page_size)
 
 
     # 1.3 With both the initial task region and reserved region determined the kernel
@@ -1044,32 +1060,32 @@ def build_system(
             pd_extra_maps[pd] += (mp, )
 
     for vm in virtual_machines:
-        seg_idx = 0
-        # vm_phys_addr_next = vm.load_addr
-        for segment in pd_elf_files[vm].segments:
-            if not segment.loadable:
-                continue
+        with open(vm.program_image, "rb") as f:
+            data = f.read()
 
-            regions.append(Region(f"VM-ELF {vm.name}-{seg_idx}", phys_addr_next, segment.data))
+        regions.append(Region(f"VM-IMAGE {vm.name}", phys_addr_next, data))
+        aligned_size = round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
+        print(f"aligned_size: {aligned_size}")
+        mr = SysMemoryRegion(f"IMAGE:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
+        phys_addr_next += aligned_size
+        extra_mrs.append(mr)
 
-            perms = ""
-            if segment.is_readable:
-                perms += "r"
-            if segment.is_writable:
-                perms += "w"
-            if segment.is_executable:
-                perms += "x"
+        mp = SysMap(mr.name, 0x40000000, perms=perms, cached=True, element=None) # @ivanv: fix
+        pd_extra_maps[vm] += (mp, )
 
-            base_vaddr = round_down(segment.virt_addr, kernel_config.minimum_page_size)
-            end_vaddr = round_up(segment.virt_addr + segment.mem_size, kernel_config.minimum_page_size)
-            aligned_size = end_vaddr - base_vaddr
-            name = f"ELF:{vm.name}-{seg_idx}"
-            mr = SysMemoryRegion(name, aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
-            seg_idx += 1
+    for vm in virtual_machines:
+        if vm.device_tree:
+            with open(vm.device_tree, "rb") as f:
+                data = f.read()
+
+            regions.append(Region(f"VM-DTB {vm.name}", phys_addr_next, data))
+            aligned_size = round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
+            print(f"aligned_size: {aligned_size}")
+            mr = SysMemoryRegion(f"DTB:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
 
-            mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True, element=None)
+            mp = SysMap(mr.name, 0x4f000000, perms=perms, cached=True, element=None) # @ivanv: fix
             pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
@@ -1202,7 +1218,6 @@ def build_system(
         else:
             vaddrs = []
         for map in (pd.maps + pd_extra_maps[pd]):
-            print(f"map: {map}")
             mr = all_mr_by_name[map.mr]
             vaddr = map.vaddr
             for _ in range(mr.page_count):
@@ -1389,9 +1404,9 @@ def build_system(
                 parent_pd = pd
                 break
 
-        print("===== parent_pd is:")
-        print(parent_pd)
-        print(pd_endpoint_objects)
+        # print("===== parent_pd is:")
+        # print(parent_pd)
+        # print(pd_endpoint_objects)
         fault_ep_cap = pd_endpoint_objects[parent_pd].cap_addr
         # @ivanv: Right now there's nothing stopping the vm_id being
         # the same as a pd_id. We should change this.
@@ -1493,7 +1508,8 @@ def build_system(
         if pd.virtual_machine:
             for maybe_vm_tcb, maybe_vm in zip(tcb_objects[len(system.protection_domains):], virtual_machines):
                 if pd.virtual_machine == maybe_vm:
-                    cap_idx = BASE_VM_TCB_CAP + maybe_vm.vm_id
+                    cap_idx = BASE_TCB_CAP + maybe_vm.vm_id
+                    print(f"Doing CNode mint for VM TCB, cap_idx: {cap_idx}")
                     system_invocations.append(
                         Sel4CnodeMint(
                             cnode_obj.cap_addr,
@@ -1597,8 +1613,8 @@ def build_system(
 
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
-    print("pt_objects:")
-    print(pt_objects)
+    # print("pt_objects:")
+    # print(pt_objects)
     for map_cls, descriptors, objects in [
         # (Sel4PageUpperDirectoryMap, uds, ud_objects), @ivanv change to get non-hypervisor mode working
         (Sel4PageDirectoryMap, ds, d_objects),

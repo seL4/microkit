@@ -124,8 +124,8 @@ class Channel:
 class VirtualMachine:
     name: str
     vm_id: int
-    image: Path
-    # load_addr: int
+    program_image: Path
+    device_tree: Optional[Path]
     maps: Tuple[SysMap, ...]
     priority: int
     budget: int
@@ -283,7 +283,10 @@ class SystemDescription:
         # warnings, not errors
         check_mrs = set(self.mr_by_name.keys())
         for pd in self.protection_domains:
-            for m in (pd.maps + pd.virtual_machine.maps):
+            maps = pd.maps
+            if pd.virtual_machine:
+                maps += pd.virtual_machine.maps
+            for m in maps:
                 if m.mr in check_mrs:
                     check_mrs.remove(m.mr)
 
@@ -425,18 +428,15 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
 
 def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
-    # @ivanv: should check that there are no children
-    _check_attrs(vm_xml, ("name", "vm_id", "image", "priority"))
-    # _check_attrs(vm_xml, ("name", "vm_id", "image", "load_addr", "priority"))
+    _check_attrs(vm_xml, ("name", "vm_id", "priority"))
     name = checked_lookup(vm_xml, "name")
 
     vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
     if vm_id < 0 or vm_id > 255:
         raise ValueError("vm_id must be between 0 and 255")
 
-    image = Path(checked_lookup(vm_xml, "image"))
-    # load_addr = int(checked_lookup(vm_xml, "load_addr"), base=16)
-
+    program_image: Optional[Path] = None
+    device_tree: Optional[Path] = None
     budget = int(vm_xml.attrib.get("budget", "1000"), base=0)
     period = int(vm_xml.attrib.get("period", str(budget)), base=0)
     priority = int(vm_xml.attrib.get("priority", "0"), base=0)
@@ -444,7 +444,17 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
     maps = []
     for child in vm_xml:
         try:
-            if child.tag == "map":
+            if child.tag == "program_image":
+                _check_attrs(child, ("path", ))
+                if program_image is not None:
+                    raise ValueError("program_image must only be specified once")
+                program_image = Path(checked_lookup(child, "path"))
+            elif child.tag == "device_tree":
+                _check_attrs(child, ("path", ))
+                if device_tree is not None:
+                    raise ValueError("device_tree must only be specified once")
+                device_tree = Path(checked_lookup(child, "path"))
+            elif child.tag == "map":
                 _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
                 mr = checked_lookup(child, "mr")
                 vaddr = int(checked_lookup(child, "vaddr"), base=0)
@@ -456,11 +466,14 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
         except ValueError as e:
             raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
 
+    if program_image is None:
+        raise ValueError("program_image must be specified")
+
     return VirtualMachine(
         name,
         vm_id,
-        image,
-        # load_addr,
+        program_image,
+        device_tree,
         tuple(maps),
         priority,
         budget,
