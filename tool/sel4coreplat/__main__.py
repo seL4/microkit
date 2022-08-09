@@ -1065,27 +1065,24 @@ def build_system(
 
         regions.append(Region(f"VM-IMAGE {vm.name}", phys_addr_next, data))
         aligned_size = round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
-        print(f"aligned_size: {aligned_size}")
         mr = SysMemoryRegion(f"IMAGE:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
         phys_addr_next += aligned_size
         extra_mrs.append(mr)
 
-        mp = SysMap(mr.name, 0x40000000, perms=perms, cached=True, element=None) # @ivanv: fix
+        mp = SysMap(mr.name, 0x40000000, perms="rwx", cached=False, element=None) # @ivanv: fix
         pd_extra_maps[vm] += (mp, )
 
-    for vm in virtual_machines:
         if vm.device_tree:
             with open(vm.device_tree, "rb") as f:
                 data = f.read()
 
             regions.append(Region(f"VM-DTB {vm.name}", phys_addr_next, data))
             aligned_size = round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
-            print(f"aligned_size: {aligned_size}")
             mr = SysMemoryRegion(f"DTB:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
 
-            mp = SysMap(mr.name, 0x4f000000, perms=perms, cached=True, element=None) # @ivanv: fix
+            mp = SysMap(mr.name, 0x4f000000, perms="rwx", cached=False, element=None) # @ivanv: fix
             pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
