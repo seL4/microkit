@@ -937,8 +937,6 @@ def build_system(
     for ut in (ut for ut in kernel_boot_info.untyped_objects if ut.is_device):
         ut_pages = ut.region.size // kernel_config.minimum_page_size
         retype_page_count = min(ut_pages, remaining_pages)
-        if retype_page_count > kernel_config.fan_out_limit:
-            print(f"retype_page_count: {retype_page_count}, fan_out_limit: {kernel_config.fan_out_limit}")
         assert retype_page_count <= kernel_config.fan_out_limit
         bootstrap_invocations.append(Sel4UntypedRetype(
                 ut.cap,
