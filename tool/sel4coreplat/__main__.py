@@ -698,7 +698,6 @@ def build_system(
         for device_tree in vm_device_trees.values() if device_tree is not None
     ])
     reserved_size = invocation_table_size + pd_elf_size + vm_image_size
-    print(f"Reserved size: {reserved_size}")
 
     # Now that the size is determine, find a free region in the physical memory
     # space.
