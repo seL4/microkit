@@ -168,6 +168,7 @@ BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
 BASE_TCB_CAP = BASE_IRQ_CAP + 64
 BASE_VM_TCB_CAP = BASE_TCB_CAP + 64
+BASE_VCPU_CAP = BASE_VM_TCB_CAP + 64
 MAX_SYSTEM_INVOCATION_SIZE = mb(128)
 PD_CAPTABLE_BITS = 12
 PD_CAP_SIZE = 512
@@ -1510,6 +1511,24 @@ def build_system(
                             PD_CAP_BITS,
                             root_cnode_cap,
                             maybe_vm_tcb.cap_addr,
+                            kernel_config.cap_address_bits,
+                            SEL4_RIGHTS_ALL,
+                            0)
+                    )
+
+    ## Mint access to the VM's VCPU in the PD CSpace
+    for cnode_obj, pd in zip(cnode_objects, system.protection_domains):
+        if pd.virtual_machine:
+            for vm_vcpu, vm in zip(vcpu_objects, virtual_machines):
+                if pd.virtual_machine == vm:
+                    cap_idx = BASE_VCPU_CAP + vm.vm_id
+                    system_invocations.append(
+                        Sel4CnodeMint(
+                            cnode_obj.cap_addr,
+                            cap_idx,
+                            PD_CAP_BITS,
+                            root_cnode_cap,
+                            vm_vcpu.cap_addr,
                             kernel_config.cap_address_bits,
                             SEL4_RIGHTS_ALL,
                             0)
