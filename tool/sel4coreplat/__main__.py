@@ -1069,7 +1069,7 @@ def build_system(
         phys_addr_next += aligned_size
         extra_mrs.append(mr)
 
-        mp = SysMap(mr.name, 0x40000000, perms="rwx", cached=False, element=None) # @ivanv: fix
+        mp = SysMap(mr.name, 0x40080000, perms="rwx", cached=False, element=None) # @ivanv: fix
         pd_extra_maps[vm] += (mp, )
 
         if vm.device_tree:
