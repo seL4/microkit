@@ -1075,7 +1075,7 @@ def build_system(
                 data = f.read()
 
             regions.append(Region(f"VM-DTB {vm.name}", phys_addr_next, data))
-            aligned_size = round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
+            aligned_size = round_up(os.path.getsize(vm.device_tree), kernel_config.minimum_page_size)
             mr = SysMemoryRegion(f"DTB:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
@@ -1660,7 +1660,7 @@ def build_system(
                 vspace_obj.cap_addr,
                 vaddr,
                 rights,
-                attrs
+                attrs # @ivanv: fix
             )
         )
 
