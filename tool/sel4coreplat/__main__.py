@@ -170,7 +170,7 @@ BASE_TCB_CAP = BASE_IRQ_CAP + 64
 BASE_VM_TCB_CAP = BASE_TCB_CAP + 64
 MAX_SYSTEM_INVOCATION_SIZE = mb(128)
 PD_CAPTABLE_BITS = 12
-PD_CAP_SIZE = 256
+PD_CAP_SIZE = 512
 PD_CAP_BITS = int(log2(PD_CAP_SIZE))
 PD_SCHEDCONTEXT_SIZE = (1 << 8)
 
@@ -1502,8 +1502,7 @@ def build_system(
         if pd.virtual_machine:
             for maybe_vm_tcb, maybe_vm in zip(tcb_objects[len(system.protection_domains):], virtual_machines):
                 if pd.virtual_machine == maybe_vm:
-                    cap_idx = BASE_TCB_CAP + maybe_vm.vm_id
-                    print(f"Doing CNode mint for VM TCB, cap_idx: {cap_idx}")
+                    cap_idx = BASE_VM_TCB_CAP + maybe_vm.vm_id
                     system_invocations.append(
                         Sel4CnodeMint(
                             cnode_obj.cap_addr,
