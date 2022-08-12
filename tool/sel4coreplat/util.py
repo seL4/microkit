@@ -65,7 +65,7 @@ class MemoryRegion:
     end: int
 
     def aligned_power_of_two_regions(self) -> List["MemoryRegion"]:
-        max_bits = 40
+        max_bits = 47
         # Align
         # find the first bit self
         r = []
