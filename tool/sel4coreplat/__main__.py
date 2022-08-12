@@ -365,13 +365,14 @@ class FixedUntypedAlloc:
         return self._ut.region.base < other._ut.region.base
 
     def __str__(self) -> str:
-        return f"FixedUntypedAlloc(self._ut={self._ut}"
+        return f"FixedUntypedAlloc(self._ut={self._ut})"
 
     def __repr__(self) -> str:
         return str(self)
 
     def __contains__(self, address: int) -> bool:
         return self._ut.region.base <= address < self._ut.region.end
+
 
 @dataclass(frozen=True, eq=True)
 class KernelObject:
