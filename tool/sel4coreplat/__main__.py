@@ -114,6 +114,7 @@ from sel4coreplat.sel4 import (
     SEL4_LARGE_PAGE_SIZE,
     SEL4_PAGE_TABLE_SIZE,
     SEL4_OBJECT_TYPE_NAMES,
+    SEL4_RISCV_4K_PAGE_OBJECT,
 )
 from sel4coreplat.sysxml import ProtectionDomain, xml2system, SystemDescription, PlatformDescription
 from sel4coreplat.sysxml import SysMap, SysMemoryRegion # This shouldn't be needed here as such
@@ -910,7 +911,7 @@ def build_system(
         assert retype_page_count <= kernel_config.fan_out_limit
         bootstrap_invocations.append(Sel4UntypedRetype(
                 ut.cap,
-                SEL4_SMALL_PAGE_OBJECT,
+                SEL4_RISCV_4K_PAGE_OBJECT,
                 0,
                 root_cnode_cap,
                 1,
@@ -1039,8 +1040,8 @@ def build_system(
     init_system = InitSystem(kernel_config, root_cnode_cap, system_cap_address_mask, cap_slot, kao, kernel_boot_info, system_invocations, cap_address_names)
     init_system.reserve(invocation_table_allocations)
 
-    SUPPORTED_PAGE_SIZES = (0x1_000, 0x200_000)
-    SUPPORTED_PAGE_OBJECTS = (SEL4_SMALL_PAGE_OBJECT, SEL4_LARGE_PAGE_OBJECT)
+    SUPPORTED_PAGE_SIZES = [0x1_000]
+    SUPPORTED_PAGE_OBJECTS = [SEL4_RISCV_4K_PAGE_OBJECT]
     PAGE_OBJECT_BY_SIZE = dict(zip(SUPPORTED_PAGE_SIZES, SUPPORTED_PAGE_OBJECTS))
     # 3.1 Work out how many regular (non-fixed) page objects are required
     page_names_by_size: Dict[int, List[str]] = {
@@ -1427,6 +1428,8 @@ def build_system(
     # Initialise the VSpaces -- assign them all the the initial asid pool.
     if kernel_config.arch == KernelArch.RISCV64:
         vspace_invocations = [
+            # (Sel4RISCVPageTableMap, uds, ud_objects),
+            (Sel4RISCVPageTableMap, ds, d_objects),
             (Sel4RISCVPageTableMap, pts, pt_objects),
         ]
         default_vm_attributes = SEL4_RISCV_DEFAULT_VMATTRIBUTES

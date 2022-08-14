@@ -164,7 +164,7 @@ class DisjointMemoryRegion:
         # 'best' may be something that best matches a power-of-two
         # allocation
         for region in self._regions:
-            if size <= region.size and region.base >= 0x84028000:
+            if size <= region.size and region.base >= 0x84028000: # @ivanv
                 break
         else:
             raise ValueError(f"Unable to allocate {size} bytes.")
