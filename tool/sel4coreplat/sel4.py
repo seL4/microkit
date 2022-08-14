@@ -625,6 +625,19 @@ class Sel4CnodeMint(Sel4Invocation):
     rights: int
     badge: int
 
+@dataclass
+class Sel4CnodeCopy(Sel4Invocation):
+    _object_type = "CNode"
+    _method_name = "Copy"
+    _extra_caps = ("src_root", )
+    label = Sel4Label.CNodeCopy
+    cnode: int
+    dest_index: int
+    dest_depth: int
+    src_root: int
+    src_obj: int
+    src_depth: int
+    rights: int
 
 @dataclass
 class Sel4CnodeMutate(Sel4Invocation):
