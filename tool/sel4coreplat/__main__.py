@@ -1383,7 +1383,7 @@ def build_system(
             )
 
     # mint a cap between monitor and passive PDs.
-    for idx, (cnode_obj, pd) in enumerate(zip(cnode_objects, system.protection_domains)):
+    for idx, (cnode_obj, pd) in enumerate(zip(cnode_objects, system.protection_domains), 1):
         if pd.passive:
             system_invocations.append(Sel4CnodeMint(
                                         cnode_obj.cap_addr, 
