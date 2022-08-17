@@ -1745,10 +1745,10 @@ def build_system(
 
     # And now we are done. We have all the invocations
 
-    system_invocation_data = b''
+    system_invocation_data_array = bytearray()
     for system_invocation in system_invocations:
-        system_invocation_data += system_invocation._get_raw_invocation(kernel_config)
-
+        system_invocation_data_array += system_invocation._get_raw_invocation(kernel_config)
+    system_invocation_data = bytes(system_invocation_data_array)
 
     for pd in system.protection_domains:
         # Could use pd.elf_file.write_symbol here to update variables if required.
@@ -1956,9 +1956,10 @@ def main() -> int:
     monitor_elf.write_symbol(MONITOR_CONFIG.system_invocation_count_symbol_name, pack("<Q", len(built_system.system_invocations)))
     monitor_elf.write_symbol(MONITOR_CONFIG.bootstrap_invocation_data_symbol_name, bootstrap_invocation_data)
 
-    system_invocation_data = b''
+    system_invocation_data_array = bytearray()
     for system_invocation in built_system.system_invocations:
-        system_invocation_data += system_invocation._get_raw_invocation(kernel_config)
+        system_invocation_data_array += system_invocation._get_raw_invocation(kernel_config)
+    system_invocation_data = bytes(system_invocation_data_array)
 
     regions: List[Tuple[int, Union[bytes, bytearray]]] = [(built_system.reserved_region.base, system_invocation_data)]
     regions += [(r.addr, r.data) for r in built_system.regions]
