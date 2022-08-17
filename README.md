@@ -113,17 +113,17 @@ The SDK top-level directory is `sel4cp-sdk-$VERSION`.
 The directory layout underneath the top-level directory is:
 
 ```
-bin/
 bin/sel4cp
-bsp/$board/$config/include/
-bsp/$board/$config/include/sel4cp.h
-bsp/$board/$config/lib/
-bsp/$board/$config/lib/libsel4cp.a
-bsp/$board/$config/lib/sel4cp.ld
-bsp/$board/$config/elf
-bsp/$board/$config/elf/loader.elf
-bsp/$board/$config/elf/kernel.elf
-bsp/$board/$config/elf/monitor.elf
+board/$board/$config/include/
+board/$board/$config/include/sel4cp.h
+board/$board/$config/lib/
+board/$board/$config/lib/libsel4cp.a
+board/$board/$config/lib/sel4cp.ld
+board/$board/$config/elf
+board/$board/$config/elf/loader.elf
+board/$board/$config/elf/kernel.elf
+board/$board/$config/elf/monitor.elf
+doc/sel4cp_user_manual.pdf
 ```
 
 The currently supported boards:
