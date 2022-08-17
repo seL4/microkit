@@ -349,6 +349,133 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
 }
 
 static void
+print_registers(seL4_UserContext regs)
+{
+#if defined(ARCH_riscv64)
+    puts("Registers: \n");
+    puts("pc : ");
+    puthex64(regs.pc);
+    puts("\n");
+    puts("ra : ");
+    puthex64(regs.ra);
+    puts("\n");
+    puts("s0 : ");
+    puthex64(regs.s0);
+    puts("\n");
+    puts("s1 : ");
+    puthex64(regs.s1);
+    puts("\n");
+    puts("s2 : ");
+    puthex64(regs.s2);
+    puts("\n");
+    puts("s3 : ");
+    puthex64(regs.s3);
+    puts("\n");
+    puts("s4 : ");
+    puthex64(regs.s4);
+    puts("\n");
+    puts("s5 : ");
+    puthex64(regs.s5);
+    puts("\n");
+    puts("s6 : ");
+    puthex64(regs.s6);
+    puts("\n");
+    puts("s7 : ");
+    puthex64(regs.s7);
+    puts("\n");
+    puts("s8 : ");
+    puthex64(regs.s8);
+    puts("\n");
+    puts("s9 : ");
+    puthex64(regs.s9);
+    puts("\n");
+    puts("s10 : ");
+    puthex64(regs.s10);
+    puts("\n");
+    puts("s11 : ");
+    puthex64(regs.s11);
+    puts("\n");
+    puts("a0 : ");
+    puthex64(regs.a0);
+    puts("\n");
+    puts("a1 : ");
+    puthex64(regs.a1);
+    puts("\n");
+    puts("a2 : ");
+    puthex64(regs.a2);
+    puts("\n");
+    puts("a3 : ");
+    puthex64(regs.a3);
+    puts("\n");
+    puts("a4 : ");
+    puthex64(regs.a4);
+    puts("\n");
+    puts("a5 : ");
+    puthex64(regs.a5);
+    puts("\n");
+    puts("a6 : ");
+    puthex64(regs.a6);
+    puts("\n");
+    puts("t0 : ");
+    puthex64(regs.t0);
+    puts("\n");
+    puts("t1 : ");
+    puthex64(regs.t1);
+    puts("\n");
+    puts("t2 : ");
+    puthex64(regs.t2);
+    puts("\n");
+    puts("t3 : ");
+    puthex64(regs.t3);
+    puts("\n");
+    puts("t4 : ");
+    puthex64(regs.t4);
+    puts("\n");
+    puts("t5 : ");
+    puthex64(regs.t5);
+    puts("\n");
+    puts("t6 : ");
+    puthex64(regs.t6);
+    puts("\n");
+    puts("tp : ");
+    puthex64(regs.tp);
+#elif defined(ARCH_aarch64)
+    // FIXME: Would be good to print the whole register set
+    puts("Registers: \n");
+    puts("pc : ");
+    puthex64(regs.pc);
+    puts("\n");
+    puts("spsr : ");
+    puthex64(regs.spsr);
+    puts("\n");
+    puts("x0 : ");
+    puthex64(regs.x0);
+    puts("\n");
+    puts("x1 : ");
+    puthex64(regs.x1);
+    puts("\n");
+    puts("x2 : ");
+    puthex64(regs.x2);
+    puts("\n");
+    puts("x3 : ");
+    puthex64(regs.x3);
+    puts("\n");
+    puts("x4 : ");
+    puthex64(regs.x4);
+    puts("\n");
+    puts("x5 : ");
+    puthex64(regs.x5);
+    puts("\n");
+    puts("x6 : ");
+    puthex64(regs.x6);
+    puts("\n");
+    puts("x7 : ");
+    puthex64(regs.x7);
+    puts("\n");
+#endif
+}
+
+static void
 monitor(void)
 {
     for (;;) {
@@ -384,38 +511,7 @@ monitor(void)
             fail("error reading registers");
         }
 
-        // FIXME: Would be good to print the whole register set
-        puts("Registers: \n");
-        puts("pc : ");
-        puthex64(regs.pc);
-        puts("\n");
-        puts("spsr : ");
-        puthex64(regs.spsr);
-        puts("\n");
-        puts("x0 : ");
-        puthex64(regs.x0);
-        puts("\n");
-        puts("x1 : ");
-        puthex64(regs.x1);
-        puts("\n");
-        puts("x2 : ");
-        puthex64(regs.x2);
-        puts("\n");
-        puts("x3 : ");
-        puthex64(regs.x3);
-        puts("\n");
-        puts("x4 : ");
-        puthex64(regs.x4);
-        puts("\n");
-        puts("x5 : ");
-        puthex64(regs.x5);
-        puts("\n");
-        puts("x6 : ");
-        puthex64(regs.x6);
-        puts("\n");
-        puts("x7 : ");
-        puthex64(regs.x7);
-        puts("\n");
+        print_registers(regs);
 
         switch(label) {
             case seL4_Fault_CapFault: {
