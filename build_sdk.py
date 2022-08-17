@@ -76,7 +76,19 @@ SUPPORTED_BOARDS = (
         examples = {
             "hello": Path("example/zcu102/hello")
         }
-    )
+    ),
+    BoardInfo(
+        name="spike",
+        arch = "riscv64",
+        gcc_cpu = "",
+        loader_link_address=0x80280000,
+        kernel_options = {
+            "KernelPlatform": "spike",
+        },
+        examples = {
+            "hello": Path("example/spike/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
