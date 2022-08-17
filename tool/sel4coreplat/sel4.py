@@ -142,32 +142,6 @@ def _get_arch_n_paging(region: MemoryRegion) -> int:
     )
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
-    # FIXME: These constants should ideally come from the config / kernel
-    # binary not be hard coded here.
-    # But they are constant so it isn't too bad.
-    # This is specifically for aarch64
-    slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = 12  # CONFIG_ROOT_CNODE_SIZE_BITS
-    tcb_bits = 11  # seL4_TCBBits
-    page_bits = 12  # seL4_PageBits
-    asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = 12  #seL4_VSpaceBits
-    page_table_bits = 12  # seL4_PageTableBits
-    min_sched_context_bits = 8 # seL4_MinSchedContextBits
-
-    size = 0
-    size += 1 << (root_cnode_bits + slot_bits)
-    size += 1 << (tcb_bits)
-    size += 2 * (1 << page_bits)
-    size += 1 << asid_pool_bits
-    size += 1 << vspace_bits
-    size += _get_arch_n_paging(initial_task_region) * (1 << page_table_bits)
-    size += 1 <<min_sched_context_bits
-
-    return size
-
-
 class Sel4Aarch64Regs:
     """
 typedef struct seL4_UserContext_ {
@@ -686,7 +660,7 @@ class KernelConfig:
     minimum_page_size: int
     paddr_user_device_top: int
     kernel_frame_size: int
-    init_cnode_bits: int
+    root_cnode_bits: int
     cap_address_bits: int
     fan_out_limit: int
 
@@ -744,9 +718,9 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
     return MemoryRegion(base, ki_boot_end_p)
 
 
-def _rootserver_max_size_bits() -> int:
+def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = 12  # CONFIG_ROOT_CNODE_SIZE_BITS
+    root_cnode_bits = kernel_config.root_cnode_bits
     vspace_bits = 12  #seL4_VSpaceBits
 
     cnode_size_bits = root_cnode_bits + slot_bits
@@ -826,8 +800,8 @@ def emulate_kernel_boot(
     normal_memory.remove_region(reserved_region.base, reserved_region.end)
 
     # Now, the tricky part! determine which memory is used for the initial task objects
-    initial_objects_size = calculate_rootserver_size(initial_task_virt_region)
-    initial_objects_align = _rootserver_max_size_bits()
+    initial_objects_size = calculate_rootserver_size(initial_task_virt_region, kernel_config)
+    initial_objects_align = _rootserver_max_size_bits(kernel_config)
 
     # Find an appropriate region of normal memory to allocate the objects
     # from; this follows the same algorithm used within the kernel boot code
@@ -863,3 +837,30 @@ def emulate_kernel_boot(
         first_available_cap = first_untyped_cap + len(device_regions) + len(normal_regions),
         untyped_objects = untyped_objects,
     )
+
+
+def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: KernelConfig) -> int:
+    # FIXME: These constants should ideally come from the config / kernel
+    # binary not be hard coded here.
+    # But they are constant so it isn't too bad.
+    # This is specifically for aarch64
+    slot_bits = 5  # seL4_SlotBits
+    root_cnode_bits = kernel_config.root_cnode_bits
+    tcb_bits = 11  # seL4_TCBBits
+    page_bits = 12  # seL4_PageBits
+    asid_pool_bits = 12  # seL4_ASIDPoolBits
+    vspace_bits = 12  #seL4_VSpaceBits
+    page_table_bits = 12  # seL4_PageTableBits
+    min_sched_context_bits = 8 # seL4_MinSchedContextBits
+
+    size = 0
+    size += 1 << (root_cnode_bits + slot_bits)
+    size += 1 << (tcb_bits)
+    size += 2 * (1 << page_bits)
+    size += 1 << asid_pool_bits
+    size += 1 << vspace_bits
+    size += _get_arch_n_paging(initial_task_region) * (1 << page_table_bits)
+    size += 1 <<min_sched_context_bits
+
+    return size
+

@@ -44,6 +44,7 @@ from struct import pack, Struct
 from os import environ
 from math import log2, ceil
 from sys import argv, executable, stderr
+from yaml import load  as yaml_load, Loader as YamlLoader
 
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -811,7 +812,7 @@ def build_system(
     #
     # guard size is the lower bit of the guard, upper bits are the guard itself
     # which for out purposes is always zero.
-    guard = kernel_config.cap_address_bits - root_cnode_bits - kernel_config.init_cnode_bits
+    guard = kernel_config.cap_address_bits - root_cnode_bits - kernel_config.root_cnode_bits
     bootstrap_invocations.append(Sel4CnodeMint(
         root_cnode_cap,
         0,
@@ -1560,11 +1561,15 @@ def main() -> int:
     if args.config not in available_configs:
         parser.error(f"argument --config: invalid choice: '{args.config}' (choose from {available_configs})")
 
+    gen_config_path = SDK_DIR / "board" / args.board / args.config / "config.yaml"
     elf_path = SDK_DIR / "board" / args.board / args.config / "elf"
     loader_elf_path = elf_path / "loader.elf"
     kernel_elf_path = elf_path / "sel4.elf"
     monitor_elf_path = elf_path / "monitor.elf"
 
+    if not gen_config_path.exists():
+        print(f"Error: auto-generated kernel config '{gen_config}' does not exist")
+        return 1
     if not elf_path.exists():
         print(f"Error: board ELF directory '{elf_path}' does not exist")
         return 1
@@ -1589,16 +1594,25 @@ def main() -> int:
 
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
-    # FIXME: The kernel config should be an output of the kernel
-    # build step (or embedded into the kernel elf file in some manner
+    with open(gen_config_path, "r") as f:
+        gen_config_yaml = yaml_load(f, Loader=YamlLoader)
+    # What we really want is a dictionary that has every option as a key with it's correspoding value
+    gen_config = {}
+    for option_dict in gen_config_yaml:
+        # @ivanv, so gross... we'll definitely have to find a better way
+        option, value = list(option_dict.items())[0]
+        gen_config[option] = value
+
+    # Some of the options we need can be found in the auto-generated config YAML
+    # file. Which we use here since they can differ between platforms.
     kernel_config = KernelConfig(
-        word_size = 64,
+        word_size = gen_config["CONFIG_WORD_SIZE"],
         minimum_page_size = kb(4),
-        paddr_user_device_top = (1 << 40),
+        paddr_user_device_top = gen_config["CONFIG_PADDR_USER_DEVICE_TOP"],
         kernel_frame_size = (1 << 12),
-        init_cnode_bits = 12,
+        root_cnode_bits = gen_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
         cap_address_bits=64,
-        fan_out_limit=256
+        fan_out_limit= gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
     )
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
