@@ -115,15 +115,15 @@ The directory layout underneath the top-level directory is:
 ```
 bin/
 bin/microkit
-bsp/$board/$config/include/
-bsp/$board/$config/include/microkit.h
-bsp/$board/$config/lib/
-bsp/$board/$config/lib/libmicrokit.a
-bsp/$board/$config/lib/microkit.ld
-bsp/$board/$config/elf
-bsp/$board/$config/elf/loader.elf
-bsp/$board/$config/elf/kernel.elf
-bsp/$board/$config/elf/monitor.elf
+board/$board/$config/include/
+board/$board/$config/include/microkit.h
+board/$board/$config/lib/
+board/$board/$config/lib/libmicrokit.a
+board/$board/$config/lib/microkit.ld
+board/$board/$config/elf
+board/$board/$config/elf/loader.elf
+board/$board/$config/elf/kernel.elf
+board/$board/$config/elf/monitor.elf
 ```
 
 The currently supported boards:
