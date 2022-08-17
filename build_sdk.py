@@ -33,6 +33,7 @@ KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 @dataclass
 class BoardInfo:
     name: str
+    arch: str
     gcc_cpu: str
     loader_link_address: int
     kernel_options: KERNEL_CONFIG_TYPE
@@ -49,6 +50,7 @@ class ConfigInfo:
 SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
+        arch="aarch64",
         gcc_cpu="cortex-a35",
         loader_link_address=0x80280000,
         kernel_options = {
@@ -62,6 +64,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="zcu102",
+        arch="aarch64",
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
         kernel_options = {
@@ -231,9 +234,15 @@ def build_elf_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
-    r = system(
-        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
-    )
+
+    if board.arch == "aarch64":
+        build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} TOOLCHAIN=aarch64-none-elf- ARCH=aarch64 GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
+    elif board.arch == "riscv64":
+        build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} TOOLCHAIN=riscv64-unknown-elf- ARCH=riscv64 SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
+    else:
+        raise Exception(f"Unexpected arch, {board.arch}")
+
+    r = system(build_cmd)
     if r != 0:
         raise Exception(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"
@@ -269,9 +278,15 @@ def build_lib_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
-    r = system(
-        f"BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make -C {component_name}"
-    )
+
+    if board.arch == "aarch64":
+        build_cmd = f"BUILD_DIR={build_dir.absolute()} TOOLCHAIN=aarch64-none-elf- ARCH=aarch64 GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make  -C {component_name}"
+    elif board.arch == "riscv64":
+        build_cmd = f"BUILD_DIR={build_dir.absolute()} TOOLCHAIN=riscv64-unknown-elf- ARCH=riscv64 SEL4_SDK={sel4_dir.absolute()} make  -C {component_name}"
+    else:
+        raise Exception(f"Unexpected arch, {board.arch}")
+
+    r = system(build_cmd)
     if r != 0:
         raise Exception(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"

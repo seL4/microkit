@@ -106,6 +106,7 @@ SEL4_ARM_CACHE_ID = 3
 
 # FIXME: There should be a better way of determining these, so they don't
 # have to be hard coded
+# @ivanv: look at platform specific stuff
 INIT_NULL_CAP_ADDRESS = 0
 INIT_TCB_CAP_ADDRESS = 1
 INIT_CNODE_CAP_ADDRESS = 2
@@ -474,7 +475,7 @@ class Sel4TcbResume(Sel4Invocation):
 
 
 @dataclass
-class Sel4TcbWriteRegisters(Sel4Invocation):
+class Sel4ARMTcbWriteRegisters(Sel4Invocation):
     _object_type = "TCB"
     _method_name = "WriteRegisters"
     _extra_caps = ()
@@ -503,7 +504,7 @@ class Sel4TcbBindNotification(Sel4Invocation):
 
 
 @dataclass
-class Sel4AsidPoolAssign(Sel4Invocation):
+class Sel4ARMAsidPoolAssign(Sel4Invocation):
     _object_type = "ASID Pool"
     _method_name = "Assign"
     _extra_caps = ("vspace", )
@@ -536,7 +537,7 @@ class Sel4IrqHandlerSetNotification(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageUpperDirectoryMap(Sel4Invocation):
+class Sel4ARMPageUpperDirectoryMap(Sel4Invocation):
     _object_type = "Page Upper Directory"
     _method_name = "Map"
     _extra_caps = ("vspace", )
@@ -548,7 +549,7 @@ class Sel4PageUpperDirectoryMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageDirectoryMap(Sel4Invocation):
+class Sel4ARMPageDirectoryMap(Sel4Invocation):
     _object_type = "Page Directory"
     _method_name = "Map"
     _extra_caps = ("vspace", )
@@ -560,7 +561,7 @@ class Sel4PageDirectoryMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageTableMap(Sel4Invocation):
+class Sel4ARMPageTableMap(Sel4Invocation):
     _object_type = "Page Table"
     _method_name = "Map"
     _extra_caps = ("vspace", )
@@ -572,7 +573,7 @@ class Sel4PageTableMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageMap(Sel4Invocation):
+class Sel4ARMPageMap(Sel4Invocation):
     _object_type = "Page"
     _method_name = "Map"
     _extra_caps = ("vspace", )
