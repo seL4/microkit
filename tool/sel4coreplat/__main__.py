@@ -156,6 +156,7 @@ FAULT_EP_CAP_IDX = 2
 VSPACE_CAP_IDX = 3
 REPLY_CAP_IDX = 4
 MONITOR_EP_CAP_IDX = 5
+TCB_CAP_IDX = 6
 BASE_OUTPUT_NOTIFICATION_CAP = 10
 BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
@@ -1394,6 +1395,7 @@ def build_system(
                                         kernel_config.cap_address_bits,
                                         SEL4_RIGHTS_ALL, 
                                         idx))
+
     # All minting is complete at this point
 
     # Associate badges
@@ -1459,6 +1461,10 @@ def build_system(
 
     for tcb_obj, schedcontext_obj, pd in zip(tcb_objects, schedcontext_objects, system.protection_domains):
         system_invocations.append(Sel4TcbSetSchedParams(tcb_obj.cap_addr, INIT_TCB_CAP_ADDRESS, pd.priority, pd.priority, schedcontext_obj.cap_addr, fault_ep_endpoint_object.cap_addr))
+
+    # Copy the PD's TCB cap into their address space for development purposes.
+    for tcb_obj, cnode_obj in zip(tcb_objects, cnode_objects):
+        system_invocations.append(Sel4CnodeCopy(cnode_obj.cap_addr, TCB_CAP_IDX, PD_CAP_BITS, root_cnode_cap, tcb_obj.cap_addr, kernel_config.cap_address_bits, SEL4_RIGHTS_ALL))
 
     # set vspace / cspace (SetSpace)
     invocation = Sel4TcbSetSpace(tcb_objects[0].cap_addr, badged_fault_ep, cnode_objects[0].cap_addr, kernel_config.cap_address_bits - PD_CAP_BITS, vspace_objects[0].cap_addr, 0)
