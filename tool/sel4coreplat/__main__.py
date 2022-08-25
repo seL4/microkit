@@ -760,9 +760,9 @@ def build_system(
         pd_elf_regions[pd] = tuple(elf_regions)
 
     for vm in virtual_machines:
-        phys_addr_next += round_up(os.path.getsize(vm.program_image), kernel_config.minimum_page_size)
+        phys_addr_next += round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
         if vm.device_tree is not None:
-            phys_addr_next += round_up(os.path.getsize(vm.device_tree), kernel_config.minimum_page_size)
+            phys_addr_next += round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
 
 
     # 1.3 With both the initial task region and reserved region determined the kernel
