@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: Build and upload SDK
+    name: Build and upload SDK (Linux x86_64)
     # Don't want any forks to run this workflow
     if: ${{ github.repository_owner == 'Ivan-Velickovic' }}
     runs-on: self-hosted
@@ -31,5 +31,5 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-latest-${{ github.ref_name }}
+            name: sel4cp-sdk-latest-${{ github.ref_name }}-linux-x86_64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
