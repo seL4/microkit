@@ -1,0 +1,35 @@
+name: SDK build CI
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build and upload SDK
+    # Don't want any forks to run this workflow
+    if: ${{ github.repository_owner == 'Ivan-Velickovic' }}
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Add aarch64-none-elf to PATH
+        run: echo "/home/ci/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Setup pyenv
+        run: |
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+      - name: Clone seL4
+        uses: actions/checkout@v3
+        with:
+          repository: BreakawayConsulting/seL4
+          ref: sel4cp-core-support
+          path: seL4
+      - name: Build SDK
+        run: ./pyenv/bin/python build_sdk.py --sel4=seL4
+      - name: Archive SDK
+        uses: actions/upload-artifact@v3
+        with:
+            name: sel4cp-sdk-latest-${{ github.ref_name }}
+            path: ./release/sel4cp-sdk-1.2.6.tar.gz
