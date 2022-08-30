@@ -984,6 +984,8 @@ class _KernelPartialBootInfo:
 def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
     """Extract the physical address of all kernel (only) devices"""
     kernel_devices = []
+    # @ivanv: This struct layout is archiecture specific (e.g armExecuteNever)
+    # doesn't appear on other architectures
     kernel_frame_t = Struct("<QQII")
     # The Spike platform (and possibly others) do not have any kernel devices
     # specified in the DTS, so the array kernel_devices_frames is empty.
@@ -1062,11 +1064,17 @@ def _kernel_partial_boot(
     device_memory.insert_region(0, kernel_config.paddr_user_device_top)
 
     # Next, remove all the kernel devices.
-    # NOTE: There is an assumption each kernel device is one frame
-    # in size only. It's possible this assumption could break in the
-    # future.
+    # NOTE: There is an assumption each kernel device is uniform
+    # in size, this is based on the map_kernel_devices function in seL4.
+    # It is possible that this assumption could break in the future.
+    if kernel_config.arch == KernelArch.RISCV64:
+        device_size = 1 << 21
+    elif kernel_config.arch == KernelArch.AARCH64:
+        device_size = 1 << 12
+    else:
+        raise Exception("Unsupported architecture")
     for paddr in _kernel_device_addrs(kernel_elf):
-        device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size)
+        device_memory.remove_region(paddr, paddr + device_size)
 
     # Remove all the actual physical memory from the device regions
     # but add it all to the actual normal memory regions
