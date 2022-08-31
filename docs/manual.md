@@ -581,6 +581,23 @@ An QEMU command line:
        -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
        -serial mon:stdio
 
+## Spike
+
+Initial support is available for the Spike on 64-bit RISC-V.
+
+The QEMU command to run is:
+
+    $ qemu-system-riscv64 \
+       -machine spike \
+       -m size=4095M  \
+       -nographic \
+       -serial mon:stdio \
+       -bios [SYSTEM_IMAGE]
+
+You can also use the [Spike simulator](https://github.com/riscv-software-src/riscv-isa-sim), the command is:
+
+    $ spike -m4095 [SYSTEM_IMAGE]
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.
