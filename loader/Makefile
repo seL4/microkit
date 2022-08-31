@@ -33,7 +33,7 @@ ifeq ($(ARCH),aarch64)
 	ASM_FLAGS := -g3 -mcpu=$(GCC_CPU)
 else ifeq ($(ARCH),riscv64)
 	C_FLAGS := -mcmodel=medany -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -march=rv64imac -mabi=lp64 -DBOARD_$(BOARD) -DARCH_riscv64 -Wall -Werror
-	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -march=rv64imac -mabi=lp64
+	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -march=rv64imac -mabi=lp64 -DBOARD_$(BOARD)
 	ASM_FLAGS := -g3 -march=rv64imac -mabi=lp64
 else
 	$(error ARCH must be aarch64 or riscv64)

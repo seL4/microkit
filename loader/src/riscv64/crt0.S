@@ -17,11 +17,15 @@
 #define SBI_EXT_BASE_EID 0x10
 #define SBI_EXT_BASE_PROBE_EXT_FID 3
 
-/* The only platform that we're supporting for RISC-V right
- * now (the Spike) has the first hart ID as 0. This comes from
- * the config.cmake script for the platform in seL4.
+/* This comes from the config.cmake script for the platform in seL4.
+ * This is not the most ideal way to do this, however once we add the kernel
+ * config it should be nicer.
  */
+#if defined(BOARD_spike)
 #define FIRST_HART_ID 0
+#elif defined(BOARD_hifive_unleashed)
+#define FIRST_HART_ID 1
+#endif
 
 .section ".text.start"
 
@@ -78,7 +82,7 @@ _start:
   bnez a2, _start1 /* goto _start1 if SBI did not return SBI_SUCCESS (0) */
   beqz a3, _start1 /* goto _start1 if HSM extension is missing */
 
-  /*  Check if we are running on the hart we expect on, FIRST_HART_ID */
+  /* Check if we are running on the hart we expect on, FIRST_HART_ID */
   li s1, FIRST_HART_ID
   beq  a0, s1, _start1 /* goto _start1 if we are on FIRST_HART_ID */
 

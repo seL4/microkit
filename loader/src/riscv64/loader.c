@@ -110,15 +110,11 @@ static inline void sbi_console_putchar(int ch)
     SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
 }
 
-#if defined(BOARD_spike)
 static void
 putc(uint8_t ch)
 {
     sbi_console_putchar(ch);
 }
-#else
-#error Board not defined
-#endif
 
 static void
 puts(const char *s)
