@@ -1229,17 +1229,25 @@ def build_system(
         for mp in (pd.maps + pd_extra_maps[pd]):
             vaddr = mp.vaddr
             mr = all_mr_by_name[mp.mr] #system.mr_by_name[mp.mr]
+            # Get page attributes depending on architecture
+            attrs = 0
+            if kernel_config.arch == KernelArch.AARCH64:
+                attrs = SEL4_ARM_PARITY_ENABLED
+                if mp.cached:
+                    attrs |= SEL4_ARM_PAGE_CACHEABLE
+                if "x" not in mp.perms:
+                    attrs |= SEL4_ARM_EXECUTE_NEVER
+            elif kernel_config.arch == KernelArch.RISCV64:
+                if "x" not in mp.perms:
+                    attrs |= SEL4_RISCV_EXECUTE_NEVER
+            else:
+                raise Exception(f"Unexpected architecture: {kernel_config.arch}")
+            # Get page rights
             rights = 0
-            # @ivanv: revisit
-            attrs = SEL4_ARM_PARITY_ENABLED if kernel_config.arch == KernelArch.AARCH64 else 0
             if "r" in mp.perms:
                 rights |= SEL4_RIGHTS_READ
             if "w" in mp.perms:
                 rights |= SEL4_RIGHTS_WRITE
-            if "x" not in mp.perms:
-                attrs |= SEL4_ARM_EXECUTE_NEVER if kernel_config.arch == KernelArch.AARCH64 else SEL4_RISCV_EXECUTE_NEVER
-            if mp.cached and kernel_config.arch == KernelArch.AARCH64:
-                attrs |= SEL4_ARM_PAGE_CACHEABLE
 
             assert len(mr_pages[mr]) > 0
             assert_objects_adjacent(mr_pages[mr])
