@@ -36,14 +36,13 @@ HELLO_OBJS := hello.o
 BOARD_DIR := $(SEL4CP_SDK)/board/$(SEL4CP_BOARD)/$(SEL4CP_CONFIG)
 
 IMAGES := hello.elf
-CFLAGS := -mcmodel=medany -mstrict-align -march=rv64imac -mabi=lp64 -nostdlib -ffreestanding -g3 -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include
+CFLAGS := -mcmodel=medany -mstrict-align -march=rv64imac -mabi=lp64 -nostdlib -ffreestanding -g3 -O3 -Wall -Wno-unused-function -Werror -I$(BOARD_DIR)/include
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lsel4cp -Tsel4cp.ld
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
 PAYLOAD_FILE = $(BUILD_DIR)/platform/generic/firmware/fw_payload.elf
-CWD = $(CURDIR)
 
 all: $(PAYLOAD_FILE)
 
@@ -60,5 +59,5 @@ $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hello.system
 	$(SEL4CP_TOOL) hello.system --search-path $(BUILD_DIR) --board $(SEL4CP_BOARD) --config $(SEL4CP_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
 
 $(PAYLOAD_FILE): $(IMAGE_FILE)
-	make -C $(OPENSBI) PLATFORM=generic CROSS_COMPILE=riscv64-unknown-elf- FW_PAYLOAD_PATH=$(CWD)/$(IMAGE_FILE) \
-	PLATFORM_RISCV_XLEN=64 PLATFORM_RISCV_ISA=rv64imac PLATFORM_RISCV_ABI=lp64 O=$(CWD)/$(BUILD_DIR)
+	make -C $(OPENSBI) PLATFORM=generic CROSS_COMPILE=riscv64-unknown-elf- FW_PAYLOAD_PATH=$(IMAGE_FILE) \
+	PLATFORM_RISCV_XLEN=64 PLATFORM_RISCV_ISA=rv64imac PLATFORM_RISCV_ABI=lp64 O=$(BUILD_DIR)
