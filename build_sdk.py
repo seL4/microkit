@@ -16,6 +16,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
+from yaml import load  as yaml_load, Loader as YamlLoader
 
 from typing import Dict, Union, List, Tuple
 
@@ -311,6 +312,24 @@ def build_lib_component(
         dest.chmod(0o444)
 
 
+def build_config_component(
+    root_dir: Path,
+    build_dir: Path,
+    board: BoardInfo,
+    config: ConfigInfo,
+) -> None:
+    # Here we are just copying the auto-generated kernel config, "gen_config.yaml".
+    sel4_build_dir = build_dir / board.name / config.name / "sel4" / "build"
+    sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.yaml"
+    dest = root_dir / "board" / board.name / config.name / "config.yaml"
+    with open(sel4_gen_config, "r") as f:
+        sel4_config = yaml_load(f, Loader=YamlLoader)
+
+    dest.unlink(missing_ok=True)
+    copy(sel4_gen_config, dest)
+    dest.chmod(0o444)
+
+
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
@@ -363,6 +382,7 @@ def main() -> None:
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)
+            build_config_component(root_dir, build_dir, board, config)
         # Setup the examples
         for example, example_path in board.examples.items():
             include_dir = root_dir / "board" / board.name / "example" / example
