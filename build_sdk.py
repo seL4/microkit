@@ -30,11 +30,25 @@ SEL4CP_EPOCH = 1616367257
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
+AARCH64_TOOLCHAIN = "aarch64-none-elf-"
+RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
+
+class BoardArch:
+    AARCH64 = 1
+    RISCV64 = 2
+
+# @ivanv: if we're going to have an optimised build, should we pass in -mtune as well to all the Makefiles
+# for RISC-V builds?
+# @ivanv: explain risc-v specifc arguments to the toolchain in the Makefiles, do the same for ARM since it's
+# useful imo
+# @ivanv: find the best way to abstract the arch specific seL4 invocations.
+# @ivanv: find a way to consistently pass in mabi and march to the various Makefiles
+
 @dataclass
 class BoardInfo:
     name: str
-    arch: str
-    gcc_cpu: str
+    arch: BoardArch
+    gcc_flags: str
     loader_link_address: int
     kernel_options: KERNEL_CONFIG_TYPE
     examples: Dict[str, Path]
@@ -50,8 +64,8 @@ class ConfigInfo:
 SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
-        arch="aarch64",
-        gcc_cpu="cortex-a35",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a35",
         loader_link_address=0x80280000,
         kernel_options = {
             "KernelPlatform": "tqma8xqp1gb",
@@ -64,8 +78,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="zcu102",
-        arch="aarch64",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x40000000,
         kernel_options = {
             "KernelPlatform": "zynqmp",
@@ -77,12 +91,14 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/zcu102/hello")
         }
     ),
+    # @ivanv: need to comment how this loader link address is decided.
     BoardInfo(
         name="spike",
-        arch = "riscv64",
-        gcc_cpu = "",
-        loader_link_address=0x80280000,
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
         kernel_options = {
+            "KernelIsMCS": True,
             "KernelPlatform": "spike",
         },
         examples = {
@@ -247,13 +263,14 @@ def build_elf_component(
     build_dir.mkdir(exist_ok=True, parents=True)
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
 
-    if board.arch == "aarch64":
-        build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} TOOLCHAIN=aarch64-none-elf- ARCH=aarch64 GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
-    elif board.arch == "riscv64":
-        build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} TOOLCHAIN=riscv64-unknown-elf- ARCH=riscv64 SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
+    if board.arch == BoardArch.AARCH64:
+        arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV64:
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
     else:
-        raise Exception(f"Unexpected arch, {board.arch}")
+        raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
 
+    build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} {arch_args} {board.gcc_flags} SEL4_SDK={sel4_dir.absolute()} {defines_str} make -C {component_name}"
     r = system(build_cmd)
     if r != 0:
         raise Exception(
@@ -291,13 +308,14 @@ def build_lib_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
 
-    if board.arch == "aarch64":
-        build_cmd = f"BUILD_DIR={build_dir.absolute()} TOOLCHAIN=aarch64-none-elf- ARCH=aarch64 GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make  -C {component_name}"
-    elif board.arch == "riscv64":
-        build_cmd = f"BUILD_DIR={build_dir.absolute()} TOOLCHAIN=riscv64-unknown-elf- ARCH=riscv64 SEL4_SDK={sel4_dir.absolute()} make  -C {component_name}"
+    if board.arch == BoardArch.AARCH64:
+        arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV64:
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
     else:
-        raise Exception(f"Unexpected arch, {board.arch}")
+        raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
 
+    build_cmd = f"BUILD_DIR={build_dir.absolute()} {arch_args} {board.gcc_flags} SEL4_SDK={sel4_dir.absolute()} make -C {component_name}"
     r = system(build_cmd)
     if r != 0:
         raise Exception(

@@ -54,7 +54,9 @@ class MachineType(IntEnum):
     # NOTE: Obviously there are may more!
     # This is all we support for now, and I don't
     # feel like typing them all out!
+    # These values are from Linux source in include/uapi/linux/elf-em.h
     EM_AARCH64 = 183
+    EM_RISCV = 243
 
 
 class ElfVersion(IntEnum):
@@ -340,7 +342,7 @@ class ElfFile:
 
         return elf
 
-    def write(self, path: Path) -> None:
+    def write(self, path: Path, machine: MachineType) -> None:
         """Note: This only supports writing out of program headers
         and segments. It does *not* support writing out sections
         at this point in time.
@@ -354,7 +356,7 @@ class ElfFile:
                 ident_osabi=OperatingSystemAbi.ELFOSABI_STANDALINE,
                 ident_abiversion=0,
                 type_ = ObjectFileType.ET_EXEC,
-                machine=MachineType.EM_AARCH64,
+                machine=machine,
                 version=ElfVersion.EV_CURRENT,
                 entry=self.entry,
                 phoff=ehsize,
@@ -431,6 +433,13 @@ class ElfFile:
         return strtab[idx:end_idx].decode("utf8")
 
     def find_symbol(self, variable_name: str) -> Tuple[int, int]:
+        found_sym = self.find_symbol_if_exists(variable_name)
+        if found_sym is None:
+            raise KeyError(f"No symbol named {variable_name} found")
+
+        return found_sym
+
+    def find_symbol_if_exists(self, variable_name: str) -> Optional[Tuple[int, int]]:
         found_sym = None
         for name, sym in self._symbols:
             if name == variable_name:
@@ -439,7 +448,7 @@ class ElfFile:
                 else:
                     raise Exception(f"Multiple symbols with name {variable_name}")
         if found_sym is None:
-            raise KeyError(f"No symbol named {variable_name} found")
+            return None
         # symbol_type = found_sym.info & 0xf
         # symbol_binding = found_sym.info >> 4
         #if symbol_type != 1:

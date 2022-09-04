@@ -52,16 +52,21 @@ from sel4coreplat.elf import ElfFile
 from sel4coreplat.util import kb, mb, lsb, msb, round_up, round_down, mask_bits, is_power_of_two, MemoryRegion, UserError
 from sel4coreplat.sel4 import (
     Sel4Aarch64Regs,
+    Sel4RiscvRegs,
     Sel4Invocation,
-    Sel4AsidPoolAssign,
-    Sel4PageUpperDirectoryMap,
-    Sel4PageDirectoryMap,
-    Sel4PageTableMap,
-    Sel4PageMap,
+    Sel4ARMAsidPoolAssign,
+    Sel4ARMPageUpperDirectoryMap,
+    Sel4ARMPageDirectoryMap,
+    Sel4ARMPageTableMap,
+    Sel4ARMPageMap,
+    Sel4RISCVAsidPoolAssign,
+    Sel4RISCVPageTableMap,
+    Sel4RISCVPageMap,
     Sel4TcbSetSchedParams,
     Sel4TcbSetSpace,
     Sel4TcbSetIpcBuffer,
-    Sel4TcbWriteRegisters,
+    Sel4ARMTcbWriteRegisters,
+    Sel4RISCVTcbWriteRegisters,
     Sel4TcbBindNotification,
     Sel4TcbResume,
     Sel4CnodeMint,
@@ -72,6 +77,7 @@ from sel4coreplat.sel4 import (
     emulate_kernel_boot,
     emulate_kernel_boot_partial,
     UntypedObject,
+    KernelArch,
     KernelConfig,
     KernelBootInfo,
     FIXED_OBJECT_SIZES,
@@ -103,13 +109,15 @@ from sel4coreplat.sel4 import (
     SEL4_ARM_EXECUTE_NEVER,
     SEL4_ARM_PARITY_ENABLED,
     SEL4_ARM_PAGE_CACHEABLE,
+    SEL4_RISCV_DEFAULT_VMATTRIBUTES,
+    SEL4_RISCV_EXECUTE_NEVER,
     SEL4_LARGE_PAGE_SIZE,
     SEL4_PAGE_TABLE_SIZE,
     SEL4_OBJECT_TYPE_NAMES,
 )
 from sel4coreplat.sysxml import ProtectionDomain, xml2system, SystemDescription, PlatformDescription
 from sel4coreplat.sysxml import SysMap, SysMemoryRegion # This shouldn't be needed here as such
-from sel4coreplat.loader import Loader
+from sel4coreplat.loader import Loader, _check_non_overlapping
 
 # This is a workaround for: https://github.com/indygreg/PyOxidizer/issues/307
 # Basically, pyoxidizer generates code that results in argv[0] being set to None.
@@ -948,13 +956,26 @@ def build_system(
 
     # Now that the page tables are allocated they can be mapped into vspace
     vaddr = 0x8000_0000
-    invocation = Sel4PageTableMap(system_cap_address_mask | base_page_table_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_ARM_DEFAULT_VMATTRIBUTES)
+    if kernel_config.arch == KernelArch.AARCH64:
+        arch_page_table_map = Sel4ARMPageTableMap
+        arch_vm_attributes = SEL4_ARM_DEFAULT_VMATTRIBUTES
+    elif kernel_config.arch == KernelArch.RISCV64:
+        arch_page_table_map = Sel4RISCVPageTableMap
+        arch_vm_attributes = SEL4_RISCV_DEFAULT_VMATTRIBUTES
+
+    invocation = arch_page_table_map(system_cap_address_mask | base_page_table_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, arch_vm_attributes)
     invocation.repeat(page_tables_required, page_table=1, vaddr=SEL4_LARGE_PAGE_SIZE)
     bootstrap_invocations.append(invocation)
 
     # Finally, once the page tables are allocated the pages can be mapped
     vaddr = 0x8000_0000
-    invocation = Sel4PageMap(system_cap_address_mask | base_page_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_RIGHTS_READ, SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER)
+    if kernel_config.arch == KernelArch.AARCH64:
+        arch_page_map = Sel4ARMPageMap
+        arch_vm_attributes = SEL4_ARM_DEFAULT_VMATTRIBUTES | SEL4_ARM_EXECUTE_NEVER
+    elif kernel_config.arch == KernelArch.RISCV64:
+        arch_page_map = Sel4RISCVPageMap
+        arch_vm_attributes = SEL4_RISCV_DEFAULT_VMATTRIBUTES | SEL4_RISCV_EXECUTE_NEVER
+    invocation = arch_page_map(system_cap_address_mask | base_page_cap, INIT_VSPACE_CAP_ADDRESS, vaddr, SEL4_RIGHTS_READ, arch_vm_attributes)
     invocation.repeat(pages_required, page=1, vaddr=kernel_config.minimum_page_size)
     bootstrap_invocations.append(invocation)
 
@@ -1102,7 +1123,7 @@ def build_system(
     # Page directory (level 2 table) is based on how many 1,024 MiB parts of
     # the address space is covered
     #
-    # Page table (level 3 table) is based on how many 2 MiB parts of the
+    # Page table (level 1 table) is based on how many 2 MiB parts of the
     # address space is covered (excluding any 2MiB regions covered by large
     # pages).
 
@@ -1110,7 +1131,13 @@ def build_system(
     ds = []
     pts = []
     for pd_idx, pd in enumerate(system.protection_domains):
-        ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
+        ipc_buffer_symbol = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
+        assert ipc_buffer_symbol is not None
+        ipc_buffer_vaddr, _ = ipc_buffer_symbol
+        # @ivanv: change for RISC-V, also don't like the hard coding of 12 and 9
+        # I need to figure out what the situation is with page levels for RISC-V
+        # on seL4. Seems to me that since only PageTableMap and PageMap exists,
+        # only two level PT is supported, even though the hardware is 4 level.
         upper_directory_vaddrs = set()
         directory_vaddrs = set()
         page_table_vaddrs = set()
@@ -1140,11 +1167,19 @@ def build_system(
 
     vspace_objects = init_system.allocate_objects(SEL4_VSPACE_OBJECT, vspace_names)
 
-    ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
-    ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
+    # PageUpperDirectory and PageDirectory are not present on RISC-V
+    if kernel_config.arch == KernelArch.AARCH64:
+        ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
+        ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
 
-    d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
-    d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
+        d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
+        d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
+    elif kernel_config.arch == KernelArch.RISCV64:
+        # ud_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
+        # ud_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, ud_names)
+
+        d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
+        d_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, d_names)
 
     pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, pt_names)
@@ -1179,7 +1214,8 @@ def build_system(
     # This has to be done prior to minting!
     # for vspace_obj in vspace_objects:
     #     system_invocations.append(Sel4AsidPoolAssign(INIT_ASID_POOL_CAP_ADDRESS, vspace_obj.cap_addr))
-    invocation = Sel4AsidPoolAssign(INIT_ASID_POOL_CAP_ADDRESS, vspace_objects[0].cap_addr)
+    asid_pool_assign = Sel4ARMAsidPoolAssign if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVAsidPoolAssign
+    invocation = asid_pool_assign(INIT_ASID_POOL_CAP_ADDRESS, vspace_objects[0].cap_addr)
     invocation.repeat(len(system.protection_domains), vspace=1)
     system_invocations.append(invocation)
 
@@ -1193,14 +1229,15 @@ def build_system(
             vaddr = mp.vaddr
             mr = all_mr_by_name[mp.mr] #system.mr_by_name[mp.mr]
             rights = 0
-            attrs = SEL4_ARM_PARITY_ENABLED
+            # @ivanv: revisit
+            attrs = SEL4_ARM_PARITY_ENABLED if kernel_config.arch == KernelArch.AARCH64 else 0
             if "r" in mp.perms:
                 rights |= SEL4_RIGHTS_READ
             if "w" in mp.perms:
                 rights |= SEL4_RIGHTS_WRITE
             if "x" not in mp.perms:
-                attrs |= SEL4_ARM_EXECUTE_NEVER
-            if mp.cached:
+                attrs |= SEL4_ARM_EXECUTE_NEVER if kernel_config.arch == KernelArch.AARCH64 else SEL4_RISCV_EXECUTE_NEVER
+            if mp.cached and kernel_config.arch == KernelArch.AARCH64:
                 attrs |= SEL4_ARM_PAGE_CACHEABLE
 
             assert len(mr_pages[mr]) > 0
@@ -1388,11 +1425,19 @@ def build_system(
 
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
-    for map_cls, descriptors, objects in [
-        (Sel4PageUpperDirectoryMap, uds, ud_objects),
-        (Sel4PageDirectoryMap, ds, d_objects),
-        (Sel4PageTableMap, pts, pt_objects),
-    ]:
+    if kernel_config.arch == KernelArch.RISCV64:
+        vspace_invocations = [
+            (Sel4RISCVPageTableMap, pts, pt_objects),
+        ]
+        default_vm_attributes = SEL4_RISCV_DEFAULT_VMATTRIBUTES
+    else:
+        vspace_invocations = [
+            (Sel4ARMPageUpperDirectoryMap, uds, ud_objects),
+            (Sel4ARMPageDirectoryMap, ds, d_objects),
+            (Sel4ARMPageTableMap, pts, pt_objects),
+        ]
+        default_vm_attributes = SEL4_ARM_DEFAULT_VMATTRIBUTES
+    for map_cls, descriptors, objects in vspace_invocations:
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects):
             vspace_obj = vspace_objects[pd_idx]
             system_invocations.append(
@@ -1400,14 +1445,15 @@ def build_system(
                     obj.cap_addr,
                     vspace_obj.cap_addr,
                     vaddr,
-                    SEL4_ARM_DEFAULT_VMATTRIBUTES
+                    default_vm_attributes
                 )
             )
 
     # Now maps all the pages
+    page_map = Sel4ARMPageMap if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVPageMap
     for page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
         vspace_obj = vspace_objects[pd_idx]
-        invocation = Sel4PageMap(page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
+        invocation = page_map(page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
         invocation.repeat(count, page=1, vaddr=vaddr_incr)
         system_invocations.append(invocation)
 
@@ -1415,7 +1461,7 @@ def build_system(
     for vspace_obj, pd, ipc_buffer_obj in zip(vspace_objects, system.protection_domains, ipc_buffer_objects):
         vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
         system_invocations.append(
-            Sel4PageMap(
+            page_map(
                 ipc_buffer_obj.cap_addr,
                 vspace_obj.cap_addr,
                 vaddr,
@@ -1455,13 +1501,15 @@ def build_system(
         system_invocations.append(Sel4TcbSetIpcBuffer(tcb_obj.cap_addr, ipc_buffer_vaddr, ipc_buffer_obj.cap_addr,))
 
     # set register (entry point)
+    tcb_write_registers = Sel4ARMTcbWriteRegisters if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVTcbWriteRegisters
+    regs = Sel4Aarch64Regs if kernel_config.arch == KernelArch.AARCH64 else Sel4RiscvRegs
     for tcb_obj, pd in zip(tcb_objects, system.protection_domains):
         system_invocations.append(
-            Sel4TcbWriteRegisters(
+            tcb_write_registers(
                 tcb_obj.cap_addr,
                 False,
-                0, # no flags on ARM
-                Sel4Aarch64Regs(pc=pd_elf_files[pd].entry)
+                0, # no flags on ARM and RISC-V
+                regs(pc=pd_elf_files[pd].entry)
             )
         )
     # bind the notification object
@@ -1603,21 +1651,31 @@ def main() -> int:
         option, value = list(option_dict.items())[0]
         gen_config[option] = value
 
-    # Some of the options we need can be found in the auto-generated config YAML
-    # file. Which we use here since they can differ between platforms.
+    # Some of the kernel config we need can be found in the auto-generated
+    # config YAML file. Which we use here since they can differ between
+    # platforms and architecture.
+    gen_config_arch = gen_config["CONFIG_SEL4_ARCH"]
+    if gen_config_arch == "aarch64":
+        arch = KernelArch.AARCH64
+    elif gen_config_arch == "riscv64":
+        arch = KernelArch.RISCV64
+    else:
+        raise Exception(f"Unsupported seL4 architecture: {gen_config_arch}")
+
     kernel_config = KernelConfig(
+        arch = arch,
         word_size = gen_config["CONFIG_WORD_SIZE"],
         minimum_page_size = kb(4),
         paddr_user_device_top = gen_config["CONFIG_PADDR_USER_DEVICE_TOP"],
         kernel_frame_size = (1 << 12),
         root_cnode_bits = gen_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
-        cap_address_bits=64,
-        fan_out_limit= gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
+        cap_address_bits = 64,
+        fan_out_limit = gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
     )
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
     if len(monitor_elf.segments) > 1:
-        raise Exception("monitor ({monitor_elf_path}) has {len(monitor_elf.segments)} segments; must only have one")
+        raise Exception(f"monitor ({monitor_elf_path}) has {len(monitor_elf.segments)} segments; must only have one")
 
     invocation_table_size = kernel_config.minimum_page_size
     system_cnode_size = 2
@@ -1754,6 +1812,7 @@ def main() -> int:
 
     # FIXME: Verify that the regions do not overlap!
     loader = Loader(
+        kernel_config.arch,
         loader_elf_path,
         kernel_elf,
         monitor_elf,

@@ -1,8 +1,10 @@
 .extern main
 
+/* Note: this was originally taken from the RISC-V bootloader in elfloader in seL4_tools */
+
 /* @ivanv: whyyyy does this have an $ on the end? */
 .extern __global_pointer$
-.extern elfloader_stack_alloc
+.extern _stack
 
 /* @ivanv: This is defined in loader.c too, would be better to have this come from there? */
 #define STACK_SIZE 4096
@@ -15,7 +17,7 @@
 #define SBI_EXT_BASE_EID 0x10
 #define SBI_EXT_BASE_PROBE_EXT_FID 3
 
-/* @ivanv: The only platform that we're supporting for RISC-V right
+/* The only platform that we're supporting for RISC-V right
  * now (the Spike) has the first hart ID as 0. This comes from
  * the config.cmake script for the platform in seL4.
  */
@@ -104,15 +106,7 @@ _start1: /* a0 must hold current hard ID passed by bootloader */
   addi  gp, gp, %pcrel_lo(1b)
 .option pop
 
-  /* Attach the stack to sp before calling any C functions */
-  /* This HART may be a different HART to the one that started at _start
-   * If we've switched HARTs then the other HART will get a different stack
-   * region in secondary_harts. */
   la sp, (_stack + STACK_SIZE)
-  /* The C code expects the registers to be set up as:
-   *   a0 = hart id
-   *   a1 = dtb
-   */
   la s0, main
   jr s0
 

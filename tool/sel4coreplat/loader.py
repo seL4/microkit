@@ -10,6 +10,12 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from sel4coreplat.elf import ElfFile
 from sel4coreplat.util import kb, mb, round_up, MemoryRegion
+from sel4coreplat.sel4 import KernelArch
+
+# @ivanv: clean up and explain
+# Do a massive clean up of all these random constants.
+# Ideally we wouldn't be defining these here and instead reading
+# from the kernel config file or kernel ELF
 
 AARCH64_1GB_BLOCK_BITS = 30
 AARCH64_2MB_BLOCK_BITS = 21
@@ -18,35 +24,78 @@ AARCH64_LVL0_BITS = 9
 AARCH64_LVL1_BITS = 9
 AARCH64_LVL2_BITS = 9
 
-PAGE_TABLE_SIZE = 4096
+# Note that we're setting up page tables for a RISC-V system with Sv48 virtual memory.
+RISCV64_1GB_BLOCK_BITS = 30 # seL4_HugePageBits
+RISCV64_2MB_BLOCK_BITS = 21 # seL4_LargePageBits
+
+# @ivanv: clean up and explain
+RISCV_PT_INDEX_BITS = 9
+RISCV_PGSHIFT = 12
+PTE_PPN0_SHIFT = 10
+PTE_TYPE_TABLE = 0x00
+PTE_TYPE_SRWX = 0xCE
+PTE_V = 0x001
+PT_LEVEL_1 = 1
+PT_LEVEL_2 = 2
+NUM_PT_LEVELS = 3
+
+AARCH64_PAGE_TABLE_SIZE = 4096
+RISCV64_PAGE_TABLE_SIZE = 4096
+
+#define RISCV_GET_PT_INDEX(addr, n)  (((addr) >> (((PT_INDEX_BITS) * (((CONFIG_PT_LEVELS) - 1) - (n))) + seL4_PageBits)) & MASK(PT_INDEX_BITS))
+#define RISCV_GET_LVL_PGSIZE_BITS(n) (((PT_INDEX_BITS) * (((CONFIG_PT_LEVELS) - 1) - (n))) + seL4_PageBits)
+#define RISCV_GET_LVL_PGSIZE(n)      BIT(RISCV_GET_LVL_PGSIZE_BITS((n)))
+
+def is_aligned(n: int, b: int) -> bool:
+    False if (n & mask(b) == 0) else True
+
+def virt_phys_aligned(virt: int, phys: int, level_bits: int) -> bool:
+    return (is_aligned(virt, level_bits) and is_aligned(phys, level_bits))
+
+# @ivanv: helpers for RISC-V, clean up after we get it working
+def riscv_get_pt_index(addr: int, n: int) -> int:
+    return (((addr) >> (((RISCV_PT_INDEX_BITS) * (((NUM_PT_LEVELS)) - (n))) + RISCV_PGSHIFT)) % 512)
+
+
+def pte_create_ppn(pt_base: int) -> int:
+    return ((pt_base >> RISCV_PGSHIFT) << PTE_PPN0_SHIFT)
+
+
+def pte_create_next(pt_base: int) -> int:
+    return (pte_create_ppn(pt_base) | PTE_TYPE_TABLE | PTE_V)
+
+
+def pte_create_leaf(pt_base: int) -> int:
+    return (pte_create_ppn(pt_base) | PTE_TYPE_SRWX | PTE_V)
+
 
 def mask(x: int) -> int:
     return ((1 << x) - 1)
 
 
-def lvl0_index(addr: int) -> int:
+def arm_lvl0_index(addr: int) -> int:
     return (((addr) >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS)) & mask(AARCH64_LVL0_BITS))
 
 
-def lvl1_index(addr: int) -> int:
+def arm_lvl1_index(addr: int) -> int:
     return (((addr) >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS)) & mask(AARCH64_LVL1_BITS))
 
 
-def lvl2_index(addr: int) -> int:
+def arm_lvl2_index(addr: int) -> int:
     return (((addr) >> (AARCH64_2MB_BLOCK_BITS)) & mask(AARCH64_LVL2_BITS))
 
 
-def lvl0_addr(addr: int) -> int:
+def arm_lvl0_addr(addr: int) -> int:
     bits = AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS
     return (addr >> bits) << bits
 
 
-def lvl1_addr(addr: int) -> int:
+def arch_lvl1_addr(arch: KernelArch, addr: int) -> int:
     bits = AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS
     return (addr >> bits) << bits
 
 
-def lvl2_addr(addr: int) -> int:
+def arch_lvl2_addr(arch: KernelArch, addr: int) -> int:
     bits = AARCH64_2MB_BLOCK_BITS
     return (addr >> bits) << bits
 
@@ -65,6 +114,7 @@ def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
 class Loader:
 
     def __init__(self,
+        kernel_arch: KernelArch,
         loader_elf_path: Path,
         kernel_elf: ElfFile,
         initial_task_elf: ElfFile,
@@ -154,7 +204,12 @@ class Loader:
         # Determine the pagetable variables
         assert kernel_first_vaddr is not None
         assert kernel_first_paddr is not None
-        pagetable_vars = self._setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+        # @ivanv: temporary, probably shouldn't pass KernelConfig and find a better solution
+        if kernel_arch == KernelArch.AARCH64:
+            pagetable_vars = self._arm_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+        elif kernel_arch == KernelArch.RISCV64:
+            pagetable_vars = self._riscv_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+
         for var_name, var_data in pagetable_vars.items():
             var_addr, var_size = self._elf.find_symbol(var_name)
             offset = var_addr - loader_segment.virt_addr
@@ -198,15 +253,18 @@ class Loader:
             len(self._regions)
         )
 
-    def _setup_pagetables(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
+
+    def _arm_setup_pagetables(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
         boot_lvl1_lower_addr, _ = self._elf.find_symbol("boot_lvl1_lower")
         boot_lvl1_upper_addr, _ = self._elf.find_symbol("boot_lvl1_upper")
         boot_lvl2_upper_addr, _ = self._elf.find_symbol("boot_lvl2_upper")
 
-        boot_lvl0_lower = bytearray(PAGE_TABLE_SIZE)
-        boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3)
+        boot_lvl0_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
+        boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3) # @ivanv the fuck is this three doing here?
 
-        boot_lvl1_lower = bytearray(PAGE_TABLE_SIZE)
+        # @ivanv why the fuck is this a straight copy and paste from the sel4 elfolaoder without any explanation
+        # or extra comments lmao
+        boot_lvl1_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
         for i in range(512):
             pt_entry = (
                 (i << AARCH64_1GB_BLOCK_BITS) |
@@ -216,18 +274,19 @@ class Loader:
             )
             boot_lvl1_lower[8*i:8*(i+1)] = pack("<Q", pt_entry)
 
-        boot_lvl0_upper = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl0_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
         ptentry = boot_lvl1_upper_addr | 3
-        idx = lvl0_index(first_vaddr)
+        idx = arm_lvl0_index(first_vaddr)
         boot_lvl0_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
 
-        boot_lvl1_upper = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl1_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
         ptentry = boot_lvl2_upper_addr | 3
-        idx = lvl1_index(first_vaddr)
+        idx = arm_lvl1_index(first_vaddr)
         boot_lvl1_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
 
-        boot_lvl2_upper = bytearray(PAGE_TABLE_SIZE)
-        for i in range(lvl2_index(first_vaddr), 512):
+        boot_lvl2_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
+        for i in range(arm_lvl2_index(first_vaddr), 512):
+            # @ivanv: need to figure out this encoding
             pt_entry = (
                 first_paddr |
                 (1 << 10) | # access flag
@@ -245,6 +304,54 @@ class Loader:
             "boot_lvl1_upper": boot_lvl1_upper,
             "boot_lvl2_upper": boot_lvl2_upper,
         }
+
+    def _riscv_setup_pagetables(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
+        TEXT_START = 0x80200000
+        # @ivanv: should we note that this is only for 64 bit
+
+        # if (!IS_ALIGNED((uintptr_t)_text, PT_LEVEL_2_BITS)) {
+        #     printf("ERROR: ELF Loader not properly aligned\n");
+        #     return -1;
+        # }
+
+        # @ivanv: here everything is offset by _text. I'm wondering if a) that is necessary.
+        # and b) if it is necessary, do we have to figure out the address of _text?
+
+        boot_lvl1_pt_addr, _ = self._elf.find_symbol("boot_lvl1_pt")
+        boot_lvl2_pt_addr, _ = self._elf.find_symbol("boot_lvl2_pt")
+        boot_lvl2_pt_elf_addr, _ = self._elf.find_symbol("boot_lvl2_pt_elf")
+
+        index = riscv_get_pt_index(TEXT_START, PT_LEVEL_1)
+
+        boot_lvl1_pt = bytearray(RISCV64_PAGE_TABLE_SIZE)
+        boot_lvl1_pt[8*index:8*(index+1)] = pack("<Q", pte_create_next(boot_lvl2_pt_elf_addr))
+
+        lvl2_elf_index = riscv_get_pt_index(TEXT_START, PT_LEVEL_2)
+
+        boot_lvl2_pt_elf = bytearray(RISCV64_PAGE_TABLE_SIZE)
+
+        # @ivanv: should we get rid of this constant? to be honest it's pretty obvious
+        page = 0
+        for i in range(lvl2_elf_index, 512):
+            boot_lvl2_pt_elf[8*i:8*(i+1)] = pack("<Q", pte_create_leaf(TEXT_START + (page << RISCV64_2MB_BLOCK_BITS)))
+            page += 1
+
+        index = riscv_get_pt_index(first_vaddr, PT_LEVEL_1)
+        boot_lvl1_pt[8*index:8*(index+1)] = pack("<Q", pte_create_next(boot_lvl2_pt_addr))
+
+        index = riscv_get_pt_index(first_vaddr, PT_LEVEL_2)
+        boot_lvl2_pt = bytearray(RISCV64_PAGE_TABLE_SIZE)
+        page = 0
+        for i in range(index, 512):
+            boot_lvl2_pt[8*i:8*(i+1)] = pack("<Q", pte_create_leaf(first_paddr + (page << RISCV64_2MB_BLOCK_BITS)))
+            page += 1
+
+        return {
+            "boot_lvl1_pt": boot_lvl1_pt,
+            "boot_lvl2_pt": boot_lvl2_pt,
+            "boot_lvl2_pt_elf": boot_lvl2_pt_elf,
+        }
+
 
     def write_image(self, path: Path) -> None:
         with path.open("wb") as f:

@@ -7,7 +7,6 @@ ifeq ($(strip $(BUILD_DIR)),)
 $(error BUILD_DIR must be specified)
 endif
 
-# @ivanv: find a better solution than this, maybe gcc_cpu should be an optional arugment?
 # ifeq ($(strip $(GCC_CPU)),)
 # $(error GCC_CPU must be specified)
 # endif

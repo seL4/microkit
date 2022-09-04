@@ -65,7 +65,8 @@ class MemoryRegion:
     end: int
 
     def aligned_power_of_two_regions(self) -> List["MemoryRegion"]:
-        max_bits = 40
+        # @ivanv: Note that this is RISC-V 64-bit specific
+        max_bits = 38 # seL4_MaxUntypedBits
         # Align
         # find the first bit self
         r = []
@@ -163,7 +164,7 @@ class DisjointMemoryRegion:
         # 'best' may be something that best matches a power-of-two
         # allocation
         for region in self._regions:
-            if size <= region.size:
+            if size <= region.size and region.base >= 0x84028000:
                 break
         else:
             raise ValueError(f"Unable to allocate {size} bytes.")

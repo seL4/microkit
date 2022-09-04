@@ -19,13 +19,11 @@ ifeq ($(strip $(TOOLCHAIN)),)
 $(error TOOLCHAIN must be specified)
 endif
 
-# @ivanv: This is, quite the mess. I dislike this, but at the same time I dislike the over abstractions of build systems like CMake...
 ifeq ($(ARCH),aarch64)
 	C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
 	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -mcpu=$(GCC_CPU)
 	ASM_FLAGS := -g3 -mcpu=$(GCC_CPU)
 else ifeq ($(ARCH),riscv64)
-	# @ivanv: if we're going to have an optimised build, should we pass in -mtune as well?
 	C_FLAGS := -mcmodel=medany -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -march=rv64imac -mabi=lp64 -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
 	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -march=rv64imac -mabi=lp64
 	ASM_FLAGS := -g3 -march=rv64imac -mabi=lp64

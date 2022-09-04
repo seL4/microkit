@@ -43,8 +43,6 @@ struct loader_data {
     uintptr_t ui_p_reg_end;
     uintptr_t pv_offset;
     uintptr_t v_entry;
-    uintptr_t hart_id;
-    uintptr_t core_id;
     uintptr_t extra_device_addr_p;
     uintptr_t extra_device_size;
 
@@ -59,8 +57,9 @@ typedef void (*sel4_entry)(
     uintptr_t v_entry,
     uintptr_t dtb_addr_p,
     uintptr_t dtb_size,
-    uintptr_t hart_id,
-    uintptr_t core_id,
+    // @ivanv: These two fields don't appear on non-SMP configurations.
+    // uintptr_t hart_id,
+    // uintptr_t core_id,
     uintptr_t extra_device_addr_p,
     uintptr_t extra_device_size
 );
@@ -68,14 +67,15 @@ typedef void (*sel4_entry)(
 char _stack[STACK_SIZE] ALIGN(16);
 
 /* Paging structures for kernel mapping */
-uint64_t boot_lvl0_upper[1 << 9] ALIGN(1 << 12);
-uint64_t boot_lvl1_upper[1 << 9] ALIGN(1 << 12);
-uint64_t boot_lvl2_upper[1 << 9] ALIGN(1 << 12);
-
+uint64_t boot_lvl1_pt[1 << 9] ALIGN(1 << 12);
+uint64_t boot_lvl2_pt[1 << 9] ALIGN(1 << 12);
 /* Paging structures for identity mapping */
-uint64_t boot_lvl0_lower[1 << 9] ALIGN(1 << 12);
-uint64_t boot_lvl1_lower[1 << 9] ALIGN(1 << 12);
+uint64_t boot_lvl2_pt_elf[1 << 9] ALIGN(1 << 12);
 
+#define RISCV_PGSHIFT 12
+
+extern char _text;
+extern char _text_end;
 extern char _bss_end;
 const struct loader_data *loader_data = (void *)&_bss_end;
 
@@ -89,11 +89,32 @@ memcpy(void *dst, const void *src, size_t sz)
     }
 }
 
+#define SBI_CONSOLE_PUTCHAR 1
+
+#define SBI_CALL(which, arg0, arg1, arg2) ({            \
+    register uintptr_t a0 asm ("a0") = (uintptr_t)(arg0);   \
+    register uintptr_t a1 asm ("a1") = (uintptr_t)(arg1);   \
+    register uintptr_t a2 asm ("a2") = (uintptr_t)(arg2);   \
+    register uintptr_t a7 asm ("a7") = (uintptr_t)(which);  \
+    asm volatile ("ecall"                   \
+              : "+r" (a0)               \
+              : "r" (a1), "r" (a2), "r" (a7)        \
+              : "memory");              \
+    a0;                         \
+})
+
+#define SBI_CALL_1(which, arg0) SBI_CALL(which, arg0, 0, 0)
+
+static inline void sbi_console_putchar(int ch)
+{
+    SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
+}
+
 #if defined(BOARD_spike)
 static void
 putc(uint8_t ch)
 {
-    // do nothing for now
+    sbi_console_putchar(ch);
 }
 #else
 #error Board not defined
@@ -219,11 +240,36 @@ start_kernel(void)
         loader_data->v_entry,
         0,
         0,
-        0,
-        0,
-        loader_data->extra_device_addr_p,
+        loader_data->extra_device_addr_p, // @ivanv note that for SMP this will have to change!!
         loader_data->extra_device_size
     );
+}
+
+// @ivanv: move these to ASM
+static inline void sfence_vma(void)
+{
+    asm volatile("sfence.vma" ::: "memory");
+}
+
+static inline void ifence(void)
+{
+    asm volatile("fence.i" ::: "memory");
+}
+
+// @ivanv: only when CONFIG_PT_LEVELS == 3
+uint64_t vm_mode = 0x8llu << 60;
+
+static inline void enable_mmu(void)
+{
+    // @ivanv: figure out what this is actually doing
+    sfence_vma();
+    asm volatile(
+        "csrw satp, %0\n"
+        :
+        : "r"(vm_mode | (uintptr_t)boot_lvl1_pt >> RISCV_PGSHIFT)
+        :
+    );
+    ifence();
 }
 
 int
@@ -240,7 +286,8 @@ main(void)
 
     copy_data();
 
-    // @ivanv: setup mmu/virtual memory and shit
+    puts("LDR|INFO: enabling MMU\n");
+    enable_mmu();
 
     puts("LDR|INFO: jumping to kernel\n");
     start_kernel();
@@ -249,7 +296,7 @@ main(void)
     goto fail;
 
 fail:
-    // @ivanv: comment
+    // @ivanv: comment and understand this fully
     /* We could call the SBI shutdown now. However, it's likely there is an
      * issue that needs to be debugged. Instead of doing a busy loop, spinning
      * over a wfi is the better choice here, as it allows the core to enter an
