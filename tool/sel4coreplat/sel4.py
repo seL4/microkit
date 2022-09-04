@@ -195,7 +195,7 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
 
 def _get_arch_n_paging(arch: KernelArch, region: MemoryRegion) -> int:
     if arch == KernelArch.RISCV64:
-        # ASSUMPTION: RISC-V platforms use Sv48 which means the kernel uses
+        # ASSUMPTION: RISC-V platforms use Sv39 which means the kernel uses
         # 3 page table levels. See CONFIG_PT_LEVELS for details.
         # @ivanv: should probably change this to support whatever CONFIG_PT_LEVEL is
         PT_INDEX_OFFSET  =  12
@@ -1170,12 +1170,13 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: 
     slot_bits = 5  # seL4_SlotBits
     root_cnode_bits = kernel_config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
     if kernel_config.arch == KernelArch.RISCV64:
+        # @ivanv: come back to this
         # For RISC-V, the TCB bits depends on whether the platform has an FPU.
         # Since we're only targeting rv64imac, we don't use the FPU.
         tcb_bits = 10  # seL4_TCBBits
     else:
         tcb_bits = 11  # seL4_TCBBits
-    page_bits = SEL4_RISCV_PAGE_BITS # seL4_PageBits
+    page_bits = SEL4_RISCV_PAGE_BITS # seL4_PageBits # @ivanv
     asid_pool_bits = 12  # seL4_ASIDPoolBits
     vspace_bits = SEL4_VSPACE_BITS #seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits

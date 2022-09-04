@@ -1,8 +1,15 @@
-.extern main
+/*
+ * Copyright 2020, Data61, CSIRO (ABN 41 687 119 230)
+ * Copyright 2022, UNSW (ABN 57 195 873 179)
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ */
 
 /* Note: this was originally taken from the RISC-V bootloader in elfloader in seL4_tools */
+// @ivanv: this file needs to be cleaned up
 
-/* @ivanv: whyyyy does this have an $ on the end? */
+.extern main
+
 .extern __global_pointer$
 .extern _stack
 

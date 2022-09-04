@@ -91,7 +91,12 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/zcu102/hello")
         }
     ),
-    # @ivanv: need to comment how this loader link address is decided.
+    # For RISC-V the link address for the seL4CP loader is dependent on the
+    # previous loader. Currently for RISC-V platforms we use OpenSBI which
+    # is placed at the start of memory and since we use FW_PAYLOAD, it places
+    # the loader at fixed location of 2MiB after the start of memory. If you
+    # were to use a different SBI implementation or not use FW_PAYLOAD with
+    # OpenSBI, you will most likely have to change the loader_link_address.
     BoardInfo(
         name="spike",
         arch=BoardArch.RISCV64,
