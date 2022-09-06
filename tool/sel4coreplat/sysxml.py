@@ -119,13 +119,20 @@ class Channel:
     id_b: int
     element: ET.Element
 
+# @ivanv: If we are going to have a specified vaddr, we need to
+# have additional checks on it perhaps?
+@dataclass(frozen=True, eq=True)
+class Image:
+    path: Path
+    vaddr: int
 
 @dataclass(frozen=True, eq=True)
 class VirtualMachine:
     name: str
     vm_id: int
-    program_image: Path
-    device_tree: Optional[Path]
+    program_image: Optional[Image]
+    device_tree: Optional[Image]
+    init_ram_disk: Optional[Image]
     maps: Tuple[SysMap, ...]
     priority: int
     budget: int
@@ -373,7 +380,8 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
             elif child.tag == "protection_domain":
                 child_pds.append(xml2pd(child, is_child=True))
             elif child.tag == "virtual_machine":
-                # @ivanv: check we don't have more than one VM
+                if virtual_machine is not None:
+                    raise UserError("virtual_machine must only be specified once")
                 virtual_machine = xml2vm(child)
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
@@ -437,6 +445,7 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
 
     program_image: Optional[Path] = None
     device_tree: Optional[Path] = None
+    init_ram_disk: Optional[Path] = None
     budget = int(vm_xml.attrib.get("budget", "1000"), base=0)
     period = int(vm_xml.attrib.get("period", str(budget)), base=0)
     priority = int(vm_xml.attrib.get("priority", "0"), base=0)
@@ -445,15 +454,26 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
     for child in vm_xml:
         try:
             if child.tag == "program_image":
-                _check_attrs(child, ("path", ))
+                _check_attrs(child, ("path", "vaddr"))
                 if program_image is not None:
                     raise ValueError("program_image must only be specified once")
-                program_image = Path(checked_lookup(child, "path"))
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                program_image = Image(path, vaddr)
             elif child.tag == "device_tree":
-                _check_attrs(child, ("path", ))
+                _check_attrs(child, ("path", "vaddr"))
                 if device_tree is not None:
                     raise ValueError("device_tree must only be specified once")
-                device_tree = Path(checked_lookup(child, "path"))
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                device_tree = Image(path, vaddr)
+            elif child.tag == "init_ram_disk":
+                _check_attrs(child, ("path", "vaddr"))
+                if init_ram_disk is not None:
+                    raise ValueError("init_ram_disk must only be specified once")
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                init_ram_disk = Image(path, vaddr)
             elif child.tag == "map":
                 _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
                 mr = checked_lookup(child, "mr")
@@ -474,6 +494,7 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
         vm_id,
         program_image,
         device_tree,
+        init_ram_disk,
         tuple(maps),
         priority,
         budget,

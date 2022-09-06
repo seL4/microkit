@@ -672,12 +672,16 @@ def build_system(
         for pd in system.protection_domains
     }
     vm_images = {
-        vm: _get_full_path(vm.program_image, search_paths)
+        vm: _get_full_path(vm.program_image.path, search_paths)
         for vm in virtual_machines
     }
     vm_device_trees = {
-        vm: _get_full_path(vm.device_tree, search_paths)
+        vm: _get_full_path(vm.device_tree.path, search_paths)
         for vm in virtual_machines if vm.device_tree is not None
+    }
+    vm_init_ram_disks = {
+        vm: _get_full_path(vm.init_ram_disk.path, search_paths)
+        for vm in virtual_machines if vm.init_ram_disk is not None
     }
     ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
@@ -698,6 +702,10 @@ def build_system(
     vm_image_size += sum([
         round_up(os.path.getsize(device_tree), kernel_config.minimum_page_size)
         for device_tree in vm_device_trees.values() if device_tree is not None
+    ])
+    vm_image_size += sum([
+        round_up(os.path.getsize(init_ram_disk), kernel_config.minimum_page_size)
+        for init_ram_disk in vm_init_ram_disks.values() if init_ram_disk is not None
     ])
     reserved_size = invocation_table_size + pd_elf_size + vm_image_size
 
@@ -763,6 +771,8 @@ def build_system(
         phys_addr_next += round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
         if vm.device_tree is not None:
             phys_addr_next += round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
+        if vm.init_ram_disk is not None:
+            phys_addr_next += round_up(os.path.getsize(vm_init_ram_disks[vm]), kernel_config.minimum_page_size)
 
 
     # 1.3 With both the initial task region and reserved region determined the kernel
@@ -939,7 +949,7 @@ def build_system(
     for ut in (ut for ut in kernel_boot_info.untyped_objects if ut.is_device):
         ut_pages = ut.region.size // kernel_config.minimum_page_size
         retype_page_count = min(ut_pages, remaining_pages)
-        assert retype_page_count <= kernel_config.fan_out_limit
+        assert retype_page_count <= kernel_config.fan_out_limit, f"retype_page_count: {retype_page_count}, fan_out_limit: {kernel_config.fan_out_limit}"
         bootstrap_invocations.append(Sel4UntypedRetype(
                 ut.cap,
                 SEL4_SMALL_PAGE_OBJECT,
@@ -1059,7 +1069,7 @@ def build_system(
             pd_extra_maps[pd] += (mp, )
 
     for vm in virtual_machines:
-        with open(vm.program_image, "rb") as f:
+        with open(vm_images[vm], "rb") as f:
             data = f.read()
 
         regions.append(Region(f"VM-IMAGE {vm.name}", phys_addr_next, data))
@@ -1068,20 +1078,33 @@ def build_system(
         phys_addr_next += aligned_size
         extra_mrs.append(mr)
 
-        mp = SysMap(mr.name, 0x40080000, perms="rwx", cached=False, element=None) # @ivanv: fix
+        mp = SysMap(mr.name, vm.program_image.vaddr, perms="rwx", cached=False, element=None)
         pd_extra_maps[vm] += (mp, )
 
         if vm.device_tree:
-            with open(vm.device_tree, "rb") as f:
+            with open(vm_device_trees[vm], "rb") as f:
                 data = f.read()
 
             regions.append(Region(f"VM-DTB {vm.name}", phys_addr_next, data))
-            aligned_size = round_up(os.path.getsize(vm.device_tree), kernel_config.minimum_page_size)
+            aligned_size = round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
             mr = SysMemoryRegion(f"DTB:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
 
-            mp = SysMap(mr.name, 0x4f000000, perms="rwx", cached=False, element=None) # @ivanv: fix
+            mp = SysMap(mr.name, vm.device_tree.vaddr, perms="rw", cached=False, element=None)
+            pd_extra_maps[vm] += (mp, )
+
+        if vm.init_ram_disk:
+            with open(vm_init_ram_disks[vm], "rb") as f:
+                data = f.read()
+
+            regions.append(Region(f"VM-INITRD {vm.name}", phys_addr_next, data))
+            aligned_size = round_up(os.path.getsize(vm_init_ram_disks[vm]), kernel_config.minimum_page_size)
+            mr = SysMemoryRegion(f"INITRD:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
+            phys_addr_next += aligned_size
+            extra_mrs.append(mr)
+
+            mp = SysMap(mr.name, vm.init_ram_disk.vaddr, perms="rw", cached=False, element=None)
             pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
