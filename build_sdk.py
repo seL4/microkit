@@ -98,7 +98,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "ARM_HYP": True,
-            "KernelRetypeFanOutLimit": 1024,
+            "KernelRetypeFanOutLimit": 2048,
             "QEMU_MEMORY": 2048,
         },
         examples = {
