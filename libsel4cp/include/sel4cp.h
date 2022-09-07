@@ -139,7 +139,7 @@ sel4cp_mr_get(uint8_t mr)
 static uint64_t
 sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
-    return seL4_ARM_VCPU_InjectIRQ(BASE_VM_TCB_CAP + vm, irq, priority, group, index);
+    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
 }
 
 static inline void
