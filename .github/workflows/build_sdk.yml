@@ -2,7 +2,7 @@ name: SDK build CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "imx8_support" ]
 
 jobs:
   build:
