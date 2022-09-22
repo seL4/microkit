@@ -23,8 +23,8 @@ jobs:
       - name: Clone seL4
         uses: actions/checkout@v3
         with:
-          repository: BreakawayConsulting/seL4
-          ref: sel4cp-core-support
+          repository: Ivan-Velickovic/seL4
+          ref: sel4cp-core-support-updated
           path: seL4
       - name: Build SDK
         run: ./pyenv/bin/python build_sdk.py --sel4=seL4
