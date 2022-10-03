@@ -2,7 +2,7 @@ name: SDK build CI
 
 on:
   push:
-    branches: [ "main", "imx8_support", "rpi3b_support" ]
+    branches: [ "main", "imx8_support", "rpi3b_support", "qemu_arm_virt_support_dynamic" ]
 
 jobs:
   build:
