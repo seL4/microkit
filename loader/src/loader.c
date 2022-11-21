@@ -26,10 +26,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #define STACK_SIZE 4096
 
-#define UART_BASE 0x5a070000
-#define STAT 0x14
-#define TRANSMIT 0x1c
-#define STAT_TDRE (1 << 23)
 #define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
 #if defined(BOARD_zcu102)
@@ -113,6 +109,38 @@ memcpy(void *dst, const void *src, size_t sz)
 }
 
 #if defined(BOARD_tqma8xqp1gb)
+
+#define UART_BASE 0x5a070000
+#define STAT 0x14
+#define TRANSMIT 0x1c
+#define STAT_TDRE (1 << 23)
+
+static void
+putc(uint8_t ch)
+{
+    while (!(*UART_REG(STAT) & STAT_TDRE)) { }
+    *UART_REG(TRANSMIT) = ch;
+}
+#elif defined(BOARD_imx8mq_evk)
+
+#define UART_BASE 0x30860000
+#define STAT 0x98
+#define TRANSMIT 0x40
+#define STAT_TDRE (1 << 14)
+
+static void
+putc(uint8_t ch)
+{
+    while (!(*UART_REG(STAT) & STAT_TDRE)) { }
+    *UART_REG(TRANSMIT) = ch;
+}
+#elif defined(BOARD_imx8mm_evk)
+
+#define UART_BASE 0x30890000
+#define STAT 0x98
+#define TRANSMIT 0x40
+#define STAT_TDRE (1 << 14)
+
 static void
 putc(uint8_t ch)
 {
