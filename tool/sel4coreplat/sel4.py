@@ -989,11 +989,10 @@ def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
     # @ivanv: This struct layout is archiecture specific (e.g armExecuteNever)
     # doesn't appear on other architectures
     kernel_frame_t = Struct("<QQII")
-    # NOTE: The Spike platform (and possibly others) do not have any kernel
-    # devices specified in the device tree, so the array kernel_devices_frames
-    # is empty. This is fine except for the fact that if the array is empty the
-    # compiler will optimise out the symbol so we must also check that the
-    # symbol exists in the ELF.
+    # NOTE: Certain platforms may not have any kernel devices specified in the
+    # device tree (such as the Spike). Since the kernel_devices_frames array
+    # will be empty the kernel the compiler may optimise out the symbol so we
+    # must also check that the symbol actually exists in the ELF.
     res = kernel_elf.find_symbol_if_exists("kernel_device_frames")
     if res is not None:
         vaddr, size = res
@@ -1180,7 +1179,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelC
         tcb_bits = 11  # seL4_TCBBits
     page_bits = SEL4_RISCV_PAGE_BITS # seL4_PageBits # @ivanv
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = SEL4_VSPACE_BITS #seL4_VSpaceBits
+    vspace_bits = SEL4_VSPACE_BITS # seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
     min_sched_context_bits = 8 # seL4_MinSchedContextBits
 
