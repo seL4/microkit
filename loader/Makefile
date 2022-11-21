@@ -21,7 +21,8 @@ endif
 
 
 TOOLCHAIN := aarch64-none-elf-
-CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror
+# FIXME: investigate why having -O3 causes QEMU ARM virt to not be able to boot.
+CFLAGS := -std=gnu11 -g3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o util64.o
