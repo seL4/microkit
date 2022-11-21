@@ -26,8 +26,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #define STACK_SIZE 4096
 
-#define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
-
 #if defined(BOARD_zcu102)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
@@ -107,6 +105,8 @@ memcpy(void *dst, const void *src, size_t sz)
         *dst_++ = *src_++;
     }
 }
+
+#define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
 #if defined(BOARD_tqma8xqp1gb)
 
