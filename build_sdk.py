@@ -105,6 +105,17 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
         },
         examples = {}
+    ),
+    BoardInfo(
+        name="odroidc2",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x20000000,
+        kernel_options = {
+            "KernelPlatform": "odroidc2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {}
     )
 )
 
