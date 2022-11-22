@@ -54,12 +54,10 @@ from sel4coreplat.sel4 import (
     Sel4Aarch64Regs,
     Sel4RiscvRegs,
     Sel4Invocation,
-    Sel4ARMAsidPoolAssign,
     Sel4ARMPageUpperDirectoryMap,
     Sel4ARMPageDirectoryMap,
     Sel4ARMPageTableMap,
     Sel4ARMPageMap,
-    Sel4RISCVAsidPoolAssign,
     Sel4RISCVPageTableMap,
     Sel4RISCVPageMap,
     Sel4TcbSetSchedParams,
@@ -67,6 +65,7 @@ from sel4coreplat.sel4 import (
     Sel4TcbSetIpcBuffer,
     Sel4ARMTcbWriteRegisters,
     Sel4RISCVTcbWriteRegisters,
+    Sel4AsidPoolAssign,
     Sel4TcbBindNotification,
     Sel4TcbResume,
     Sel4CnodeMint,
@@ -76,6 +75,7 @@ from sel4coreplat.sel4 import (
     Sel4SchedControlConfigureFlags,
     emulate_kernel_boot,
     emulate_kernel_boot_partial,
+    arch_get_page_attrs,
     UntypedObject,
     KernelArch,
     KernelConfig,
@@ -107,8 +107,6 @@ from sel4coreplat.sel4 import (
     SEL4_RIGHTS_WRITE,
     SEL4_ARM_DEFAULT_VMATTRIBUTES,
     SEL4_ARM_EXECUTE_NEVER,
-    SEL4_ARM_PARITY_ENABLED,
-    SEL4_ARM_PAGE_CACHEABLE,
     SEL4_RISCV_DEFAULT_VMATTRIBUTES,
     SEL4_RISCV_EXECUTE_NEVER,
     SEL4_LARGE_PAGE_SIZE,
@@ -911,7 +909,7 @@ def build_system(
         assert retype_page_count <= kernel_config.fan_out_limit
         bootstrap_invocations.append(Sel4UntypedRetype(
                 ut.cap,
-                SEL4_RISCV_4K_PAGE_OBJECT,
+                SEL4_RISCV_4K_PAGE_OBJECT, # @ivanv: fix, should be arch independent
                 0,
                 root_cnode_cap,
                 1,
@@ -1215,8 +1213,7 @@ def build_system(
     # This has to be done prior to minting!
     # for vspace_obj in vspace_objects:
     #     system_invocations.append(Sel4AsidPoolAssign(INIT_ASID_POOL_CAP_ADDRESS, vspace_obj.cap_addr))
-    asid_pool_assign = Sel4ARMAsidPoolAssign if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVAsidPoolAssign
-    invocation = asid_pool_assign(INIT_ASID_POOL_CAP_ADDRESS, vspace_objects[0].cap_addr)
+    invocation = Sel4AsidPoolAssign(kernel_config.arch, INIT_ASID_POOL_CAP_ADDRESS, vspace_objects[0].cap_addr)
     invocation.repeat(len(system.protection_domains), vspace=1)
     system_invocations.append(invocation)
 
@@ -1230,18 +1227,7 @@ def build_system(
             vaddr = mp.vaddr
             mr = all_mr_by_name[mp.mr] #system.mr_by_name[mp.mr]
             # Get page attributes depending on architecture
-            attrs = 0
-            if kernel_config.arch == KernelArch.AARCH64:
-                attrs = SEL4_ARM_PARITY_ENABLED
-                if mp.cached:
-                    attrs |= SEL4_ARM_PAGE_CACHEABLE
-                if "x" not in mp.perms:
-                    attrs |= SEL4_ARM_EXECUTE_NEVER
-            elif kernel_config.arch == KernelArch.RISCV64:
-                if "x" not in mp.perms:
-                    attrs |= SEL4_RISCV_EXECUTE_NEVER
-            else:
-                raise Exception(f"Unexpected architecture: {kernel_config.arch}")
+            attrs = arch_get_page_attrs(kernel_config.arch, mp)
             # Get page rights
             rights = 0
             if "r" in mp.perms:
@@ -1512,11 +1498,12 @@ def build_system(
         system_invocations.append(Sel4TcbSetIpcBuffer(tcb_obj.cap_addr, ipc_buffer_vaddr, ipc_buffer_obj.cap_addr,))
 
     # set register (entry point)
-    tcb_write_registers = Sel4ARMTcbWriteRegisters if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVTcbWriteRegisters
+    # @ivanv: handle this better
+    arch_tcb_write_regs = Sel4ARMTcbWriteRegisters if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVTcbWriteRegisters
     regs = Sel4Aarch64Regs if kernel_config.arch == KernelArch.AARCH64 else Sel4RiscvRegs
     for tcb_obj, pd in zip(tcb_objects, system.protection_domains):
         system_invocations.append(
-            tcb_write_registers(
+            arch_tcb_write_regs(
                 tcb_obj.cap_addr,
                 False,
                 0, # no flags on ARM and RISC-V
@@ -1682,6 +1669,8 @@ def main() -> int:
         root_cnode_bits = gen_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
         cap_address_bits = 64,
         fan_out_limit = gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
+        have_fpu = gen_config["CONFIG_HAVE_FPU"],
+        page_table_levels = gen_config["CONFIG_PT_LEVELS"] # @ivanv: this is only RISC-V specific, I feel like it shouldn't be apart of the config if it isn't a RISCV board
     )
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
@@ -1823,7 +1812,7 @@ def main() -> int:
 
     # FIXME: Verify that the regions do not overlap!
     loader = Loader(
-        kernel_config.arch,
+        kernel_config,
         loader_elf_path,
         kernel_elf,
         monitor_elf,

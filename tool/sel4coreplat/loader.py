@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from sel4coreplat.elf import ElfFile
 from sel4coreplat.util import kb, mb, round_up, MemoryRegion
-from sel4coreplat.sel4 import KernelArch
+from sel4coreplat.sel4 import KernelConfig, KernelArch
 
 AARCH64_PAGE_TABLE_SIZE = 4096
 RISCV64_PAGE_TABLE_SIZE = 4096
@@ -38,27 +38,6 @@ RISCV_PT_LEVEL_2 = 2
 
 def mask(x: int) -> int:
     return ((1 << x) - 1)
-
-# @ivanv, understand why we don't need the alignment checking
-#
-# RISC-V specific helpers
-#
-def riscv_get_pt_index(addr: int, n: int) -> int:
-    # @ivanv: Fix so that the '3' is CONFIG_PT_LEVELS
-    return (addr >> ((RISCV_PT_INDEX_BITS * (3 - n)) + RISCV_PAGE_SHIFT)) % 512
-
-
-def riscv_pte_create_ppn(pt_base: int) -> int:
-    return (pt_base >> RISCV_PAGE_SHIFT) << RISCV_PTE_PPN0_SHIFT
-
-
-def riscv_pte_create_next(pt_base: int) -> int:
-    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_TABLE | RISCV_PTE_V)
-
-
-def riscv_pte_create_leaf(pt_base: int) -> int:
-    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_SRWX | RISCV_PTE_V)
-
 
 #
 # ARM specific helpers
@@ -89,6 +68,26 @@ def arch_lvl2_addr(arch: KernelArch, addr: int) -> int:
     bits = AARCH64_2MB_BLOCK_BITS
     return (addr >> bits) << bits
 
+# @ivanv, understand why we don't need the alignment checking
+#
+# RISC-V specific helpers
+#
+def riscv_get_pt_index(pt_levels: int, addr: int, n: int) -> int:
+    # @ivanv: Fix so that the '3' is CONFIG_PT_LEVELS, double check this is correct
+    return (addr >> ((RISCV_PT_INDEX_BITS * (pt_levels - n)) + RISCV_PAGE_SHIFT)) % 512
+
+
+def riscv_pte_create_ppn(pt_base: int) -> int:
+    return (pt_base >> RISCV_PAGE_SHIFT) << RISCV_PTE_PPN0_SHIFT
+
+
+def riscv_pte_create_next(pt_base: int) -> int:
+    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_TABLE | RISCV_PTE_V)
+
+
+def riscv_pte_create_leaf(pt_base: int) -> int:
+    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_SRWX | RISCV_PTE_V)
+
 
 def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
     checked: List[Tuple[int, int]] = []
@@ -104,7 +103,7 @@ def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
 class Loader:
 
     def __init__(self,
-        kernel_arch: KernelArch,
+        config: KernelConfig,
         loader_elf_path: Path,
         kernel_elf: ElfFile,
         initial_task_elf: ElfFile,
@@ -195,10 +194,10 @@ class Loader:
         assert kernel_first_vaddr is not None
         assert kernel_first_paddr is not None
 
-        if kernel_arch == KernelArch.AARCH64:
+        if config.arch == KernelArch.AARCH64:
             pagetable_vars = self._arm_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
-        elif kernel_arch == KernelArch.RISCV64:
-            pagetable_vars = self._riscv_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+        elif config.arch == KernelArch.RISCV64:
+            pagetable_vars = self._riscv_setup_pagetables(config.page_table_levels, kernel_first_vaddr, kernel_first_paddr)
 
         for var_name, var_data in pagetable_vars.items():
             var_addr, var_size = self._elf.find_symbol(var_name)
@@ -252,8 +251,6 @@ class Loader:
         boot_lvl0_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
         boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3)
 
-        # @ivanv why the fuck is this a straight copy and paste from the sel4 elfolaoder without any explanation
-        # or extra comments lmao
         boot_lvl1_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
         for i in range(512):
             pt_entry = (
@@ -294,7 +291,7 @@ class Loader:
             "boot_lvl2_upper": boot_lvl2_upper,
         }
 
-    def _riscv_setup_pagetables(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
+    def _riscv_setup_pagetables(self, pt_levels: int, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
         # Note that this function makes the assumption that we are to run on a
         # 64-bit RISC-V platform.
         TEXT_START = 0x80200000
@@ -306,12 +303,12 @@ class Loader:
         boot_lvl2_pt_addr, _ = self._elf.find_symbol("boot_lvl2_pt")
         boot_lvl2_pt_elf_addr, _ = self._elf.find_symbol("boot_lvl2_pt_elf")
 
-        index = riscv_get_pt_index(TEXT_START, RISCV_PT_LEVEL_1)
+        index = riscv_get_pt_index(pt_levels, TEXT_START, RISCV_PT_LEVEL_1)
 
         boot_lvl1_pt = bytearray(RISCV64_PAGE_TABLE_SIZE)
         boot_lvl1_pt[8*index:8*(index+1)] = pack("<Q", riscv_pte_create_next(boot_lvl2_pt_elf_addr))
 
-        lvl2_elf_index = riscv_get_pt_index(TEXT_START, RISCV_PT_LEVEL_2)
+        lvl2_elf_index = riscv_get_pt_index(pt_levels, TEXT_START, RISCV_PT_LEVEL_2)
 
         boot_lvl2_pt_elf = bytearray(RISCV64_PAGE_TABLE_SIZE)
 
@@ -320,10 +317,10 @@ class Loader:
             boot_lvl2_pt_elf[8*i:8*(i+1)] = pack("<Q", riscv_pte_create_leaf(TEXT_START + (page << RISCV64_2MB_BLOCK_BITS)))
             page += 1
 
-        index = riscv_get_pt_index(first_vaddr, RISCV_PT_LEVEL_1)
+        index = riscv_get_pt_index(pt_levels, first_vaddr, RISCV_PT_LEVEL_1)
         boot_lvl1_pt[8*index:8*(index+1)] = pack("<Q", riscv_pte_create_next(boot_lvl2_pt_addr))
 
-        index = riscv_get_pt_index(first_vaddr, RISCV_PT_LEVEL_2)
+        index = riscv_get_pt_index(pt_levels, first_vaddr, RISCV_PT_LEVEL_2)
         boot_lvl2_pt = bytearray(RISCV64_PAGE_TABLE_SIZE)
         page = 0
         for i in range(index, 512):

@@ -10,6 +10,7 @@ from struct import pack, Struct
 
 from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
+from sel4coreplat.sysxml import SysMap
 
 
 SLOT_BITS = 5
@@ -150,10 +151,6 @@ SEL4_ARM_EXECUTE_NEVER = 4
 
 SEL4_ARM_DEFAULT_VMATTRIBUTES = 3
 
-SEL4_ARM_CACHE_I = 1
-SEL4_ARM_CACHE_D = 2
-SEL4_ARM_CACHE_ID = 3
-
 SEL4_RISCV_DEFAULT_VMATTRIBUTES = 0
 SEL4_RISCV_EXECUTE_NEVER = 1
 
@@ -217,6 +214,8 @@ def _get_arch_n_paging(arch: KernelArch, region: MemoryRegion) -> int:
             _get_n_paging(region, PUD_INDEX_OFFSET) +
             _get_n_paging(region, PD_INDEX_OFFSET)
         )
+    else:
+        raise Exception(f"Unknown architecture {arch}")
 
 
 # Unlike ARM, seL4_UserContext is the same on 32-bit and 64-bit RISC-V
@@ -777,7 +776,7 @@ class Sel4TcbBindNotification(Sel4Invocation):
 
 
 @dataclass
-class Sel4ARMAsidPoolAssign(Sel4Invocation):
+class Sel4AsidPoolAssign(Sel4Invocation):
     _object_type = "ASID Pool"
     _method_name = "Assign"
     _extra_caps = ("vspace", )
@@ -785,15 +784,16 @@ class Sel4ARMAsidPoolAssign(Sel4Invocation):
     asid_pool: int
     vspace: int
 
+    def __init__(self, arch: KernelArch, asid_pool: int, vspace: int):
+        if arch == KernelArch.AARCH64:
+            self.label = Sel4LabelARM.ARMASIDPoolAssign
+        elif arch == KernelArch.RISCV64:
+            self.label = Sel4LabelRISCV.RISCVASIDPoolAssign
+        else:
+            raise Exception(f"Unknown kernel architecture: {arch}")
 
-@dataclass
-class Sel4RISCVAsidPoolAssign(Sel4Invocation):
-    _object_type = "ASID Pool"
-    _method_name = "Assign"
-    _extra_caps = ("vspace", )
-    label = Sel4LabelRISCV.RISCVASIDPoolAssign
-    asid_pool: int
-    vspace: int
+        self.asid_pool = asid_pool
+        self.vspace = vspace
 
 
 @dataclass
@@ -864,8 +864,8 @@ class Sel4ARMPageMap(Sel4Invocation):
     page: int
     vspace: int
     vaddr: int
-    attr: int
     rights: int
+    attr: int
 
 
 @dataclass
@@ -972,6 +972,8 @@ class KernelConfig:
     root_cnode_bits: int
     cap_address_bits: int
     fan_out_limit: int
+    have_fpu: bool
+    page_table_levels: int
 
 
 @dataclass
@@ -987,11 +989,11 @@ def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
     # @ivanv: This struct layout is archiecture specific (e.g armExecuteNever)
     # doesn't appear on other architectures
     kernel_frame_t = Struct("<QQII")
-    # The Spike platform (and possibly others) do not have any kernel devices
-    # specified in the DTS, so the array kernel_devices_frames is empty.
-    # This is fine except for the fact that if the array is empty the compiler
-    # will actually optimise out the symbol so we must check that the symbol
-    # exists in the ELF first.
+    # NOTE: The Spike platform (and possibly others) do not have any kernel
+    # devices specified in the device tree, so the array kernel_devices_frames
+    # is empty. This is fine except for the fact that if the array is empty the
+    # compiler will optimise out the symbol so we must also check that the
+    # symbol exists in the ELF.
     res = kernel_elf.find_symbol_if_exists("kernel_device_frames")
     if res is not None:
         vaddr, size = res
@@ -1163,17 +1165,17 @@ def emulate_kernel_boot(
     )
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: KernelConfig) -> int:
+def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelConfig) -> int:
     # FIXME: These constants should ideally come from the config / kernel
     # binary not be hard coded here.
     # But they are constant so it isn't too bad.
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = kernel_config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
-    if kernel_config.arch == KernelArch.RISCV64:
-        # @ivanv: come back to this
-        # For RISC-V, the TCB bits depends on whether the platform has an FPU.
-        # Since we're only targeting rv64imac, we don't use the FPU.
-        tcb_bits = 10  # seL4_TCBBits
+    root_cnode_bits = config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
+    if config.arch == KernelArch.RISCV64:
+        if config.have_fpu:
+            tcb_bits = 11 # seL4_TCBBits
+        else:
+            tcb_bits = 10  # seL4_TCBBits
     else:
         tcb_bits = 11  # seL4_TCBBits
     page_bits = SEL4_RISCV_PAGE_BITS # seL4_PageBits # @ivanv
@@ -1188,8 +1190,25 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: 
     size += 2 * (1 << page_bits)
     size += 1 << asid_pool_bits
     size += 1 << vspace_bits
-    size += _get_arch_n_paging(kernel_config.arch, initial_task_region) * (1 << page_table_bits)
+    size += _get_arch_n_paging(config.arch, initial_task_region) * (1 << page_table_bits)
     size += 1 << min_sched_context_bits
 
     return size
+
+
+def arch_get_page_attrs(arch: KernelArch, mp: SysMap) -> int:
+    attrs = 0
+    if arch == KernelArch.AARCH64:
+        attrs = SEL4_ARM_PARITY_ENABLED
+        if mp.cached:
+            attrs |= SEL4_ARM_PAGE_CACHEABLE
+        if "x" not in mp.perms:
+            attrs |= SEL4_ARM_EXECUTE_NEVER
+    elif arch == KernelArch.RISCV64:
+        if "x" not in mp.perms:
+            attrs |= SEL4_RISCV_EXECUTE_NEVER
+    else:
+        raise Exception(f"Unexpected architecture: {arch}")
+
+    return attrs
 
