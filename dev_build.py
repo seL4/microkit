@@ -96,7 +96,9 @@ def main():
         make_env["PYTHONPATH"] = str(CWD / "tool")
         make_env["SEL4CP_TOOL"] = f"{executable} -m sel4coreplat"
 
-    cmd = ["make", "-C", makefile_directory, args.extra_args]
+    cmd = ["make", "-C", makefile_directory]
+    if args.extra_args:
+        cmd.append(args.extra_args)
 
     run(cmd, env=make_env)
 
