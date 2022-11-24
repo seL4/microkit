@@ -13,7 +13,6 @@ from sel4coreplat.util import kb, mb, round_up, MemoryRegion
 from sel4coreplat.sel4 import KernelConfig, KernelArch
 
 AARCH64_PAGE_TABLE_SIZE = 4096
-RISCV64_PAGE_TABLE_SIZE = 4096
 
 AARCH64_1GB_BLOCK_BITS = 30
 AARCH64_2MB_BLOCK_BITS = 21
@@ -23,15 +22,15 @@ AARCH64_LVL1_BITS = 9
 AARCH64_LVL2_BITS = 9
 
 # Note that we're setting up page tables for a RISC-V system with Sv39 virtual memory.
-RISCV64_1GB_BLOCK_BITS = 30 # seL4_HugePageBits
-RISCV64_2MB_BLOCK_BITS = 21 # seL4_LargePageBits
+RISCV64_PAGE_TABLE_SIZE = 4096
+RISCV64_2MB_BLOCK_BITS = 21
 
 RISCV_PT_INDEX_BITS = 9
 RISCV_PAGE_SHIFT = 12
 RISCV_PTE_TYPE_TABLE = 0x00
 RISCV_PTE_PPN0_SHIFT = 10
 RISCV_PTE_TYPE_SRWX = 0xCE
-RISCV_PTE_V = 0x001
+RISCV_PTE_VALID = 0x001
 RISCV_PT_LEVEL_1 = 1
 RISCV_PT_LEVEL_2 = 2
 
@@ -73,7 +72,6 @@ def arch_lvl2_addr(arch: KernelArch, addr: int) -> int:
 # RISC-V specific helpers
 #
 def riscv_get_pt_index(pt_levels: int, addr: int, n: int) -> int:
-    # @ivanv: Fix so that the '3' is CONFIG_PT_LEVELS, double check this is correct
     return (addr >> ((RISCV_PT_INDEX_BITS * (pt_levels - n)) + RISCV_PAGE_SHIFT)) % 512
 
 
@@ -82,11 +80,11 @@ def riscv_pte_create_ppn(pt_base: int) -> int:
 
 
 def riscv_pte_create_next(pt_base: int) -> int:
-    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_TABLE | RISCV_PTE_V)
+    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_TABLE | RISCV_PTE_VALID)
 
 
 def riscv_pte_create_leaf(pt_base: int) -> int:
-    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_SRWX | RISCV_PTE_V)
+    return (riscv_pte_create_ppn(pt_base) | RISCV_PTE_TYPE_SRWX | RISCV_PTE_VALID)
 
 
 def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
@@ -103,7 +101,7 @@ def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
 class Loader:
 
     def __init__(self,
-        config: KernelConfig,
+        kernel_config: KernelConfig,
         loader_elf_path: Path,
         kernel_elf: ElfFile,
         initial_task_elf: ElfFile,
@@ -194,10 +192,14 @@ class Loader:
         assert kernel_first_vaddr is not None
         assert kernel_first_paddr is not None
 
-        if config.arch == KernelArch.AARCH64:
+        if kernel_config.arch == KernelArch.AARCH64:
             pagetable_vars = self._arm_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
-        elif config.arch == KernelArch.RISCV64:
-            pagetable_vars = self._riscv_setup_pagetables(config.page_table_levels, kernel_first_vaddr, kernel_first_paddr)
+        elif kernel_config.arch == KernelArch.RISCV64:
+            pagetable_vars = self._riscv_setup_pagetables(kernel_config.page_table_levels,
+                                                          kernel_first_vaddr,
+                                                          kernel_first_paddr)
+        else:
+            raise Exception(f"Unknown architecture: {kernel_config.arch}")
 
         for var_name, var_data in pagetable_vars.items():
             var_addr, var_size = self._elf.find_symbol(var_name)
@@ -277,7 +279,7 @@ class Loader:
                 first_paddr |
                 (1 << 10) | # access flag
                 (3 << 8) | # make sure the shareability is the same as the kernel's
-                (4 << 2) | #MT_NORMAL memory
+                (4 << 2) | # MT_NORMAL memory
                 (1 << 0) # 2M block
             )
             first_paddr += (1 << AARCH64_2MB_BLOCK_BITS)
