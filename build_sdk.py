@@ -33,6 +33,7 @@ KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 AARCH64_TOOLCHAIN = "aarch64-none-elf-"
 RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
 
+# @ivanv: temporary, this can be removed by looking at the architecture in gen_config.yaml
 class BoardArch:
     AARCH64 = 1
     RISCV64 = 2
@@ -41,7 +42,6 @@ class BoardArch:
 # for RISC-V builds?
 # @ivanv: explain risc-v specifc arguments to the toolchain in the Makefiles, do the same for ARM since it's
 # useful imo
-# @ivanv: find the best way to abstract the arch specific seL4 invocations.
 # @ivanv: find a way to consistently pass in mabi and march to the various Makefiles
 
 @dataclass
@@ -375,7 +375,7 @@ def build_lib_component(
         dest.chmod(0o444)
 
 
-def build_config_component(
+def build_kernel_config_component(
     root_dir: Path,
     build_dir: Path,
     board: BoardInfo,
@@ -442,10 +442,10 @@ def main() -> None:
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address))
             ]
+            kernel_config = build_kernel_config_component(root_dir, build_dir, board, config)
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)
-            build_config_component(root_dir, build_dir, board, config)
         # Setup the examples
         for example, example_path in board.examples.items():
             include_dir = root_dir / "board" / board.name / "example" / example
