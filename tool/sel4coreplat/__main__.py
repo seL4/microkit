@@ -1265,10 +1265,6 @@ def build_system(
 
     pd_ds = ds[:len(pd_names)]
     vm_ds = ds[len(pd_names):]
-    # print(f"pd_ds: {pd_ds}")
-    # print(f"vm_ds: {vm_ds}")
-    # print(f"pd_names: {pd_names}")
-    # print(f"vm_names: {vm_names}")
     d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
     d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
     d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
