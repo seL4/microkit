@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <strings.h>
 
+// @ivanv: merge this with loader.c aarch64
+
 _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr_t to be 32-bit or 64-bit");
 
 #if UINTPTR_MAX == 0xffffffffUL
@@ -57,7 +59,6 @@ typedef void (*sel4_entry)(
     uintptr_t v_entry,
     uintptr_t dtb_addr_p,
     uintptr_t dtb_size,
-    // @ivanv: These two fields don't appear on non-SMP configurations.
     // uintptr_t hart_id,
     // uintptr_t core_id,
     uintptr_t extra_device_addr_p,
@@ -71,8 +72,6 @@ uint64_t boot_lvl1_pt[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl2_pt[1 << 9] ALIGN(1 << 12);
 /* Paging structures for identity mapping */
 uint64_t boot_lvl2_pt_elf[1 << 9] ALIGN(1 << 12);
-
-#define RISCV_PGSHIFT 12
 
 extern char _text;
 extern char _text_end;
@@ -252,17 +251,24 @@ static inline void ifence(void)
     asm volatile("fence.i" ::: "memory");
 }
 
-// @ivanv: only when CONFIG_PT_LEVELS == 3
-uint64_t vm_mode = 0x8llu << 60;
+// This is the encoding for the MODE field of the satp register when
+// implementing 39-bit virtual address spaces (known as Sv39).
+#define VM_MODE (0x8llu << 60)
+
+#define RISCV_PGSHIFT 12
 
 static inline void enable_mmu(void)
 {
-    // @ivanv: figure out what this is actually doing
+    // @ivanv: Comment this function
+    // The RISC-V privileged spec (20211203), section 4.1.11 says that the
+    // SFENCE.VMA instruction may need to be executed before or after writing
+    // to satp. I don't understand why we do it before compared to after.
+    // Need to understand 4.2.1 of the spec.
     sfence_vma();
     asm volatile(
         "csrw satp, %0\n"
         :
-        : "r"(vm_mode | (uintptr_t)boot_lvl1_pt >> RISCV_PGSHIFT)
+        : "r"(VM_MODE | (uintptr_t)boot_lvl1_pt >> RISCV_PGSHIFT)
         :
     );
     ifence();
@@ -292,7 +298,6 @@ main(void)
     goto fail;
 
 fail:
-    // @ivanv: comment and understand this fully
     /* We could call the SBI shutdown now. However, it's likely there is an
      * issue that needs to be debugged. Instead of doing a busy loop, spinning
      * over a WFI is the better choice here, as it allows the core to enter an
