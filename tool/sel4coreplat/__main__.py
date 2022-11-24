@@ -245,7 +245,7 @@ class KernelObjectAllocator:
                 ut.allocations.append(allocation)
                 return allocation
 
-        raise Exception("Can't alloc - nos pace")
+        raise Exception(f"Not enough space to allocate 0x{size * count:x} bytes")
 
 
 def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
