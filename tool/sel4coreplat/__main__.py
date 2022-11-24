@@ -166,6 +166,7 @@ BASE_OUTPUT_NOTIFICATION_CAP = 10
 BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
 BASE_TCB_CAP = BASE_IRQ_CAP + 64
+BASE_VM_TCB_CAP = BASE_TCB_CAP + 64
 MAX_SYSTEM_INVOCATION_SIZE = mb(128)
 PD_CAPTABLE_BITS = 12
 PD_CAP_SIZE = 256
@@ -481,6 +482,8 @@ class InitSystem:
             if phys_address in ut:
                 break
         else:
+            for ut in self._device_untyped:
+                print(ut)
             raise Exception(f"{phys_address=:x} not in any device untyped")
 
         if phys_address < ut.watermark:
@@ -669,6 +672,8 @@ def build_system(
         vm: ElfFile.from_path(_get_full_path(vm.image, search_paths))
         for vm in virtual_machines
     }
+    # for vm in virtual_machines:
+    #     vm_elf_files[vm].entry = vm.load_addr
     pd_elf_files.update(vm_elf_files)
     ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
@@ -710,7 +715,6 @@ def build_system(
     phys_addr_next = invocation_table_region.end
     # Now we create additional MRs (and mappings) for the ELF files.
     pd_elf_regions = {}
-    print(system.protection_domains)
     for pd in list(system.protection_domains) + virtual_machines:
         elf_regions: List[Tuple[int, bytearray, str]] = []
         seg_idx = 0
@@ -1041,6 +1045,7 @@ def build_system(
 
     for vm in virtual_machines:
         seg_idx = 0
+        # vm_phys_addr_next = vm.load_addr
         for segment in pd_elf_files[vm].segments:
             if not segment.loadable:
                 continue
@@ -1104,7 +1109,7 @@ def build_system(
 
     # @ivanv: revisit this for VM
     pg_idx: Dict[int, int] = {sz: 0 for sz in SUPPORTED_PAGE_SIZES}
-    pg_idx[0x1000] = len(system.protection_domains)
+    pg_idx[0x1000] = len(system.protection_domains) + len(virtual_machines)
     mr_pages: Dict[SysMemoryRegion, List[KernelObject]] = {mr: [] for mr in all_mrs}
     for mr in all_mrs:
         if mr.phys_addr is not None:
@@ -1182,7 +1187,6 @@ def build_system(
     uds = []
     ds = []
     pts = []
-    # @ivanv: change
     for pd_idx, pd in enumerate(list(system.protection_domains) + virtual_machines):
         if pd_idx < len(system.protection_domains):
             ipc_buffer_vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
@@ -1195,18 +1199,26 @@ def build_system(
         # in, and then page sure this is set
         if pd_idx < len(system.protection_domains):
             vaddrs = [(ipc_buffer_vaddr, 0x1000)]
+            print(f" ========= here, pd_idx: {pd_idx}")
+        else:
+            vaddrs = []
         for map in (pd.maps + pd_extra_maps[pd]):
+            print(f"map: {map}")
             mr = all_mr_by_name[map.mr]
             vaddr = map.vaddr
             for _ in range(mr.page_count):
                 vaddrs.append((vaddr, mr.page_size))
                 vaddr += mr_page_bytes(mr)
 
+        if (0x200000, 0x1000) in vaddrs and pd_idx == 1:
+            print(f"here, pd_idx: {pd_idx}")
         for vaddr, page_size in vaddrs:
             upper_directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9 + 9))
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
+                if vaddr == 0x200000:
+                    print(f"Adding PageTable vaddr: {hex(vaddr)}")
         if not kernel_config.hyp_mode:
             uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
@@ -1224,10 +1236,10 @@ def build_system(
 
     pd_ds = ds[:len(pd_names)]
     vm_ds = ds[len(pd_names):]
-    print(f"pd_ds: {pd_ds}")
-    print(f"vm_ds: {vm_ds}")
-    print(f"pd_names: {pd_names}")
-    print(f"vm_names: {vm_names}")
+    # print(f"pd_ds: {pd_ds}")
+    # print(f"vm_ds: {vm_ds}")
+    # print(f"pd_names: {pd_names}")
+    # print(f"vm_names: {vm_names}")
     d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
     d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
     d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
@@ -1371,9 +1383,41 @@ def build_system(
         system_invocations.append(invocation)
         cap_slot += 1
 
+    # Create a fault endpoint cap for each virtual machine, this will
+    # be the parent protection domain's endpoint.
+    for idx, vm in enumerate(virtual_machines, 1):
+        # @ivanv: this is inefficient, we should store the root PD
+        # in the XML parsing instead
+        # Find the PD that has the virtual machine
+        for pd in system.protection_domains:
+            if pd.virtual_machine == vm:
+                parent_pd = pd
+                break
+
+        print("===== parent_pd is:")
+        print(parent_pd)
+        print(pd_endpoint_objects)
+        fault_ep_cap = pd_endpoint_objects[parent_pd].cap_addr
+        # @ivanv: Right now there's nothing stopping the vm_id being
+        # the same as a pd_id. We should change this.
+        badge = (1 << 62) | vm.vm_id
+
+        invocation = Sel4CnodeMint(
+            system_cnode_cap,
+            cap_slot,
+            system_cnode_bits,
+            root_cnode_cap,
+            fault_ep_cap,
+            kernel_config.cap_address_bits,
+            SEL4_RIGHTS_ALL,
+            badge
+        )
+        system_invocations.append(invocation)
+        cap_slot += 1
+
     final_cap_slot = cap_slot
 
-    ## Minting in the address space
+    ## Minting in the endpoint (or notification object if protected is not set)
     for pd, notification_obj, cnode_obj in zip(system.protection_domains, notification_objects, cnode_objects):
         obj = pd_endpoint_objects[pd] if pd.needs_ep else notification_obj
         assert INPUT_CAP_IDX < PD_CAP_SIZE
@@ -1389,6 +1433,7 @@ def build_system(
                 0)
         )
 
+    ## Mint access to reply cap
     assert REPLY_CAP_IDX < PD_CAP_SIZE
     invocation = Sel4CnodeMint(cnode_objects[0].cap_addr,
                                REPLY_CAP_IDX,
@@ -1402,7 +1447,6 @@ def build_system(
     system_invocations.append(invocation)
 
     ## Mint access to the vspace cap
-    # @ivanv: change this I think
     assert VSPACE_CAP_IDX < PD_CAP_SIZE
     invocation = Sel4CnodeMint(cnode_objects[0].cap_addr,
                                VSPACE_CAP_IDX,
@@ -1412,7 +1456,7 @@ def build_system(
                                kernel_config.cap_address_bits,
                                SEL4_RIGHTS_ALL,
                                0)
-    invocation.repeat(len(system.protection_domains), cnode=1, src_obj=1)
+    invocation.repeat(len(system.protection_domains) + len(virtual_machines), cnode=1, src_obj=1)
     system_invocations.append(invocation)
 
     ## Mint access to interrupt handlers in the PD Cspace
@@ -1448,6 +1492,24 @@ def build_system(
                         SEL4_RIGHTS_ALL,
                         0)
                 )
+
+    ## Mint access to the VM's TCB in the PD Cspace
+    for cnode_obj, pd in zip(cnode_objects, system.protection_domains):
+        if pd.virtual_machine:
+            for maybe_vm_tcb, maybe_vm in zip(tcb_objects[len(system.protection_domains):], virtual_machines):
+                if pd.virtual_machine == maybe_vm:
+                    cap_idx = BASE_VM_TCB_CAP + maybe_vm.vm_id
+                    system_invocations.append(
+                        Sel4CnodeMint(
+                            cnode_obj.cap_addr,
+                            cap_idx,
+                            PD_CAP_BITS,
+                            root_cnode_cap,
+                            maybe_vm_tcb.cap_addr,
+                            kernel_config.cap_address_bits,
+                            SEL4_RIGHTS_ALL,
+                            0)
+                    )
 
     for cc in system.channels:
         pd_a = system.pd_by_name[cc.pd_a]
@@ -1540,12 +1602,15 @@ def build_system(
 
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
+    print("pt_objects:")
+    print(pt_objects)
     for map_cls, descriptors, objects in [
-        # (Sel4PageUpperDirectoryMap, uds, ud_objects),
+        # (Sel4PageUpperDirectoryMap, uds, ud_objects), @ivanv change to get non-hypervisor mode working
         (Sel4PageDirectoryMap, ds, d_objects),
         (Sel4PageTableMap, pts, pt_objects),
     ]:
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects):
+            # print(f"Map invocation for vaddr: {hex(vaddr)}, pd_idx: {pd_idx}")
             vspace_obj = vspace_objects[pd_idx]
             system_invocations.append(
                 map_cls(
@@ -1579,7 +1644,7 @@ def build_system(
     # Initialise the TCBs
     #
     # set scheduling parameters (SetSchedParams)
-    for idx, (pd, schedcontext_obj) in enumerate(zip(system.protection_domains, schedcontext_objects)):
+    for idx, (pd, schedcontext_obj) in enumerate(zip(list(system.protection_domains) + virtual_machines, schedcontext_objects)):
         # FIXME: We don't use repeat here because in the near future PDs will set the sched params
         system_invocations.append(
             Sel4SchedControlConfigureFlags(
@@ -1593,7 +1658,7 @@ def build_system(
             )
         )
 
-    for tcb_obj, schedcontext_obj, pd in zip(tcb_objects, schedcontext_objects, system.protection_domains):
+    for tcb_obj, schedcontext_obj, pd in zip(tcb_objects, schedcontext_objects, list(system.protection_domains) + virtual_machines):
         system_invocations.append(Sel4TcbSetSchedParams(tcb_obj.cap_addr,
                                                         INIT_TCB_CAP_ADDRESS,
                                                         pd.priority,
@@ -1602,14 +1667,13 @@ def build_system(
                                                         fault_ep_endpoint_object.cap_addr))
 
     # set vspace / cspace (SetSpace)
-    # @ivanv: needs to happen for VMs
     invocation = Sel4TcbSetSpace(tcb_objects[0].cap_addr,
                                  badged_fault_ep,
                                  cnode_objects[0].cap_addr,
                                  kernel_config.cap_address_bits - PD_CAP_BITS,
                                  vspace_objects[0].cap_addr,
                                  0)
-    invocation.repeat(len(system.protection_domains), tcb=1, fault_ep=1, cspace_root=1, vspace_root=1)
+    invocation.repeat(len(system.protection_domains) + len(virtual_machines), tcb=1, fault_ep=1, cspace_root=1, vspace_root=1)
     system_invocations.append(invocation)
 
     # set IPC buffer

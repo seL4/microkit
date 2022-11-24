@@ -99,7 +99,7 @@ class ProtectionDomain:
 
     @property
     def needs_ep(self) -> bool:
-        return self.pp or self.has_children
+        return self.pp or self.has_children or self.virtual_machine
 
 
 @dataclass(frozen=True, eq=True)
@@ -125,8 +125,11 @@ class VirtualMachine:
     name: str
     vm_id: int
     image: Path
-    maps: Tuple[SysMap, ...]
     # load_addr: int
+    maps: Tuple[SysMap, ...]
+    priority: int
+    budget: int
+    period: int
 
 
 def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
@@ -151,6 +154,30 @@ def _pd_flatten(pds: Iterable[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]
     to each node having a parent link instead.
     """
     return sum((_pd_tree_to_list(pd, None) for pd in pds), tuple())
+
+
+# def _vm_tree_to_list(root_pd: ProtectionDomain, vm: ProtectionDomain) -> Tuple[VirtualMachine, ...]:
+#     # Check child PDs have unique identifiers
+#     child_ids = set()
+#     for child_pd in root_pd.child_pds:
+#         if child_pd.pd_id in child_ids:
+#             raise UserError(f"duplicate pd_id: {child_pd.pd_id} in protection domain: '{root_pd.name}' @ {child_pd.element._loc_str}")  # type: ignore
+#         child_ids.add(child_pd.pd_id)
+
+#     new_root_pd = replace(root_pd, child_pds=tuple(), parent=parent_pd)
+#     new_child_pds = sum((_pd_tree_to_list(child_pd, new_root_pd) for child_pd in root_pd.child_pds), tuple())
+#     return (new_root_pd, ) + new_child_pds
+
+
+# def _vm_flatten(vms: Iterable[VirtualMachine]) -> Tuple[VirtualMachine, ...]:
+#     """
+#     Given an iterable of protection domains flatten the tree representation
+#     into a flat tuple.
+
+#     In doing so the representation is changed from "Node with list of children",
+#     to each node having a parent link instead.
+#     """
+#     return sum((_vm_tree_to_list(vm, None) for vm in vms), tuple())
 
 
 class SystemDescription:
@@ -399,34 +426,20 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
 def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
     # @ivanv: should check that there are no children
-    _check_attrs(vm_xml, ("name", "vm_id", "image"))
-    # _check_attrs(vm_xml, ("name", "vm_id", "image", "load_addr"))
+    _check_attrs(vm_xml, ("name", "vm_id", "image", "priority"))
+    # _check_attrs(vm_xml, ("name", "vm_id", "image", "load_addr", "priority"))
     name = checked_lookup(vm_xml, "name")
 
     vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
     if vm_id < 0 or vm_id > 255:
         raise ValueError("vm_id must be between 0 and 255")
 
-    # @ivanv: could rename this to be linux_image/dtb or vm_image/dtb etc
     image = Path(checked_lookup(vm_xml, "image"))
     # load_addr = int(checked_lookup(vm_xml, "load_addr"), base=16)
 
-    # for child in vm_xml:
-    #     try:
-    #         if child.tag == "image":
-    #             _check_attrs(child, ("path"))
-    #             if image is not None:
-    #                 raise ValueError("image must only be specified once")
-    #             image = Path(checked_lookup(child, "path"))
-    #         elif child.tag == "dtb":
-    #             _check_attrs(child, ("path"))
-    #             if dtb is not None:
-    #                 raise ValueError("dtb must only be specified once")
-    #             dtb = Path(checked_lookup(child, "path"))
-    #         else:
-    #             raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
-    #     except ValueError as e:
-    #         raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
+    budget = int(vm_xml.attrib.get("budget", "1000"), base=0)
+    period = int(vm_xml.attrib.get("period", str(budget)), base=0)
+    priority = int(vm_xml.attrib.get("priority", "0"), base=0)
 
     maps = []
     for child in vm_xml:
@@ -443,8 +456,16 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
         except ValueError as e:
             raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
 
-    # return VirtualMachine(name, vm_id, image, load_addr)
-    return VirtualMachine(name, vm_id, image, tuple(maps))
+    return VirtualMachine(
+        name,
+        vm_id,
+        image,
+        # load_addr,
+        tuple(maps),
+        priority,
+        budget,
+        period
+    )
 
 
 def _check_no_text(el: ET.Element) -> None:
