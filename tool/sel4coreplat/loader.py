@@ -294,27 +294,25 @@ class Loader:
     def _riscv_setup_pagetables(self, pt_levels: int, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
         # Note that this function makes the assumption that we are to run on a
         # 64-bit RISC-V platform.
-        TEXT_START = 0x80200000
+        # @ivanv: Revisit this function and comment it, it is difficult to come back to and understand
 
-        # @ivanv: here everything is offset by _text. I'm wondering if a) that is necessary.
-        # and b) if it is necessary, do we have to figure out the address of _text?
-
+        text_addr, _  = self._elf.find_symbol("_text")
         boot_lvl1_pt_addr, _ = self._elf.find_symbol("boot_lvl1_pt")
         boot_lvl2_pt_addr, _ = self._elf.find_symbol("boot_lvl2_pt")
         boot_lvl2_pt_elf_addr, _ = self._elf.find_symbol("boot_lvl2_pt_elf")
 
-        index = riscv_get_pt_index(pt_levels, TEXT_START, RISCV_PT_LEVEL_1)
+        index = riscv_get_pt_index(pt_levels, text_addr, RISCV_PT_LEVEL_1)
 
         boot_lvl1_pt = bytearray(RISCV64_PAGE_TABLE_SIZE)
         boot_lvl1_pt[8*index:8*(index+1)] = pack("<Q", riscv_pte_create_next(boot_lvl2_pt_elf_addr))
 
-        lvl2_elf_index = riscv_get_pt_index(pt_levels, TEXT_START, RISCV_PT_LEVEL_2)
+        lvl2_elf_index = riscv_get_pt_index(pt_levels, text_addr, RISCV_PT_LEVEL_2)
 
         boot_lvl2_pt_elf = bytearray(RISCV64_PAGE_TABLE_SIZE)
 
         page = 0
         for i in range(lvl2_elf_index, 512):
-            boot_lvl2_pt_elf[8*i:8*(i+1)] = pack("<Q", riscv_pte_create_leaf(TEXT_START + (page << RISCV64_2MB_BLOCK_BITS)))
+            boot_lvl2_pt_elf[8*i:8*(i+1)] = pack("<Q", riscv_pte_create_leaf(text_addr + (page << RISCV64_2MB_BLOCK_BITS)))
             page += 1
 
         index = riscv_get_pt_index(pt_levels, first_vaddr, RISCV_PT_LEVEL_1)
