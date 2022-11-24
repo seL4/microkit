@@ -163,30 +163,6 @@ def _pd_flatten(pds: Iterable[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]
     return sum((_pd_tree_to_list(pd, None) for pd in pds), tuple())
 
 
-# def _vm_tree_to_list(root_pd: ProtectionDomain, vm: ProtectionDomain) -> Tuple[VirtualMachine, ...]:
-#     # Check child PDs have unique identifiers
-#     child_ids = set()
-#     for child_pd in root_pd.child_pds:
-#         if child_pd.pd_id in child_ids:
-#             raise UserError(f"duplicate pd_id: {child_pd.pd_id} in protection domain: '{root_pd.name}' @ {child_pd.element._loc_str}")  # type: ignore
-#         child_ids.add(child_pd.pd_id)
-
-#     new_root_pd = replace(root_pd, child_pds=tuple(), parent=parent_pd)
-#     new_child_pds = sum((_pd_tree_to_list(child_pd, new_root_pd) for child_pd in root_pd.child_pds), tuple())
-#     return (new_root_pd, ) + new_child_pds
-
-
-# def _vm_flatten(vms: Iterable[VirtualMachine]) -> Tuple[VirtualMachine, ...]:
-#     """
-#     Given an iterable of protection domains flatten the tree representation
-#     into a flat tuple.
-
-#     In doing so the representation is changed from "Node with list of children",
-#     to each node having a parent link instead.
-#     """
-#     return sum((_vm_tree_to_list(vm, None) for vm in vms), tuple())
-
-
 class SystemDescription:
     def __init__(
         self,
@@ -197,11 +173,6 @@ class SystemDescription:
         self.memory_regions = tuple(memory_regions)
         self.protection_domains = _pd_flatten(protection_domains)
         self.channels = tuple(channels)
-
-        # @ivanv: need to add checks for each VM
-        # * How many per each PD?
-        # * Check every field
-        # * What child tags can a VM have?
 
         # Note: These could be dict comprehensions, but
         # we want to perform duplicate checks as we
@@ -228,10 +199,7 @@ class SystemDescription:
                 raise UserError(f"Duplicate memory region name '{mr.name}'.")
             self.mr_by_name[mr.name] = mr
 
-        # Ensure no duplicate VMs
-        # @ivanv
-        # for vm in protection_domains:
-
+        # Ensure no duplicate VMs @ivanv
 
         # Ensure all CCs make senses
         for cc in self.channels:
@@ -278,11 +246,7 @@ class SystemDescription:
                 if extra != 0:
                     raise UserError(f"Invalid vaddr alignment on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
 
-        # Ensure that VM image and DTB are different
-        # for vm in self.virtual_machines:
-        #     if vm.image == vm.dtb:
-        #         # @ivanv: come back to
-        #         raise UserError(f"The image and dtb have the same path")
+        # Ensure that VM image and DTB are different @ivanv
 
         # Note: Overlapping memory is checked in the build.
 
