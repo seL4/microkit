@@ -13,130 +13,131 @@ from sel4coreplat.elf import ElfFile
 from sel4coreplat.sysxml import SysMap
 
 
-SLOT_BITS = 5
-SLOT_SIZE = 1 << SLOT_BITS
+class KernelArch:
+    AARCH64 = 1
+    RISCV64 = 2
 
-SEL4_TCB_SIZE = (1 << 11)
-SEL4_ENDPOINT_SIZE = (1 << 4)
-SEL4_NOTIFICATION_SIZE = (1 << 6)
-SEL4_REPLY_SIZE = (1 << 5)
-SEL4_PAGE_TABLE_SIZE = (1 << 12)
-SEL4_PAGE_DIRECTORY_SIZE = (1 << 12)
-SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 12)
-SEL4_LARGE_PAGE_SIZE = (2 * 1024 * 1024)
-SEL4_SMALL_PAGE_SIZE = (4 * 1024)
-SEL4_VSPACE_SIZE = (1 << 12)
-SEL4_ASID_POOL_SIZE = (1 << 12)
 
-# Page -> Page
-# Mega -> Large
-# Giga -> Huge
-# Tera -> Tera
-SEL4_RISCV_GIGA_PAGE_SIZE = (1 << 12)
-SEL4_RISCV_4K_PAGE_SIZE = (1 << 12)
-SEL4_RISCV_MEGA_PAGE_SIZE = (1 << 21)
-SEL4_PAGE_TABLE_SIZE = (1 << 12)
-
+@dataclass(frozen=True, eq=True)
+class KernelConfig:
+    arch: KernelArch
+    word_size: int
+    minimum_page_size: int
+    paddr_user_device_top: int
+    kernel_frame_size: int
+    root_cnode_bits: int
+    cap_address_bits: int
+    fan_out_limit: int
+    have_fpu: bool
+    page_table_levels: int
 
 # Kernel Objects:
 
-# @ivanv Even these are arch specific....
-SEL4_UNTYPED_OBJECT = 0
+# @ivanv: comment how these work
+class Sel4Object(IntEnum):
+    Untyped = 0
+    Tcb = 1
+    Endpoint = 2
+    Notification = 3
+    CNode = 4
+    SchedContext = 5
+    Reply = 6
+    SmallPage = 7
+    LargePage = 8
+    HugePage = 9
+    PageTable = 10
+    PageDirectory = 11
+    PageUpperDirectory = 12
+    PageGlobalDirectory = 13
+    VSpace = 14
 
-SEL4_TCB_OBJECT = 1
-SEL4_ENDPOINT_OBJECT = 2
-SEL4_NOTIFICATION_OBJECT = 3
-SEL4_CNODE_OBJECT = 4
-SEL4_SCHEDCONTEXT_OBJECT = 5
-SEL4_REPLY_OBJECT = 6
+    def get_id(self, kernel_config: KernelConfig) -> int:
+        if kernel_config.arch == KernelArch.AARCH64:
+            if self in AARCH64_OBJECTS:
+                return AARCH64_OBJECTS[self]
+            else:
+                return self
+        elif kernel_config.arch == KernelArch.RISCV64:
+            if self in RISCV64_OBJECTS:
+                return RISCV64_OBJECTS[self]
+            else:
+                return self
+        else:
+            raise Exception(f"Unknown kernel architecture {arch}")
 
-SEL4_HUGE_PAGE_OBJECT = 7
-SEL4_PAGE_UPPER_DIRECTORY_OBJECT = 8
-SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT = 9
-SEL4_SMALL_PAGE_OBJECT = 10
-SEL4_LARGE_PAGE_OBJECT = 11
-# SEL4_PAGE_TABLE_OBJECT = 12
-SEL4_PAGE_DIRECTORY_OBJECT = 13
 
-# SEL4_VSPACE_OBJECT = SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT
-
-# For RISC-V:
-SEL4_RISCV_GIGA_PAGE_OBJECT = 7
-SEL4_RISCV_4K_PAGE_OBJECT = 8
-SEL4_RISCV_MEGA_PAGE_OBJECT = 9
-SEL4_PAGE_TABLE_OBJECT = 10
-
-SEL4_VSPACE_OBJECT = SEL4_PAGE_TABLE_OBJECT
-
-# SEL4_OBJECT_TYPE_NAMES = {
-#     SEL4_UNTYPED_OBJECT: "SEL4_UNTYPED_OBJECT",
-#     SEL4_TCB_OBJECT: "SEL4_TCB_OBJECT",
-#     SEL4_ENDPOINT_OBJECT: "SEL4_ENDPOINT_OBJECT",
-#     SEL4_NOTIFICATION_OBJECT: "SEL4_NOTIFICATION_OBJECT",
-#     SEL4_CNODE_OBJECT: "SEL4_CNODE_OBJECT",
-#     SEL4_SCHEDCONTEXT_OBJECT: "SEL4_SCHEDCONTEXT_OBJECT",
-#     SEL4_REPLY_OBJECT: "SEL4_REPLY_OBJECT",
-#     SEL4_HUGE_PAGE_OBJECT: "SEL4_HUGE_PAGE_OBJECT",
-#     SEL4_PAGE_UPPER_DIRECTORY_OBJECT: "SEL4_PAGE_UPPER_DIRECTORY_OBJECT",
-#     SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT: "SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT",
-#     SEL4_SMALL_PAGE_OBJECT: "SEL4_SMALL_PAGE_OBJECT",
-#     SEL4_LARGE_PAGE_OBJECT: "SEL4_LARGE_PAGE_OBJECT",
-#     SEL4_PAGE_TABLE_OBJECT: "SEL4_PAGE_TABLE_OBJECT",
-#     SEL4_PAGE_DIRECTORY_OBJECT: "SEL4_PAGE_DIRECTORY_OBJECT",
-# }
-
-SEL4_OBJECT_TYPE_NAMES = {
-    SEL4_UNTYPED_OBJECT: "SEL4_UNTYPED_OBJECT",
-    SEL4_TCB_OBJECT: "SEL4_TCB_OBJECT",
-    SEL4_ENDPOINT_OBJECT: "SEL4_ENDPOINT_OBJECT",
-    SEL4_NOTIFICATION_OBJECT: "SEL4_NOTIFICATION_OBJECT",
-    SEL4_CNODE_OBJECT: "SEL4_CNODE_OBJECT",
-    SEL4_SCHEDCONTEXT_OBJECT: "SEL4_SCHEDCONTEXT_OBJECT",
-    SEL4_REPLY_OBJECT: "SEL4_REPLY_OBJECT",
-    SEL4_RISCV_GIGA_PAGE_OBJECT: "SEL4_RISCV_GIGA_PAGE_OBJECT",
-    SEL4_RISCV_4K_PAGE_OBJECT: "SEL4_RISCV_4K_PAGE_OBJECT",
-    SEL4_RISCV_MEGA_PAGE_OBJECT: "SEL4_RISCV_MEGA_PAGE_OBJECT",
-    SEL4_PAGE_TABLE_OBJECT: "SEL4_PAGE_TABLE_OBJECT",
+# Note AArch32 will have a different virtual address space and hence seL4 page
+# objects will look different there.
+AARCH64_OBJECTS = {
+    Sel4Object.HugePage: 7,
+    Sel4Object.PageUpperDirectory: 8,
+    Sel4Object.PageGlobalDirectory: 9,
+    Sel4Object.SmallPage: 10,
+    Sel4Object.LargePage: 11,
+    Sel4Object.PageTable: 12,
+    Sel4Object.PageDirectory: 13,
+     # A VSpace on AArch64 is represented by a PageGlobalDirectory
+    Sel4Object.VSpace: 9,
 }
 
-# FIXED_OBJECT_SIZES = {
-#     SEL4_TCB_OBJECT: SEL4_TCB_SIZE,
-#     SEL4_ENDPOINT_OBJECT: SEL4_ENDPOINT_SIZE,
-#     SEL4_NOTIFICATION_OBJECT: SEL4_NOTIFICATION_SIZE,
-#     SEL4_REPLY_OBJECT: SEL4_REPLY_SIZE,
 
-#     SEL4_VSPACE_OBJECT: SEL4_VSPACE_SIZE,
-#     SEL4_PAGE_UPPER_DIRECTORY_OBJECT: SEL4_PAGE_UPPER_DIRECTORY_SIZE,
-#     SEL4_PAGE_DIRECTORY_OBJECT: SEL4_PAGE_DIRECTORY_SIZE,
-#     SEL4_PAGE_TABLE_OBJECT: SEL4_PAGE_TABLE_SIZE,
+# Note that here we make the assumption that we are using Sv39 platforms as
+# larger address spaces (Sv48, Sv59) have Tera pages and smaller address spaces
+# (Sv32) lack Giga pages.
+RISCV64_OBJECTS = {
+    Sel4Object.HugePage: 7,
+    Sel4Object.SmallPage: 8,
+    Sel4Object.LargePage: 9,
+    Sel4Object.PageTable: 10,
+    # A VSpace on RISC-V is represented by a PageTable
+    Sel4Object.VSpace: 10,
+}
 
-#     SEL4_LARGE_PAGE_OBJECT: SEL4_LARGE_PAGE_SIZE,
-#     SEL4_SMALL_PAGE_OBJECT: SEL4_SMALL_PAGE_SIZE,
-# }
 
+SEL4_OBJECT_TYPE_NAMES = {
+    Sel4Object.Untyped: "SEL4_UNTYPED_OBJECT",
+    Sel4Object.Tcb: "SEL4_TCB_OBJECT",
+    Sel4Object.Endpoint: "SEL4_ENDPOINT_OBJECT",
+    Sel4Object.Notification: "SEL4_NOTIFICATION_OBJECT",
+    Sel4Object.CNode: "SEL4_CNODE_OBJECT",
+    Sel4Object.SchedContext: "SEL4_SCHEDCONTEXT_OBJECT",
+    Sel4Object.Reply: "SEL4_REPLY_OBJECT",
+    Sel4Object.SmallPage: "SEL4_SMALL_PAGE_OBJECT",
+    Sel4Object.LargePage: "SEL4_LARGE_PAGE_OBJECT",
+    Sel4Object.HugePage: "SEL4_HUGE_PAGE_SIZE",
+    Sel4Object.PageTable: "SEL4_PAGE_TABLE_OBJECT",
+    Sel4Object.PageDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
+    Sel4Object.PageUpperDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
+    Sel4Object.VSpace: "SEL4_VSPACE_OBJECT",
+}
+
+# Note that these sizes can be architecture specific but for now we only
+# support 64-bit ARM and RISC-V where these happen to be the same.
 FIXED_OBJECT_SIZES = {
-    SEL4_TCB_OBJECT: SEL4_TCB_SIZE,
-    SEL4_ENDPOINT_OBJECT: SEL4_ENDPOINT_SIZE,
-    SEL4_NOTIFICATION_OBJECT: SEL4_NOTIFICATION_SIZE,
-    SEL4_REPLY_OBJECT: SEL4_REPLY_SIZE,
+    Sel4Object.Tcb: 1 << 11,
+    Sel4Object.Endpoint: 1 << 4,
+    Sel4Object.Notification: 1 << 6,
+    Sel4Object.Reply: 1 << 5,
 
-    SEL4_VSPACE_OBJECT: SEL4_VSPACE_SIZE,
-    SEL4_RISCV_GIGA_PAGE_OBJECT: SEL4_RISCV_GIGA_PAGE_SIZE,
-    SEL4_RISCV_4K_PAGE_OBJECT: SEL4_RISCV_4K_PAGE_SIZE,
-    SEL4_RISCV_MEGA_PAGE_OBJECT: SEL4_RISCV_MEGA_PAGE_SIZE,
-    SEL4_PAGE_TABLE_OBJECT: SEL4_PAGE_TABLE_SIZE,
+    Sel4Object.VSpace: 1 << 12,
+    Sel4Object.HugePage: 1 << 30,
+    Sel4Object.SmallPage: 1 << 12,
+    Sel4Object.LargePage: 1 << 21,
+    Sel4Object.PageTable: 1 << 12,
+    Sel4Object.PageDirectory: 1 << 12,
+    Sel4Object.PageUpperDirectory: 1 << 12,
 }
 
 
 VARIABLE_SIZE_OBJECTS = {
-    SEL4_CNODE_OBJECT,
-    SEL4_UNTYPED_OBJECT,
-    SEL4_SCHEDCONTEXT_OBJECT,
+    Sel4Object.CNode,
+    Sel4Object.Untyped,
+    Sel4Object.SchedContext,
 }
 
 # @ivanv: while it's probably hard to get these constants wrong,
 # it would be nice to explain a bit + say where they are defined in the kernel
-SEL4_VSPACE_BITS = 12
+SEL4_SLOT_SIZE = (1 << 5)
 
 SEL4_RIGHTS_WRITE = 1
 SEL4_RIGHTS_READ = 2
@@ -172,16 +173,7 @@ INIT_THREAD_IPC_BUFFER_CAP_ADDRESS = 10
 DOMAIN_CAP_ADDRESS = 11
 SMMU_SID_CONTROL_CAP_ADDRESS = 12
 SMMU_CB_CONTROL_CAP_ADDRESS = 13
-# @ivanv: The cap addr's above are the same across arm/risc-v platforms from
-# what I can see but I don't know where INIT_THREAD_SC_CAP_ADDRESS comes from,
-# this is not used really so it doesn't matter for now
 INIT_THREAD_SC_CAP_ADDRESS = 14
-
-
-# @ivanv: temporary, change this. I don't like that it's duplicated with build_sdk.py
-class KernelArch:
-    AARCH64 = 1
-    RISCV64 = 2
 
 
 def _get_n_paging(region: MemoryRegion, bits: int) -> int:
@@ -215,10 +207,10 @@ def _get_arch_n_paging(arch: KernelArch, region: MemoryRegion) -> int:
             _get_n_paging(region, PD_INDEX_OFFSET)
         )
     else:
-        raise Exception(f"Unknown architecture {arch}")
+        raise Exception(f"Unknown kernel architecture {arch}")
 
 
-# Unlike ARM, seL4_UserContext is the same on 32-bit and 64-bit RISC-V
+# Unlike on ARM, seL4_UserContext is the same on 32-bit and 64-bit RISC-V
 class Sel4RiscvRegs:
     """
     typedef struct seL4_UserContext_ {
@@ -553,6 +545,7 @@ class Sel4Label(IntEnum):
     SchedContextConsume = 34
     SchedContextYieldTo = 35
 
+
 # The reason we need separation for arch specific objects is because these
 # values for each label are the enum values that the kernel uses. So if you
 # target ARM, you'll find that a different syscall will correspond to the
@@ -584,6 +577,7 @@ class Sel4LabelARM(IntEnum):
     ARMASIDPoolAssign = 54
     # ARM IRQ
     ARMIRQIssueIRQHandlerTrigger = 55
+
 
 class Sel4LabelRISCV(IntEnum):
     # RISC-V Page Table
@@ -646,7 +640,7 @@ class Sel4Invocation:
         assert length < 0x80
         return label << 12 | caps << 9 | extra_caps << 7 | length
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
         val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
         return self._generic_invocation(cap_args, val_args)
@@ -675,6 +669,19 @@ class Sel4UntypedRetype(Sel4Invocation):
     node_depth: int
     node_offset: int
     num_objects: int
+
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
+        # @ivanv: HACK
+        old_object_type = self.object_type
+        self.object_type = Sel4Object.get_id(self.object_type, kernel_config)
+
+        cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
+        val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
+
+        invocation = self._generic_invocation(cap_args, val_args)
+        self.object_type = old_object_type
+
+        return invocation
 
 
 @dataclass
@@ -736,7 +743,7 @@ class Sel4ARMTcbWriteRegisters(Sel4Invocation):
     arch_flags: int
     regs: Sel4Aarch64Regs
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         params = (
             self.arch_flags << 8 | 1 if self.resume else 0,
             self.regs.count()
@@ -756,7 +763,7 @@ class Sel4RISCVTcbWriteRegisters(Sel4Invocation):
     arch_flags: int
     regs: Sel4RiscvRegs
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         params = (
             self.arch_flags << 8 | 1 if self.resume else 0,
             self.regs.count()
@@ -780,7 +787,6 @@ class Sel4AsidPoolAssign(Sel4Invocation):
     _object_type = "ASID Pool"
     _method_name = "Assign"
     _extra_caps = ("vspace", )
-    label = Sel4LabelARM.ARMASIDPoolAssign
     asid_pool: int
     vspace: int
 
@@ -790,7 +796,7 @@ class Sel4AsidPoolAssign(Sel4Invocation):
         elif arch == KernelArch.RISCV64:
             self.label = Sel4LabelRISCV.RISCVASIDPoolAssign
         else:
-            raise Exception(f"Unknown kernel architecture: {arch}")
+            raise Exception(f"Unexpected kernel architecture: {arch}")
 
         self.asid_pool = asid_pool
         self.vspace = vspace
@@ -879,6 +885,7 @@ class Sel4RISCVPageTableMap(Sel4Invocation):
     vaddr: int
     attr: int
 
+
 @dataclass
 class Sel4RISCVPageMap(Sel4Invocation):
     _object_type = "Page"
@@ -936,6 +943,7 @@ class Sel4SchedControlConfigureFlags(Sel4Invocation):
     badge: int
     flags: int
 
+
 @dataclass(frozen=True, eq=True)
 class UntypedObject:
     cap: int
@@ -951,7 +959,6 @@ class UntypedObject:
         return lsb(self.region.end - self.region.base)
 
 
-
 @dataclass(frozen=True, eq=True)
 class KernelBootInfo:
     fixed_cap_count: int
@@ -962,20 +969,6 @@ class KernelBootInfo:
     first_available_cap: int
 
 
-@dataclass(frozen=True, eq=True)
-class KernelConfig:
-    arch: KernelArch
-    word_size: int
-    minimum_page_size: int
-    paddr_user_device_top: int
-    kernel_frame_size: int
-    root_cnode_bits: int
-    cap_address_bits: int
-    fan_out_limit: int
-    have_fpu: bool
-    page_table_levels: int
-
-
 @dataclass
 class _KernelPartialBootInfo:
     device_memory: DisjointMemoryRegion
@@ -983,12 +976,16 @@ class _KernelPartialBootInfo:
     boot_region: MemoryRegion
 
 
-def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
+def _kernel_device_addrs(arch: KernelArch, kernel_elf: ElfFile) -> List[int]:
     """Extract the physical address of all kernel (only) devices"""
     kernel_devices = []
-    # @ivanv: This struct layout is archiecture specific (e.g armExecuteNever)
-    # doesn't appear on other architectures
-    kernel_frame_t = Struct("<QQII")
+    if arch == KernelArch.AARCH64:
+        kernel_frame_t = Struct("<QQII")
+    elif arch == KernelArch.RISCV64:
+        # @ivanv: for some reason, only on the HiFive, having QQI does not work
+        kernel_frame_t = Struct("<QQQ")
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
     # NOTE: Certain platforms may not have any kernel devices specified in the
     # device tree (such as the Spike). Since the kernel_devices_frames array
     # will be empty the kernel the compiler may optimise out the symbol so we
@@ -999,7 +996,12 @@ def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
         p_regs = kernel_elf.get_data(vaddr, size)
         offset = 0
         while offset < size:
-            paddr, pptr, xn, ua = kernel_frame_t.unpack_from(p_regs, offset)
+            if arch == KernelArch.AARCH64:
+                paddr, pptr, xn, ua = kernel_frame_t.unpack_from(p_regs, offset)
+            elif arch == KernelArch.RISCV64:
+                paddr, pptr, ua = kernel_frame_t.unpack_from(p_regs, offset)
+            else:
+                raise Exception(f"Unexpected kernel architecture: {arch}")
             if not ua:
                 kernel_devices.append(paddr)
             offset += kernel_frame_t.size
@@ -1073,8 +1075,9 @@ def _kernel_partial_boot(
     elif kernel_config.arch == KernelArch.AARCH64:
         device_size = 1 << 12
     else:
-        raise Exception("Unsupported architecture")
-    for paddr in _kernel_device_addrs(kernel_elf):
+        raise Exception(f"Unexpected kernel architecture {config.arch}")
+
+    for paddr in _kernel_device_addrs(kernel_config.arch, kernel_elf):
         device_memory.remove_region(paddr, paddr + device_size)
 
     # Remove all the actual physical memory from the device regions
@@ -1125,7 +1128,7 @@ def emulate_kernel_boot(
     normal_memory.remove_region(reserved_region.base, reserved_region.end)
 
     # Now, the tricky part! determine which memory is used for the initial task objects
-    initial_objects_size = calculate_rootserver_size(initial_task_virt_region, kernel_config)
+    initial_objects_size = calculate_rootserver_size(kernel_config, initial_task_virt_region)
     initial_objects_align = _rootserver_max_size_bits(kernel_config)
 
     # Find an appropriate region of normal memory to allocate the objects
@@ -1164,22 +1167,22 @@ def emulate_kernel_boot(
     )
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelConfig) -> int:
+def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: MemoryRegion) -> int:
     # FIXME: These constants should ideally come from the config / kernel
     # binary not be hard coded here.
     # But they are constant so it isn't too bad.
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
-    if config.arch == KernelArch.RISCV64:
-        if config.have_fpu:
+    root_cnode_bits = kernel_config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
+    if kernel_config.arch == KernelArch.RISCV64:
+        if kernel_config.have_fpu:
             tcb_bits = 11 # seL4_TCBBits
         else:
             tcb_bits = 10  # seL4_TCBBits
     else:
         tcb_bits = 11  # seL4_TCBBits
-    page_bits = SEL4_RISCV_PAGE_BITS # seL4_PageBits # @ivanv
+    page_bits = 12 # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = SEL4_VSPACE_BITS # seL4_VSpaceBits
+    vspace_bits = 12 # seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
     min_sched_context_bits = 8 # seL4_MinSchedContextBits
 
@@ -1189,7 +1192,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelC
     size += 2 * (1 << page_bits)
     size += 1 << asid_pool_bits
     size += 1 << vspace_bits
-    size += _get_arch_n_paging(config.arch, initial_task_region) * (1 << page_table_bits)
+    size += _get_arch_n_paging(kernel_config.arch, initial_task_region) * (1 << page_table_bits)
     size += 1 << min_sched_context_bits
 
     return size
@@ -1207,7 +1210,20 @@ def arch_get_page_attrs(arch: KernelArch, mp: SysMap) -> int:
         if "x" not in mp.perms:
             attrs |= SEL4_RISCV_EXECUTE_NEVER
     else:
-        raise Exception(f"Unexpected architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {arch}")
 
     return attrs
 
+# @ivanv: TODO, support Huge page size for AArch64/RISCV
+def arch_get_page_objects(arch: KernelArch) -> [int]:
+    if arch == KernelArch.AARCH64 or arch == KernelArch.RISCV64:
+        return [Sel4Object.SmallPage, Sel4Object.LargePage]
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+
+
+def arch_get_page_sizes(arch: KernelArch) -> [int]:
+    if arch == KernelArch.AARCH64 or arch == KernelArch.RISCV64:
+        return [0x1000, 0x200_000]
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
