@@ -166,7 +166,7 @@ class DisjointMemoryRegion:
             if size <= region.size:
                 break
         else:
-            raise ValueError(f"Unable to allocate {size} bytes.")
+            raise ValueError(f"Unable to allocate 0x{size:x} bytes.")
 
         self.remove_region(region.base, region.base + size)
 
