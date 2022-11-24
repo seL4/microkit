@@ -9,11 +9,10 @@
 // @ivanv: this file needs to be cleaned up
 
 .extern main
-
 .extern __global_pointer$
-.extern _stack
 
-/* @ivanv: This is defined in loader.c too, would be better to have this come from there? */
+.section ".text.start"
+
 #define STACK_SIZE 4096
 
 /* SBI commands for the HSM extension */
@@ -26,15 +25,15 @@
 
 /* This comes from the config.cmake script for the platform in seL4.
  * This is not the most ideal way to do this, however once we add the kernel
- * config it should be nicer.
+ * config it should be nicer. @ivanv
  */
 #if defined(BOARD_spike)
 #define FIRST_HART_ID 0
 #elif defined(BOARD_hifive_unleashed)
 #define FIRST_HART_ID 1
+#else
+#error "Need to define FIRST_HART_ID"
 #endif
-
-.section ".text.start"
 
 /* OpenSBI starts us these parameters:
  *   a0: hart id
