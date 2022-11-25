@@ -163,7 +163,9 @@ class DisjointMemoryRegion:
         # 'best' may be something that best matches a power-of-two
         # allocation
         for region in self._regions:
-            if size <= region.size:
+             # @ivanv: HACK, I think the loader when builidng the imx8mm vmm system will overwrite itself so we need this.
+             # if size <= region.size and region.base >= 0x60000000:
+             if size <= region.size: 
                 break
         else:
             raise ValueError(f"Unable to allocate 0x{size:x} bytes.")

@@ -11,14 +11,6 @@ from struct import pack, Struct
 from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
 
-# @ivanv:
-# ASSUMPTION: CONFIG_ARM_PA_SIZE_BITS_40 is set.
-# If we are going to build something better, then the point about seL4 not outlining it's U-boot assumptions
-# should mean that we also outline our assumptions, but in this case about seL4. It's frustrating to find
-# these assumptions scattered throughout comments the code, it's better than nothing, but ideally we should
-# outline everything we think about a certain platform so when someone does a port, their life is easier and
-# they break less shit.
-# /rant
 
 SLOT_BITS = 5
 SLOT_SIZE = 1 << SLOT_BITS
@@ -101,7 +93,7 @@ SEL4_PAGE_TABLE_OBJECT = 12
 SEL4_PAGE_DIRECTORY_OBJECT = 13
 SEL4_VCPU_OBJECT = 14
 
-# @ivanv Notice how this is a differnet kernel object depending on the config
+# @ivanv HYP mode specific
 SEL4_VSPACE_OBJECT = SEL4_PAGE_UPPER_DIRECTORY_OBJECT
 
 SEL4_OBJECT_TYPE_NAMES = {

@@ -287,10 +287,9 @@ class Loader:
                 (((i - lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS) + first_paddr) |
                 (1 << 10) | # access flag
                 (3 << 8) | # make sure the shareability is the same as the kernel's
-                (4 << 2) | #MT_NORMAL memory
+                (4 << 2) | # MT_NORMAL memory
                 (1 << 0) # 2M block
             )
-            # first_paddr += (1 << AARCH64_2MB_BLOCK_BITS)
             boot_lvl2_upper[8*i:8*(i+1)] = pack("<Q", pt_entry)
 
         return {

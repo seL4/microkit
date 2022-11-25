@@ -1072,13 +1072,14 @@ def build_system(
         with open(vm_images[vm], "rb") as f:
             data = f.read()
 
+        assert os.path.getsize(vm_images[vm]) == len(data)
         regions.append(Region(f"VM-IMAGE {vm.name}", phys_addr_next, data))
         aligned_size = round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
         mr = SysMemoryRegion(f"IMAGE:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
         phys_addr_next += aligned_size
         extra_mrs.append(mr)
 
-        mp = SysMap(mr.name, vm.program_image.vaddr, perms="rwx", cached=False, element=None)
+        mp = SysMap(mr.name, vm.program_image.vaddr, perms="rwx", cached=True, element=None)
         pd_extra_maps[vm] += (mp, )
 
         if vm.device_tree:
@@ -1091,7 +1092,7 @@ def build_system(
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
 
-            mp = SysMap(mr.name, vm.device_tree.vaddr, perms="rw", cached=False, element=None)
+            mp = SysMap(mr.name, vm.device_tree.vaddr, perms="rwx", cached=True, element=None)
             pd_extra_maps[vm] += (mp, )
 
         if vm.init_ram_disk:
@@ -1104,7 +1105,7 @@ def build_system(
             phys_addr_next += aligned_size
             extra_mrs.append(mr)
 
-            mp = SysMap(mr.name, vm.init_ram_disk.vaddr, perms="rw", cached=False, element=None)
+            mp = SysMap(mr.name, vm.init_ram_disk.vaddr, perms="rw", cached=True, element=None)
             pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
@@ -1165,6 +1166,7 @@ def build_system(
             fixed_pages.append((phys_addr, mr))
             phys_addr += mr_page_bytes(mr)
 
+    # fixed_pages.sort(key=lambda page: page[0])
     fixed_pages.sort()
 
     # FIXME: At this point we can recombine them into
@@ -1645,13 +1647,21 @@ def build_system(
 
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
-    # print("pt_objects:")
-    # print(pt_objects)
-    for map_cls, descriptors, objects in [
-        # (Sel4PageUpperDirectoryMap, uds, ud_objects), @ivanv change to get non-hypervisor mode working
-        (Sel4PageDirectoryMap, ds, d_objects),
-        (Sel4PageTableMap, pts, pt_objects),
-    ]:
+
+    # @ivanv: explain
+    if kernel_config.hyp_mode:
+        vspace_invocations = [
+            (Sel4PageDirectoryMap, ds, d_objects),
+            (Sel4PageTableMap, pts, pt_objects),
+        ]
+    else:
+        vspace_invocations = [
+            (Sel4PageUpperDirectoryMap, uds, ud_objects),
+            (Sel4PageDirectoryMap, ds, d_objects),
+            (Sel4PageTableMap, pts, pt_objects),
+        ]
+
+    for map_cls, descriptors, objects in vspace_invocations:
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects):
             # print(f"Map invocation for vaddr: {hex(vaddr)}, pd_idx: {pd_idx}")
             vspace_obj = vspace_objects[pd_idx]
@@ -1680,7 +1690,7 @@ def build_system(
                 vspace_obj.cap_addr,
                 vaddr,
                 rights,
-                attrs # @ivanv: fix
+                attrs | SEL4_ARM_PAGE_CACHEABLE # @ivanv: fix
             )
         )
 
@@ -1901,6 +1911,11 @@ def main() -> int:
         hyp_mode = gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"],
     )
 
+    # @ivanv: add support for 44-bit physical addresses
+    # Certain values in hypervisor mode when CONFIG_ARM_PA_SIZE_BITS_44 change.
+    # Need to go through seL4 source code and fix this.
+    assert gen_config["CONFIG_ARM_PA_SIZE_BITS_40"] == 1 and kernel_config.hyp_mode, "TODO: add support for 44-bit physical addresses in hyp mode"
+
     monitor_elf = ElfFile.from_path(monitor_elf_path)
     if len(monitor_elf.segments) > 1:
         raise Exception(f"Monitor ({monitor_elf_path}) has {len(monitor_elf.segments)} segments; must only have one")
@@ -1980,6 +1995,8 @@ def main() -> int:
         system_invocation_data_array += system_invocation._get_raw_invocation(kernel_config)
     system_invocation_data = bytes(system_invocation_data_array)
 
+    # regions: List[Tuple[int, Union[bytes, bytearray], str]] = [(built_system.reserved_region.base, system_invocation_data, "system invocation data")]
+    # regions += [(r.addr, r.data, r.name) for r in built_system.regions]
     regions: List[Tuple[int, Union[bytes, bytearray]]] = [(built_system.reserved_region.base, system_invocation_data)]
     regions += [(r.addr, r.data) for r in built_system.regions]
 
