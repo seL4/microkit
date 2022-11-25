@@ -1149,8 +1149,15 @@ def emulate_kernel_boot(
     first_untyped_cap = fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count
     schedcontrol_cap = fixed_cap_count + paging_cap_count
 
-    device_regions = reserved_region.aligned_power_of_two_regions() + device_memory.aligned_power_of_two_regions()
-    normal_regions = boot_region.aligned_power_of_two_regions() + normal_memory.aligned_power_of_two_regions()
+    # Determining seL4_MaxUntypedBits
+    if kernel_config.arch == KernelArch.AARCH64:
+        max_bits = 47
+    elif kernel_config.arch == KernelArch.RISCV64:
+        max_bits = 38
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+    device_regions = reserved_region.aligned_power_of_two_regions(max_bits) + device_memory.aligned_power_of_two_regions(max_bits)
+    normal_regions = boot_region.aligned_power_of_two_regions(max_bits) + normal_memory.aligned_power_of_two_regions(max_bits)
     untyped_objects = []
     for cap, r in enumerate(device_regions, first_untyped_cap):
         untyped_objects.append(UntypedObject(cap, r, True))

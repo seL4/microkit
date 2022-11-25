@@ -64,9 +64,7 @@ class MemoryRegion:
     base: int
     end: int
 
-    def aligned_power_of_two_regions(self) -> List["MemoryRegion"]:
-        # @ivanv: Note that this is RISC-V 64-bit specific
-        max_bits = 38 # seL4_MaxUntypedBits
+    def aligned_power_of_two_regions(self, max_bits: int) -> List["MemoryRegion"]:
         # Align
         # find the first bit self
         r = []
@@ -148,10 +146,10 @@ class DisjointMemoryRegion:
 
         self._check()
 
-    def aligned_power_of_two_regions(self) -> List[MemoryRegion]:
+    def aligned_power_of_two_regions(self, max_bits: int) -> List[MemoryRegion]:
         r = []
         for region in self._regions:
-            r += region.aligned_power_of_two_regions()
+            r += region.aligned_power_of_two_regions(max_bits)
         return r
 
     def allocate(self, size: int) -> int:
