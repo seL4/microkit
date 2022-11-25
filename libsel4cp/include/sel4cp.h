@@ -45,6 +45,16 @@ void sel4cp_dbg_putc(int c);
  */
 void sel4cp_dbg_puts(const char *s);
 
+static inline void memzero(void *s, unsigned long n)
+{
+    uint8_t *p;
+
+    /* Otherwise, we use a slower, simple memset. */
+    for (p = (uint8_t *)s; n > 0; n--, p++) {
+        *p = 0;
+    }
+}
+
 static inline void
 sel4cp_internal_crash(seL4_Error err)
 {
@@ -75,7 +85,8 @@ static inline void
 sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
 {
     seL4_Error err;
-    seL4_UserContext ctxt = {0};
+    seL4_UserContext ctxt;
+    memzero(&ctxt, sizeof(seL4_UserContext));
     ctxt.pc = entry_point;
     err = seL4_TCB_WriteRegisters(
         BASE_TCB_CAP + pd,
@@ -142,11 +153,18 @@ sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t gro
     return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
 }
 
+static uint64_t
+sel4cp_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
+{
+    return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
+}
+
 static inline void
 sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
 {
     seL4_Error err;
-    seL4_UserContext ctxt = {0};
+    seL4_UserContext ctxt;
+    memzero(&ctxt, sizeof(seL4_UserContext));
     ctxt.pc = entry_point;
     err = seL4_TCB_WriteRegisters(
         BASE_VM_TCB_CAP + vm,
