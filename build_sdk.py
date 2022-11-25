@@ -88,7 +88,7 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/imx8mq/hello")
         }
     ),
-     BoardInfo(
+    BoardInfo(
         name="qemu_arm_virt",
         gcc_cpu="cortex-a53",
         loader_link_address=0x70000000,
@@ -104,7 +104,36 @@ SUPPORTED_BOARDS = (
         examples = {
             "hello": Path("example/qemu_arm_virt/hello")
         }
-    )
+    ),
+    BoardInfo(
+        name="odroidc2",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x20000000,
+        kernel_options = {
+            "KernelPlatform": "odroidc2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelRetypeFanOutLimit": 1024,
+            "KernelArmHypervisorSupport": True,
+            "ARM_HYP": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="imx8mm",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "ARM_HYP": True,
+            "KernelRetypeFanOutLimit": 1024,
+            # "KernelDebugDisablePrefetchers": True
+        },
+        examples = {}
+    ),
 )
 
 SUPPORTED_CONFIGS = (
@@ -398,9 +427,9 @@ def main() -> None:
 
     tool_target = root_dir / "bin" / "sel4cp"
 
-    if not tool_target.exists():
-        test_tool()
-        build_tool(tool_target)
+    # if not tool_target.exists():
+    test_tool()
+    build_tool(tool_target)
 
     build_doc(root_dir)
 

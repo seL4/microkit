@@ -39,6 +39,9 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #elif defined(BOARD_qemu_arm_virt)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
+#elif defined(BOARD_odroidc2)
+#define GICD_BASE 0xc4301000UL
+#define GICC_BASE 0xc4302000UL
 #endif
 
 #define REGION_TYPE_DATA 1
@@ -158,6 +161,31 @@ putc(uint8_t ch)
 {
     while ((*UART_REG(UARTFR) & PL011_UARTFR_TXFF) != 0);
     *UART_REG(UARTDR) = ch;
+}
+#elif defined(BOARD_odroidc2)
+#define UART_WFIFO  0x0
+#define UART_STATUS 0xC
+#define UART_TX_FULL (1 << 21)
+
+#define REG(x) ((volatile uint32_t *)(0xc81004c0 + (x)))
+
+static void
+putc(uint8_t ch)
+{
+    while ((*REG(UART_STATUS) & UART_TX_FULL));
+    *REG(UART_WFIFO) = ch;
+}
+#elif defined(BOARD_imx8mm)
+#define UART_BASE 0x30890000
+#define STAT 0x98
+#define TRANSMIT 0x40
+#define STAT_TDRE (1 << 14)
+
+static void
+putc(uint8_t ch)
+{
+    while (!(*UART_REG(STAT) & STAT_TDRE)) { }
+    *UART_REG(TRANSMIT) = ch;
 }
 #else
 #error Board not defined
@@ -434,7 +462,7 @@ start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
 static void
 configure_gicv2(void)
 {
@@ -480,7 +508,6 @@ configure_gicv2(void)
 }
 #endif
 
-
 int
 main(void)
 {
@@ -501,7 +528,7 @@ main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
     configure_gicv2();
 #endif
 
