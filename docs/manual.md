@@ -600,6 +600,21 @@ You can also use the [Spike simulator](https://github.com/riscv-software-src/ris
 
     $ spike -m4095 [SYSTEM_IMAGE]
 
+## QEMU RISC-V virt
+
+Initial support is available for QEMU's "virt" platform on 64-bit RISC-V.
+
+Note that the SYSTEM_IMAGE below refers to an OpenSBI (v1.0) firmware with a payload built into the image (FW_PAYLOAD). See [here](https://github.com/riscv-software-src/opensbi/blob/master/docs/firmware/fw_payload.md) for details. This command may need to be changed to work with other SBI implementations or other configurations of OpenSBI.
+
+The QEMU command to run is:
+
+    $ qemu-system-riscv64 \
+       -machine virt \
+       -m size=3072M \
+       -nographic \
+       -serial mon:stdio \
+       -bios [SYSTEM_IMAGE]
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.

@@ -27,7 +27,7 @@
  * This is not the most ideal way to do this, however once we add the kernel
  * config it should be nicer. @ivanv
  */
-#if defined(BOARD_spike)
+#if defined(BOARD_spike) || defined(BOARD_qemu_riscv_virt)
 #define FIRST_HART_ID 0
 #elif defined(BOARD_hifive_unleashed)
 #define FIRST_HART_ID 1
