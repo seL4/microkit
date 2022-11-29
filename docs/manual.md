@@ -615,6 +615,12 @@ The QEMU command to run is:
        -serial mon:stdio \
        -bios [SYSTEM_IMAGE]
 
+## HiFive Unleashed
+
+Initial support is available for the HiFive Unleashed development board.
+
+TODO @ivanv: Add documentation for getting the HiFive Unleashed up and running.
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.
