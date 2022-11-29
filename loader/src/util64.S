@@ -158,15 +158,6 @@ finished_\op:
     isb
 .endm
 
-/* @ivanv: temp */
-.macro disable_id_cache sctlr tmp
-    mrs     \tmp, \sctlr
-    bic     \tmp, \tmp, #(1 << 2)
-    bic     \tmp, \tmp, #(1 << 12)
-    msr     \sctlr, \tmp
-    isb
-.endm
-
 /* Standard function decorators. */
 #define BEGIN_FUNC(_name) \
     .global _name ; \
@@ -340,7 +331,6 @@ BEGIN_FUNC(el2_mmu_enable)
 
     /* Disable caches */
     bl      flush_dcache
-    disable_id_cache sctlr_el2, x9
 
     // @ivanv not sure this comment is correct
     /* Ensure I-cache, D-cache and mmu are disabled for EL2/Stage1 */
