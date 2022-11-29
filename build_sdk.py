@@ -16,6 +16,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
+from yaml import load  as yaml_load, Loader as YamlLoader
 
 from typing import Dict, Union, List, Tuple
 
@@ -29,10 +30,25 @@ SEL4CP_EPOCH = 1616367257
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
+AARCH64_TOOLCHAIN = "aarch64-none-elf-"
+RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
+
+# @ivanv: temporary, this can be removed by looking at the architecture in gen_config.yaml
+class BoardArch:
+    AARCH64 = 1
+    RISCV64 = 2
+
+# @ivanv: if we're going to have an optimised build, should we pass in -mtune as well to all the Makefiles
+# for RISC-V builds?
+# @ivanv: explain risc-v specifc arguments to the toolchain in the Makefiles, do the same for ARM since it's
+# useful imo
+# @ivanv: find a way to consistently pass in mabi and march to the various Makefiles
+
 @dataclass
 class BoardInfo:
     name: str
-    gcc_cpu: str
+    arch: BoardArch
+    gcc_flags: str
     loader_link_address: int
     kernel_options: KERNEL_CONFIG_TYPE
     examples: Dict[str, Path]
@@ -48,7 +64,8 @@ class ConfigInfo:
 SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
-        gcc_cpu="cortex-a35",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a35",
         loader_link_address=0x80280000,
         kernel_options = {
             "KernelPlatform": "tqma8xqp1gb",
@@ -61,7 +78,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="zcu102",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x40000000,
         kernel_options = {
             "KernelPlatform": "zynqmp",
@@ -75,7 +93,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="imx8mq_evk",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x41000000,
         kernel_options = {
             "KernelPlatform": "imx8mq-evk",
@@ -86,7 +105,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="imx8mm_evk",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x41000000,
         kernel_options = {
             "KernelPlatform": "imx8mm-evk",
@@ -97,7 +117,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="qemu_arm_virt",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x70000000,
         kernel_options = {
             "KernelPlatform": "qemu-arm-virt",
@@ -108,7 +129,8 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="odroidc2",
-        gcc_cpu="cortex-a53",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
         loader_link_address=0x20000000,
         kernel_options = {
             "KernelPlatform": "odroidc2",
@@ -116,7 +138,37 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
         },
         examples = {}
-    )
+    ),
+    # For RISC-V the link address for the seL4CP loader is dependent on the
+    # previous loader. Currently for RISC-V platforms we use OpenSBI which
+    # is placed at the start of memory and since we use FW_PAYLOAD, it places
+    # the loader at fixed location of 2MiB after the start of memory. If you
+    # were to use a different SBI implementation or not use FW_PAYLOAD with
+    # OpenSBI, you will most likely have to change the loader_link_address.
+    BoardInfo(
+        name="spike",
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "spike",
+        },
+        examples = {
+            "hello": Path("example/spike/hello")
+        }
+    ),
+    BoardInfo(
+        name="hifive_unleashed",
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "hifive",
+        },
+        examples = {}
+    ),
 )
 
 SUPPORTED_CONFIGS = (
@@ -273,9 +325,16 @@ def build_elf_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
-    r = system(
-        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
-    )
+
+    if board.arch == BoardArch.AARCH64:
+        arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV64:
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
+    else:
+        raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
+
+    build_cmd = f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} {arch_args} {board.gcc_flags} SEL4_SDK={sel4_dir.absolute()} {defines_str} make -C {component_name}"
+    r = system(build_cmd)
     if r != 0:
         raise Exception(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"
@@ -311,9 +370,16 @@ def build_lib_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
-    r = system(
-        f"BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make -C {component_name}"
-    )
+
+    if board.arch == BoardArch.AARCH64:
+        arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV64:
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
+    else:
+        raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
+
+    build_cmd = f"BUILD_DIR={build_dir.absolute()} {arch_args} {board.gcc_flags} SEL4_SDK={sel4_dir.absolute()} make -C {component_name}"
+    r = system(build_cmd)
     if r != 0:
         raise Exception(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"
@@ -352,6 +418,24 @@ def build_lib_component(
         dest.unlink(missing_ok=True)
         copy(p, dest)
         dest.chmod(0o444)
+
+
+def build_kernel_config_component(
+    root_dir: Path,
+    build_dir: Path,
+    board: BoardInfo,
+    config: ConfigInfo,
+) -> None:
+    # Here we are just copying the auto-generated kernel config, "gen_config.yaml".
+    sel4_build_dir = build_dir / board.name / config.name / "sel4" / "build"
+    sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.yaml"
+    dest = root_dir / "board" / board.name / config.name / "config.yaml"
+    with open(sel4_gen_config, "r") as f:
+        sel4_config = yaml_load(f, Loader=YamlLoader)
+
+    dest.unlink(missing_ok=True)
+    copy(sel4_gen_config, dest)
+    dest.chmod(0o444)
 
 
 def main() -> None:
@@ -403,6 +487,7 @@ def main() -> None:
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address))
             ]
+            kernel_config = build_kernel_config_component(root_dir, build_dir, board, config)
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)

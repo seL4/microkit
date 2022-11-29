@@ -32,7 +32,8 @@ Please file an issue if additional packages are required.
 * python3.9
 * python3.9-venv
 * musl-1.2.2
-* ARM GCC compiler; 10.2-2020.11
+* ARM GCC toolchain; 10.2-2020.11
+* RISC-V GCC toolchain; 10.2.0-2020.12.8
 
 On Ubuntu 18.04 there are no packages available for musl-1.2.2; it must be compiled from source.
 On Ubuntu 18.04 Python 3.9 is available via the *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
@@ -60,6 +61,14 @@ https://developer.arm.com/tools-and-software/open-source-software/developer-tool
 The specific version used for development is the x86_64-aarch64-none-elf version:
 
 https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz?revision=79f65c42-1a1b-43f2-acb7-a795c8427085&hash=61BBFB526E785D234C5D8718D9BA8E61
+
+The RISC-V toolchain is available from:
+
+https://github.com/sifive/freedom-tools/releases/tag/v2020.12.0
+
+The specific version used for development is the x86_64-linux-ubuntu14 version:
+
+https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
 
 Note: There are no plans to support development of sel4cp on any platforms other than Linux x86_64.
 

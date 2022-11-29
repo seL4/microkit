@@ -581,6 +581,25 @@ An QEMU command line:
        -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
        -serial mon:stdio
 
+## Spike
+
+Initial support is available for the Spike on 64-bit RISC-V.
+
+Note that the SYSTEM_IMAGE below refers to an OpenSBI (v1.0) firmware with a payload built into the image (FW_PAYLOAD). See [here](https://github.com/riscv-software-src/opensbi/blob/master/docs/firmware/fw_payload.md) for details. This command may need to be changed to work with other SBI implementations or other configurations of OpenSBI.
+
+The QEMU command to run is:
+
+    $ qemu-system-riscv64 \
+       -machine spike \
+       -m size=4095M  \
+       -nographic \
+       -serial mon:stdio \
+       -bios [SYSTEM_IMAGE]
+
+You can also use the [Spike simulator](https://github.com/riscv-software-src/riscv-isa-sim), the command is:
+
+    $ spike -m4095 [SYSTEM_IMAGE]
+
 # Rationale
 
 This section describes the rationales driving the sel4cp design choices.

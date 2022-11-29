@@ -10,82 +10,134 @@ from struct import pack, Struct
 
 from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
+from sel4coreplat.sysxml import SysMap
 
 
-SLOT_BITS = 5
-SLOT_SIZE = 1 << SLOT_BITS
+class KernelArch:
+    AARCH64 = 1
+    RISCV64 = 2
 
-SEL4_TCB_SIZE = (1 << 11)
-SEL4_ENDPOINT_SIZE = (1 << 4)
-SEL4_NOTIFICATION_SIZE = (1 << 6)
-SEL4_REPLY_SIZE = (1 << 5)
-SEL4_PAGE_TABLE_SIZE = (1 << 12)
-SEL4_PAGE_DIRECTORY_SIZE = (1 << 12)
-SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 12)
-SEL4_LARGE_PAGE_SIZE = (2 * 1024 * 1024)
-SEL4_SMALL_PAGE_SIZE = (4 * 1024)
-SEL4_VSPACE_SIZE = (4 * 1024)
-SEL4_ASID_POOL_SIZE = (1 << 12)
 
+@dataclass(frozen=True, eq=True)
+class KernelConfig:
+    arch: KernelArch
+    word_size: int
+    minimum_page_size: int
+    paddr_user_device_top: int
+    kernel_frame_size: int
+    root_cnode_bits: int
+    cap_address_bits: int
+    fan_out_limit: int
+    have_fpu: bool
+    page_table_levels: int
 
 # Kernel Objects:
 
-SEL4_UNTYPED_OBJECT = 0
+# @ivanv: comment how these work
+class Sel4Object(IntEnum):
+    Untyped = 0
+    Tcb = 1
+    Endpoint = 2
+    Notification = 3
+    CNode = 4
+    SchedContext = 5
+    Reply = 6
+    SmallPage = 7
+    LargePage = 8
+    HugePage = 9
+    PageTable = 10
+    PageDirectory = 11
+    PageUpperDirectory = 12
+    PageGlobalDirectory = 13
+    VSpace = 14
 
-SEL4_TCB_OBJECT = 1
-SEL4_ENDPOINT_OBJECT = 2
-SEL4_NOTIFICATION_OBJECT = 3
-SEL4_CNODE_OBJECT = 4
-SEL4_SCHEDCONTEXT_OBJECT = 5
-SEL4_REPLY_OBJECT = 6
+    def get_id(self, kernel_config: KernelConfig) -> int:
+        if kernel_config.arch == KernelArch.AARCH64:
+            if self in AARCH64_OBJECTS:
+                return AARCH64_OBJECTS[self]
+            else:
+                return self
+        elif kernel_config.arch == KernelArch.RISCV64:
+            if self in RISCV64_OBJECTS:
+                return RISCV64_OBJECTS[self]
+            else:
+                return self
+        else:
+            raise Exception(f"Unknown kernel architecture {arch}")
 
-SEL4_HUGE_PAGE_OBJECT = 7
-SEL4_PAGE_UPPER_DIRECTORY_OBJECT = 8
-SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT = 9
-SEL4_SMALL_PAGE_OBJECT = 10
-SEL4_LARGE_PAGE_OBJECT = 11
-SEL4_PAGE_TABLE_OBJECT = 12
-SEL4_PAGE_DIRECTORY_OBJECT = 13
 
-SEL4_VSPACE_OBJECT = SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT
+# Note AArch32 will have a different virtual address space and hence seL4 page
+# objects will look different there.
+AARCH64_OBJECTS = {
+    Sel4Object.HugePage: 7,
+    Sel4Object.PageUpperDirectory: 8,
+    Sel4Object.PageGlobalDirectory: 9,
+    Sel4Object.SmallPage: 10,
+    Sel4Object.LargePage: 11,
+    Sel4Object.PageTable: 12,
+    Sel4Object.PageDirectory: 13,
+     # A VSpace on AArch64 is represented by a PageGlobalDirectory
+    Sel4Object.VSpace: 9,
+}
+
+
+# Note that here we make the assumption that we are using Sv39 platforms as
+# larger address spaces (Sv48, Sv59) have Tera pages and smaller address spaces
+# (Sv32) lack Giga pages.
+RISCV64_OBJECTS = {
+    Sel4Object.HugePage: 7,
+    Sel4Object.SmallPage: 8,
+    Sel4Object.LargePage: 9,
+    Sel4Object.PageTable: 10,
+    # A VSpace on RISC-V is represented by a PageTable
+    Sel4Object.VSpace: 10,
+}
+
 
 SEL4_OBJECT_TYPE_NAMES = {
-    SEL4_UNTYPED_OBJECT: "SEL4_UNTYPED_OBJECT",
-    SEL4_TCB_OBJECT: "SEL4_TCB_OBJECT",
-    SEL4_ENDPOINT_OBJECT: "SEL4_ENDPOINT_OBJECT",
-    SEL4_NOTIFICATION_OBJECT: "SEL4_NOTIFICATION_OBJECT",
-    SEL4_CNODE_OBJECT: "SEL4_CNODE_OBJECT",
-    SEL4_SCHEDCONTEXT_OBJECT: "SEL4_SCHEDCONTEXT_OBJECT",
-    SEL4_REPLY_OBJECT: "SEL4_REPLY_OBJECT",
-    SEL4_HUGE_PAGE_OBJECT: "SEL4_HUGE_PAGE_OBJECT",
-    SEL4_PAGE_UPPER_DIRECTORY_OBJECT: "SEL4_PAGE_UPPER_DIRECTORY_OBJECT",
-    SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT: "SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT",
-    SEL4_SMALL_PAGE_OBJECT: "SEL4_SMALL_PAGE_OBJECT",
-    SEL4_LARGE_PAGE_OBJECT: "SEL4_LARGE_PAGE_OBJECT",
-    SEL4_PAGE_TABLE_OBJECT: "SEL4_PAGE_TABLE_OBJECT",
-    SEL4_PAGE_DIRECTORY_OBJECT: "SEL4_PAGE_DIRECTORY_OBJECT",
+    Sel4Object.Untyped: "SEL4_UNTYPED_OBJECT",
+    Sel4Object.Tcb: "SEL4_TCB_OBJECT",
+    Sel4Object.Endpoint: "SEL4_ENDPOINT_OBJECT",
+    Sel4Object.Notification: "SEL4_NOTIFICATION_OBJECT",
+    Sel4Object.CNode: "SEL4_CNODE_OBJECT",
+    Sel4Object.SchedContext: "SEL4_SCHEDCONTEXT_OBJECT",
+    Sel4Object.Reply: "SEL4_REPLY_OBJECT",
+    Sel4Object.SmallPage: "SEL4_SMALL_PAGE_OBJECT",
+    Sel4Object.LargePage: "SEL4_LARGE_PAGE_OBJECT",
+    Sel4Object.HugePage: "SEL4_HUGE_PAGE_SIZE",
+    Sel4Object.PageTable: "SEL4_PAGE_TABLE_OBJECT",
+    Sel4Object.PageDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
+    Sel4Object.PageUpperDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
+    Sel4Object.VSpace: "SEL4_VSPACE_OBJECT",
 }
 
+# Note that these sizes can be architecture specific but for now we only
+# support 64-bit ARM and RISC-V where these happen to be the same.
 FIXED_OBJECT_SIZES = {
-    SEL4_TCB_OBJECT: SEL4_TCB_SIZE,
-    SEL4_ENDPOINT_OBJECT: SEL4_ENDPOINT_SIZE,
-    SEL4_NOTIFICATION_OBJECT: SEL4_NOTIFICATION_SIZE,
-    SEL4_REPLY_OBJECT: SEL4_REPLY_SIZE,
+    Sel4Object.Tcb: 1 << 11,
+    Sel4Object.Endpoint: 1 << 4,
+    Sel4Object.Notification: 1 << 6,
+    Sel4Object.Reply: 1 << 5,
 
-    SEL4_VSPACE_OBJECT: SEL4_VSPACE_SIZE,
-    SEL4_PAGE_UPPER_DIRECTORY_OBJECT: SEL4_PAGE_UPPER_DIRECTORY_SIZE,
-    SEL4_PAGE_DIRECTORY_OBJECT: SEL4_PAGE_DIRECTORY_SIZE,
-    SEL4_PAGE_TABLE_OBJECT: SEL4_PAGE_TABLE_SIZE,
-
-    SEL4_LARGE_PAGE_OBJECT: SEL4_LARGE_PAGE_SIZE,
-    SEL4_SMALL_PAGE_OBJECT: SEL4_SMALL_PAGE_SIZE,
+    Sel4Object.VSpace: 1 << 12,
+    Sel4Object.HugePage: 1 << 30,
+    Sel4Object.SmallPage: 1 << 12,
+    Sel4Object.LargePage: 1 << 21,
+    Sel4Object.PageTable: 1 << 12,
+    Sel4Object.PageDirectory: 1 << 12,
+    Sel4Object.PageUpperDirectory: 1 << 12,
 }
+
 
 VARIABLE_SIZE_OBJECTS = {
-    SEL4_CNODE_OBJECT,
-    SEL4_UNTYPED_OBJECT,
-    SEL4_SCHEDCONTEXT_OBJECT,
+    Sel4Object.CNode,
+    Sel4Object.Untyped,
+    Sel4Object.SchedContext,
 }
+
+# @ivanv: while it's probably hard to get these constants wrong,
+# it would be nice to explain a bit + say where they are defined in the kernel
+SEL4_SLOT_SIZE = (1 << 5)
 
 SEL4_RIGHTS_WRITE = 1
 SEL4_RIGHTS_READ = 2
@@ -100,9 +152,10 @@ SEL4_ARM_EXECUTE_NEVER = 4
 
 SEL4_ARM_DEFAULT_VMATTRIBUTES = 3
 
-SEL4_ARM_CACHE_I = 1
-SEL4_ARM_CACHE_D = 2
-SEL4_ARM_CACHE_ID = 3
+SEL4_RISCV_DEFAULT_VMATTRIBUTES = 0
+SEL4_RISCV_EXECUTE_NEVER = 1
+
+SEL4_RISCV_PAGE_BITS = 12
 
 # FIXME: There should be a better way of determining these, so they don't
 # have to be hard coded
@@ -113,7 +166,7 @@ INIT_VSPACE_CAP_ADDRESS = 3
 IRQ_CONTROL_CAP_ADDRESS = 4  # Singleton
 ASID_CONTROL_CAP_ADDRESS = 5  # Singleton
 INIT_ASID_POOL_CAP_ADDRESS = 6
-IO_PORT_CONTROL_CAP_ADDRESS = 7  # Null on this platform
+IO_PORT_CONTROL_CAP_ADDRESS = 7  # Null on this platform @ivanv clarify "this platform"
 IO_SPACE_CAP_ADDRESS = 8  # Null on this platform
 BOOT_INFO_FRAME_CAP_ADDRESS = 9
 INIT_THREAD_IPC_BUFFER_CAP_ADDRESS = 10
@@ -129,43 +182,187 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
     return (end - start) // (1 << bits)
 
 
-def _get_arch_n_paging(region: MemoryRegion) -> int:
-    PT_INDEX_OFFSET  =  12
-    PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
-    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
-    PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
+def _get_arch_n_paging(arch: KernelArch, region: MemoryRegion) -> int:
+    if arch == KernelArch.RISCV64:
+        # ASSUMPTION: RISC-V platforms use Sv39 which means the kernel uses
+        # 3 page table levels. See CONFIG_PT_LEVELS for details.
+        # @ivanv: should probably change this to support whatever CONFIG_PT_LEVEL is
+        PT_INDEX_OFFSET  =  12
+        PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
+        PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
 
-    return (
-        _get_n_paging(region, PGD_INDEX_OFFSET) +
-        _get_n_paging(region, PUD_INDEX_OFFSET) +
-        _get_n_paging(region, PD_INDEX_OFFSET)
-    )
+        return (
+            _get_n_paging(region, PUD_INDEX_OFFSET) +
+            _get_n_paging(region, PD_INDEX_OFFSET)
+        )
+    elif arch == KernelArch.AARCH64:
+        PT_INDEX_OFFSET  =  12
+        PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
+        PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
+        PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
+
+        return (
+            _get_n_paging(region, PGD_INDEX_OFFSET) +
+            _get_n_paging(region, PUD_INDEX_OFFSET) +
+            _get_n_paging(region, PD_INDEX_OFFSET)
+        )
+    else:
+        raise Exception(f"Unknown kernel architecture {arch}")
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
-    # FIXME: These constants should ideally come from the config / kernel
-    # binary not be hard coded here.
-    # But they are constant so it isn't too bad.
-    # This is specifically for aarch64
-    slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = 12  # CONFIG_ROOT_CNODE_SIZE_BITS
-    tcb_bits = 11  # seL4_TCBBits
-    page_bits = 12  # seL4_PageBits
-    asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = 12  #seL4_VSpaceBits
-    page_table_bits = 12  # seL4_PageTableBits
-    min_sched_context_bits = 8 # seL4_MinSchedContextBits
+# Unlike on ARM, seL4_UserContext is the same on 32-bit and 64-bit RISC-V
+class Sel4RiscvRegs:
+    """
+    typedef struct seL4_UserContext_ {
+        seL4_Word pc;
+        seL4_Word ra;
+        seL4_Word sp;
+        seL4_Word gp;
 
-    size = 0
-    size += 1 << (root_cnode_bits + slot_bits)
-    size += 1 << (tcb_bits)
-    size += 2 * (1 << page_bits)
-    size += 1 << asid_pool_bits
-    size += 1 << vspace_bits
-    size += _get_arch_n_paging(initial_task_region) * (1 << page_table_bits)
-    size += 1 <<min_sched_context_bits
+        seL4_Word s0;
+        seL4_Word s1;
+        seL4_Word s2;
+        seL4_Word s3;
+        seL4_Word s4;
+        seL4_Word s5;
+        seL4_Word s6;
+        seL4_Word s7;
+        seL4_Word s8;
+        seL4_Word s9;
+        seL4_Word s10;
+        seL4_Word s11;
 
-    return size
+        seL4_Word a0;
+        seL4_Word a1;
+        seL4_Word a2;
+        seL4_Word a3;
+        seL4_Word a4;
+        seL4_Word a5;
+        seL4_Word a6;
+        seL4_Word a7;
+
+        seL4_Word t0;
+        seL4_Word t1;
+        seL4_Word t2;
+        seL4_Word t3;
+        seL4_Word t4;
+        seL4_Word t5;
+        seL4_Word t6;
+
+        seL4_Word tp;
+    } seL4_UserContext;
+
+    """
+    # FIXME: This is pretty terrible, but for now... explicit better than implicit
+    # NOTE: We could optimize so that we can see how many register are actually set
+    # in a given set to reduce space
+    def __init__(self,
+        pc: Optional[int] = None,
+        ra: Optional[int] = None,
+        sp: Optional[int] = None,
+        gp: Optional[int] = None,
+        s0: Optional[int] = None,
+        s1: Optional[int] = None,
+        s2: Optional[int] = None,
+        s3: Optional[int] = None,
+        s4: Optional[int] = None,
+        s5: Optional[int] = None,
+        s6: Optional[int] = None,
+        s7: Optional[int] = None,
+        s8: Optional[int] = None,
+        s9: Optional[int] = None,
+        s10: Optional[int] = None,
+        s11: Optional[int] = None,
+        a0: Optional[int] = None,
+        a1: Optional[int] = None,
+        a2: Optional[int] = None,
+        a3: Optional[int] = None,
+        a4: Optional[int] = None,
+        a5: Optional[int] = None,
+        a6: Optional[int] = None,
+        a7: Optional[int] = None,
+        t0: Optional[int] = None,
+        t1: Optional[int] = None,
+        t2: Optional[int] = None,
+        t3: Optional[int] = None,
+        t4: Optional[int] = None,
+        t5: Optional[int] = None,
+        t6: Optional[int] = None,
+        tp: Optional[int] = None,
+    ):
+        self.pc          = pc
+        self.ra          = ra
+        self.sp          = sp
+        self.gp          = gp
+        self.s0          = s0
+        self.s1          = s1
+        self.s2          = s2
+        self.s3          = s3
+        self.s4          = s4
+        self.s5          = s5
+        self.s6          = s6
+        self.s7          = s7
+        self.s8          = s8
+        self.s9          = s9
+        self.s10         = s10
+        self.s11         = s11
+        self.a0          = a0
+        self.a1          = a1
+        self.a2          = a2
+        self.a3          = a3
+        self.a4          = a4
+        self.a5          = a5
+        self.a6          = a6
+        self.a7          = a7
+        self.t0          = t0
+        self.t1          = t1
+        self.t2          = t2
+        self.t3          = t3
+        self.t4          = t4
+        self.t5          = t5
+        self.t6          = t6
+        self.tp          = tp
+
+    def count(self) -> int:
+        # FIXME: Optimize when most are none
+        return len(self.as_tuple())
+
+    def as_tuple(self) -> Tuple[int, ...]:
+        raw = (
+        self.pc ,
+        self.ra ,
+        self.sp ,
+        self.gp ,
+        self.s0 ,
+        self.s1 ,
+        self.s2 ,
+        self.s3 ,
+        self.s4 ,
+        self.s5 ,
+        self.s6 ,
+        self.s7 ,
+        self.s8 ,
+        self.s9 ,
+        self.s10,
+        self.s11,
+        self.a0 ,
+        self.a1 ,
+        self.a2 ,
+        self.a3 ,
+        self.a4 ,
+        self.a5 ,
+        self.a6 ,
+        self.a7 ,
+        self.t0 ,
+        self.t1 ,
+        self.t2 ,
+        self.t3 ,
+        self.t4 ,
+        self.t5 ,
+        self.t6 ,
+        self.tp ,
+        )
+        return tuple(0 if x is None else x for x in raw)
 
 
 class Sel4Aarch64Regs:
@@ -263,7 +460,7 @@ typedef struct seL4_UserContext_ {
         return len(self.as_tuple())
 
     def as_tuple(self) -> Tuple[int, ...]:
-        raw =  (
+        raw = (
         self.pc         ,
         self.sp         ,
         self.spsr       ,
@@ -303,7 +500,8 @@ typedef struct seL4_UserContext_ {
         )
         return tuple(0 if x is None else x for x in raw)
 
-
+# Note that each label has a specified value as this is
+# what it is used to invoke the right system call to seL4.
 class Sel4Label(IntEnum):
     # Untyped
     UntypedRetype = 1
@@ -346,6 +544,13 @@ class Sel4Label(IntEnum):
     SchedContextUnbindObject = 33
     SchedContextConsume = 34
     SchedContextYieldTo = 35
+
+
+# The reason we need separation for arch specific objects is because these
+# values for each label are the enum values that the kernel uses. So if you
+# target ARM, you'll find that a different syscall will correspond to the
+# same enum value then if you target RISC-V or another architecture.
+class Sel4LabelARM(IntEnum):
     # ARM V Space
     ARMVSpaceClean_Data = 36
     ARMVSpaceInvalidate_Data = 37
@@ -356,7 +561,7 @@ class Sel4Label(IntEnum):
     ARMPageUpperDirectoryUnmap = 41
     ARMPageDirectoryMap = 42
     ARMPageDirectoryUnmap = 43
-    # ARM Page table
+    # ARM Page Table
     ARMPageTableMap = 44
     ARMPageTableUnmap = 45
     # ARM Page
@@ -367,11 +572,26 @@ class Sel4Label(IntEnum):
     ARMPageCleanInvalidate_Data = 50
     ARMPageUnify_Instruction = 51
     ARMPageGetAddress = 52
-    # ARM Asid
+    # ARM ASID
     ARMASIDControlMakePool = 53
     ARMASIDPoolAssign = 54
     # ARM IRQ
     ARMIRQIssueIRQHandlerTrigger = 55
+
+
+class Sel4LabelRISCV(IntEnum):
+    # RISC-V Page Table
+    RISCVPageTableMap = 36
+    RISCVPageTableUnmap = 37
+    # RISC-V Page
+    RISCVPageMap = 38
+    RISCVPageUnmap = 39
+    RISCVPageGetAddress = 40
+    # RISC-V ASID
+    RISCVASIDControlMakePool = 41
+    RISCVASIDPoolAssign = 42
+    # RISC-V IRQ
+    RISCVIRQIssueIRQHandlerTrigger = 43
 
 
 ### Invocations
@@ -420,7 +640,7 @@ class Sel4Invocation:
         assert length < 0x80
         return label << 12 | caps << 9 | extra_caps << 7 | length
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
         val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
         return self._generic_invocation(cap_args, val_args)
@@ -449,6 +669,19 @@ class Sel4UntypedRetype(Sel4Invocation):
     node_depth: int
     node_offset: int
     num_objects: int
+
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
+        # @ivanv: HACK
+        old_object_type = self.object_type
+        self.object_type = Sel4Object.get_id(self.object_type, kernel_config)
+
+        cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
+        val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
+
+        invocation = self._generic_invocation(cap_args, val_args)
+        self.object_type = old_object_type
+
+        return invocation
 
 
 @dataclass
@@ -500,7 +733,7 @@ class Sel4TcbResume(Sel4Invocation):
 
 
 @dataclass
-class Sel4TcbWriteRegisters(Sel4Invocation):
+class Sel4ARMTcbWriteRegisters(Sel4Invocation):
     _object_type = "TCB"
     _method_name = "WriteRegisters"
     _extra_caps = ()
@@ -510,13 +743,34 @@ class Sel4TcbWriteRegisters(Sel4Invocation):
     arch_flags: int
     regs: Sel4Aarch64Regs
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         params = (
             self.arch_flags << 8 | 1 if self.resume else 0,
             self.regs.count()
         ) + self.regs.as_tuple()
 
         return self._generic_invocation((), params)
+
+
+@dataclass
+class Sel4RISCVTcbWriteRegisters(Sel4Invocation):
+    _object_type = "TCB"
+    _method_name = "WriteRegisters"
+    _extra_caps = ()
+    label = Sel4Label.TCBWriteRegisters
+    tcb: int
+    resume: bool
+    arch_flags: int
+    regs: Sel4RiscvRegs
+
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
+        params = (
+            self.arch_flags << 8 | 1 if self.resume else 0,
+            self.regs.count()
+        ) + self.regs.as_tuple()
+
+        return self._generic_invocation((), params)
+
 
 @dataclass
 class Sel4TcbBindNotification(Sel4Invocation):
@@ -533,9 +787,19 @@ class Sel4AsidPoolAssign(Sel4Invocation):
     _object_type = "ASID Pool"
     _method_name = "Assign"
     _extra_caps = ("vspace", )
-    label = Sel4Label.ARMASIDPoolAssign
     asid_pool: int
     vspace: int
+
+    def __init__(self, arch: KernelArch, asid_pool: int, vspace: int):
+        if arch == KernelArch.AARCH64:
+            self.label = Sel4LabelARM.ARMASIDPoolAssign
+        elif arch == KernelArch.RISCV64:
+            self.label = Sel4LabelRISCV.RISCVASIDPoolAssign
+        else:
+            raise Exception(f"Unexpected kernel architecture: {arch}")
+
+        self.asid_pool = asid_pool
+        self.vspace = vspace
 
 
 @dataclass
@@ -562,11 +826,11 @@ class Sel4IrqHandlerSetNotification(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageUpperDirectoryMap(Sel4Invocation):
+class Sel4ARMPageUpperDirectoryMap(Sel4Invocation):
     _object_type = "Page Upper Directory"
     _method_name = "Map"
     _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageUpperDirectoryMap
+    label = Sel4LabelARM.ARMPageUpperDirectoryMap
     page_upper_directory: int
     vspace: int
     vaddr: int
@@ -574,11 +838,11 @@ class Sel4PageUpperDirectoryMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageDirectoryMap(Sel4Invocation):
+class Sel4ARMPageDirectoryMap(Sel4Invocation):
     _object_type = "Page Directory"
     _method_name = "Map"
     _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageDirectoryMap
+    label = Sel4LabelARM.ARMPageDirectoryMap
     page_directory: int
     vspace: int
     vaddr: int
@@ -586,11 +850,11 @@ class Sel4PageDirectoryMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageTableMap(Sel4Invocation):
+class Sel4ARMPageTableMap(Sel4Invocation):
     _object_type = "Page Table"
     _method_name = "Map"
     _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageTableMap
+    label = Sel4LabelARM.ARMPageTableMap
     page_table: int
     vspace: int
     vaddr: int
@@ -598,11 +862,36 @@ class Sel4PageTableMap(Sel4Invocation):
 
 
 @dataclass
-class Sel4PageMap(Sel4Invocation):
+class Sel4ARMPageMap(Sel4Invocation):
     _object_type = "Page"
     _method_name = "Map"
     _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageMap
+    label = Sel4LabelARM.ARMPageMap
+    page: int
+    vspace: int
+    vaddr: int
+    rights: int
+    attr: int
+
+
+@dataclass
+class Sel4RISCVPageTableMap(Sel4Invocation):
+    _object_type = "Page Table"
+    _method_name = "Map"
+    _extra_caps = ("vspace", )
+    label = Sel4LabelRISCV.RISCVPageTableMap
+    page_table: int
+    vspace: int
+    vaddr: int
+    attr: int
+
+
+@dataclass
+class Sel4RISCVPageMap(Sel4Invocation):
+    _object_type = "Page"
+    _method_name = "Map"
+    _extra_caps = ("vspace", )
+    label = Sel4LabelRISCV.RISCVPageMap
     page: int
     vspace: int
     vaddr: int
@@ -654,6 +943,7 @@ class Sel4SchedControlConfigureFlags(Sel4Invocation):
     badge: int
     flags: int
 
+
 @dataclass(frozen=True, eq=True)
 class UntypedObject:
     cap: int
@@ -669,7 +959,6 @@ class UntypedObject:
         return lsb(self.region.end - self.region.base)
 
 
-
 @dataclass(frozen=True, eq=True)
 class KernelBootInfo:
     fixed_cap_count: int
@@ -680,17 +969,6 @@ class KernelBootInfo:
     first_available_cap: int
 
 
-@dataclass(frozen=True, eq=True)
-class KernelConfig:
-    word_size: int
-    minimum_page_size: int
-    paddr_user_device_top: int
-    kernel_frame_size: int
-    init_cnode_bits: int
-    cap_address_bits: int
-    fan_out_limit: int
-
-
 @dataclass
 class _KernelPartialBootInfo:
     device_memory: DisjointMemoryRegion
@@ -698,18 +976,35 @@ class _KernelPartialBootInfo:
     boot_region: MemoryRegion
 
 
-def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
-    """Extra the physical address of all kernel (only) devices"""
+def _kernel_device_addrs(arch: KernelArch, kernel_elf: ElfFile) -> List[int]:
+    """Extract the physical address of all kernel (only) devices"""
     kernel_devices = []
-    kernel_frame_t = Struct("<QQII")
-    vaddr, size = kernel_elf.find_symbol("kernel_device_frames")
-    p_regs = kernel_elf.get_data(vaddr, size)
-    offset = 0
-    while offset < size:
-        paddr, pptr, xn, ua = kernel_frame_t.unpack_from(p_regs, offset)
-        if not ua:
-            kernel_devices.append(paddr)
-        offset += kernel_frame_t.size
+    if arch == KernelArch.AARCH64:
+        kernel_frame_t = Struct("<QQII")
+    elif arch == KernelArch.RISCV64:
+        # @ivanv: for some reason, only on the HiFive, having QQI does not work
+        kernel_frame_t = Struct("<QQQ")
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+    # NOTE: Certain platforms may not have any kernel devices specified in the
+    # device tree (such as the Spike). Since the kernel_devices_frames array
+    # will be empty the kernel the compiler may optimise out the symbol so we
+    # must also check that the symbol actually exists in the ELF.
+    res = kernel_elf.find_symbol_if_exists("kernel_device_frames")
+    if res is not None:
+        vaddr, size = res
+        p_regs = kernel_elf.get_data(vaddr, size)
+        offset = 0
+        while offset < size:
+            if arch == KernelArch.AARCH64:
+                paddr, pptr, xn, ua = kernel_frame_t.unpack_from(p_regs, offset)
+            elif arch == KernelArch.RISCV64:
+                paddr, pptr, ua = kernel_frame_t.unpack_from(p_regs, offset)
+            else:
+                raise Exception(f"Unexpected kernel architecture: {arch}")
+            if not ua:
+                kernel_devices.append(paddr)
+            offset += kernel_frame_t.size
 
     return kernel_devices
 
@@ -744,9 +1039,9 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
     return MemoryRegion(base, ki_boot_end_p)
 
 
-def _rootserver_max_size_bits() -> int:
+def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = 12  # CONFIG_ROOT_CNODE_SIZE_BITS
+    root_cnode_bits = kernel_config.root_cnode_bits
     vspace_bits = 12  #seL4_VSpaceBits
 
     cnode_size_bits = root_cnode_bits + slot_bits
@@ -772,11 +1067,18 @@ def _kernel_partial_boot(
     device_memory.insert_region(0, kernel_config.paddr_user_device_top)
 
     # Next, remove all the kernel devices.
-    # NOTE: There is an assumption each kernel device is one frame
-    # in size only. It's possible this assumption could break in the
-    # future.
-    for paddr in _kernel_device_addrs(kernel_elf):
-        device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size)
+    # NOTE: There is an assumption each kernel device is uniform
+    # in size, this is based on the map_kernel_devices function in seL4.
+    # It is possible that this assumption could break in the future.
+    if kernel_config.arch == KernelArch.RISCV64:
+        device_size = 1 << 21
+    elif kernel_config.arch == KernelArch.AARCH64:
+        device_size = 1 << 12
+    else:
+        raise Exception(f"Unexpected kernel architecture {config.arch}")
+
+    for paddr in _kernel_device_addrs(kernel_config.arch, kernel_elf):
+        device_memory.remove_region(paddr, paddr + device_size)
 
     # Remove all the actual physical memory from the device regions
     # but add it all to the actual normal memory regions
@@ -800,7 +1102,7 @@ def emulate_kernel_boot_partial(
     ) -> DisjointMemoryRegion:
     """Return the memory available after a 'partial' boot emulation.
 
-    This allows the caller to allocation a reserved memory region at an
+    This allows the caller to allocate a reserved memory region at an
     appropriate location.
     """
     partial_info = _kernel_partial_boot(kernel_config, kernel_elf)
@@ -826,8 +1128,8 @@ def emulate_kernel_boot(
     normal_memory.remove_region(reserved_region.base, reserved_region.end)
 
     # Now, the tricky part! determine which memory is used for the initial task objects
-    initial_objects_size = calculate_rootserver_size(initial_task_virt_region)
-    initial_objects_align = _rootserver_max_size_bits()
+    initial_objects_size = calculate_rootserver_size(kernel_config, initial_task_virt_region)
+    initial_objects_align = _rootserver_max_size_bits(kernel_config)
 
     # Find an appropriate region of normal memory to allocate the objects
     # from; this follows the same algorithm used within the kernel boot code
@@ -842,13 +1144,20 @@ def emulate_kernel_boot(
 
     fixed_cap_count = 0xf
     sched_control_cap_count = 1
-    paging_cap_count = _get_arch_n_paging(initial_task_virt_region)
+    paging_cap_count = _get_arch_n_paging(kernel_config.arch, initial_task_virt_region)
     page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
     first_untyped_cap = fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count
     schedcontrol_cap = fixed_cap_count + paging_cap_count
 
-    device_regions = reserved_region.aligned_power_of_two_regions() + device_memory.aligned_power_of_two_regions()
-    normal_regions = boot_region.aligned_power_of_two_regions() + normal_memory.aligned_power_of_two_regions()
+    # Determining seL4_MaxUntypedBits
+    if kernel_config.arch == KernelArch.AARCH64:
+        max_bits = 47
+    elif kernel_config.arch == KernelArch.RISCV64:
+        max_bits = 38
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+    device_regions = reserved_region.aligned_power_of_two_regions(max_bits) + device_memory.aligned_power_of_two_regions(max_bits)
+    normal_regions = boot_region.aligned_power_of_two_regions(max_bits) + normal_memory.aligned_power_of_two_regions(max_bits)
     untyped_objects = []
     for cap, r in enumerate(device_regions, first_untyped_cap):
         untyped_objects.append(UntypedObject(cap, r, True))
@@ -863,3 +1172,65 @@ def emulate_kernel_boot(
         first_available_cap = first_untyped_cap + len(device_regions) + len(normal_regions),
         untyped_objects = untyped_objects,
     )
+
+
+def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: MemoryRegion) -> int:
+    # FIXME: These constants should ideally come from the config / kernel
+    # binary not be hard coded here.
+    # But they are constant so it isn't too bad.
+    slot_bits = 5  # seL4_SlotBits
+    root_cnode_bits = kernel_config.root_cnode_bits # CONFIG_ROOT_CNODE_SIZE_BITS
+    if kernel_config.arch == KernelArch.RISCV64:
+        if kernel_config.have_fpu:
+            tcb_bits = 11 # seL4_TCBBits
+        else:
+            tcb_bits = 10  # seL4_TCBBits
+    else:
+        tcb_bits = 11  # seL4_TCBBits
+    page_bits = 12 # seL4_PageBits
+    asid_pool_bits = 12  # seL4_ASIDPoolBits
+    vspace_bits = 12 # seL4_VSpaceBits
+    page_table_bits = 12  # seL4_PageTableBits
+    min_sched_context_bits = 8 # seL4_MinSchedContextBits
+
+    size = 0
+    size += 1 << (root_cnode_bits + slot_bits)
+    size += 1 << (tcb_bits)
+    size += 2 * (1 << page_bits)
+    size += 1 << asid_pool_bits
+    size += 1 << vspace_bits
+    size += _get_arch_n_paging(kernel_config.arch, initial_task_region) * (1 << page_table_bits)
+    size += 1 << min_sched_context_bits
+
+    return size
+
+
+def arch_get_page_attrs(arch: KernelArch, mp: SysMap) -> int:
+    attrs = 0
+    if arch == KernelArch.AARCH64:
+        attrs = SEL4_ARM_PARITY_ENABLED
+        if mp.cached:
+            attrs |= SEL4_ARM_PAGE_CACHEABLE
+        if "x" not in mp.perms:
+            attrs |= SEL4_ARM_EXECUTE_NEVER
+    elif arch == KernelArch.RISCV64:
+        if "x" not in mp.perms:
+            attrs |= SEL4_RISCV_EXECUTE_NEVER
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+
+    return attrs
+
+# @ivanv: TODO, support Huge page size for AArch64/RISCV
+def arch_get_page_objects(arch: KernelArch) -> [int]:
+    if arch == KernelArch.AARCH64 or arch == KernelArch.RISCV64:
+        return [Sel4Object.SmallPage, Sel4Object.LargePage]
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")
+
+
+def arch_get_page_sizes(arch: KernelArch) -> [int]:
+    if arch == KernelArch.AARCH64 or arch == KernelArch.RISCV64:
+        return [0x1000, 0x200_000]
+    else:
+        raise Exception(f"Unexpected kernel architecture: {arch}")

@@ -63,6 +63,10 @@ def main():
         "--example",
         help="Example to build"
     )
+    parser.add_argument(
+        "--extra-args",
+        help="Extra arguments to be passed to the example Makefile"
+    )
     args = parser.parse_args()
 
     # TODO: Support choosing a release by specifying on command line
@@ -93,6 +97,8 @@ def main():
         make_env["SEL4CP_TOOL"] = f"{executable} -m sel4coreplat"
 
     cmd = ["make", "-C", makefile_directory]
+    if args.extra_args:
+        cmd.append(args.extra_args)
 
     run(cmd, env=make_env)
 

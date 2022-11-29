@@ -64,8 +64,7 @@ class MemoryRegion:
     base: int
     end: int
 
-    def aligned_power_of_two_regions(self) -> List["MemoryRegion"]:
-        max_bits = 40
+    def aligned_power_of_two_regions(self, max_bits: int) -> List["MemoryRegion"]:
         # Align
         # find the first bit self
         r = []
@@ -147,10 +146,10 @@ class DisjointMemoryRegion:
 
         self._check()
 
-    def aligned_power_of_two_regions(self) -> List[MemoryRegion]:
+    def aligned_power_of_two_regions(self, max_bits: int) -> List[MemoryRegion]:
         r = []
         for region in self._regions:
-            r += region.aligned_power_of_two_regions()
+            r += region.aligned_power_of_two_regions(max_bits)
         return r
 
     def allocate(self, size: int) -> int:
@@ -163,7 +162,7 @@ class DisjointMemoryRegion:
         # 'best' may be something that best matches a power-of-two
         # allocation
         for region in self._regions:
-            if size <= region.size:
+            if size <= region.size and region.base >= 0x84028000: # @ivanv
                 break
         else:
             raise ValueError(f"Unable to allocate {size} bytes.")
