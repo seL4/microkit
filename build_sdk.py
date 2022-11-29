@@ -427,9 +427,9 @@ def main() -> None:
 
     tool_target = root_dir / "bin" / "sel4cp"
 
-    # if not tool_target.exists():
-    test_tool()
-    build_tool(tool_target)
+    if not tool_target.exists():
+        test_tool()
+        build_tool(tool_target)
 
     build_doc(root_dir)
 
