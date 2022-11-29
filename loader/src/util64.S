@@ -222,7 +222,7 @@ BEGIN_FUNC(switch_to_el1)
     msr     cptr_el2, x9
     msr     hstr_el2, xzr
 
-    /* Since stage 2 addressing is disable, clear the base register */
+    /* Since stage 2 addressing is disabled, clear the base register */
     msr     vttbr_el2, xzr
 
     /* Disable EL1 MMU (stage1) */
