@@ -20,6 +20,7 @@ def make_exe():
 
     exe = dist.to_python_executable(name="sel4cp", packaging_policy=policy, config=python_config)
     resources = exe.read_package_root(path="tool", packages=["sel4coreplat"])
+    exe.add_python_resources(exe.pip_install(["PyYAML==6.0"]))
     exe.add_python_resources(resources)
 
     return exe
