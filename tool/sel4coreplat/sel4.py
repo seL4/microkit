@@ -180,7 +180,7 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
     return (end - start) // (1 << bits)
 
 
-def _get_arch_n_paging(region: MemoryRegion, config: KernelConfig) -> int:
+def _get_arch_n_paging(region: MemoryRegion, kernel_config: KernelConfig) -> int:
     # @ivanv hyp specific, also I think this assumes CONFIG_ARM_PA_SIZE_BITS_40
     # but can't remember, double check in kernel
     PT_INDEX_OFFSET  =  12
@@ -188,7 +188,7 @@ def _get_arch_n_paging(region: MemoryRegion, config: KernelConfig) -> int:
     PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 10) # @ivanv: hyp specific
     PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
 
-    if config.hyp_mode:
+    if kernel_config.hyp_mode:
         return (
             _get_n_paging(region, PUD_INDEX_OFFSET) +
             _get_n_paging(region, PD_INDEX_OFFSET)
@@ -491,9 +491,9 @@ class Sel4Invocation:
     _object_type: str
     _method_name: str
 
-    def _generic_invocation(self, config: KernelConfig, extra_caps: Tuple[int, ...], args: Tuple[int, ...]) -> bytes:
+    def _generic_invocation(self, kernel_config: KernelConfig, extra_caps: Tuple[int, ...], args: Tuple[int, ...]) -> bytes:
         repeat_count = self._repeat_count if hasattr(self, "_repeat_count") else None
-        tag = self.message_info_new(self.label.get_id(config), 0, len(extra_caps), len(args))
+        tag = self.message_info_new(self.label.get_id(kernel_config), 0, len(extra_caps), len(args))
         if repeat_count:
             tag |= ((repeat_count - 1) << 32)
         fmt = "<QQ" + ("Q" * (0 + len(extra_caps) + len(args)))
@@ -529,10 +529,10 @@ class Sel4Invocation:
         assert length < 0x80
         return label << 12 | caps << 9 | extra_caps << 7 | length
 
-    def _get_raw_invocation(self, config: KernelConfig) -> bytes:
+    def _get_raw_invocation(self, kernel_config :KernelConfig) -> bytes:
         cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
         val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
-        return self._generic_invocation(config, cap_args, val_args)
+        return self._generic_invocation(kernel_config, cap_args, val_args)
 
     def repeat(self, count: int, **kwargs: int) -> None:
         if count > 1:
@@ -619,13 +619,13 @@ class Sel4TcbWriteRegisters(Sel4Invocation):
     arch_flags: int
     regs: Sel4Aarch64Regs
 
-    def _get_raw_invocation(self, config: KernelConfig) -> bytes:
+    def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         params = (
             self.arch_flags << 8 | 1 if self.resume else 0,
             self.regs.count()
         ) + self.regs.as_tuple()
 
-        return self._generic_invocation(config, (), params)
+        return self._generic_invocation(kernel_config, (), params)
 
 
 @dataclass
@@ -945,17 +945,17 @@ def emulate_kernel_boot(
     )
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelConfig) -> int:
+def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: KernelConfig) -> int:
     # FIXME: These constants should ideally come from the config / kernel
     # binary not be hard coded here.
     # But they are constant so it isn't too bad.
     # This is specifically for aarch64
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = config.root_cnode_bits
+    root_cnode_bits = kernel_config.root_cnode_bits
     tcb_bits = 11  # seL4_TCBBits
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    if config.hyp_mode:
+    if kernel_config.hyp_mode:
         # @ivanv Note that this assumes CONFIG_ARM_PA_SIZE_BITS_40 is set
         vspace_bits = 13  #seL4_VSpaceBits
     else:
@@ -969,7 +969,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelC
     size += 2 * (1 << page_bits)
     size += 1 << asid_pool_bits
     size += 1 << vspace_bits
-    size += _get_arch_n_paging(initial_task_region, config) * (1 << page_table_bits)
+    size += _get_arch_n_paging(initial_task_region, kernel_config) * (1 << page_table_bits)
     size += 1 <<min_sched_context_bits
 
     return size

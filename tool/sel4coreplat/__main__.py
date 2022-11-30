@@ -35,10 +35,6 @@ The following abreviations are used in the source code:
 * Address => addr
 * Physical => phys
 
-@ivanv be consistent about kernel_config vs config for KernelConfig usage,
-  should really be called just Config or something, since it'll have more than
-  just the kernel stuff in it
-
 """
 import cProfile
 import sys
