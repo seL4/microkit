@@ -70,7 +70,6 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
-            "ARM_HYP": True,
         },
         examples = {
             "hello": Path("example/zcu102/hello")
@@ -97,7 +96,6 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
-            "ARM_HYP": True,
             "KernelRetypeFanOutLimit": 2048,
             "QEMU_MEMORY": 2048,
         },
@@ -115,7 +113,6 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelRetypeFanOutLimit": 1024,
             "KernelArmHypervisorSupport": True,
-            "ARM_HYP": True,
         },
         examples = {}
     ),
@@ -128,9 +125,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
-            "ARM_HYP": True,
             "KernelRetypeFanOutLimit": 1024,
-            # "KernelDebugDisablePrefetchers": True
         },
         examples = {}
     ),
