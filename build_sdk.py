@@ -69,11 +69,25 @@ SUPPORTED_BOARDS = (
             "KernelARMPlatform": "zcu102",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "ARM_HYP": True,
         },
         examples = {
             "hello": Path("example/zcu102/hello")
         }
-    )
+    ),
+    BoardInfo(
+        name="imx8mq",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mq-evk",
+            "KernelIsMCS": True,
+        },
+        examples = {
+            "hello": Path("example/imx8mq/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
@@ -158,7 +172,7 @@ def build_sel4(
     sel4_install_dir.mkdir(exist_ok=True, parents=True)
     sel4_build_dir.mkdir(exist_ok=True, parents=True)
 
-    print(f"Building sel4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
+    print(f"Building seL4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
 
     config_args = list(board.kernel_options.items()) + list(config.kernel_options.items())
     config_strs = []
@@ -175,7 +189,7 @@ def build_sel4(
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "\
         f" -DPYTHON3={executable} " \
-        f" -DKernelPlatform={platform} {config_str} " \
+        f" {config_str} " \
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
     r = system(cmd)
@@ -201,6 +215,7 @@ def build_sel4(
     # Make output read-only
     dest.chmod(0o444)
 
+    # @ivanv: comment, this is hard to follow
     include_dir = root_dir / "board" / board.name / config.name / "include"
     for source in ("kernel_Config", "libsel4", "libsel4/sel4_Config", "libsel4/autoconf"):
         source_dir = sel4_install_dir / source / "include"

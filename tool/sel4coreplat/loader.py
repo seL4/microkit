@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from sel4coreplat.elf import ElfFile
 from sel4coreplat.util import kb, mb, round_up, MemoryRegion
+from sel4coreplat.sel4 import KernelConfig
 
 AARCH64_1GB_BLOCK_BITS = 30
 AARCH64_2MB_BLOCK_BITS = 21
@@ -70,7 +71,8 @@ class Loader:
         initial_task_elf: ElfFile,
         initial_task_phys_base: Optional[int],
         reserved_region: MemoryRegion,
-        regions: List[Tuple[int, bytes]]
+        regions: List[Tuple[int, bytes]],
+        kernel_config: KernelConfig
     ) -> None:
         """
 
@@ -154,7 +156,10 @@ class Loader:
         # Determine the pagetable variables
         assert kernel_first_vaddr is not None
         assert kernel_first_paddr is not None
-        pagetable_vars = self._setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+        if kernel_config.hyp_mode:
+            pagetable_vars = self._setup_pagetables_hypervisor(kernel_first_vaddr, kernel_first_paddr)
+        else:
+            pagetable_vars = self._setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
         for var_name, var_data in pagetable_vars.items():
             var_addr, var_size = self._elf.find_symbol(var_name)
             offset = var_addr - loader_segment.virt_addr
@@ -182,8 +187,9 @@ class Loader:
 
         _check_non_overlapping(self._regions)
 
-        # FIXME: Should be a way to determine if seL4 needs hypervisor mode or not
-        flags = 0
+        # Currently the only flag passed to the loader is whether seL4
+        # is configured as a hypervisor or not.
+        flags = 1 if kernel_config.hyp_mode else 0
 
         self._header = (
             self._magic,
@@ -236,6 +242,55 @@ class Loader:
                 (1 << 0) # 2M block
             )
             first_paddr += (1 << AARCH64_2MB_BLOCK_BITS)
+            boot_lvl2_upper[8*i:8*(i+1)] = pack("<Q", pt_entry)
+
+        return {
+            "boot_lvl0_lower": boot_lvl0_lower,
+            "boot_lvl1_lower": boot_lvl1_lower,
+            "boot_lvl0_upper": boot_lvl0_upper,
+            "boot_lvl1_upper": boot_lvl1_upper,
+            "boot_lvl2_upper": boot_lvl2_upper,
+        }
+
+    def _setup_pagetables_hypervisor(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
+        boot_lvl1_lower_addr, _ = self._elf.find_symbol("boot_lvl1_lower")
+        boot_lvl1_upper_addr, _ = self._elf.find_symbol("boot_lvl1_upper")
+        boot_lvl2_upper_addr, _ = self._elf.find_symbol("boot_lvl2_upper")
+
+        boot_lvl0_lower = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3)
+
+        boot_lvl0_upper = bytearray(PAGE_TABLE_SIZE)
+
+        boot_lvl1_lower = bytearray(PAGE_TABLE_SIZE)
+        for i in range(512):
+            pt_entry = (
+                (i << AARCH64_1GB_BLOCK_BITS) |
+                (1 << 10) | # access flag
+                (0 << 2) | # strongly ordered memory
+                (1) # 1G block
+            )
+            boot_lvl1_lower[8*i:8*(i+1)] = pack("<Q", pt_entry)
+
+        ptentry = boot_lvl1_upper_addr | 3
+        idx = lvl0_index(first_vaddr)
+        boot_lvl0_lower[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+
+        boot_lvl1_upper = bytearray(PAGE_TABLE_SIZE)
+        ptentry = boot_lvl2_upper_addr | 3
+        idx = lvl1_index(first_vaddr)
+        boot_lvl1_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+
+        boot_lvl2_upper = bytearray(PAGE_TABLE_SIZE)
+        for i in range(lvl2_index(first_vaddr), 512):
+            pt_entry = (
+                (((i - lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS) + first_paddr) |
+                (1 << 10) | # access flag
+                (3 << 8) | # make sure the shareability is the same as the kernel's
+                (4 << 2) | #MT_NORMAL memory
+                (1 << 0) # 2M block
+            )
+            # first_paddr += (1 << AARCH64_2MB_BLOCK_BITS)
             boot_lvl2_upper[8*i:8*(i+1)] = pack("<Q", pt_entry)
 
         return {

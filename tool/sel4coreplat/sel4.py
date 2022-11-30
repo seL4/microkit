@@ -4,13 +4,21 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 from dataclasses import dataclass, fields
-from enum import IntEnum
-from typing import List, Optional, Set, Tuple
+from enum import Enum, IntEnum
+from typing import List, Optional, Set, Tuple, Dict
 from struct import pack, Struct
 
 from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
 
+# @ivanv:
+# ASSUMPTION: CONFIG_ARM_PA_SIZE_BITS_40 is set.
+# If we are going to build something better, then the point about seL4 not outlining it's U-boot assumptions
+# should mean that we also outline our assumptions, but in this case about seL4. It's frustrating to find
+# these assumptions scattered throughout comments the code, it's better than nothing, but ideally we should
+# outline everything we think about a certain platform so when someone does a port, their life is easier and
+# they break less shit.
+# /rant
 
 SLOT_BITS = 5
 SLOT_SIZE = 1 << SLOT_BITS
@@ -24,8 +32,52 @@ SEL4_PAGE_DIRECTORY_SIZE = (1 << 12)
 SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 12)
 SEL4_LARGE_PAGE_SIZE = (2 * 1024 * 1024)
 SEL4_SMALL_PAGE_SIZE = (4 * 1024)
-SEL4_VSPACE_SIZE = (4 * 1024)
+SEL4_VSPACE_SIZE = (4 * 1024) # @ivanv: check this
 SEL4_ASID_POOL_SIZE = (1 << 12)
+
+
+@dataclass(frozen=True, eq=True)
+class UntypedObject:
+    cap: int
+    region: MemoryRegion
+    is_device: bool
+
+    @property
+    def base(self) -> int:
+        return self.region.base
+
+    @property
+    def size_bits(self) -> int:
+        return lsb(self.region.end - self.region.base)
+
+
+@dataclass(frozen=True, eq=True)
+class KernelBootInfo:
+    fixed_cap_count: int
+    schedcontrol_cap: int
+    paging_cap_count: int
+    page_cap_count: int
+    untyped_objects: List[UntypedObject]
+    first_available_cap: int
+
+
+@dataclass(frozen=True, eq=True)
+class KernelConfig:
+    word_size: int
+    minimum_page_size: int
+    paddr_user_device_top: int
+    kernel_frame_size: int
+    root_cnode_bits: int
+    cap_address_bits: int
+    fan_out_limit: int
+    hyp_mode: bool
+
+
+@dataclass
+class _KernelPartialBootInfo:
+    device_memory: DisjointMemoryRegion
+    normal_memory: DisjointMemoryRegion
+    boot_region: MemoryRegion
 
 
 # Kernel Objects:
@@ -47,7 +99,8 @@ SEL4_LARGE_PAGE_OBJECT = 11
 SEL4_PAGE_TABLE_OBJECT = 12
 SEL4_PAGE_DIRECTORY_OBJECT = 13
 
-SEL4_VSPACE_OBJECT = SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT
+# @ivanv Notice how this is a differnet kernel object depending on the config
+SEL4_VSPACE_OBJECT = SEL4_PAGE_UPPER_DIRECTORY_OBJECT
 
 SEL4_OBJECT_TYPE_NAMES = {
     SEL4_UNTYPED_OBJECT: "SEL4_UNTYPED_OBJECT",
@@ -106,6 +159,7 @@ SEL4_ARM_CACHE_ID = 3
 
 # FIXME: There should be a better way of determining these, so they don't
 # have to be hard coded
+# @ivanv: these should really note where the fuck to find thiis, spent ages
 INIT_NULL_CAP_ADDRESS = 0
 INIT_TCB_CAP_ADDRESS = 1
 INIT_CNODE_CAP_ADDRESS = 2
@@ -129,17 +183,25 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
     return (end - start) // (1 << bits)
 
 
-def _get_arch_n_paging(region: MemoryRegion) -> int:
+def _get_arch_n_paging(region: MemoryRegion, config: KernelConfig) -> int:
+    # @ivanv hyp specific, also I think this assumes CONFIG_ARM_PA_SIZE_BITS_40
+    # but can't remember, double check in kernel
     PT_INDEX_OFFSET  =  12
     PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
-    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
+    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 10)
     PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
 
-    return (
-        _get_n_paging(region, PGD_INDEX_OFFSET) +
-        _get_n_paging(region, PUD_INDEX_OFFSET) +
-        _get_n_paging(region, PD_INDEX_OFFSET)
-    )
+    if config.hyp_mode:
+        return (
+            _get_n_paging(region, PUD_INDEX_OFFSET) +
+            _get_n_paging(region, PD_INDEX_OFFSET)
+        )
+    else:
+        return (
+            _get_n_paging(region, PGD_INDEX_OFFSET) +
+            _get_n_paging(region, PUD_INDEX_OFFSET) +
+            _get_n_paging(region, PD_INDEX_OFFSET)
+        )
 
 
 class Sel4Aarch64Regs:
@@ -278,7 +340,8 @@ typedef struct seL4_UserContext_ {
         return tuple(0 if x is None else x for x in raw)
 
 
-class Sel4Label(IntEnum):
+# @ivanv need to comment on how this works/why it's messy
+class Sel4Label(Enum):
     # Untyped
     UntypedRetype = 1
     # TCB
@@ -318,7 +381,7 @@ class Sel4Label(IntEnum):
     SchedContextBind = 31
     SchedContextUnbind = 32
     SchedContextUnbindObject = 33
-    SchedContextConsume = 34
+    SchedContextConsumed = 34
     SchedContextYieldTo = 35
     # ARM V Space
     ARMVSpaceClean_Data = 36
@@ -344,8 +407,83 @@ class Sel4Label(IntEnum):
     # ARM Asid
     ARMASIDControlMakePool = 53
     ARMASIDPoolAssign = 54
+    # ARM VCPU
+    ARMVCPUSetTCB = 55
+    ARMVCPUInjectIRQ = 56
+    ARMVCPUReadReg = 57
+    ARMVCPUWriteReg = 58
+    ARMVCPUAckVPPI = 59
     # ARM IRQ
-    ARMIRQIssueIRQHandlerTrigger = 55
+    ARMIRQIssueIRQHandlerTrigger = 60
+
+    def get_id(self, kernel_config: KernelConfig) -> int:
+        aarch64_labels = {
+            Sel4Label.ARMVSpaceClean_Data: 36,
+            Sel4Label.ARMVSpaceInvalidate_Data: 37,
+            Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
+            Sel4Label.ARMVSpaceUnify_Instruction: 39,
+            # ARM Page Upper Directory
+            Sel4Label.ARMPageUpperDirectoryMap: 40,
+            Sel4Label.ARMPageUpperDirectoryUnmap: 41,
+            Sel4Label.ARMPageDirectoryMap: 42,
+            Sel4Label.ARMPageDirectoryUnmap: 43,
+            # ARM Page table
+            Sel4Label.ARMPageTableMap: 44,
+            Sel4Label.ARMPageTableUnmap: 45,
+            # ARM Page
+            Sel4Label.ARMPageMap: 46,
+            Sel4Label.ARMPageUnmap: 47,
+            Sel4Label.ARMPageClean_Data: 48,
+            Sel4Label.ARMPageInvalidate_Data: 49,
+            Sel4Label.ARMPageCleanInvalidate_Data: 50,
+            Sel4Label.ARMPageUnify_Instruction: 51,
+            Sel4Label.ARMPageGetAddress: 52,
+            # ARM Asid
+            Sel4Label.ARMASIDControlMakePool: 53,
+            Sel4Label.ARMASIDPoolAssign: 54,
+            # ARM IRQ
+            Sel4Label.ARMIRQIssueIRQHandlerTrigger: 55
+        }
+
+        aarch64_hyp_labels = {
+            Sel4Label.ARMVSpaceClean_Data: 36,
+            Sel4Label.ARMVSpaceInvalidate_Data: 37,
+            Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
+            Sel4Label.ARMVSpaceUnify_Instruction: 39,
+            # ARM Page Upper Directory
+            Sel4Label.ARMPageDirectoryMap: 40,
+            Sel4Label.ARMPageDirectoryUnmap: 41,
+            # ARM Page table
+            Sel4Label.ARMPageTableMap: 42,
+            Sel4Label.ARMPageTableUnmap: 43,
+            # ARM Page
+            Sel4Label.ARMPageMap: 44,
+            Sel4Label.ARMPageUnmap: 45,
+            Sel4Label.ARMPageClean_Data: 46,
+            Sel4Label.ARMPageInvalidate_Data: 47,
+            Sel4Label.ARMPageCleanInvalidate_Data: 48,
+            Sel4Label.ARMPageUnify_Instruction: 49,
+            Sel4Label.ARMPageGetAddress: 50,
+            # ARM Asid
+            Sel4Label.ARMASIDControlMakePool: 51,
+            Sel4Label.ARMASIDPoolAssign: 52,
+            # ARM VCPU
+            Sel4Label.ARMVCPUSetTCB: 53,
+            Sel4Label.ARMVCPUInjectIRQ: 54,
+            Sel4Label.ARMVCPUReadReg: 55,
+            Sel4Label.ARMVCPUWriteReg: 56,
+            Sel4Label.ARMVCPUAckVPPI: 57,
+            # ARM IRQ
+            Sel4Label.ARMIRQIssueIRQHandlerTrigger: 58
+        }
+
+        if self.value <= Sel4Label.SchedContextYieldTo.value:
+            return self.value
+
+        if kernel_config.hyp_mode:
+            return aarch64_hyp_labels[self]
+        else:
+            return aarch64_labels[self]
 
 
 ### Invocations
@@ -356,9 +494,9 @@ class Sel4Invocation:
     _object_type: str
     _method_name: str
 
-    def _generic_invocation(self, extra_caps: Tuple[int, ...], args: Tuple[int, ...]) -> bytes:
+    def _generic_invocation(self, config: KernelConfig, extra_caps: Tuple[int, ...], args: Tuple[int, ...]) -> bytes:
         repeat_count = self._repeat_count if hasattr(self, "_repeat_count") else None
-        tag = self.message_info_new(self.label, 0, len(extra_caps), len(args))
+        tag = self.message_info_new(self.label.get_id(config), 0, len(extra_caps), len(args))
         if repeat_count:
             tag |= ((repeat_count - 1) << 32)
         fmt = "<QQ" + ("Q" * (0 + len(extra_caps) + len(args)))
@@ -394,10 +532,10 @@ class Sel4Invocation:
         assert length < 0x80
         return label << 12 | caps << 9 | extra_caps << 7 | length
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, config: KernelConfig) -> bytes:
         cap_args = tuple(val for nm, val in self._args if nm in self._extra_caps)
         val_args = tuple(val for nm, val in self._args if nm not in self._extra_caps)
-        return self._generic_invocation(cap_args, val_args)
+        return self._generic_invocation(config, cap_args, val_args)
 
     def repeat(self, count: int, **kwargs: int) -> None:
         if count > 1:
@@ -484,13 +622,14 @@ class Sel4TcbWriteRegisters(Sel4Invocation):
     arch_flags: int
     regs: Sel4Aarch64Regs
 
-    def _get_raw_invocation(self) -> bytes:
+    def _get_raw_invocation(self, config: KernelConfig) -> bytes:
         params = (
             self.arch_flags << 8 | 1 if self.resume else 0,
             self.regs.count()
         ) + self.regs.as_tuple()
 
-        return self._generic_invocation((), params)
+        return self._generic_invocation(config, (), params)
+
 
 @dataclass
 class Sel4TcbBindNotification(Sel4Invocation):
@@ -614,6 +753,7 @@ class Sel4CnodeMutate(Sel4Invocation):
     src_depth: int
     badge: int
 
+
 @dataclass
 class Sel4SchedControlConfigureFlags(Sel4Invocation):
     _object_type = "SchedControl"
@@ -628,52 +768,30 @@ class Sel4SchedControlConfigureFlags(Sel4Invocation):
     badge: int
     flags: int
 
-@dataclass(frozen=True, eq=True)
-class UntypedObject:
-    cap: int
-    region: MemoryRegion
-    is_device: bool
 
-    @property
-    def base(self) -> int:
-        return self.region.base
-
-    @property
-    def size_bits(self) -> int:
-        return lsb(self.region.end - self.region.base)
-
-
-
-@dataclass(frozen=True, eq=True)
-class KernelBootInfo:
-    fixed_cap_count: int
-    schedcontrol_cap: int
-    paging_cap_count: int
-    page_cap_count: int
-    untyped_objects: List[UntypedObject]
-    first_available_cap: int
-
-
-@dataclass(frozen=True, eq=True)
-class KernelConfig:
-    word_size: int
-    minimum_page_size: int
-    paddr_user_device_top: int
-    kernel_frame_size: int
-    root_cnode_bits: int
-    cap_address_bits: int
-    fan_out_limit: int
+@dataclass
+class Sel4ArmVcpuSetTcb(Sel4Invocation):
+    _object_type = "VCPU"
+    _method_name = "Set TCB"
+    _extra_caps = ("vcpu", )
+    label = Sel4Label.ARMVCPUSetTCB
+    tcb: int
 
 
 @dataclass
-class _KernelPartialBootInfo:
-    device_memory: DisjointMemoryRegion
-    normal_memory: DisjointMemoryRegion
-    boot_region: MemoryRegion
+class Sel4ArmVcpuInjectIrq(Sel4Invocation):
+    _object_type = "VCPU"
+    _method_name = "Inject IRQ"
+    _extra_caps = ("vcpu", )
+    label = Sel4Label.ARMVCPUInjectIRQ
+    virq: int
+    priority: int
+    group: int
+    index: int
 
 
 def _kernel_device_addrs(kernel_elf: ElfFile) -> List[int]:
-    """Extra the physical address of all kernel (only) devices"""
+    """Extract the physical address and size of all kernel (only) devices"""
     kernel_devices = []
     kernel_frame_t = Struct("<QQII")
     vaddr, size = kernel_elf.find_symbol("kernel_device_frames")
@@ -719,9 +837,12 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
 
 
 def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
-    slot_bits = 5  # seL4_SlotBits
+    slot_bits = 5 # seL4_SlotBits
     root_cnode_bits = kernel_config.root_cnode_bits
-    vspace_bits = 12  #seL4_VSpaceBits
+    if kernel_config.hyp_mode:
+        vspace_bits = 13  # seL4_VSpaceBits
+    else:
+        vspace_bits = 12  # seL4_VSpaceBits
 
     cnode_size_bits = root_cnode_bits + slot_bits
     return max(cnode_size_bits, vspace_bits)
@@ -746,9 +867,8 @@ def _kernel_partial_boot(
     device_memory.insert_region(0, kernel_config.paddr_user_device_top)
 
     # Next, remove all the kernel devices.
-    # NOTE: There is an assumption each kernel device is one frame
-    # in size only. It's possible this assumption could break in the
-    # future.
+    # ASSUMPTION: Each kernel device is one frame in size only.
+    # It's possible this assumption could break in the future.
     for paddr in _kernel_device_addrs(kernel_elf):
         device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size)
 
@@ -816,7 +936,7 @@ def emulate_kernel_boot(
 
     fixed_cap_count = 0xf
     sched_control_cap_count = 1
-    paging_cap_count = _get_arch_n_paging(initial_task_virt_region)
+    paging_cap_count = _get_arch_n_paging(initial_task_virt_region, kernel_config)
     page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
     first_untyped_cap = fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count
     schedcontrol_cap = fixed_cap_count + paging_cap_count
@@ -839,17 +959,21 @@ def emulate_kernel_boot(
     )
 
 
-def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: KernelConfig) -> int:
+def calculate_rootserver_size(initial_task_region: MemoryRegion, config: KernelConfig) -> int:
     # FIXME: These constants should ideally come from the config / kernel
     # binary not be hard coded here.
     # But they are constant so it isn't too bad.
     # This is specifically for aarch64
     slot_bits = 5  # seL4_SlotBits
-    root_cnode_bits = kernel_config.root_cnode_bits
+    root_cnode_bits = config.root_cnode_bits
     tcb_bits = 11  # seL4_TCBBits
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = 12  #seL4_VSpaceBits
+    if config.hyp_mode:
+        # @ivanv Note that this assumes CONFIG_ARM_PA_SIZE_BITS_40 is set
+        vspace_bits = 13  #seL4_VSpaceBits
+    else:
+        vspace_bits = 12  #seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
     min_sched_context_bits = 8 # seL4_MinSchedContextBits
 
@@ -859,7 +983,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion, kernel_config: 
     size += 2 * (1 << page_bits)
     size += 1 << asid_pool_bits
     size += 1 << vspace_bits
-    size += _get_arch_n_paging(initial_task_region) * (1 << page_table_bits)
+    size += _get_arch_n_paging(initial_task_region, config) * (1 << page_table_bits)
     size += 1 <<min_sched_context_bits
 
     return size

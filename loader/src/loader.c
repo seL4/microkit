@@ -26,10 +26,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #define STACK_SIZE 4096
 
-#define UART_BASE 0x5a070000
-#define STAT 0x14
-#define TRANSMIT 0x1c
-#define STAT_TDRE (1 << 23)
 #define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
 #if defined(BOARD_zcu102)
@@ -85,6 +81,7 @@ typedef void (*sel4_entry)(
 void switch_to_el1(void);
 void switch_to_el2(void);
 void el1_mmu_enable(void);
+void el2_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
 
@@ -113,6 +110,25 @@ memcpy(void *dst, const void *src, size_t sz)
 }
 
 #if defined(BOARD_tqma8xqp1gb)
+
+#define UART_BASE 0x5a070000
+#define STAT 0x14
+#define TRANSMIT 0x1c
+#define STAT_TDRE (1 << 23)
+
+static void
+putc(uint8_t ch)
+{
+    while (!(*UART_REG(STAT) & STAT_TDRE)) { }
+    *UART_REG(TRANSMIT) = ch;
+}
+#elif defined(BOARD_imx8mq)
+
+#define UART_BASE 0x30860000
+#define STAT 0x98
+#define TRANSMIT 0x40
+#define STAT_TDRE (1 << 14)
+
 static void
 putc(uint8_t ch)
 {
@@ -360,6 +376,7 @@ ensure_correct_el(void)
     if (loader_data->flags & FLAG_SEL4_HYP) {
         if (el != EL2) {
             puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
+            return 1;
         }
     } else {
         if (el == EL2) {
@@ -450,6 +467,7 @@ int
 main(void)
 {
     int r;
+    enum el el;
 
     puts("LDR|INFO: altloader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
@@ -475,7 +493,15 @@ main(void)
     }
 
     puts("LDR|INFO: enabling MMU\n");
-    el1_mmu_enable();
+    /* Since we've ensured the correct EL, the current EL can only be
+     * EL1 or EL2.
+     */
+    el = current_el();
+    if (el == EL1) {
+        el1_mmu_enable();
+    } else if (el == EL2) {
+        el2_mmu_enable();
+    }
 
     puts("LDR|INFO: jumping to kernel\n");
     start_kernel();

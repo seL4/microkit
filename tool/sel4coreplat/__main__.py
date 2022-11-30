@@ -35,6 +35,10 @@ The following abreviations are used in the source code:
 * Address => addr
 * Physical => phys
 
+@ivanv be consistent about kernel_config vs config for KernelConfig usage,
+  should really be called just Config or something, since it'll have more than
+  just the kernel stuff in it
+
 """
 import sys
 from argparse import ArgumentParser
@@ -1132,7 +1136,8 @@ def build_system(
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
-        uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
+        if not kernel_config.hyp_mode:
+            uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
         pts += [(pd_idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
 
@@ -1141,8 +1146,9 @@ def build_system(
 
     vspace_objects = init_system.allocate_objects(SEL4_VSPACE_OBJECT, vspace_names)
 
-    ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
-    ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
+    if not kernel_config.hyp_mode:
+        ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
+        ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
 
     d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
     d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
@@ -1429,7 +1435,7 @@ def build_system(
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
     for map_cls, descriptors, objects in [
-        (Sel4PageUpperDirectoryMap, uds, ud_objects),
+        # (Sel4PageUpperDirectoryMap, uds, ud_objects),
         (Sel4PageDirectoryMap, ds, d_objects),
         (Sel4PageTableMap, pts, pt_objects),
     ]:
@@ -1521,7 +1527,7 @@ def build_system(
 
     system_invocation_data = b''
     for system_invocation in system_invocations:
-        system_invocation_data += system_invocation._get_raw_invocation()
+        system_invocation_data += system_invocation._get_raw_invocation(kernel_config)
 
 
     for pd in system.protection_domains:
@@ -1653,6 +1659,7 @@ def main() -> int:
         root_cnode_bits = gen_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
         cap_address_bits=64,
         fan_out_limit= gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
+        hyp_mode = gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"],
     )
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
@@ -1713,7 +1720,7 @@ def main() -> int:
 
     bootstrap_invocation_data = b''
     for bootstrap_invocation in built_system.bootstrap_invocations:
-        bootstrap_invocation_data += bootstrap_invocation._get_raw_invocation()
+        bootstrap_invocation_data += bootstrap_invocation._get_raw_invocation(kernel_config)
 
     if len(bootstrap_invocation_data) > bootstrap_invocation_data_size:
         print("INTERNAL ERROR: bootstrap invocations too large", file=stderr)
@@ -1730,7 +1737,7 @@ def main() -> int:
 
     system_invocation_data = b''
     for system_invocation in built_system.system_invocations:
-        system_invocation_data += system_invocation._get_raw_invocation()
+        system_invocation_data += system_invocation._get_raw_invocation(kernel_config)
 
     regions: List[Tuple[int, Union[bytes, bytearray]]] = [(built_system.reserved_region.base, system_invocation_data)]
     regions += [(r.addr, r.data) for r in built_system.regions]
@@ -1800,6 +1807,7 @@ def main() -> int:
         built_system.initial_task_phys_region.base,
         built_system.reserved_region,
         regions,
+        kernel_config
     )
     loader.write_image(args.output)
 

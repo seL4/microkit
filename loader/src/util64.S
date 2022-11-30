@@ -60,6 +60,7 @@
 #define TCR_PS_16T        (4 << 16)
 #define TCR_PS_256T       (5 << 16)
 
+#define TCR_EL2_RES1      ((1 << 23) | (1 << 31))
 #define TCR_ASID16        (1 << 36)
 
 /* Assembler Macros */
@@ -157,6 +158,14 @@ finished_\op:
     isb
 .endm
 
+/* @ivanv: temp */
+.macro disable_id_cache sctlr tmp
+    mrs     \tmp, \sctlr
+    bic     \tmp, \tmp, #(1 << 2)
+    bic     \tmp, \tmp, #(1 << 12)
+    msr     \sctlr, \tmp
+    isb
+.endm
 
 /* Standard function decorators. */
 #define BEGIN_FUNC(_name) \
@@ -166,7 +175,6 @@ _name:
 
 #define END_FUNC(_name) \
     .size _name, .-_name
-
 
 /* Invalidate the D-cache */
 BEGIN_FUNC(invalidate_dcache)
@@ -325,6 +333,68 @@ BEGIN_FUNC(el1_mmu_enable)
     ret
 
 END_FUNC(el1_mmu_enable)
+
+BEGIN_FUNC(el2_mmu_enable)
+    stp     x29, x30, [sp, #-16]!
+    mov     x29, sp
+
+    /* Disable caches */
+    bl      flush_dcache
+    disable_id_cache sctlr_el2, x9
+
+    // @ivanv not sure this comment is correct
+    /* Ensure I-cache, D-cache and mmu are disabled for EL2/Stage1 */
+    disable_mmu sctlr_el2, x8
+
+    /*
+     * Invalidate the local I-cache so that any instructions fetched
+     * speculatively are discarded.
+     */
+    bl      invalidate_icache
+
+    /* @ivanv: what is this doing */
+    /*
+     *   DEVICE_nGnRnE      000     00000000
+     *   DEVICE_nGnRE       001     00000100
+     *   DEVICE_GRE         010     00001100
+     *   NORMAL_NC          011     01000100
+     *   NORMAL             100     11111111
+     */
+    ldr     x5, =MAIR(0x00, MT_DEVICE_nGnRnE) | \
+                 MAIR(0x04, MT_DEVICE_nGnRE) | \
+                 MAIR(0x0c, MT_DEVICE_GRE) | \
+                 MAIR(0x44, MT_NORMAL_NC) | \
+                 MAIR(0xff, MT_NORMAL)
+    msr     mair_el2, x5
+
+    /* @ivanv: what is this doing */
+    // @ivanv: explain these, especially TCR_PS_1T
+    ldr     x8, =TCR_T0SZ(48) | TCR_IRGN0_WBWC | TCR_ORGN0_WBWC | TCR_SH0_ISH | TCR_TG0_4K | TCR_PS_1T | TCR_EL2_RES1
+    msr     tcr_el2, x8
+    isb
+
+    /* Setup page tables */
+    adrp    x8, boot_lvl0_lower
+    msr     ttbr0_el2, x8
+    isb
+
+    /* invalidate all TLB entries for EL2 */
+    tlbi    alle2is
+    dsb     ish
+    isb
+
+    enable_mmu  sctlr_el2, x8
+    /* @ivanv: comment what this is doing */
+    ic  ialluis
+    dsb ish
+    isb
+    tlbi    alle2is
+    dsb     ish
+    isb
+    ldp     x29, x30, [sp], #16
+    ret
+
+END_FUNC(el2_mmu_enable)
 
 
 .extern exception_handler
