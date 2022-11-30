@@ -332,7 +332,6 @@ BEGIN_FUNC(el2_mmu_enable)
     /* Disable caches */
     bl      flush_dcache
 
-    // @ivanv not sure this comment is correct
     /* Ensure I-cache, D-cache and mmu are disabled for EL2/Stage1 */
     disable_mmu sctlr_el2, x8
 
