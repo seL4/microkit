@@ -45,6 +45,17 @@ void sel4cp_dbg_putc(int c);
  */
 void sel4cp_dbg_puts(const char *s);
 
+// @ivanv: When building a non-optimised build of something that uses the library, doing something like seL4_UserContext ctx = {0} does not work...
+// Figure out why it doesn't
+static inline void
+memzero(void *s, unsigned long n)
+{
+    uint8_t *p;
+    for (p = (uint8_t *)s; n > 0; n--, p++) {
+        *p = 0;
+    }
+}
+
 static inline void
 sel4cp_internal_crash(seL4_Error err)
 {
@@ -75,7 +86,8 @@ static inline void
 sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
 {
     seL4_Error err;
-    seL4_UserContext ctxt = {0};
+    seL4_UserContext ctxt;
+    memzero(&ctxt, sizeof(seL4_UserContext));
     ctxt.pc = entry_point;
     err = seL4_TCB_WriteRegisters(
         BASE_TCB_CAP + pd,
@@ -150,7 +162,8 @@ static inline void
 sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
 {
     seL4_Error err;
-    seL4_UserContext ctxt = {0};
+    seL4_UserContext ctxt;
+    memzero(&ctxt, sizeof(seL4_UserContext));
     ctxt.pc = entry_point;
     err = seL4_TCB_WriteRegisters(
         BASE_VM_TCB_CAP + vm,

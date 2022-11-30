@@ -1285,12 +1285,13 @@ def build_system(
             ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
             ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
 
-        d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
+        pd_ds = ds[:len(pd_names)]
+        vm_ds = ds[len(pd_names):]
+
+        d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
+        d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
-        # ud_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
-        # ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, ud_names)
-
         d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
@@ -1298,7 +1299,7 @@ def build_system(
 
     pd_pts = pts[:len(pd_names)]
     vm_pts = pts[len(pd_names):]
-    pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
+    pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_pts]
     pt_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_pts]
     pt_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, pt_names)
 
@@ -1306,12 +1307,6 @@ def build_system(
     cnode_names = [f"CNode: PD={pd.name}" for pd in system.protection_domains]
     cnode_names += [f"CNode: VM={vm.name}" for vm in virtual_machines]
     cnode_objects = init_system.allocate_objects(kernel_config, Sel4Object.CNode, cnode_names, size=PD_CAP_SIZE)
-
-    pd_ds = ds[:len(pd_names)]
-    vm_ds = ds[len(pd_names):]
-    d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
-    d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
-    d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
 
     # @ivanv: make a note why this is okay
     cnode_objects_by_pd = dict(zip(system.protection_domains, cnode_objects))

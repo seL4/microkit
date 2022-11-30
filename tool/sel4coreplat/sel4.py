@@ -663,8 +663,13 @@ class Sel4Label(IntEnum):
                 return AARCH64_LABELS[self]
             else:
                 return self
+        elif kernel_config.arch == KernelArch.RISCV64:
+            if self in RISCV_LABELS:
+                return RISCV_LABELS[self]
+            else:
+                return self
         else:
-            return self
+            raise Exception("@ivanv")
 
 
 AARCH64_LABELS = {
@@ -728,7 +733,7 @@ AARCH64_HYP_LABELS = {
     Sel4Label.ARMIRQIssueIRQHandlerTrigger: 58
 }
 
-RISCV64_LABELS = {
+RISCV_LABELS = {
     # RISC-V Page Table
     Sel4Label.RISCVPageTableMap: 36,
     Sel4Label.RISCVPageTableUnmap: 37,

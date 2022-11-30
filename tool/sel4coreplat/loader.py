@@ -335,12 +335,12 @@ class Loader:
         boot_lvl1_upper_addr, _ = self._elf.find_symbol("boot_lvl1_upper")
         boot_lvl2_upper_addr, _ = self._elf.find_symbol("boot_lvl2_upper")
 
-        boot_lvl0_lower = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl0_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
         boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3)
 
-        boot_lvl0_upper = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl0_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
 
-        boot_lvl1_lower = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl1_lower = bytearray(AARCH64_PAGE_TABLE_SIZE)
         for i in range(512):
             pt_entry = (
                 (i << AARCH64_1GB_BLOCK_BITS) |
@@ -351,18 +351,18 @@ class Loader:
             boot_lvl1_lower[8*i:8*(i+1)] = pack("<Q", pt_entry)
 
         ptentry = boot_lvl1_upper_addr | 3
-        idx = lvl0_index(first_vaddr)
+        idx = arm_lvl0_index(first_vaddr)
         boot_lvl0_lower[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
 
-        boot_lvl1_upper = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl1_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
         ptentry = boot_lvl2_upper_addr | 3
-        idx = lvl1_index(first_vaddr)
+        idx = arm_lvl1_index(first_vaddr)
         boot_lvl1_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
 
-        boot_lvl2_upper = bytearray(PAGE_TABLE_SIZE)
-        for i in range(lvl2_index(first_vaddr), 512):
+        boot_lvl2_upper = bytearray(AARCH64_PAGE_TABLE_SIZE)
+        for i in range(arm_lvl2_index(first_vaddr), 512):
             pt_entry = (
-                (((i - lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS) + first_paddr) |
+                (((i - arm_lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS) + first_paddr) |
                 (1 << 10) | # access flag
                 (3 << 8) | # make sure the shareability is the same as the kernel's
                 (4 << 2) | # MT_NORMAL memory
