@@ -112,6 +112,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "imx8mm-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples = {}
     ),
@@ -124,6 +125,8 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "qemu-arm-virt",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "QEMU_MEMORY": 2048,
         },
         examples = {}
     ),
@@ -136,6 +139,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "odroidc2",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples = {}
     ),
@@ -264,7 +268,7 @@ def build_sel4(
     sel4_install_dir.mkdir(exist_ok=True, parents=True)
     sel4_build_dir.mkdir(exist_ok=True, parents=True)
 
-    print(f"Building sel4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
+    print(f"Building seL4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
 
     config_args = list(board.kernel_options.items()) + list(config.kernel_options.items())
     config_strs = []
@@ -306,6 +310,7 @@ def build_sel4(
     # Make output read-only
     dest.chmod(0o444)
 
+    # @ivanv: comment, this is hard to follow
     include_dir = root_dir / "board" / board.name / config.name / "include"
     for source in ("kernel_Config", "libsel4", "libsel4/sel4_Config", "libsel4/autoconf"):
         source_dir = sel4_install_dir / source / "include"

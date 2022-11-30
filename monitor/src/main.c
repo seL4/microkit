@@ -79,7 +79,7 @@
  *
  * FIXME: This can be smaller once compression is enabled.
  */
-#define BOOTSTRAP_INVOCATION_DATA_SIZE 90
+#define BOOTSTRAP_INVOCATION_DATA_SIZE 150
 
 seL4_IPCBuffer *__sel4_ipc_buffer;
 

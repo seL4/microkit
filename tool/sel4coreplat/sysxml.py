@@ -91,12 +91,13 @@ class ProtectionDomain:
     setvars: Tuple[SysSetVar, ...]
     child_pds: Tuple["ProtectionDomain", ...]
     parent: Optional["ProtectionDomain"]
+    virtual_machine: Optional["VirtualMachine"]
     has_children: bool
     element: ET.Element
 
     @property
     def needs_ep(self) -> bool:
-        return self.pp or self.has_children
+        return self.pp or self.has_children or self.virtual_machine
 
 
 @dataclass(frozen=True, eq=True)
@@ -116,6 +117,26 @@ class Channel:
     id_b: int
     element: ET.Element
 
+# @ivanv: If we are going to have a specified vaddr, we need to
+# have additional checks on it perhaps?
+@dataclass(frozen=True, eq=True)
+class Image:
+    path: Path
+    vaddr: int
+
+
+@dataclass(frozen=True, eq=True)
+class VirtualMachine:
+    name: str
+    vm_id: int
+    program_image: Optional[Image]
+    device_tree: Optional[Image]
+    init_ram_disk: Optional[Image]
+    maps: Tuple[SysMap, ...]
+    priority: int
+    budget: int
+    period: int
+
 
 def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
     # Check child PDs have unique identifiers
@@ -131,7 +152,8 @@ def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDo
 
 
 def _pd_flatten(pds: Iterable[ProtectionDomain]) -> Tuple[ProtectionDomain, ...]:
-    """Given an iterable of protection domains flatten the tree representation
+    """
+    Given an iterable of protection domains flatten the tree representation
     into a flat tuple.
 
     In doing so the representation is changed from "Node with list of children",
@@ -164,15 +186,19 @@ class SystemDescription:
         if len(self.protection_domains) > 63:
             raise UserError(f"Too many protection domains ({len(self.protection_domains)}) defined. Maximum is 63.")
 
+        # Ensure no duplicate PDs
         for pd in protection_domains:
             if pd.name in self.pd_by_name:
                 raise UserError(f"Duplicate protection domain name '{pd.name}'.")
             self.pd_by_name[pd.name] = pd
 
+        # Ensure no duplicate MRs
         for mr in memory_regions:
             if mr.name in self.mr_by_name:
                 raise UserError(f"Duplicate memory region name '{mr.name}'.")
             self.mr_by_name[mr.name] = mr
+
+        # Ensure no duplicate VMs @ivanv
 
         # Ensure all CCs make senses
         for cc in self.channels:
@@ -219,6 +245,7 @@ class SystemDescription:
                 if extra != 0:
                     raise UserError(f"Invalid vaddr alignment on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
 
+        # Ensure that VM image and DTB are different @ivanv
 
         # Note: Overlapping memory is checked in the build.
 
@@ -226,7 +253,10 @@ class SystemDescription:
         # warnings, not errors
         check_mrs = set(self.mr_by_name.keys())
         for pd in self.protection_domains:
-            for m in pd.maps:
+            maps = pd.maps
+            if pd.virtual_machine:
+                maps += pd.virtual_machine.maps
+            for m in maps:
                 if m.mr in check_mrs:
                     check_mrs.remove(m.mr)
 
@@ -281,6 +311,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
     irqs = []
     setvars = []
     child_pds = []
+    virtual_machine = None
     for child in pd_xml:
         try:
             if child.tag == "program_image":
@@ -311,6 +342,10 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
                 setvars.append(SysSetVar(symbol, region_paddr=region_paddr))
             elif child.tag == "protection_domain":
                 child_pds.append(xml2pd(child, is_child=True))
+            elif child.tag == "virtual_machine":
+                if virtual_machine is not None:
+                    raise UserError("virtual_machine must only be specified once")
+                virtual_machine = xml2vm(child)
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
         except ValueError as e:
@@ -332,6 +367,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         tuple(setvars),
         tuple(child_pds),
         None,
+        virtual_machine,
         len(child_pds) > 0,
         pd_xml
     )
@@ -361,6 +397,72 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
     return Channel(ends[0][0], ends[0][1], ends[1][0], ends[1][1], ch_xml)
 
+
+def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
+    _check_attrs(vm_xml, ("name", "vm_id", "priority"))
+    name = checked_lookup(vm_xml, "name")
+
+    vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
+    if vm_id < 0 or vm_id > 255:
+        raise ValueError("vm_id must be between 0 and 255")
+
+    program_image: Optional[Path] = None
+    device_tree: Optional[Path] = None
+    init_ram_disk: Optional[Path] = None
+    budget = int(vm_xml.attrib.get("budget", "1000"), base=0)
+    period = int(vm_xml.attrib.get("period", str(budget)), base=0)
+    priority = int(vm_xml.attrib.get("priority", "0"), base=0)
+
+    maps = []
+    for child in vm_xml:
+        try:
+            if child.tag == "program_image":
+                _check_attrs(child, ("path", "vaddr"))
+                if program_image is not None:
+                    raise ValueError("program_image must only be specified once")
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                program_image = Image(path, vaddr)
+            elif child.tag == "device_tree":
+                _check_attrs(child, ("path", "vaddr"))
+                if device_tree is not None:
+                    raise ValueError("device_tree must only be specified once")
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                device_tree = Image(path, vaddr)
+            elif child.tag == "init_ram_disk":
+                _check_attrs(child, ("path", "vaddr"))
+                if init_ram_disk is not None:
+                    raise ValueError("init_ram_disk must only be specified once")
+                path = checked_lookup(child, "path")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                init_ram_disk = Image(path, vaddr)
+            elif child.tag == "map":
+                _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
+                mr = checked_lookup(child, "mr")
+                vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                perms = child.attrib.get("perms", "rw")
+                cached = str_to_bool(child.attrib.get("cached", "true"))
+                maps.append(SysMap(mr, vaddr, perms, cached, child))
+            else:
+                raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
+        except ValueError as e:
+            raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
+
+    if program_image is None:
+        raise ValueError("program_image must be specified")
+
+    return VirtualMachine(
+        name,
+        vm_id,
+        program_image,
+        device_tree,
+        init_ram_disk,
+        tuple(maps),
+        priority,
+        budget,
+        period
+    )
 
 
 def _check_no_text(el: ET.Element) -> None:

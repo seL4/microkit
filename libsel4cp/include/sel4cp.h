@@ -15,12 +15,15 @@
 
 typedef unsigned int sel4cp_channel;
 typedef unsigned int sel4cp_pd;
+typedef unsigned int sel4cp_vm;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
 #define BASE_TCB_CAP 202
+#define BASE_VM_TCB_CAP 266
+#define BASE_VCPU_CAP 330
 
 #define SEL4CP_MAX_CHANNELS 63
 
@@ -83,7 +86,7 @@ sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
     );
 
     if (err != seL4_NoError) {
-        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_dbg_puts("sel4cp_pd_restart: error writing TCB registers\n");
         sel4cp_internal_crash(err);
     }
 }
@@ -94,7 +97,7 @@ sel4cp_pd_stop(sel4cp_pd pd)
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
     if (err != seL4_NoError) {
-        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_dbg_puts("sel4cp_pd_stop: error suspending TCB\n");
         sel4cp_internal_crash(err);
     }
 }
@@ -128,3 +131,49 @@ sel4cp_mr_get(uint8_t mr)
 {
     return seL4_GetMR(mr);
 }
+
+// @ivanv: inline or nah?
+#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
+static uint64_t
+sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
+{
+    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
+}
+
+static uint64_t
+sel4cp_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
+{
+    return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
+}
+
+static inline void
+sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
+{
+    seL4_Error err;
+    seL4_UserContext ctxt = {0};
+    ctxt.pc = entry_point;
+    err = seL4_TCB_WriteRegisters(
+        BASE_VM_TCB_CAP + vm,
+        true,
+        0, /* No flags */
+        1, /* writing 1 register */
+        &ctxt
+    );
+
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_internal_crash(err);
+    }
+}
+
+static void
+sel4cp_vm_stop(sel4cp_vm vm)
+{
+    seL4_Error err;
+    err = seL4_TCB_Suspend(BASE_VM_TCB_CAP + vm);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_vm_stop: error suspending TCB\n");
+        sel4cp_internal_crash(err);
+    }
+}
+#endif

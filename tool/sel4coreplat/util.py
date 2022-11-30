@@ -65,6 +65,7 @@ class MemoryRegion:
     end: int
 
     def aligned_power_of_two_regions(self, max_bits: int) -> List["MemoryRegion"]:
+        max_bits = 47
         # Align
         # find the first bit self
         r = []
@@ -162,10 +163,12 @@ class DisjointMemoryRegion:
         # 'best' may be something that best matches a power-of-two
         # allocation
         for region in self._regions:
+            # @ivanv: HACK, I think the loader when builidng the imx8mm vmm system will overwrite itself so we need this.
+            # if size <= region.size and region.base >= 0x60000000:
             if size <= region.size and region.base >= 0x84028000: # @ivanv
                 break
         else:
-            raise ValueError(f"Unable to allocate {size} bytes.")
+            raise ValueError(f"Unable to allocate 0x{size:x} bytes.")
 
         self.remove_region(region.base, region.base + size)
 

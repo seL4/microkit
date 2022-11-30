@@ -23,6 +23,7 @@ AARCH64_LVL2_BITS = 9
 
 # Note that we're setting up page tables for a RISC-V system with Sv39 virtual memory.
 RISCV64_PAGE_TABLE_SIZE = 4096
+
 RISCV64_2MB_BLOCK_BITS = 21
 
 RISCV_PT_INDEX_BITS = 9
@@ -57,15 +58,6 @@ def arm_lvl0_addr(addr: int) -> int:
     bits = AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS
     return (addr >> bits) << bits
 
-
-def arch_lvl1_addr(arch: KernelArch, addr: int) -> int:
-    bits = AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS
-    return (addr >> bits) << bits
-
-
-def arch_lvl2_addr(arch: KernelArch, addr: int) -> int:
-    bits = AARCH64_2MB_BLOCK_BITS
-    return (addr >> bits) << bits
 
 # @ivanv, understand why we don't need the alignment checking
 #
@@ -107,7 +99,7 @@ class Loader:
         initial_task_elf: ElfFile,
         initial_task_phys_base: Optional[int],
         reserved_region: MemoryRegion,
-        regions: List[Tuple[int, bytes]]
+        regions: List[Tuple[int, bytes]],
     ) -> None:
         """
 
@@ -193,9 +185,12 @@ class Loader:
         assert kernel_first_paddr is not None
 
         if kernel_config.arch == KernelArch.AARCH64:
-            pagetable_vars = self._arm_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
+            if kernel_config.hyp_mode:
+                pagetable_vars = self._arm_setup_pagetables_hyp(kernel_first_vaddr, kernel_first_paddr)
+            else:
+                pagetable_vars = self._arm_setup_pagetables(kernel_first_vaddr, kernel_first_paddr)
         elif kernel_config.arch == KernelArch.RISCV64:
-            pagetable_vars = self._riscv_setup_pagetables(kernel_config.page_table_levels,
+            pagetable_vars = self._riscv_setup_pagetables(kernel_config.riscv_page_table_levels,
                                                           kernel_first_vaddr,
                                                           kernel_first_paddr)
         else:
@@ -228,8 +223,9 @@ class Loader:
 
         _check_non_overlapping(self._regions)
 
-        # FIXME: Should be a way to determine if seL4 needs hypervisor mode or not
-        flags = 0
+        # Currently the only flag passed to the loader is whether seL4
+        # is configured as a hypervisor or not.
+        flags = 1 if kernel_config.hyp_mode else 0
 
         self._header = (
             self._magic,
@@ -331,6 +327,55 @@ class Loader:
             "boot_lvl1_pt": boot_lvl1_pt,
             "boot_lvl2_pt": boot_lvl2_pt,
             "boot_lvl2_pt_elf": boot_lvl2_pt_elf,
+        }
+
+
+    def _arm_setup_pagetables_hyp(self, first_vaddr: int, first_paddr: int) -> Dict[str, bytes]:
+        boot_lvl1_lower_addr, _ = self._elf.find_symbol("boot_lvl1_lower")
+        boot_lvl1_upper_addr, _ = self._elf.find_symbol("boot_lvl1_upper")
+        boot_lvl2_upper_addr, _ = self._elf.find_symbol("boot_lvl2_upper")
+
+        boot_lvl0_lower = bytearray(PAGE_TABLE_SIZE)
+        boot_lvl0_lower[:8] = pack("<Q", boot_lvl1_lower_addr | 3)
+
+        boot_lvl0_upper = bytearray(PAGE_TABLE_SIZE)
+
+        boot_lvl1_lower = bytearray(PAGE_TABLE_SIZE)
+        for i in range(512):
+            pt_entry = (
+                (i << AARCH64_1GB_BLOCK_BITS) |
+                (1 << 10) | # access flag
+                (0 << 2) | # strongly ordered memory
+                (1) # 1G block
+            )
+            boot_lvl1_lower[8*i:8*(i+1)] = pack("<Q", pt_entry)
+
+        ptentry = boot_lvl1_upper_addr | 3
+        idx = lvl0_index(first_vaddr)
+        boot_lvl0_lower[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+
+        boot_lvl1_upper = bytearray(PAGE_TABLE_SIZE)
+        ptentry = boot_lvl2_upper_addr | 3
+        idx = lvl1_index(first_vaddr)
+        boot_lvl1_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+
+        boot_lvl2_upper = bytearray(PAGE_TABLE_SIZE)
+        for i in range(lvl2_index(first_vaddr), 512):
+            pt_entry = (
+                (((i - lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS) + first_paddr) |
+                (1 << 10) | # access flag
+                (3 << 8) | # make sure the shareability is the same as the kernel's
+                (4 << 2) | # MT_NORMAL memory
+                (1 << 0) # 2M block
+            )
+            boot_lvl2_upper[8*i:8*(i+1)] = pack("<Q", pt_entry)
+
+        return {
+            "boot_lvl0_lower": boot_lvl0_lower,
+            "boot_lvl1_lower": boot_lvl1_lower,
+            "boot_lvl0_upper": boot_lvl0_upper,
+            "boot_lvl1_upper": boot_lvl1_upper,
+            "boot_lvl2_upper": boot_lvl2_upper,
         }
 
 

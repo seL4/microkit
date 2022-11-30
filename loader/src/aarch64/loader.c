@@ -32,6 +32,9 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #elif defined(BOARD_qemu_arm_virt)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
+#elif defined(BOARD_odroidc2)
+#define GICD_BASE 0xc4301000UL
+#define GICC_BASE 0xc4302000UL
 #endif
 
 #define REGION_TYPE_DATA 1
@@ -82,6 +85,7 @@ typedef void (*sel4_entry)(
 void switch_to_el1(void);
 void switch_to_el2(void);
 void el1_mmu_enable(void);
+void el2_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
 
@@ -112,7 +116,6 @@ memcpy(void *dst, const void *src, size_t sz)
 #define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
 #if defined(BOARD_tqma8xqp1gb)
-
 #define UART_BASE 0x5a070000
 #define STAT 0x14
 #define TRANSMIT 0x1c
@@ -125,7 +128,6 @@ putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 #elif defined(BOARD_imx8mq_evk)
-
 #define UART_BASE 0x30860000
 #define STAT 0x98
 #define TRANSMIT 0x40
@@ -417,6 +419,7 @@ ensure_correct_el(void)
     if (loader_data->flags & FLAG_SEL4_HYP) {
         if (el != EL2) {
             puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
+            return 1;
         }
     } else {
         if (el == EL2) {
@@ -456,7 +459,7 @@ start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
 static void
 configure_gicv2(void)
 {
@@ -502,11 +505,11 @@ configure_gicv2(void)
 }
 #endif
 
-
 int
 main(void)
 {
     int r;
+    enum el el;
 
     puts("LDR|INFO: altloader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
@@ -522,7 +525,7 @@ main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
     configure_gicv2();
 #endif
 
@@ -532,7 +535,15 @@ main(void)
     }
 
     puts("LDR|INFO: enabling MMU\n");
-    el1_mmu_enable();
+    /* Since we've ensured the correct EL, the current EL can only be
+     * EL1 or EL2.
+     */
+    el = current_el();
+    if (el == EL1) {
+        el1_mmu_enable();
+    } else if (el == EL2) {
+        el2_mmu_enable();
+    }
 
     puts("LDR|INFO: jumping to kernel\n");
     start_kernel();
