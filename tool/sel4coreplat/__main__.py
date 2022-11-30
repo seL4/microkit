@@ -1914,7 +1914,7 @@ def main() -> int:
     # @ivanv: add support for 44-bit physical addresses
     # Certain values in hypervisor mode when CONFIG_ARM_PA_SIZE_BITS_44 change.
     # Need to go through seL4 source code and fix this.
-    assert gen_config["CONFIG_ARM_PA_SIZE_BITS_40"] == 1 and kernel_config.hyp_mode, "TODO: add support for 44-bit physical addresses in hyp mode"
+    assert not (gen_config["CONFIG_ARM_PA_SIZE_BITS_44"] and kernel_config.hyp_mode), "TODO: add support for 44-bit physical addresses in hyp mode"
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
     if len(monitor_elf.segments) > 1:
