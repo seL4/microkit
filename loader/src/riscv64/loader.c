@@ -104,15 +104,10 @@ memcpy(void *dst, const void *src, size_t sz)
 
 #define SBI_CALL_1(which, arg0) SBI_CALL(which, arg0, 0, 0)
 
-static inline void sbi_console_putchar(int ch)
-{
-    SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
-}
-
 static void
 putc(uint8_t ch)
 {
-    sbi_console_putchar(ch);
+    SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
 }
 
 static void

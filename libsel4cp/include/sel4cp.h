@@ -145,19 +145,7 @@ sel4cp_mr_get(uint8_t mr)
 }
 
 // @ivanv: inline or nah?
-#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
-static uint64_t
-sel4cp_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
-{
-    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
-}
-
-static uint64_t
-sel4cp_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
-{
-    return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
-}
-
+#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT) || defined(CONFIG_RISCV_HYPERVISOR_SUPPORT)
 static inline void
 sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
 {
@@ -188,5 +176,19 @@ sel4cp_vm_stop(sel4cp_vm vm)
         sel4cp_dbg_puts("sel4cp_vm_stop: error suspending TCB\n");
         sel4cp_internal_crash(err);
     }
+}
+#endif
+
+#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
+static uint64_t
+sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
+{
+    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
+}
+
+static uint64_t
+sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
+{
+    return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
 }
 #endif

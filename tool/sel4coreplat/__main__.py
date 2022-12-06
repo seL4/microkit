@@ -1277,7 +1277,10 @@ def build_system(
     vm_names = [vm.name for vm in virtual_machines]
     vspace_names = [f"VSpace: PD={pd.name}" for pd in system.protection_domains]
     vspace_names += [f"VSpace: VM={vm.name}" for vm in virtual_machines]
-    vspace_objects = init_system.allocate_objects(kernel_config, Sel4Object.VSpace, vspace_names)
+    vspace_objects = init_system.allocate_objects(kernel_config, Sel4Object.Vspace, vspace_names)
+
+    pd_ds = ds[:len(pd_names)]
+    vm_ds = ds[len(pd_names):]
 
     # PageUpperDirectory and PageDirectory are not present on RISC-V
     if kernel_config.arch == KernelArch.AARCH64:
@@ -1285,14 +1288,12 @@ def build_system(
             ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
             ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
 
-        pd_ds = ds[:len(pd_names)]
-        vm_ds = ds[len(pd_names):]
-
         d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
         d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
-        d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
+        d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
+        d_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
@@ -1934,6 +1935,8 @@ def main() -> int:
     else:
         raise Exception(f"Unsupported seL4 architecture: {gen_config_arch}")
 
+    hyp_mode = gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"] if "CONFIG_ARM_HYPERVISOR_SUPPORT" in gen_config else None
+    hyp_mode = gen_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"] if "CONFIG_RISCV_HYPERVISOR_SUPPORT" in gen_config else None
     kernel_config = KernelConfig(
         arch = arch,
         word_size = gen_config["CONFIG_WORD_SIZE"],
@@ -1946,7 +1949,7 @@ def main() -> int:
         have_fpu = gen_config["CONFIG_HAVE_FPU"],
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
         riscv_page_table_levels = gen_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in gen_config else None,
-        hyp_mode = gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"] if "CONFIG_ARM_HYPERVISOR_SUPPORT" in gen_config else None,
+        hyp_mode = hyp_mode,
     )
 
     # @ivanv: add support for 44-bit physical addresses

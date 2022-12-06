@@ -82,7 +82,7 @@ class Sel4Object(IntEnum):
     PageDirectory = 11
     PageUpperDirectory = 12
     PageGlobalDirectory = 13
-    VSpace = 14
+    Vspace = 14
     Vcpu = 15
 
     def get_id(self, kernel_config: KernelConfig) -> int:
@@ -94,7 +94,9 @@ class Sel4Object(IntEnum):
             else:
                 return self
         elif kernel_config.arch == KernelArch.RISCV64:
-            if self in RISCV64_OBJECTS:
+            if kernel_config.hyp_mode and self in RISCV64_HYP_OBJECTS:
+                return RISCV64_HYP_OBJECTS[self]
+            elif self in RISCV64_OBJECTS:
                 return RISCV64_OBJECTS[self]
             else:
                 return self
@@ -104,7 +106,9 @@ class Sel4Object(IntEnum):
 
     def get_size(self, kernel_config: KernelConfig) -> Optional[int]:
         if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and self in AARCH64_HYP_OBJECT_SIZES:
-                return AARCH64_HYP_OBJECT_SIZES[self]
+            return AARCH64_HYP_OBJECT_SIZES[self]
+        elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode and self in RISCV64_HYP_OBJECT_SIZES:
+            return RISCV64_HYP_OBJECT_SIZES[self]
         elif self in FIXED_OBJECT_SIZES:
             return FIXED_OBJECT_SIZES[self]
         else:
@@ -123,12 +127,12 @@ AARCH64_OBJECTS = {
     Sel4Object.PageDirectory: 13,
     Sel4Object.Vcpu: 14,
      # A VSpace on AArch64 is represented by a PageGlobalDirectory
-    Sel4Object.VSpace: 9,
+    Sel4Object.Vspace: 9,
 }
 
 AARCH64_HYP_OBJECTS = {
      # A VSpace on AArch64 in hypervisor mode is represented by a PageUpperDirectory
-    Sel4Object.VSpace: 8,
+    Sel4Object.Vspace: 8,
 }
 
 # Note that here we make the assumption that we are using Sv39 platforms as
@@ -140,7 +144,11 @@ RISCV64_OBJECTS = {
     Sel4Object.LargePage: 9,
     Sel4Object.PageTable: 10,
     # A VSpace on RISC-V is represented by a PageTable
-    Sel4Object.VSpace: 10,
+    Sel4Object.Vspace: 10,
+}
+
+RISCV64_HYP_OBJECTS = {
+    Sel4Object.Vcpu: 11,
 }
 
 SEL4_OBJECT_TYPE_NAMES = {
@@ -157,7 +165,7 @@ SEL4_OBJECT_TYPE_NAMES = {
     Sel4Object.PageTable: "SEL4_PAGE_TABLE_OBJECT",
     Sel4Object.PageDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
     Sel4Object.PageUpperDirectory: "SEL4_PAGE_DIRECTORY_OBJECT",
-    Sel4Object.VSpace: "SEL4_VSPACE_OBJECT",
+    Sel4Object.Vspace: "SEL4_VSPACE_OBJECT",
     Sel4Object.Vcpu: "SEL4_VCPU_OBJECT",
 }
 
@@ -168,7 +176,7 @@ FIXED_OBJECT_SIZES = {
     Sel4Object.Endpoint: 1 << 4,
     Sel4Object.Notification: 1 << 6,
     Sel4Object.Reply: 1 << 5,
-    Sel4Object.VSpace: 1 << 12,
+    Sel4Object.Vspace: 1 << 12,
     Sel4Object.HugePage: 1 << 30,
     Sel4Object.SmallPage: 1 << 12,
     Sel4Object.LargePage: 1 << 21,
@@ -180,6 +188,11 @@ FIXED_OBJECT_SIZES = {
 
 AARCH64_HYP_OBJECT_SIZES = {
     Sel4Object.PageUpperDirectory: 1 << 13,
+}
+
+RISCV64_HYP_OBJECT_SIZES = {
+    Sel4Object.Vcpu: 1 << 10,
+    Sel4Object.Vspace: 1 << 14,
 }
 
 VARIABLE_SIZE_OBJECTS = {
@@ -654,6 +667,10 @@ class Sel4Label(IntEnum):
     RISCVASIDPoolAssign = 67
     # RISC-V IRQ
     RISCVIRQIssueIRQHandlerTrigger = 68
+    # RISC-V VCPU
+    RISCVVCPUSetTCB = 69
+    RISCVVCPUReadReg = 70
+    RISCVVCPUWriteReg = 71
 
     def get_id(self, kernel_config: KernelConfig) -> int:
         if kernel_config.arch == KernelArch.AARCH64:

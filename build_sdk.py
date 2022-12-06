@@ -181,6 +181,18 @@ SUPPORTED_BOARDS = (
         kernel_options = {
             "KernelIsMCS": True,
             "KernelPlatform": "qemu-riscv-virt",
+            "KernelRiscVHypervisorSupport": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="qemu_riscv_virt_no_hyp",
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "qemu-riscv-virt",
         },
         examples = {}
     ),
