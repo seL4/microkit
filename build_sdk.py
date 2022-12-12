@@ -126,7 +126,6 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
-            "QEMU_MEMORY": 2048,
         },
         examples = {}
     ),
