@@ -13,8 +13,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Add aarch64-none-elf to PATH
-        run: echo "/home/ci/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Setup pyenv
         run: |
           python3.9 -m venv pyenv
