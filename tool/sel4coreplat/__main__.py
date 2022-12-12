@@ -1935,8 +1935,8 @@ def main() -> int:
     else:
         raise Exception(f"Unsupported seL4 architecture: {gen_config_arch}")
 
-    hyp_mode = gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"] if "CONFIG_ARM_HYPERVISOR_SUPPORT" in gen_config else None
-    hyp_mode = gen_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"] if "CONFIG_RISCV_HYPERVISOR_SUPPORT" in gen_config else None
+    hyp_mode = (("CONFIG_ARM_HYPERVISOR_SUPPORT" in gen_config and gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"]) or
+               ("CONFIG_RISCV_HYPERVISOR_SUPPORT" in gen_config and gen_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"]))
     kernel_config = KernelConfig(
         arch = arch,
         word_size = gen_config["CONFIG_WORD_SIZE"],

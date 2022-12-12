@@ -763,6 +763,10 @@ RISCV_LABELS = {
     Sel4Label.RISCVASIDPoolAssign: 42,
     # RISC-V IRQ
     Sel4Label.RISCVIRQIssueIRQHandlerTrigger: 43,
+    # RISC-V VCPU
+    Sel4Label.RISCVVCPUSetTCB: 44,
+    Sel4Label.RISCVVCPUReadReg: 45,
+    Sel4Label.RISCVVCPUWriteReg: 46,
 }
 
 
@@ -1192,10 +1196,13 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
 
 
 def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
+    # @ivanv: remove hard-coding
     slot_bits = 5  # seL4_SlotBits
     root_cnode_bits = kernel_config.root_cnode_bits
     if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode:
         vspace_bits = 13  # seL4_VSpaceBits
+    elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:
+        vspace_bits = 14  # seL4_VSpaceBits
     else:
         vspace_bits = 12  # seL4_VSpaceBits
     cnode_size_bits = root_cnode_bits + slot_bits
@@ -1345,9 +1352,12 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
         tcb_bits = 11
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
+    # @ivanv: remove hard-coding
     if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode:
         # @ivanv Note that this assumes CONFIG_ARM_PA_SIZE_BITS_40 is set
         vspace_bits = 13  # seL4_VSpaceBits
+    elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:
+        vspace_bits = 14  # seL4_VSpaceBits
     else:
         vspace_bits = 12  # seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
