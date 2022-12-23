@@ -1,4 +1,4 @@
-name: SDK build CI
+name: CI
 
 on:
   push:
@@ -6,26 +6,15 @@ on:
 
 jobs:
   build:
-    name: Build and upload SDK (Linux x86_64)
-    # Don't want any forks to run this workflow
+    name: Build and upload SDK (Linux x86-64)
+    # Don't want any forks or PRs to run this workflow
     if: ${{ github.repository_owner == 'Ivan-Velickovic' }}
     runs-on: self-hosted
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Setup pyenv
-        run: |
-          python3.9 -m venv pyenv
-          ./pyenv/bin/pip install --upgrade pip setuptools wheel
-          ./pyenv/bin/pip install -r requirements.txt
-      - name: Clone seL4
-        uses: actions/checkout@v3
-        with:
-          repository: Ivan-Velickovic/seL4
-          ref: sel4cp-dev
-          path: seL4
       - name: Build SDK
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4
+        run: ./ci/build.sh
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
