@@ -15,9 +15,9 @@ ifeq ($(strip $(ARCH)),)
 $(error ARCH must be specified)
 endif
 
-ifeq ($(strip $(TOOLCHAIN)),)
-$(error TOOLCHAIN must be specified)
-endif
+# ifeq ($(strip $(TOOLCHAIN)),)
+# $(error TOOLCHAIN must be specified)
+# endif
 
 ifeq ($(ARCH),aarch64)
 	C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
@@ -31,27 +31,35 @@ else
 	$(error ARCH must be aarch64 or riscv64)
 endif
 
+ifeq ($(ARCH),x86_64)
+	GCC := gcc
+	AS := as
+else
+	GCC := $(TOOLCHAIN)gcc
+	AS := $(TOOLCHAIN)as
+endif
+
 LIBS := libsel4cp.a
 OBJS := main.o dbg.o
 OTHER_OBJS := crt0.o
 
 $(BUILD_DIR)/%.o : src/$(ARCH)/%.S
-	$(TOOLCHAIN)gcc $(ASM_CPP_FLAGS) $< -o $@
+	$(GCC) $(ASM_CPP_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH)/%.s
-	$(TOOLCHAIN)as $(ASM_FLAGS) $< -o $@
+	$(AS) $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH)/%.c
-	$(TOOLCHAIN)gcc -c $(C_FLAGS)  $< -o $@
+	$(GCC) -c $(C_FLAGS)  $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.S
-	$(TOOLCHAIN)gcc $(ASM_CPP_FLAGS) $< -o $@
+	$(GCC) $(ASM_CPP_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.s
-	$(TOOLCHAIN)as $(ASM_FLAGS) $< -o $@
+	$(AS) $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
-	$(TOOLCHAIN)gcc -c $(C_FLAGS) $< -o $@
+	$(GCC) -c $(C_FLAGS) $< -o $@
 
 LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 

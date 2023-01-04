@@ -30,6 +30,7 @@ SEL4CP_EPOCH = 1616367257
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
+X86_64_TOOLCHAIN = ""
 AARCH64_TOOLCHAIN = "aarch64-none-elf-"
 RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
 
@@ -37,6 +38,7 @@ RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
 class BoardArch:
     AARCH64 = 1
     RISCV64 = 2
+    X86_64 = 3
 
 # @ivanv: if we're going to have an optimised build, should we pass in -mtune as well to all the Makefiles
 # for RISC-V builds?
@@ -235,6 +237,18 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
+    BoardInfo(
+        name="x86_64",
+        arch=BoardArch.X86_64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "pc99",
+            "KernelSel4Arch": "x86_64",
+        },
+        examples = {}
+    ),
 )
 
 SUPPORTED_CONFIGS = (
@@ -397,6 +411,8 @@ def build_elf_component(
         arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
     elif board.arch == BoardArch.RISCV64:
         arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
+    elif board.arch == BoardArch.X86_64:
+        arch_args = f"ARCH=x86_64 TOOLCHAIN={X86_64_TOOLCHAIN}"
     else:
         raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
 
