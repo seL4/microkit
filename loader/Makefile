@@ -27,10 +27,14 @@ ifeq ($(strip $(TOOLCHAIN)),)
 $(error TOOLCHAIN must be specified)
 endif
 
+ifeq ($(strip $(NUM_CPUS)),)
+$(error NUM_CPUS must be specified)
+endif
+
 ifeq ($(ARCH),aarch64)
 	# FIXME @ivanv: investigate why having -O3 causes QEMU ARM virt to not be able to boot.
-	C_FLAGS := -std=gnu11 -g3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -DARCH_aarch64 -Wall -Werror
-	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -mcpu=$(GCC_CPU)
+	C_FLAGS := -std=gnu11 -g3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -DNUM_CPUS=$(NUM_CPUS) -DARCH_aarch64 -Wall -Werror
+	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -mcpu=$(GCC_CPU) -DNUM_CPUS=$(NUM_CPUS)
 	ASM_FLAGS := -g3 -mcpu=$(GCC_CPU)
 else ifeq ($(ARCH),riscv64)
 	C_FLAGS := -mcmodel=medany -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -march=rv64imac -mabi=lp64 -DBOARD_$(BOARD) -DARCH_riscv64 -Wall -Werror

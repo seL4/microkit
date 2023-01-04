@@ -84,6 +84,7 @@ class ProtectionDomain:
     priority: int
     budget: int
     period: int
+    cpu_affinity: int
     pp: bool
     program_image: Path
     maps: Tuple[SysMap, ...]
@@ -283,7 +284,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 
 def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
-    root_attrs = ("name", "priority", "pp", "budget", "period")
+    root_attrs = ("name", "priority", "pp", "budget", "period", "cpu")
     child_attrs = root_attrs + ("pd_id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
     program_image: Optional[Path] = None
@@ -294,6 +295,8 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
 
     budget = int(pd_xml.attrib.get("budget", "1000"), base=0)
     period = int(pd_xml.attrib.get("period", str(budget)), base=0)
+    # @ivanv: TODO, check that the CPU is in the correct range
+    cpu = int(pd_xml.attrib.get("cpu", "0"), base=0)
     pd_id = None
     if is_child:
         pd_id = int(checked_lookup(pd_xml, "pd_id"), base=0)
@@ -360,6 +363,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         priority,
         budget,
         period,
+        cpu,
         pp,
         program_image,
         tuple(maps),

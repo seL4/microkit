@@ -385,6 +385,20 @@ BEGIN_FUNC(el2_mmu_enable)
 
 END_FUNC(el2_mmu_enable)
 
+#if NUM_CPUS > 1
+BEGIN_FUNC(start_secondary_cpu)
+    ldr     x9, =secondary_cpu_stack
+    ldr     x9, [x9]
+    mov     sp, x9
+
+    b secondary_cpu_entry
+END_FUNC(start_secondary_cpu)
+
+BEGIN_FUNC(psci_func)
+    smc #0
+    ret
+END_FUNC(psci_func)
+#endif
 
 .extern exception_handler
 .extern exception_register_state

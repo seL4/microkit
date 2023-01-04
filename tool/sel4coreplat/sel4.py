@@ -63,6 +63,7 @@ class KernelConfig:
     have_fpu: bool
     riscv_page_table_levels: int
     hyp_mode: bool
+    num_cpus: int
 
 # Kernel Objects:
 
@@ -1305,7 +1306,7 @@ def emulate_kernel_boot(
         raise Exception("Couldn't find appropriate region for initial task kernel objects")
 
     fixed_cap_count = 0xf
-    sched_control_cap_count = 1
+    sched_control_cap_count = kernel_config.num_cpus
     paging_cap_count = _get_arch_n_paging(kernel_config, initial_task_virt_region)
     page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
     first_untyped_cap = fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count
@@ -1386,6 +1387,8 @@ def arch_get_page_attrs(arch: KernelArch, mp: SysMap) -> int:
     elif arch == KernelArch.RISCV64:
         if "x" not in mp.perms:
             attrs |= SEL4_RISCV_EXECUTE_NEVER
+        if mp.cached:
+            print(f"WARNING: Setting cached on memory mapping RISC-V has no effect on RISC-V")
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
 

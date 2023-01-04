@@ -1733,7 +1733,7 @@ def build_system(
         # FIXME: We don't use repeat here because in the near future PDs will set the sched params
         system_invocations.append(
             Sel4SchedControlConfigureFlags(
-                kernel_boot_info.schedcontrol_cap,
+                kernel_boot_info.schedcontrol_cap + pd.cpu_affinity,
                 schedcontext_obj.cap_addr,
                 pd.budget,
                 pd.period,
@@ -1950,8 +1950,8 @@ def main() -> int:
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
         riscv_page_table_levels = gen_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in gen_config else None,
         hyp_mode = hyp_mode,
+        num_cpus = gen_config["CONFIG_MAX_NUM_NODES"],
     )
-
     # @ivanv: add support for 44-bit physical addresses
     # Certain values in hypervisor mode when CONFIG_ARM_PA_SIZE_BITS_44 change.
     # Need to go through seL4 source code and fix this.

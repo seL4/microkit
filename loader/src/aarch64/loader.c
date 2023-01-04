@@ -29,7 +29,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
-#elif defined(BOARD_qemu_arm_virt)
+#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
 #elif defined(BOARD_odroidc2)
@@ -87,7 +87,7 @@ void switch_to_el2(void);
 void el1_mmu_enable(void);
 void el2_mmu_enable(void);
 
-char _stack[STACK_SIZE] ALIGN(16);
+char _stack[NUM_CPUS][STACK_SIZE] ALIGN(16);
 
 /* Paging structures for kernel mapping */
 uint64_t boot_lvl0_upper[1 << 9] ALIGN(1 << 12);
@@ -139,7 +139,7 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_imx8mm_evk)
+#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mm_evk_2_cores) || defined(BOARD_imx8mm_evk_4_cores)
 
 #define UART_BASE 0x30890000
 #define STAT 0x98
@@ -152,7 +152,7 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_qemu_arm_virt)
+#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores)
 #define UART_BASE 0x9000000
 #define UARTDR 0x000
 #define UARTFR 0x018
@@ -471,7 +471,7 @@ start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2) || defined(BOARD_qemu_arm_virt_2_cores)
 static void
 configure_gicv2(void)
 {
@@ -517,6 +517,69 @@ configure_gicv2(void)
 }
 #endif
 
+// @ivanv: Clean up, understand, comment all the changes to the loader.
+// @ivanv: Do more multi-core tests
+#if NUM_CPUS > 1
+void start_secondary_cpu(void);
+volatile uint64_t curr_cpu_id;
+volatile uintptr_t secondary_cpu_stack;
+static volatile int core_up[NUM_CPUS];
+
+// @ivanv: Shouldn't need psci_func, we should be just making a direct assembly call to turn the
+// CPU on, just providing CPU ID.
+int psci_func(unsigned int id, unsigned long param1, unsigned long param2, unsigned long param3);
+
+int psci_cpu_on(uint64_t cpu_id) {
+    // SMC_FID_CPU_ON == 0xc4000003
+    curr_cpu_id = cpu_id;
+    secondary_cpu_stack = (uintptr_t)(&_stack[cpu_id][0xff0]);
+    return psci_func(0xc4000003, cpu_id, (unsigned long)&start_secondary_cpu, 0);
+}
+
+#define MSR(reg, v)                                \
+    do {                                           \
+        uint64_t _v = v;                             \
+        asm volatile("msr " reg ",%0" :: "r" (_v));\
+    } while(0)
+
+void secondary_cpu_entry() {
+    int r;
+    r = ensure_correct_el();
+    if (r != 0) {
+        goto fail;
+    }
+
+    /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
+    MSR("tpidr_el1", curr_cpu_id);
+
+    puts("LDR|INFO: enabling MMU on CPU ");
+    puthex64(curr_cpu_id);
+    puts("\n");
+    el1_mmu_enable();
+
+    puts("LDR|INFO: jumping to kernel on CPU ");
+    puthex64(curr_cpu_id);
+    puts("\n");
+
+    core_up[curr_cpu_id] = 1;
+
+    start_kernel();
+
+    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED on CPU ");
+    puthex64(curr_cpu_id);
+    puts("\n");
+
+fail:
+    /* Note: can't usefully return to U-Boot once we are here. */
+    /* IMPROVEMENT: use SMC SVC call to try and power-off / reboot system.
+     * or at least go to a WFI loop
+     */
+    for (;;) {
+    }
+}
+
+#endif
+
 int
 main(void)
 {
@@ -537,7 +600,7 @@ main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores) || defined(BOARD_odroidc2)
     configure_gicv2();
 #endif
 
@@ -545,6 +608,51 @@ main(void)
     if (r != 0) {
         goto fail;
     }
+
+#if NUM_CPUS > 1
+    /* Get the CPU ID of the CPU we are booting on. */
+    uint64_t boot_cpu_id;
+    asm volatile("mrs %x0, mpidr_el1" : "=r"(boot_cpu_id) :: "cc");
+    boot_cpu_id = boot_cpu_id & 0x00ffffff;
+    /* We assume that the ID of each CPU will be from 0 to n-1 where n is the
+     * number of CPUs we want to start.
+     */
+    if (boot_cpu_id >= NUM_CPUS) {
+        puts("LDR|ERROR: Boot CPU ID (");
+        puthex32(boot_cpu_id);
+        puts(") exceeds the maximum CPU ID expected (");
+        puthex32(NUM_CPUS - 1);
+        puts(")\n");
+        goto fail;
+    }
+    puts("LDR|INFO: Boot CPU ID (");
+    puthex32(boot_cpu_id);
+    puts(")\n");
+    /* Start each CPU, other than the one we are booting on. */
+    for (int i = 0; i < NUM_CPUS; i++) {
+        if (i == boot_cpu_id) continue;
+
+        asm volatile("dmb sy" ::: "memory");
+
+        puts("LDR|INFO: Starting secondary CPU (");
+        puthex32(i);
+        puts(")\n");
+
+        r = psci_cpu_on(i);
+        /* PSCI success is 0. */
+        // TODO: decode PSCI error and print out something meaningful.
+        if (r != 0) {
+            puts("LDR|ERROR: Failed to start CPU ");
+            puthex32(i);
+            puts(", PSCI error code is ");
+            puthex64(r);
+            puts("\n");
+            goto fail;
+        }
+
+        while (!core_up[i]) {}
+    }
+#endif
 
     puts("LDR|INFO: enabling MMU\n");
     /* Since we've ensured the correct EL, the current EL can only be

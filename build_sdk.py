@@ -117,6 +117,32 @@ SUPPORTED_BOARDS = (
         examples = {}
     ),
     BoardInfo(
+        name="imx8mm_evk_2_cores",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelMaxNumNodes": 2,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="imx8mm_evk_4_cores",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelMaxNumNodes": 4,
+        },
+        examples = {}
+    ),
+    BoardInfo(
         name="qemu_arm_virt",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",
@@ -525,8 +551,11 @@ def main() -> None:
     for board in SUPPORTED_BOARDS:
         for config in SUPPORTED_CONFIGS:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
+            config_args = board.kernel_options | config.kernel_options
+            num_cpus = 1 if "KernelMaxNumNodes" not in config_args else config_args["KernelMaxNumNodes"]
             loader_defines = [
-                ("LINK_ADDRESS", hex(board.loader_link_address))
+                ("LINK_ADDRESS", hex(board.loader_link_address)),
+                ("NUM_CPUS", num_cpus)
             ]
             kernel_config = build_kernel_config_component(root_dir, build_dir, board, config)
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
