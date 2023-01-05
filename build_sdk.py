@@ -252,18 +252,18 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
-    BoardInfo(
-        name="qemu_riscv_virt_no_hyp_32",
-        arch=BoardArch.RISCV32,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "qemu-riscv-virt",
-            "KernelSel4Arch": "riscv32",
-        },
-        examples = {}
-    ),
+    # BoardInfo(
+    #     name="qemu_riscv_virt_no_hyp_32",
+    #     arch=BoardArch.RISCV32,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "qemu-riscv-virt",
+    #         "KernelSel4Arch": "riscv32",
+    #     },
+    #     examples = {}
+    # ),
     # BoardInfo(
     #     name="x86_64",
     #     arch=BoardArch.X86_64,
