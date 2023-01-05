@@ -60,11 +60,13 @@ def main():
     )
     parser.add_argument(
         "--board",
-        help="Target board"
+        help="Target board",
+        required=True
     )
     parser.add_argument(
         "--example",
-        help="Example to build"
+        help="Example to build",
+        required=True
     )
     args = parser.parse_args()
 
