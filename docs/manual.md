@@ -608,11 +608,11 @@ The QEMU command to run is:
        -m size=4095M  \
        -nographic \
        -serial mon:stdio \
-       -bios [SYSTEM_IMAGE]
+       -bios [SYSTEM IMAGE]
 
 You can also use the [Spike simulator](https://github.com/riscv-software-src/riscv-isa-sim), the command is:
 
-    $ spike -m4095 [SYSTEM_IMAGE]
+    $ spike -m4095 [SYSTEM IMAGE]
 
 ## QEMU RISC-V virt
 
@@ -627,7 +627,7 @@ The QEMU command to run is:
        -m size=3072M \
        -nographic \
        -serial mon:stdio \
-       -bios [SYSTEM_IMAGE]
+       -bios [SYSTEM IMAGE]
 
 ## HiFive Unleashed
 
