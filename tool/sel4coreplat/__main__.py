@@ -62,7 +62,7 @@ from sel4coreplat.sel4 import (
     Sel4TcbSetSchedParams,
     Sel4TcbSetSpace,
     Sel4TcbSetIpcBuffer,
-    Sel4ARMTcbWriteRegisters,
+    Sel4AARCH64TcbWriteRegisters,
     Sel4RISCVTcbWriteRegisters,
     Sel4AsidPoolAssign,
     Sel4TcbBindNotification,
@@ -1709,10 +1709,9 @@ def build_system(
             )
 
     # Now maps all the pages
-    page_map = Sel4ARMPageMap if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVPageMap
     for page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
         vspace_obj = vspace_objects[pd_idx]
-        invocation = page_map(page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
+        invocation = Sel4PageMap(kernel_config.arch, page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
         invocation.repeat(count, page=1, vaddr=vaddr_incr)
         system_invocations.append(invocation)
 
@@ -1720,7 +1719,8 @@ def build_system(
     for vspace_obj, pd, ipc_buffer_obj in zip(vspace_objects, system.protection_domains, ipc_buffer_objects):
         vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
         system_invocations.append(
-            page_map(
+            Sel4PageMap(
+                kernel_config.arch,
                 ipc_buffer_obj.cap_addr,
                 vspace_obj.cap_addr,
                 vaddr,
@@ -1771,7 +1771,7 @@ def build_system(
 
     # set register (entry point)
     # @ivanv: handle this better
-    arch_tcb_write_regs = Sel4ARMTcbWriteRegisters if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVTcbWriteRegisters
+    arch_tcb_write_regs = Sel4AARCH64TcbWriteRegisters if kernel_config.arch == KernelArch.AARCH64 else Sel4RISCVTcbWriteRegisters
     regs = Sel4Aarch64Regs if kernel_config.arch == KernelArch.AARCH64 else Sel4RiscvRegs
     for tcb_obj, pd in zip(tcb_objects, system.protection_domains):
         system_invocations.append(

@@ -160,16 +160,16 @@ RISCV64_HYP_OBJECTS = {
 }
 
 # @ivanv: Double check these, not sure about the first two and the last one.
-X86_64_OBJECTS = {
-    Sel4Object.PdPt: 7, # ?? seL4_X64_PML4Object
-    Sel4Object.Pml4: 8, # seL4_X64_PML4Object
-    Sel4Object.HugePage: 9,
-    Sel4Object.SmallPage: 10,
-    Sel4Object.LargePage: 11,
-    Sel4Object.PageTable: 12,
-    Sel4Object.PageDirectory: 13,
-    Sel4Object.IOPageTable: 14 # seL4_X86_IOPageTableObject, not sure if necessary
-}
+# X86_64_OBJECTS = {
+#     Sel4Object.PdPt: 7, # ?? seL4_X64_PML4Object
+#     Sel4Object.Pml4: 8, # seL4_X64_PML4Object
+#     Sel4Object.HugePage: 9,
+#     Sel4Object.SmallPage: 10,
+#     Sel4Object.LargePage: 11,
+#     Sel4Object.PageTable: 12,
+#     Sel4Object.PageDirectory: 13,
+#     Sel4Object.IOPageTable: 14 # seL4_X86_IOPageTableObject, not sure if necessary
+# }
 
 SEL4_OBJECT_TYPE_NAMES = {
     Sel4Object.Untyped: "SEL4_UNTYPED_OBJECT",
@@ -604,7 +604,7 @@ class Sel4RiscvRegs:
         return tuple(0 if x is None else x for x in raw)
 
 
-class Sel4X86_64Regs:
+class Sel4X64Regs:
     """
 typedef struct seL4_UserContext_ {
     seL4_Word rip, rsp, rflags, rax, rbx, rcx, rdx, rsi, rdi, rbp,
@@ -688,8 +688,8 @@ typedef struct seL4_UserContext_ {
         return tuple(0 if x is None else x for x in raw)
 
 
-# Note that each label has a specified value as this is
-# what it is used to invoke the right system call to seL4.
+# Note that enum value of each system call label does not necessarily correspond
+# to the value used to invoke the system call.
 class Sel4Label(IntEnum):
     # Untyped
     UntypedRetype = 1
@@ -1047,7 +1047,7 @@ class Sel4TcbResume(Sel4Invocation):
 
 # @ivanv: combine the arch specific TCB write regs
 @dataclass
-class Sel4ARMTcbWriteRegisters(Sel4Invocation):
+class Sel4AARCH64TcbWriteRegisters(Sel4Invocation):
     _object_type = "TCB"
     _method_name = "WriteRegisters"
     _extra_caps = ()
@@ -1087,7 +1087,7 @@ class Sel4RISCVTcbWriteRegisters(Sel4Invocation):
 
 
 @dataclass
-class Sel4X86TcbWriteRegisters(Sel4Invocation):
+class Sel4X64TcbWriteRegisters(Sel4Invocation):
     _object_type = "TCB"
     _method_name = "WriteRegisters"
     _extra_caps = ()
@@ -1095,7 +1095,7 @@ class Sel4X86TcbWriteRegisters(Sel4Invocation):
     tcb: int
     resume: bool
     arch_flags: int
-    regs: Sel4X86Regs
+    regs: Sel4X64Regs
 
     def _get_raw_invocation(self, kernel_config: KernelConfig) -> bytes:
         params = (
@@ -1222,11 +1222,11 @@ class Sel4PageMap(Sel4Invocation):
 
     def __init__(self, arch: KernelArch, page: int, vspace: int, vaddr: int, rights: int, attr: int):
         if arch == KernelArch.AARCH64:
-            self.label = Sel4LabelARM.ARMPageMap
+            self.label = Sel4Label.ARMPageMap
         elif arch == KernelArch.RISCV64:
-            self.label = Sel4LabelRISCV.RISCVPageMap
+            self.label = Sel4Label.RISCVPageMap
         elif arch == KernelArch.X86_64:
-            self.label = Sel4LabelX86.X86PageMap
+            self.label = Sel4Label.X86PageMap
         else:
             raise Exception(f"Unexpected kernel architecture: {arch}")
 

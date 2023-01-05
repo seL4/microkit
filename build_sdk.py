@@ -158,6 +158,19 @@ SUPPORTED_BOARDS = (
         examples = {}
     ),
     BoardInfo(
+        name="qemu_arm_virt_2_cores",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x70000000,
+        kernel_options = {
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelMaxNumNodes": 2,
+        },
+        examples = {}
+    ),
+    BoardInfo(
         name="odroidc2",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",
@@ -237,18 +250,18 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
-    BoardInfo(
-        name="x86_64",
-        arch=BoardArch.X86_64,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "pc99",
-            "KernelSel4Arch": "x86_64",
-        },
-        examples = {}
-    ),
+    # BoardInfo(
+    #     name="x86_64",
+    #     arch=BoardArch.X86_64,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "pc99",
+    #         "KernelSel4Arch": "x86_64",
+    #     },
+    #     examples = {}
+    # ),
 )
 
 SUPPORTED_CONFIGS = (
