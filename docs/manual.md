@@ -581,6 +581,20 @@ An QEMU command line:
        -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
        -serial mon:stdio
 
+## QEMU ARM virt
+
+Initial support is available for [QEMU's "virt" platform](https://www.qemu.org/docs/master/system/arm/virt.html) on AArch64.
+
+The QEMU command to run is:
+
+    $ qemu-system-aarch64 \
+       -machine virt \
+       -cpu cortex-a53 \
+       -m size=2048M \
+       -nographic \
+       -serial mon:stdio \
+       -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0
+
 ## Spike
 
 Initial support is available for the Spike on 64-bit RISC-V.
