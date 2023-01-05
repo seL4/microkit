@@ -20,16 +20,31 @@ endif
 # endif
 
 ifeq ($(ARCH),aarch64)
-	C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
-	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -mcpu=$(GCC_CPU)
-	ASM_FLAGS := -g3 -mcpu=$(GCC_CPU)
+	C_FLAGS_ARCH := -mcpu=$(GCC_CPU)
+	ASM_CPP_FLAGS_ARCH := -mcpu=$(GCC_CPU)
+	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
+	ARCH_DIR := aarch64
 else ifeq ($(ARCH),riscv64)
-	C_FLAGS := -mcmodel=medany -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -march=rv64imac -mabi=lp64 -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
-	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -march=rv64imac -mabi=lp64
-	ASM_FLAGS := -g3 -march=rv64imac -mabi=lp64
+	MARCH := rv64imac
+	MABI := lp64
+	C_FLAGS_ARCH := -mcmodel=medany -march=$(MARCH) -mabi=$(MABI)
+	ASM_CPP_FLAGS_ARCH := -march=$(MARCH) -mabi=$(MABI)
+	ASM_FLAGS_ARCH := -g3 -march=$(MARCH) -mabi=$(MABI)
+	ARCH_DIR := riscv
+else ifeq ($(ARCH),riscv32)
+	MARCH := rv32imac
+	MABI := ilp32
+	C_FLAGS_ARCH := -mcmodel=medany -march=$(MARCH) -mabi=$(MABI)
+	ASM_CPP_FLAGS_ARCH := -march=$(MARCH) -mabi=$(MABI)
+	ASM_FLAGS_ARCH := -g3 -march=$(MARCH) -mabi=$(MABI)
+	ARCH_DIR := riscv
 else
-	$(error ARCH must be aarch64 or riscv64)
+	$(error ARCH must be aarch64 or riscv64 or riscv32)
 endif
+
+C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include $(C_FLAGS_ARCH)
+ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 $(ASM_CPP_FLAGS_ARCH)
+ASM_FLAGS := -g3 $(ASM_FLAGS_ARCH)
 
 ifeq ($(ARCH),x86_64)
 	GCC := gcc
@@ -43,13 +58,13 @@ LIBS := libsel4cp.a
 OBJS := main.o dbg.o
 OTHER_OBJS := crt0.o
 
-$(BUILD_DIR)/%.o : src/$(ARCH)/%.S
+$(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(GCC) $(ASM_CPP_FLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o : src/$(ARCH)/%.s
+$(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 	$(AS) $(ASM_FLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o : src/$(ARCH)/%.c
+$(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.c
 	$(GCC) -c $(C_FLAGS)  $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.S

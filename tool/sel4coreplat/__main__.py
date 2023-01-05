@@ -1935,6 +1935,10 @@ def main() -> int:
         arch = KernelArch.AARCH64
     elif gen_config_arch == "riscv64":
         arch = KernelArch.RISCV64
+    elif gen_config_arch == "riscv32":
+        arch = KernelArch.RISCV32
+    elif gen_config_arch == "x86_64":
+        arch = KernelArch.X86_64
     else:
         raise Exception(f"Unsupported seL4 architecture: {gen_config_arch}")
 

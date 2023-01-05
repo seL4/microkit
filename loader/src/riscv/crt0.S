@@ -29,7 +29,7 @@
 
  @ivanv: Do we even need to keep track of FIRST_HART_ID?
  */
-#if defined(BOARD_spike) || defined(BOARD_qemu_riscv_virt) || defined(BOARD_qemu_riscv_virt_no_hyp)
+#if defined(BOARD_spike) || defined(BOARD_qemu_riscv_virt) || defined(BOARD_qemu_riscv_virt_no_hyp) || defined(BOARD_qemu_riscv_virt_no_hyp_32)
 #define FIRST_HART_ID 0
 #elif defined(BOARD_hifive_unleashed)
 #define FIRST_HART_ID 1

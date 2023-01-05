@@ -32,13 +32,15 @@ KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
 X86_64_TOOLCHAIN = ""
 AARCH64_TOOLCHAIN = "aarch64-none-elf-"
-RISCV64_TOOLCHAIN = "riscv64-unknown-elf-"
+# We can use the same toolchain for both 32-bit and 64-bit RISC-V builds.
+RISCV_TOOLCHAIN = "riscv64-unknown-elf-"
 
 # @ivanv: temporary, this can be removed by looking at the architecture in gen_config.yaml
 class BoardArch:
     AARCH64 = 1
     RISCV64 = 2
-    X86_64 = 3
+    RISCV32 = 3
+    X86_64 = 4
 
 # @ivanv: if we're going to have an optimised build, should we pass in -mtune as well to all the Makefiles
 # for RISC-V builds?
@@ -250,6 +252,18 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
+    BoardInfo(
+        name="qemu_riscv_virt_no_hyp_32",
+        arch=BoardArch.RISCV32,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "qemu-riscv-virt",
+            "KernelSel4Arch": "riscv32",
+        },
+        examples = {}
+    ),
     # BoardInfo(
     #     name="x86_64",
     #     arch=BoardArch.X86_64,
@@ -423,7 +437,9 @@ def build_elf_component(
     if board.arch == BoardArch.AARCH64:
         arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
     elif board.arch == BoardArch.RISCV64:
-        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV32:
+        arch_args = f"ARCH=riscv32 TOOLCHAIN={RISCV_TOOLCHAIN}"
     elif board.arch == BoardArch.X86_64:
         arch_args = f"ARCH=x86_64 TOOLCHAIN={X86_64_TOOLCHAIN}"
     else:
@@ -470,7 +486,9 @@ def build_lib_component(
     if board.arch == BoardArch.AARCH64:
         arch_args = f"ARCH=aarch64 TOOLCHAIN={AARCH64_TOOLCHAIN}"
     elif board.arch == BoardArch.RISCV64:
-        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV64_TOOLCHAIN}"
+        arch_args = f"ARCH=riscv64 TOOLCHAIN={RISCV_TOOLCHAIN}"
+    elif board.arch == BoardArch.RISCV32:
+        arch_args = f"ARCH=riscv32 TOOLCHAIN={RISCV_TOOLCHAIN}"
     else:
         raise Exception(f"Unexpected arch given: {board.arch}", board.arch)
 
