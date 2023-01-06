@@ -114,10 +114,6 @@ from sel4coreplat.loader import Loader, _check_non_overlapping
 if argv[0] is None:
     argv[0] = executable  # type: ignore
 
-# @ivanv: come back to this and make it architecture independent
-default_platform_description = PlatformDescription(
-    page_sizes = (0x1_000, 0x200_000)
-)
 
 @dataclass
 class MonitorConfig:
@@ -1950,8 +1946,6 @@ def main() -> int:
     search_paths = [] if args.search_path is None else args.search_path
     search_paths.insert(0, Path.cwd())
 
-    system_description = xml2system(args.system, default_platform_description)
-
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
     with open(gen_config_path, "r") as f:
@@ -2001,6 +1995,12 @@ def main() -> int:
     # Need to go through seL4 source code and fix this.
     if "CONFIG_ARM_PA_SIZE_BITS_44" in gen_config:
         assert not (gen_config["CONFIG_ARM_PA_SIZE_BITS_44"] and kernel_config.hyp_mode), "TODO: add support for 44-bit physical addresses in hyp mode"
+
+    default_platform_description = PlatformDescription(
+        page_sizes = (0x1_000, 0x200_000),
+        num_cpus = kernel_config.num_cpus,
+    )
+    system_description = xml2system(args.system, default_platform_description)
 
     monitor_elf = ElfFile.from_path(monitor_elf_path)
     if len(monitor_elf.segments) > 1:

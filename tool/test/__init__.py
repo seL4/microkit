@@ -10,7 +10,10 @@ from sel4coreplat.sysxml import xml2system, UserError, PlatformDescription
 
 
 plat_desc = PlatformDescription(
-    page_sizes = [0x1_000, 0x200_000]
+    page_sizes = [0x1_000, 0x200_000],
+    # The number of CPUs is dependent on the configuration of the platform that is being built.
+    # For the tests we just decide a value for this.
+    num_cpus = 4,
 )
 
 def _file(filename: str) -> Path:
@@ -91,6 +94,12 @@ class ProtectionDomainParseTests(ExtendedTestCase):
     def test_budget_gt_period(self):
         self._check_error("pd_budget_gt_period.xml", "Error: budget (1000) must be less than, or equal to, period (100) on element 'protection_domain':")
 
+    def test_cpu_greater_than_max(self):
+        self._check_error("pd_cpu_greater_than_max.xml", f"Error: CPU affinity must be between 0 and {plat_desc.num_cpus - 1} on element 'protection_domain':")
+
+    def test_cpu_less_than_0(self):
+        self._check_error("pd_cpu_less_than_0.xml", f"Error: CPU affinity must be between 0 and {plat_desc.num_cpus - 1} on element 'protection_domain':")
+
 
 class ChannelParseTests(ExtendedTestCase):
     def test_missing_pd(self):
@@ -107,6 +116,7 @@ class ChannelParseTests(ExtendedTestCase):
 
     def test_invalid_attrs(self):
         self._check_error("ch_invalid_attrs.xml", "Error: invalid attribute 'foo' on element 'channel': ")
+
 
 class SystemParseTests(ExtendedTestCase):
     def test_duplicate_pd_names(self):

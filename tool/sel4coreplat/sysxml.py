@@ -39,6 +39,7 @@ def _check_attrs(el: ET.Element, valid_keys: Iterable[str]) -> None:
 @dataclass(frozen=True, eq=True)
 class PlatformDescription:
     page_sizes: Tuple[int, ...]
+    num_cpus: int
 
 
 class LineNumberingParser(ET.XMLParser):
@@ -284,7 +285,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
     return SysMemoryRegion(name, size, page_size, page_count, paddr)
 
 
-def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
+def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=False) -> ProtectionDomain:
     root_attrs = ("name", "priority", "pp", "budget", "period", "cpu", "passive")
     child_attrs = root_attrs + ("pd_id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
@@ -296,8 +297,10 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
 
     budget = int(pd_xml.attrib.get("budget", "1000"), base=0)
     period = int(pd_xml.attrib.get("period", str(budget)), base=0)
-    # @ivanv: TODO, check that the CPU is in the correct range
     cpu = int(pd_xml.attrib.get("cpu", "0"), base=0)
+    if cpu < 0  or cpu >= plat_desc.num_cpus:
+        raise ValueError(f"CPU affinity must be between 0 and {plat_desc.num_cpus - 1}")
+
     pd_id = None
     if is_child:
         pd_id = int(checked_lookup(pd_xml, "pd_id"), base=0)
@@ -346,7 +349,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
                 region_paddr = checked_lookup(child, "region_paddr")
                 setvars.append(SysSetVar(symbol, region_paddr=region_paddr))
             elif child.tag == "protection_domain":
-                child_pds.append(xml2pd(child, is_child=True))
+                child_pds.append(xml2pd(child, plat_desc, is_child=True))
             elif child.tag == "virtual_machine":
                 if virtual_machine is not None:
                     raise UserError("virtual_machine must only be specified once")
@@ -501,7 +504,7 @@ def xml2system(filename: Path, plat_desc: PlatformDescription) -> SystemDescript
             if child.tag == "memory_region":
                 memory_regions.append(xml2mr(child, plat_desc))
             elif child.tag == "protection_domain":
-                protection_domains.append(xml2pd(child))
+                protection_domains.append(xml2pd(child, plat_desc))
             elif child.tag == "channel":
                 channels.append(xml2channel(child))
             else:

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2022, UNSW (ABN 57 195 873 179)
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="test" cpu="5">
+        <program_image path="test" />
+    </protection_domain>
+</system>
