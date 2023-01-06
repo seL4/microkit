@@ -1286,11 +1286,11 @@ def build_system(
     pd_names = [pd.name for pd in system.protection_domains]
     vm_names = [vm.name for vm in virtual_machines]
     vspace_names = [f"VSpace: PD={pd.name}" for pd in system.protection_domains]
-    vspace_names += [f"VSpace: VM={vm.name}" for vm in virtual_machines]
+    # vspace_names += [f"VSpace: VM={vm.name}" for vm in virtual_machines]
     vspace_objects = init_system.allocate_objects(kernel_config, Sel4Object.Vspace, vspace_names)
 
     pd_ds = ds[:len(pd_names)]
-    vm_ds = ds[len(pd_names):]
+    # vm_ds = ds[len(pd_names):]
 
     # PageUpperDirectory and PageDirectory are not present on RISC-V
     if kernel_config.arch == KernelArch.AARCH64:
@@ -1299,19 +1299,22 @@ def build_system(
             ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
 
         d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
-        d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
+        # d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
         d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
-        d_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
+        # d_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
 
-    pd_pts = pts[:len(pd_names)]
-    vm_pts = pts[len(pd_names):]
-    pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_pts]
-    pt_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_pts]
+    # vm_pts = pts[len(pd_names):]
+    pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
+    # print(f"pts: {pts}")
+    # print(f"vm_pts: {vm_pts}")
+    # print(f"pd_names: {pd_names}")
+    # print(f"pt_names: {pt_names}")
+    # pt_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_pts]
     pt_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, pt_names)
 
     # Create CNodes - all CNode objects are the same size: 128 slots.
