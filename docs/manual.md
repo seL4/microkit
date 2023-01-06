@@ -445,6 +445,7 @@ It supports the following attributes:
 * `priority`: the priority of the protection domain (integer 0 to 254).
 * `budget`: (optional) the PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) the PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
+* `cpu`: (optional) the CPU that the PD is set to run on; must be greater than or equal to 0 and less than the maximum number of CPUs that seL4 has been configured for. Defaults to CPU 0.
 
 Additionally, it supports the following child elements:
 
