@@ -68,6 +68,7 @@ from sel4coreplat.sel4 import (
     Sel4TcbBindNotification,
     Sel4TcbResume,
     Sel4CnodeMint,
+    Sel4CnodeCopy,
     Sel4UntypedRetype,
     Sel4IrqControlGet,
     Sel4IrqHandlerSetNotification,
@@ -150,6 +151,7 @@ INPUT_CAP_IDX = 1
 FAULT_EP_CAP_IDX = 2
 VSPACE_CAP_IDX = 3
 REPLY_CAP_IDX = 4
+MONITOR_EP_CAP_IDX = 4
 BASE_OUTPUT_NOTIFICATION_CAP = 10
 BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
@@ -614,6 +616,8 @@ class BuiltSystem:
     reply_cap_address: int
     cap_lookup: Dict[int, str]
     tcb_caps: List[int]
+    sched_caps: List[int]
+    ntfn_caps: List[int]
     regions: List[Region]
     kernel_objects: List[KernelObject]
     initial_task_virt_region: MemoryRegion
@@ -1208,6 +1212,7 @@ def build_system(
     schedcontext_names = [f"SchedContext: PD={pd.name}" for pd in system.protection_domains]
     schedcontext_names += [f"SchedContext: VM={vm.name}" for vm in virtual_machines]
     schedcontext_objects = init_system.allocate_objects(kernel_config, Sel4Object.SchedContext, schedcontext_names, size=PD_SCHEDCONTEXT_SIZE)
+    schedcontext_caps = [sc.cap_addr for sc in schedcontext_objects]
     # Endpoints
     pds_with_endpoints = [pd for pd in system.protection_domains if pd.needs_ep]
     endpoint_names = ["EP: Monitor Fault"] + [f"EP: PD={pd.name}" for pd in pds_with_endpoints]
@@ -1223,6 +1228,7 @@ def build_system(
     notification_names = [f"Notification: PD={pd.name}" for pd in system.protection_domains]
     notification_objects = init_system.allocate_objects(kernel_config, Sel4Object.Notification, notification_names)
     notification_objects_by_pd = dict(zip(system.protection_domains, notification_objects))
+    notification_caps = [ntfn.cap_addr for ntfn in notification_objects]
 
     # Determine number of upper directory / directory / page table objects required
     #
@@ -1662,6 +1668,19 @@ def build_system(
                     pd_b_badge)
             )
 
+    # mint a cap between monitor and passive PDs.
+    # @ivanv: need to handle VMs?
+    for idx, (cnode_obj, pd) in enumerate(zip(cnode_objects, system.protection_domains), 1):
+        if pd.passive:
+            system_invocations.append(Sel4CnodeMint(
+                                        cnode_obj.cap_addr, 
+                                        MONITOR_EP_CAP_IDX, 
+                                        PD_CAP_BITS, 
+                                        root_cnode_cap, 
+                                        fault_ep_endpoint_object.cap_addr, 
+                                        kernel_config.cap_address_bits,
+                                        SEL4_RIGHTS_ALL, 
+                                        idx))
 
     # All minting is complete at this point
 
@@ -1811,6 +1830,7 @@ def build_system(
     for pd in system.protection_domains:
         # Could use pd.elf_file.write_symbol here to update variables if required.
         pd_elf_files[pd].write_symbol("sel4cp_name", pack("<16s", pd.name.encode("utf8")))
+        pd_elf_files[pd].write_symbol("passive", pack("?", pd.passive))
 
     for pd in system.protection_domains:
         for setvar in pd.setvars:
@@ -1839,6 +1859,8 @@ def build_system(
         reply_cap_address = reply_object.cap_addr,
         cap_lookup = cap_address_names,
         tcb_caps = tcb_caps,
+        sched_caps = schedcontext_caps,
+        ntfn_caps = notification_caps,
         regions = regions,
         kernel_objects = init_system._objects,
         initial_task_phys_region = initial_task_phys_region,
@@ -2049,9 +2071,13 @@ def main() -> int:
     regions += [(r.addr, r.data) for r in built_system.regions]
 
     tcb_caps = built_system.tcb_caps
+    sched_caps = built_system.sched_caps
+    ntfn_caps = built_system.ntfn_caps
     monitor_elf.write_symbol("fault_ep", pack("<Q", built_system.fault_ep_cap_address))
     monitor_elf.write_symbol("reply", pack("<Q", built_system.reply_cap_address))
     monitor_elf.write_symbol("tcbs", pack("<Q" + "Q" * len(tcb_caps), 0, *tcb_caps))
+    monitor_elf.write_symbol("scheduling_contexts", pack("<Q" + "Q" * len(sched_caps), 0, *sched_caps))
+    monitor_elf.write_symbol("notification_caps", pack("<Q" + "Q" * len(ntfn_caps), 0, *ntfn_caps))
     names_array = bytearray([0] * (64 * 16))
     for idx, pd in enumerate(system_description.protection_domains, 1):
         nm = pd.name.encode("utf8")[:15]

@@ -86,6 +86,7 @@ class ProtectionDomain:
     period: int
     cpu_affinity: int
     pp: bool
+    passive: bool
     program_image: Path
     maps: Tuple[SysMap, ...]
     irqs: Tuple[SysIrq, ...]
@@ -284,7 +285,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 
 def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
-    root_attrs = ("name", "priority", "pp", "budget", "period", "cpu")
+    root_attrs = ("name", "priority", "pp", "budget", "period", "cpu", "passive")
     child_attrs = root_attrs + ("pd_id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
     program_image: Optional[Path] = None
@@ -309,6 +310,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         raise ValueError(f"budget ({budget}) must be less than, or equal to, period ({period})")
 
     pp = str_to_bool(pd_xml.attrib.get("pp", "false"))
+    passive = str_to_bool(pd_xml.attrib.get("passive", "false"))
 
     maps = []
     irqs = []
@@ -365,6 +367,7 @@ def xml2pd(pd_xml: ET.Element, is_child: bool=False) -> ProtectionDomain:
         period,
         cpu,
         pp,
+        passive,
         program_image,
         tuple(maps),
         tuple(irqs),

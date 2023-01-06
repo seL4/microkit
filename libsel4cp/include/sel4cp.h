@@ -18,6 +18,7 @@ typedef unsigned int sel4cp_pd;
 typedef unsigned int sel4cp_vm;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
+#define MONITOR_ENDPOINT_CAP 5
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
@@ -34,6 +35,10 @@ sel4cp_msginfo protected(sel4cp_channel ch, sel4cp_msginfo msginfo);
 void fault(sel4cp_channel ch, sel4cp_msginfo msginfo);
 
 extern char sel4cp_name[16];
+/* These next three variables are so our PDs can combine a signal with the next Recv syscall */
+extern bool have_signal;
+extern seL4_CPtr signal;
+extern seL4_MessageInfo_t signal_msg;
 
 /*
  * Output a single character on the debug console.

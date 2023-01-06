@@ -22,7 +22,11 @@
 
 char _stack[4096]  __attribute__((__aligned__(16)));
 
+bool passive;
 char sel4cp_name[16];
+bool have_signal = false;
+seL4_CPtr signal;
+seL4_MessageInfo_t signal_msg;
 
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 
@@ -61,6 +65,8 @@ handler_loop(void)
 
         if (have_reply) {
             tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
+        } else if (have_signal) {
+            tag = seL4_NBSendRecv(signal, signal_msg, INPUT_CAP, &badge, REPLY_CAP);
         } else {
             tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
         }
@@ -93,5 +99,19 @@ main(void)
 {
     run_init_funcs();
     init();
+
+    /* 
+     * If we are passive, now our initialisation is complete we can
+     * signal the monitor to unbind our scheduling context and bind
+     * it to our notification object. 
+     * We delay this signal so we are ready waiting on a recv() syscall
+     */
+    if (passive) {
+        have_signal = true;
+        signal_msg = seL4_MessageInfo_new(0, 0, 0, 1);
+        seL4_SetMR(0, 0);
+        signal = (MONITOR_ENDPOINT_CAP);
+    }
+
     handler_loop();
 }
