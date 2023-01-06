@@ -462,6 +462,7 @@ The `map` element has the following attributes:
 * `vaddr`: Identifies the virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute).
 * `cached`: Determines if mapped with caching enabled or disabled. Defaults to `true`.
+    * Note that this has no effect on RISC-V.
 * `setvar_vaddr`: Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 
 The `irq` element has the following attributes:
