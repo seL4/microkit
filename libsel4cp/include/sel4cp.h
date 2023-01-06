@@ -19,6 +19,7 @@ typedef unsigned int sel4cp_vm;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
 #define MONITOR_ENDPOINT_CAP 5
+#define TCB_CAP 6
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
