@@ -310,6 +310,7 @@ SUPPORTED_CONFIGS = (
         debug=False,
         kernel_options = {
             "KernelDebugBuild": False,
+            "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation",
             "KernelArmExportPMUUser": True,
         },
