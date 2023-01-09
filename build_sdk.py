@@ -116,7 +116,6 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "imx8mm-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
         },
         examples = {}
     ),
