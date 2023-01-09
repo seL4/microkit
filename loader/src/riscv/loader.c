@@ -246,8 +246,10 @@ static inline void ifence(void)
     asm volatile("fence.i" ::: "memory");
 }
 
-// This is the encoding for the MODE field of the satp register when
-// implementing 39-bit virtual address spaces (known as Sv39).
+/*
+ * This is the encoding for the MODE field of the satp register when
+ * implementing 39-bit virtual address spaces (known as Sv39).
+ */
 #define VM_MODE (0x8llu << 60)
 
 #define RISCV_PGSHIFT 12

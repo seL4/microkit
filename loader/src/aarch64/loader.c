@@ -29,12 +29,27 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
-#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores)
+#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_hyp) || defined(BOARD_qemu_arm_virt_2_cores)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
 #elif defined(BOARD_odroidc2)
 #define GICD_BASE 0xc4301000UL
 #define GICC_BASE 0xc4302000UL
+#endif
+
+/* 
+ * seL4 expects platforms with a GICv2 to be configured. This configuration is
+ * usually done by U-Boot and so the loader does not have to do anything.
+ * However, in the case of using something like QEMU, where the system is run
+ * without U-Boot, we have to do this configuration in the loader. Otherwise
+ * interrupts will not work.
+ */
+#if defined(BOARD_zcu102) || \
+    defined(BOARD_odroidc2) || \
+    defined(BOARD_qemu_arm_virt) || \
+    defined(BOARD_qemu_arm_virt_hyp) || \
+    defined(BOARD_qemu_arm_virt_2_cores)
+    #define GIC_V2
 #endif
 
 #define REGION_TYPE_DATA 1
@@ -152,7 +167,7 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores)
+#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_hyp) || defined(BOARD_qemu_arm_virt_2_cores)
 #define UART_BASE 0x9000000
 #define UARTDR 0x000
 #define UARTFR 0x018
@@ -471,7 +486,7 @@ start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_odroidc2) || defined(BOARD_qemu_arm_virt_2_cores)
+#if defined(GIC_V2)
 static void
 configure_gicv2(void)
 {
@@ -495,6 +510,7 @@ configure_gicv2(void)
      * only needs to be called once, while the GICC registers
      * should be set for each CPU.
      */
+    // @ivanv: handle multi-core
     puts("LDR|INFO: Setting all interrupts to Group 1\n");
     uint32_t gicd_typer = *((volatile uint32_t *)(GICD_BASE + 0x4));
     uint32_t it_lines_number = gicd_typer & 0x1f;
@@ -552,22 +568,22 @@ void secondary_cpu_entry() {
     /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
     MSR("tpidr_el1", curr_cpu_id);
 
-    puts("LDR|INFO: enabling MMU on CPU ");
-    puthex64(curr_cpu_id);
+    puts("LDR|INFO: enabling MMU (CPU ");
+    puthex32(curr_cpu_id);
     puts("\n");
     el1_mmu_enable();
 
-    puts("LDR|INFO: jumping to kernel on CPU ");
-    puthex64(curr_cpu_id);
-    puts("\n");
+    puts("LDR|INFO: jumping to kernel (CPU ");
+    puthex32(curr_cpu_id);
+    puts(")\n");
 
     core_up[curr_cpu_id] = 1;
 
     start_kernel();
 
-    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED on CPU ");
-    puthex64(curr_cpu_id);
-    puts("\n");
+    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED (CPU ");
+    puthex32(curr_cpu_id);
+    puts(")\n");
 
 fail:
     /* Note: can't usefully return to U-Boot once we are here. */
@@ -600,7 +616,7 @@ main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102) || defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_2_cores) || defined(BOARD_odroidc2)
+#if defined(GIC_V2)
     configure_gicv2();
 #endif
 

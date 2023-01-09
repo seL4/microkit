@@ -155,6 +155,18 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "qemu-arm-virt",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="qemu_arm_virt_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x70000000,
+        kernel_options = {
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
         },
         examples = {}
@@ -237,18 +249,18 @@ SUPPORTED_BOARDS = (
         kernel_options = {
             "KernelIsMCS": True,
             "KernelPlatform": "qemu-riscv-virt",
-            "KernelRiscVHypervisorSupport": True,
         },
         examples = {}
     ),
     BoardInfo(
-        name="qemu_riscv_virt_no_hyp",
+        name="qemu_riscv_virt_hyp",
         arch=BoardArch.RISCV64,
         gcc_flags = "",
         loader_link_address=0x80200000,
         kernel_options = {
             "KernelIsMCS": True,
             "KernelPlatform": "qemu-riscv-virt",
+            "KernelRiscVHypervisorSupport": True,
         },
         examples = {}
     ),
@@ -293,6 +305,7 @@ SUPPORTED_CONFIGS = (
             "KernelVerificationBuild": False
         }
     ),
+    # @ivanv: This has ARM specific kernel options
     ConfigInfo(
         name="benchmark",
         debug=False,
