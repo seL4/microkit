@@ -1917,14 +1917,14 @@ def main() -> int:
     if args.config not in available_configs:
         parser.error(f"argument --config: invalid choice: '{args.config}' (choose from {available_configs})")
 
-    gen_config_path = SDK_DIR / "board" / args.board / args.config / "config.yaml"
+    sel4_config_path = SDK_DIR / "board" / args.board / args.config / "config.yaml"
     elf_path = SDK_DIR / "board" / args.board / args.config / "elf"
     loader_elf_path = elf_path / "loader.elf"
     kernel_elf_path = elf_path / "sel4.elf"
     monitor_elf_path = elf_path / "monitor.elf"
 
-    if not gen_config_path.exists():
-        print(f"Error: auto-generated kernel config '{gen_config_path}' does not exist")
+    if not sel4_config_path.exists():
+        print(f"Error: auto-generated kernel config '{sel4_config_path}' does not exist")
         return 1
     if not elf_path.exists():
         print(f"Error: board ELF directory '{elf_path}' does not exist")
@@ -1948,53 +1948,53 @@ def main() -> int:
 
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
-    with open(gen_config_path, "r") as f:
-        gen_config_yaml = yaml_load(f, Loader=YamlLoader)
+    with open(sel4_config_path, "r") as f:
+        sel4_config_yaml = yaml_load(f, Loader=YamlLoader)
     # What we really want is a dictionary that has every option as a key with it's correspoding value
-    gen_config = {}
-    for option_dict in gen_config_yaml:
+    sel4_config = {}
+    for option_dict in sel4_config_yaml:
         # @ivanv, so gross... we'll definitely have to find a better way
         option, value = list(option_dict.items())[0]
-        gen_config[option] = value
+        sel4_config[option] = value
 
     # Some of the kernel config we need can be found in the auto-generated
     # config YAML file. Which we use here since they can differ between
     # platforms and architecture.
-    gen_config_arch = gen_config["CONFIG_SEL4_ARCH"]
-    if gen_config_arch == "aarch64":
+    sel4_arch = sel4_config["CONFIG_SEL4_ARCH"]
+    if sel4_arch == "aarch64":
         arch = KernelArch.AARCH64
-    elif gen_config_arch == "riscv64":
+    elif sel4_arch == "riscv64":
         arch = KernelArch.RISCV64
-    elif gen_config_arch == "riscv32":
+    elif sel4_arch == "riscv32":
         arch = KernelArch.RISCV32
-    elif gen_config_arch == "x86_64":
+    elif sel4_arch == "x86_64":
         arch = KernelArch.X86_64
     else:
-        raise Exception(f"Unsupported seL4 architecture: {gen_config_arch}")
+        raise Exception(f"Unsupported seL4 architecture: {sel4_arch}")
 
-    hyp_mode = (("CONFIG_ARM_HYPERVISOR_SUPPORT" in gen_config and gen_config["CONFIG_ARM_HYPERVISOR_SUPPORT"]) or
-               ("CONFIG_RISCV_HYPERVISOR_SUPPORT" in gen_config and gen_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"]))
+    hyp_mode = (("CONFIG_ARM_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_ARM_HYPERVISOR_SUPPORT"]) or
+               ("CONFIG_RISCV_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"]))
     kernel_config = KernelConfig(
         arch = arch,
-        word_size = gen_config["CONFIG_WORD_SIZE"],
+        word_size = sel4_config["CONFIG_WORD_SIZE"],
         minimum_page_size = kb(4),
-        paddr_user_device_top = gen_config["CONFIG_PADDR_USER_DEVICE_TOP"],
+        paddr_user_device_top = sel4_config["CONFIG_PADDR_USER_DEVICE_TOP"],
         kernel_frame_size = (1 << 12),
-        root_cnode_bits = gen_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
+        root_cnode_bits = sel4_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
         cap_address_bits = 64,
-        fan_out_limit = gen_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
-        have_fpu = gen_config["CONFIG_HAVE_FPU"],
+        fan_out_limit = sel4_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
+        have_fpu = sel4_config["CONFIG_HAVE_FPU"],
         hyp_mode = hyp_mode,
-        num_cpus = gen_config["CONFIG_MAX_NUM_NODES"],
+        num_cpus = sel4_config["CONFIG_MAX_NUM_NODES"],
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
-        riscv_page_table_levels = gen_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in gen_config else None,
-        x86_xsave_size = gen_config["CONFIG_XSAVE_SIZE"] if "CONFIG_XSAVE_SIZE" in gen_config else None,
+        riscv_page_table_levels = sel4_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in sel4_config else None,
+        x86_xsave_size = sel4_config["CONFIG_XSAVE_SIZE"] if "CONFIG_XSAVE_SIZE" in sel4_config else None,
     )
     # @ivanv: add support for 44-bit physical addresses
     # Certain values in hypervisor mode when CONFIG_ARM_PA_SIZE_BITS_44 change.
     # Need to go through seL4 source code and fix this.
-    if "CONFIG_ARM_PA_SIZE_BITS_44" in gen_config:
-        assert not (gen_config["CONFIG_ARM_PA_SIZE_BITS_44"] and kernel_config.hyp_mode), "TODO: add support for 44-bit physical addresses in hyp mode"
+    if "CONFIG_ARM_PA_SIZE_BITS_44" in sel4_config:
+        assert not (sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"] and kernel_config.hyp_mode), "TODO: add support for 44-bit physical addresses in hyp mode"
 
     default_platform_description = PlatformDescription(
         page_sizes = (0x1_000, 0x200_000),
