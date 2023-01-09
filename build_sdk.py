@@ -543,22 +543,32 @@ def build_lib_component(
         dest.chmod(0o444)
 
 
-def build_kernel_config_component(
+def build_sel4_config_component(
     root_dir: Path,
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
-) -> None:
+) -> Dict:
     # Here we are just copying the auto-generated kernel config, "gen_config.yaml".
+    # This is because it is needed for the tool so it can deal with seL4/platform
+    # specific configuration. It is also used in this build script.
     sel4_build_dir = build_dir / board.name / config.name / "sel4" / "build"
     sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.yaml"
     dest = root_dir / "board" / board.name / config.name / "config.yaml"
     with open(sel4_gen_config, "r") as f:
-        sel4_config = yaml_load(f, Loader=YamlLoader)
+        # Convert the loaded YAML into a dictionary with the config options as
+        # keys and the config option values as the values.
+        yaml_config = yaml_load(f, Loader=YamlLoader)
+        sel4_config = {}
+        for config_option in yaml_config:
+            option, value = list(config_option.items())[0]
+            sel4_config[option] = value
 
     dest.unlink(missing_ok=True)
     copy(sel4_gen_config, dest)
     dest.chmod(0o444)
+
+    return sel4_config
 
 
 def main() -> None:
@@ -607,13 +617,18 @@ def main() -> None:
     for board in SUPPORTED_BOARDS:
         for config in SUPPORTED_CONFIGS:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
-            config_args = board.kernel_options | config.kernel_options
-            num_cpus = 1 if "KernelMaxNumNodes" not in config_args else config_args["KernelMaxNumNodes"]
+            sel4_config = build_sel4_config_component(root_dir, build_dir, board, config)
+            # Get the defines needed by the loader from the auto-generated seL4 config.
+            assert "CONFIG_MAX_NUM_NODES" in sel4_config
+            num_cpus = sel4_config["CONFIG_MAX_NUM_NODES"]
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
-                ("NUM_CPUS", num_cpus)
+                ("NUM_CPUS", num_cpus),
             ]
-            kernel_config = build_kernel_config_component(root_dir, build_dir, board, config)
+            if board.arch == BoardArch.RISCV64:
+                # On RISC-V the loader needs to know the expected first HART ID.
+                assert "CONFIG_FIRST_HART_ID" in sel4_config
+                loader_defines.append(("FIRST_HART_ID", sel4_config["CONFIG_FIRST_HART_ID"]))
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)

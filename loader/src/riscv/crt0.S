@@ -23,20 +23,6 @@
 #define SBI_EXT_BASE_EID 0x10
 #define SBI_EXT_BASE_PROBE_EXT_FID 3
 
-/* This comes from the config.cmake script for the platform in seL4.
- * This is not the most ideal way to do this, however once we add the kernel
- * config it should be nicer. @ivanv
-
- @ivanv: Do we even need to keep track of FIRST_HART_ID?
- */
-#if defined(BOARD_spike) || defined(BOARD_qemu_riscv_virt) || defined(BOARD_qemu_riscv_virt_no_hyp) || defined(BOARD_qemu_riscv_virt_no_hyp_32)
-#define FIRST_HART_ID 0
-#elif defined(BOARD_hifive_unleashed)
-#define FIRST_HART_ID 1
-#else
-#error "Need to define FIRST_HART_ID"
-#endif
-
 /* OpenSBI starts us these parameters:
  *   a0: hart id
  *   a1: dtb
