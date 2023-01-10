@@ -1571,8 +1571,6 @@ def arch_get_map_attrs(arch: KernelArch, mp: SysMap) -> int:
     elif arch == KernelArch.RISCV64:
         if "x" not in mp.perms:
             attrs |= SEL4_RISCV_EXECUTE_NEVER
-        if mp.cached:
-            print(f"WARNING: Setting cached on memory mapping RISC-V has no effect on RISC-V")
     elif arch == KernelArch.X86_64:
         # @ivanv: I *think* to make something not cacheable it's seL4_X86_CacheDisabled, but not sure.
         if not mp.cached:

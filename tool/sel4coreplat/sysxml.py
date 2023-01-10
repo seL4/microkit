@@ -15,6 +15,7 @@ from typing import Dict, Iterable, Optional, Set, Tuple
 
 from sel4coreplat.util import str_to_bool, UserError
 
+# @ivanv: when we parse mappings, should we warn that settings cached doesn't do anything on RISC-V systems?
 
 class MissingAttribute(Exception):
     def __init__(self, attribute_name: str, element: ET.Element):
