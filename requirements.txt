@@ -11,3 +11,4 @@ ply==3.11
 Jinja2==3.0.3
 PyYAML==6.0
 pyfdt==0.3
+pexpect==4.6.0

@@ -11,10 +11,18 @@ jobs:
     if: ${{ github.repository_owner == 'Ivan-Velickovic' }}
     runs-on: self-hosted
     steps:
-      - name: Checkout repository
+      - name: Checkout seL4 Core Platform repository
         uses: actions/checkout@v3
+      - name: Checkout OpenSBI repository
+        uses: actions/checkout@v3
+        with:
+            repository: riscv-software-src/opensbi
+            ref: v1.0
+            path: opensbi
       - name: Build SDK
         run: ./ci/build.sh
+      - name: Test SDK
+        run: ./pyenv/bin/python ./ci/test.py
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:

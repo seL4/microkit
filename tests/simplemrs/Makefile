@@ -5,9 +5,8 @@
 #
 LIBSEL4CP := ../../libsel4cp
 TOOLCHAIN := aarch64-linux-gnu
-PYTHON := python3.8
 
-CPU := cortex-a35
+CPU := cortex-a53
 
 CC := $(TOOLCHAIN)-gcc
 LD := $(TOOLCHAIN)-ld
