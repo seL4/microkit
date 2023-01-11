@@ -313,6 +313,8 @@ SUPPORTED_CONFIGS = (
             "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation",
             "KernelArmExportPMUUser": True,
+            # Enable signal fastpath for sDDF benchmarking
+            "KernelSignalFastpath": True,
         },
     ),
 )
