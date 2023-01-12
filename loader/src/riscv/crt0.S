@@ -23,9 +23,17 @@
 #define SBI_EXT_BASE_EID 0x10
 #define SBI_EXT_BASE_PROBE_EXT_FID 3
 
-/* OpenSBI starts us these parameters:
- *   a0: hart id
- *   a1: dtb
+/* Unfortunately, the latest version of the SBI (v1.0.0) specification does not
+ * specify the starting state of supervisor software.
+ * OpenSBI gives the following:
+ *    a0: current hart ID
+ *    a1: address of the DTB (given by previous booting stage)
+ * However, this is not enforced by the specification. Therefore, if you were
+ * to use a different SBI implementation or your own, it might not be compatible with
+ * this loader.
+ * The hart ID is required as seL4 expects to be booted on CONFIG_FIRST_HART_ID.
+ * The address of the DTB is passed to seL4 which is then passed to the initial
+ * task (via the BootInfo frame).
  *
  * On RISC-V, only M-Mode can access the CSR mhartid to get the actual hart ID,
  * the SBI running there is responsible for passing this ID up. In S-Mode there
