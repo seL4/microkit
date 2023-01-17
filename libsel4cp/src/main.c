@@ -15,8 +15,6 @@
 #define INPUT_CAP 1
 #define REPLY_CAP 4
 
-#define NOTIFICATION_BITS 57
-
 #define PD_MASK 0xff
 #define CHANNEL_MASK 0x3f
 
@@ -100,10 +98,10 @@ main(void)
     run_init_funcs();
     init();
 
-    /* 
+    /*
      * If we are passive, now our initialisation is complete we can
      * signal the monitor to unbind our scheduling context and bind
-     * it to our notification object. 
+     * it to our notification object.
      * We delay this signal so we are ready waiting on a recv() syscall
      */
     if (passive) {
