@@ -7,6 +7,11 @@
 
 /* Note: this was originally taken from the RISC-V bootloader in elfloader in seL4_tools */
 // @ivanv: this file needs to be cleaned up
+// @ivanv: HSM switching should be done after getting to the C.
+//         we should first print out the parameters we expect given by the SBI.
+//         (current hart ID and address of DTB). Since the SBI might not give us
+//         this we need some way of logging/telling the user that something
+//         unexpected happened rather than doing all of this in assembly.
 
 .extern main
 .extern __global_pointer$
@@ -28,7 +33,7 @@
  * OpenSBI gives the following:
  *    a0: current hart ID
  *    a1: address of the DTB (given by previous booting stage)
- * However, this is not enforced by the specification. Therefore, if you were
+ * However, these parameters are not enforced by the specification. Therefore, if you were
  * to use a different SBI implementation or your own, it might not be compatible with
  * this loader.
  * The hart ID is required as seL4 expects to be booted on CONFIG_FIRST_HART_ID.
