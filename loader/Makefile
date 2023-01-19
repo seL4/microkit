@@ -32,7 +32,7 @@ $(BUILD_DIR)/%.o : src/%.S
 	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g3  -mcpu=$(GCC_CPU)  $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.s
-	$(TOOLCHAIN)as -g3 -mcpu=$(GCC_CPU) $< -o $@
+	$(TOOLCHAIN)as -g -mcpu=$(GCC_CPU) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS)  $< -o $@
