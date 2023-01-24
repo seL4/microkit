@@ -1001,7 +1001,8 @@ def build_system(
             if not segment.loadable:
                 continue
 
-            regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", phys_addr_next, segment.data))
+            segment_phys_addr = phys_addr_next + (segment.virt_addr % kernel_config.minimum_page_size)
+            regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", segment_phys_addr, segment.data))
 
             perms = ""
             if segment.is_readable:
