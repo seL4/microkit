@@ -303,6 +303,11 @@ typedef struct seL4_UserContext_ {
         )
         return tuple(0 if x is None else x for x in raw)
 
+    def __str__(self):
+        return self.as_tuple().__str__()
+
+    def __repr__(self):
+        return self.as_tuple().__repr__()
 
 class Sel4Label(IntEnum):
     # Untyped
