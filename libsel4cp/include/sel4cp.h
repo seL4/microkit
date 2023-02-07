@@ -88,6 +88,33 @@ sel4cp_irq_ack(sel4cp_channel ch)
     seL4_IRQHandler_Ack(BASE_IRQ_CAP + ch);
 }
 
+/*
+ * Note that sel4cp_notify_delayed and sel4cp_irq_ack_delayed are experimental
+ * functions that allow a notify/signal or IRQ ack to happen when we get back
+ * into the seL4CP event handler loop while only making one syscall. This can
+ * improve performance as this will cause an NBSendRecv to occur in the handler
+ * loop, meaning that you avoid an extra context switch into the kernel
+ * compared to if you were to do a regular sel4cp_notify or sel4cp_irq_ack.
+ *
+ * Whether these functions should become part of mainline libsel4cp API is yet
+ * to be discussed.
+ */
+static inline void
+sel4cp_notify_delayed(sel4cp_channel ch)
+{
+    have_signal = true;
+    signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
+    signal = (BASE_OUTPUT_NOTIFICATION_CAP + ch);
+}
+
+static inline void
+sel4cp_irq_ack_delayed(sel4cp_channel ch)
+{
+    have_signal = true;
+    signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
+    signal = (BASE_IRQ_CAP + ch);
+}
+
 static inline void
 sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
 {
