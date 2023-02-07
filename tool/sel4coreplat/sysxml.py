@@ -191,7 +191,7 @@ class SystemDescription:
             raise UserError(f"Too many protection domains ({len(self.protection_domains)}) defined. Maximum is 63.")
 
         # Ensure no duplicate PDs
-        for pd in protection_domains:
+        for pd in self.protection_domains:
             if pd.name in self.pd_by_name:
                 raise UserError(f"Duplicate protection domain name '{pd.name}'.")
             self.pd_by_name[pd.name] = pd
