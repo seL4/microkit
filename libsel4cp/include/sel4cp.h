@@ -195,7 +195,7 @@ sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
     );
 
     if (err != seL4_NoError) {
-        sel4cp_dbg_puts("sel4cp_pd_restart: error writing registers\n");
+        sel4cp_dbg_puts("sel4cp_vm_restart: error writing registers\n");
         sel4cp_internal_crash(err);
     }
 }
