@@ -177,7 +177,6 @@ sel4cp_mr_get(uint8_t mr)
     return seL4_GetMR(mr);
 }
 
-// @ivanv: inline or nah?
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT) || defined(CONFIG_RISCV_HYPERVISOR_SUPPORT)
 static inline void
 sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
@@ -200,7 +199,7 @@ sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
     }
 }
 
-static void
+static inline void
 sel4cp_vm_stop(sel4cp_vm vm)
 {
     seL4_Error err;
@@ -212,14 +211,15 @@ sel4cp_vm_stop(sel4cp_vm vm)
 }
 #endif
 
+/* Wrappers over ARM specific hypervisor system calls. */
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
-static uint64_t
+static inline uint64_t
 sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
     return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
 }
 
-static uint64_t
+static inline uint64_t
 sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
 {
     return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
