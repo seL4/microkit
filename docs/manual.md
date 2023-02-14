@@ -260,6 +260,10 @@ sel4cp does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
+## Virtual Machines
+
+@ivanv: Complete this documentation.
+
 # SDK {#sdk}
 
 sel4cp is distributed as a software development kit (SDK).
