@@ -167,6 +167,12 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            # @ivanv: It is odd that we have to do this in order to run a VM
+            # with 512MiB of RAM since the default QEMU RAM is 1024MiB I think.
+            # Surely there would be enough space? But we can't find an untyped
+            # that's at least the 512MiB in size. Come back and revisit this,
+            # perhaps there's something else going on.
+            "QEMU_MEMORY": 2048,
         },
         examples = {}
     ),
