@@ -23,8 +23,11 @@ jobs:
         run: ./ci/build.sh
       - name: Test SDK
         run: ./pyenv/bin/python ./ci/test.py
+      - name: Get shortened commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-latest-${{ github.ref_name }}-linux-x86_64
+            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86_64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
