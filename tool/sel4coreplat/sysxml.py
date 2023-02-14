@@ -121,21 +121,12 @@ class Channel:
     id_b: int
     element: ET.Element
 
-# @ivanv: If we are going to have a specified vaddr, we need to
-# have additional checks on it perhaps?
-@dataclass(frozen=True, eq=True)
-class Image:
-    path: Path
-    vaddr: int
-
 
 @dataclass(frozen=True, eq=True)
 class VirtualMachine:
     name: str
     vm_id: int
-    program_image: Optional[Image]
-    device_tree: Optional[Image]
-    init_ram_disk: Optional[Image]
+    cpu_affinity: int
     maps: Tuple[SysMap, ...]
     priority: int
     budget: int
@@ -249,8 +240,6 @@ class SystemDescription:
                 if extra != 0:
                     raise UserError(f"Invalid vaddr alignment on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
 
-        # Ensure that VM image and DTB are different @ivanv
-
         # Note: Overlapping memory is checked in the build.
 
         # Ensure all memory regions are used at least once. This only generates
@@ -332,6 +321,9 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
                 _check_attrs(child, ("mr", "vaddr", "perms", "cached", "setvar_vaddr"))
                 mr = checked_lookup(child, "mr")
                 vaddr = int(checked_lookup(child, "vaddr"), base=0)
+                # @ivanv: on ARM, mapping a page as write only is not allowed by the kernel for some reason.
+                # it would be better to know this before running the systems and getting a bunch of sel4 errors
+                # though.
                 perms = child.attrib.get("perms", "rw")
                 cached = str_to_bool(child.attrib.get("cached", "true"))
                 maps.append(SysMap(mr, vaddr, perms, cached, child))
@@ -354,7 +346,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
             elif child.tag == "virtual_machine":
                 if virtual_machine is not None:
                     raise UserError("virtual_machine must only be specified once")
-                virtual_machine = xml2vm(child)
+                virtual_machine = xml2vm(child, plat_desc)
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
         except ValueError as e:
@@ -409,13 +401,17 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
     return Channel(ends[0][0], ends[0][1], ends[1][0], ends[1][1], ch_xml)
 
 
-def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
-    _check_attrs(vm_xml, ("name", "vm_id", "priority"))
+def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine:
+    _check_attrs(vm_xml, ("name", "vm_id", "priority", "cpu"))
     name = checked_lookup(vm_xml, "name")
 
     vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
     if vm_id < 0 or vm_id > 255:
         raise ValueError("vm_id must be between 0 and 255")
+
+    cpu = int(vm_xml.attrib.get("cpu", "0"), base=0)
+    if cpu < 0  or cpu >= plat_desc.num_cpus:
+        raise ValueError(f"CPU affinity must be between 0 and {plat_desc.num_cpus - 1}")
 
     program_image: Optional[Path] = None
     device_tree: Optional[Path] = None
@@ -426,49 +422,20 @@ def xml2vm(vm_xml: ET.Element) -> VirtualMachine:
 
     maps = []
     for child in vm_xml:
-        try:
-            if child.tag == "program_image":
-                _check_attrs(child, ("path", "vaddr"))
-                if program_image is not None:
-                    raise ValueError("program_image must only be specified once")
-                path = checked_lookup(child, "path")
-                vaddr = int(checked_lookup(child, "vaddr"), base=0)
-                program_image = Image(path, vaddr)
-            elif child.tag == "device_tree":
-                _check_attrs(child, ("path", "vaddr"))
-                if device_tree is not None:
-                    raise ValueError("device_tree must only be specified once")
-                path = checked_lookup(child, "path")
-                vaddr = int(checked_lookup(child, "vaddr"), base=0)
-                device_tree = Image(path, vaddr)
-            elif child.tag == "init_ram_disk":
-                _check_attrs(child, ("path", "vaddr"))
-                if init_ram_disk is not None:
-                    raise ValueError("init_ram_disk must only be specified once")
-                path = checked_lookup(child, "path")
-                vaddr = int(checked_lookup(child, "vaddr"), base=0)
-                init_ram_disk = Image(path, vaddr)
-            elif child.tag == "map":
-                _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
-                mr = checked_lookup(child, "mr")
-                vaddr = int(checked_lookup(child, "vaddr"), base=0)
-                perms = child.attrib.get("perms", "rw")
-                cached = str_to_bool(child.attrib.get("cached", "true"))
-                maps.append(SysMap(mr, vaddr, perms, cached, child))
-            else:
-                raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
-        except ValueError as e:
-            raise UserError(f"Error: {e} on element '{child.tag}': {child._loc_str}")  # type: ignore
-
-    if program_image is None:
-        raise ValueError("program_image must be specified")
+        if child.tag == "map":
+            _check_attrs(child, ("mr", "vaddr", "perms", "cached"))
+            mr = checked_lookup(child, "mr")
+            vaddr = int(checked_lookup(child, "vaddr"), base=0)
+            perms = child.attrib.get("perms", "rw")
+            cached = str_to_bool(child.attrib.get("cached", "true"))
+            maps.append(SysMap(mr, vaddr, perms, cached, child))
+        else:
+            raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
 
     return VirtualMachine(
         name,
         vm_id,
-        program_image,
-        device_tree,
-        init_ram_disk,
+        cpu,
         tuple(maps),
         priority,
         budget,

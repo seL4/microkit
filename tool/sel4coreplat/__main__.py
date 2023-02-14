@@ -668,18 +668,6 @@ def build_system(
         pd: ElfFile.from_path(_get_full_path(pd.program_image, search_paths))
         for pd in system.protection_domains
     }
-    vm_images = {
-        vm: _get_full_path(vm.program_image.path, search_paths)
-        for vm in virtual_machines
-    }
-    vm_device_trees = {
-        vm: _get_full_path(vm.device_tree.path, search_paths)
-        for vm in virtual_machines if vm.device_tree is not None
-    }
-    vm_init_ram_disks = {
-        vm: _get_full_path(vm.init_ram_disk.path, search_paths)
-        for vm in virtual_machines if vm.init_ram_disk is not None
-    }
     ### Here we should validate that ELF files @ivanv: this comment is weird ?
 
     ## Determine physical memory region for 'reserved' memory.
@@ -692,19 +680,7 @@ def build_system(
         sum([r.size for r in phys_mem_regions_from_elf(elf, kernel_config.minimum_page_size)])
         for elf in pd_elf_files.values()
     ])
-    vm_image_size = sum([
-        round_up(os.path.getsize(image), kernel_config.minimum_page_size)
-        for image in vm_images.values()
-    ])
-    vm_image_size += sum([
-        round_up(os.path.getsize(device_tree), kernel_config.minimum_page_size)
-        for device_tree in vm_device_trees.values() if device_tree is not None
-    ])
-    vm_image_size += sum([
-        round_up(os.path.getsize(init_ram_disk), kernel_config.minimum_page_size)
-        for init_ram_disk in vm_init_ram_disks.values() if init_ram_disk is not None
-    ])
-    reserved_size = invocation_table_size + pd_elf_size + vm_image_size
+    reserved_size = invocation_table_size + pd_elf_size
 
     # Now that the size is determine, find a free region in the physical memory
     # space.
@@ -758,14 +734,6 @@ def build_system(
 
             # mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True)
             # pd.maps.append(mp)
-
-    for vm in virtual_machines:
-        phys_addr_next += round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
-        if vm.device_tree is not None:
-            phys_addr_next += round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
-        if vm.init_ram_disk is not None:
-            phys_addr_next += round_up(os.path.getsize(vm_init_ram_disks[vm]), kernel_config.minimum_page_size)
-
 
     # 1.3 With both the initial task region and reserved region determined the kernel
     # boot can be emulated. This provides the boot info information which is needed
@@ -1054,7 +1022,7 @@ def build_system(
     # Now we create additional MRs (and mappings) for the ELF files.
     regions: List[Region] = []
     extra_mrs = []
-    pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in list(system.protection_domains) + virtual_machines}
+    pd_extra_maps: Dict[ProtectionDomain, Tuple[SysMap, ...]] = {pd: tuple() for pd in system.protection_domains}
     for pd in list(system.protection_domains):
         seg_idx = 0
         for segment in pd_elf_files[pd].segments:
@@ -1082,46 +1050,6 @@ def build_system(
 
             mp = SysMap(mr.name, base_vaddr, perms=perms, cached=True, element=None)
             pd_extra_maps[pd] += (mp, )
-
-    for vm in virtual_machines:
-        with open(vm_images[vm], "rb") as f:
-            data = f.read()
-
-        assert os.path.getsize(vm_images[vm]) == len(data)
-        regions.append(Region(f"VM-IMAGE {vm.name}", phys_addr_next, data))
-        aligned_size = round_up(os.path.getsize(vm_images[vm]), kernel_config.minimum_page_size)
-        mr = SysMemoryRegion(f"IMAGE:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
-        phys_addr_next += aligned_size
-        extra_mrs.append(mr)
-
-        mp = SysMap(mr.name, vm.program_image.vaddr, perms="rwx", cached=True, element=None)
-        pd_extra_maps[vm] += (mp, )
-
-        if vm.device_tree:
-            with open(vm_device_trees[vm], "rb") as f:
-                data = f.read()
-
-            regions.append(Region(f"VM-DTB {vm.name}", phys_addr_next, data))
-            aligned_size = round_up(os.path.getsize(vm_device_trees[vm]), kernel_config.minimum_page_size)
-            mr = SysMemoryRegion(f"DTB:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
-            phys_addr_next += aligned_size
-            extra_mrs.append(mr)
-
-            mp = SysMap(mr.name, vm.device_tree.vaddr, perms="rwx", cached=True, element=None)
-            pd_extra_maps[vm] += (mp, )
-
-        if vm.init_ram_disk:
-            with open(vm_init_ram_disks[vm], "rb") as f:
-                data = f.read()
-
-            regions.append(Region(f"VM-INITRD {vm.name}", phys_addr_next, data))
-            aligned_size = round_up(os.path.getsize(vm_init_ram_disks[vm]), kernel_config.minimum_page_size)
-            mr = SysMemoryRegion(f"INITRD:{vm.name}", aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
-            phys_addr_next += aligned_size
-            extra_mrs.append(mr)
-
-            mp = SysMap(mr.name, vm.init_ram_disk.vaddr, perms="rw", cached=True, element=None)
-            pd_extra_maps[vm] += (mp, )
 
     all_mrs = system.memory_regions + tuple(extra_mrs)
     all_mr_by_name = {mr.name: mr for mr in all_mrs}
@@ -1238,13 +1166,21 @@ def build_system(
     # Page table (level 1 table) is based on how many 2 MiB parts of the
     # address space is covered (excluding any 2MiB regions covered by large
     # pages).
-
+    #
+    # The upper directories, directories and page tables are architecture specific and
+    # also depend on whether we're doing a PD or VM.
+    # If we're doing a VM we can't really patch the ELF. In addition, we can't really
+    # patch an ELF that doesn't yet exist as is the case for empty PDs.
+    # @ivanv: Need to revisit this code and clean it up. Not sure what to do to get
+    # empty PDs working.
     uds = []
     ds = []
     pts = []
-    for pd_idx, pd in enumerate(list(system.protection_domains) + virtual_machines):
-        if pd_idx < len(system.protection_domains):
-            ipc_buffer_symbol = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
+    for idx, domain in enumerate(list(system.protection_domains) + virtual_machines):
+        is_pd = idx < len(system.protection_domains)
+        # For now, we only want to set the IPC buffer symbol on protection domains.
+        if is_pd:
+            ipc_buffer_symbol = pd_elf_files[domain].find_symbol("__sel4_ipc_buffer_obj")
             assert ipc_buffer_symbol is not None
             ipc_buffer_vaddr, _ = ipc_buffer_symbol
         # @ivanv: change for RISC-V, also don't like the hard coding of 12 and 9
@@ -1258,11 +1194,16 @@ def build_system(
         # For each page, in each map determine we determine
         # which upper directory, directory and page table is resides
         # in, and then page sure this is set
-        if pd_idx < len(system.protection_domains):
+        if is_pd:
             vaddrs = [(ipc_buffer_vaddr, 0x1000)]
         else:
             vaddrs = []
-        for map in (pd.maps + pd_extra_maps[pd]):
+
+        all_maps = domain.maps
+        if is_pd:
+            all_maps += pd_extra_maps[domain]
+
+        for map in all_maps:
             mr = all_mr_by_name[map.mr]
             vaddr = map.vaddr
             for _ in range(mr.page_count):
@@ -1274,43 +1215,34 @@ def build_system(
             directory_vaddrs.add(mask_bits(vaddr, 12 + 9 + 9))
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
-        if not kernel_config.hyp_mode:
-            uds += [(pd_idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
-        ds += [(pd_idx, vaddr) for vaddr in sorted(directory_vaddrs)]
-        pts += [(pd_idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
 
-    pd_names = [pd.name for pd in system.protection_domains]
-    vm_names = [vm.name for vm in virtual_machines]
+        if not kernel_config.hyp_mode:
+            uds += [(idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
+        ds += [(idx, vaddr) for vaddr in sorted(directory_vaddrs)]
+        pts += [(idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
+
+    names = [domain.name for domain in list(system.protection_domains) + virtual_machines]
     vspace_names = [f"VSpace: PD={pd.name}" for pd in system.protection_domains]
-    # vspace_names += [f"VSpace: VM={vm.name}" for vm in virtual_machines]
+    vspace_names += [f"VSpace: VM={vm.name}" for vm in virtual_machines]
     vspace_objects = init_system.allocate_objects(kernel_config, Sel4Object.Vspace, vspace_names)
 
-    pd_ds = ds[:len(pd_names)]
-    # vm_ds = ds[len(pd_names):]
-
-    # PageUpperDirectory and PageDirectory are not present on RISC-V
+    # @ivanv: fix this so that the name of the object is correct depending if it's
+    # a PD or VM
     if kernel_config.arch == KernelArch.AARCH64:
         if not kernel_config.hyp_mode:
-            ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
+            ud_names = [f"PageUpperDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in uds]
             ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
 
-        d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
-        # d_names += [f"PageDirectory: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
+        d_names = [f"PageDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
-        d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pd_ds]
-        # d_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_ds]
+        # PageUpperDirectory and PageDirectory are not present on RISC-V
+        d_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
 
-    # vm_pts = pts[len(pd_names):]
-    pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
-    # print(f"pts: {pts}")
-    # print(f"vm_pts: {vm_pts}")
-    # print(f"pd_names: {pd_names}")
-    # print(f"pt_names: {pt_names}")
-    # pt_names += [f"PageTable: VM={vm_names[vm_idx - len(pd_ds)]} VADDR=0x{vaddr:x}" for vm_idx, vaddr in vm_pts]
+    pt_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, pt_names)
 
     # Create CNodes - all CNode objects are the same size: 128 slots.
@@ -1355,8 +1287,12 @@ def build_system(
     # Mint copies of required pages, while also determing what's required
     # for later mapping
     page_descriptors = []
-    for pd_idx, pd in enumerate(list(system.protection_domains) + virtual_machines):
-        for mp in (pd.maps + pd_extra_maps[pd]):
+    for domain_idx, domain in enumerate(list(system.protection_domains) + virtual_machines):
+        maps = domain.maps
+        if domain_idx < len(system.protection_domains):
+            maps += pd_extra_maps[domain]
+
+        for mp in maps:
             vaddr = mp.vaddr
             mr = all_mr_by_name[mp.mr] #system.mr_by_name[mp.mr]
             # Get arch-specific page attributes for the mapping
@@ -1384,7 +1320,7 @@ def build_system(
 
             page_descriptors.append((
                 system_cap_address_mask | cap_slot,
-                pd_idx,
+                domain_idx,
                 vaddr,
                 rights,
                 attrs,
@@ -1728,8 +1664,8 @@ def build_system(
             )
 
     # Now maps all the pages
-    for page_cap_address, pd_idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
-        vspace_obj = vspace_objects[pd_idx]
+    for page_cap_address, idx, vaddr, rights, attrs, count, vaddr_incr in page_descriptors:
+        vspace_obj = vspace_objects[idx]
         invocation = Sel4PageMap(kernel_config.arch, page_cap_address, vspace_obj.cap_addr, vaddr, rights, attrs)
         invocation.repeat(count, page=1, vaddr=vaddr_incr)
         system_invocations.append(invocation)
