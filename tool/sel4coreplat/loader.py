@@ -249,13 +249,28 @@ class Loader:
     def write_image(self, path: Path) -> None:
         with path.open("wb") as f:
             header_binary = pack(self._header_struct_fmt, *self._header)
+            offset_list : List[int] = []
+            filler_buf = bytearray(15)
             offset = 0
+
             for addr, data in self._regions:
+                offset_list.append(offset)
                 header_binary += pack(self._region_struct_fmt, addr, len(data), offset, 1)
-                offset += len(data)
+                offset += round_up(len(data), 16)
 
             # Finally write everything out to a file.
             f.write(self._image)
             f.write(header_binary)
+
+            # Regions offsets should be aligned to 16 bytes
+            # (-O3 optimization uses 128-bit q registers),
+            # so we need to fill the space between the end of previous
+            # region and the beginning of current one when needed.
+            i  = 0
+            # wpos keeps write position
+            wpos  = 0
             for _, data in self._regions:
+                f.write(filler_buf[0:offset_list[i] - wpos])
                 f.write(data)
+                wpos = offset_list[i] + len(data)
+                i += 1
