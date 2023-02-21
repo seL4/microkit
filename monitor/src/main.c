@@ -222,9 +222,23 @@ check_untypeds_match(seL4_BootInfo *bi)
             fail("paddr mismatch");
         }
         if (untyped_info.regions[i].size_bits != bi->untypedList[i].sizeBits) {
+            puts("MON|ERROR: size_bits mismatch for untyped region: ");
+            puthex32(i);
+            puts("  expected size_bits: ");
+            puthex32(untyped_info.regions[i].size_bits);
+            puts("  boot info size_bits: ");
+            puthex32(bi->untypedList[i].sizeBits);
+            puts("\n");
             fail("size_bits mismatch");
         }
         if (untyped_info.regions[i].is_device != bi->untypedList[i].isDevice) {
+            puts("MON|ERROR: is_device mismatch for untyped region: ");
+            puthex32(i);
+            puts("  expected is_device: ");
+            puthex32(untyped_info.regions[i].is_device);
+            puts("  boot info is_device: ");
+            puthex32(bi->untypedList[i].isDevice);
+            puts("\n");
             fail("is_device mismatch");
         }
     }
