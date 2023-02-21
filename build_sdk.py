@@ -158,6 +158,19 @@ SUPPORTED_BOARDS = (
         examples = {}
     ),
     BoardInfo(
+        name="qemu_arm_virt_cortex_a72",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a72",
+        loader_link_address=0x70000000,
+        kernel_options = {
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "ARM_CPU": "cortex-a72",
+        },
+        examples = {}
+    ),
+    BoardInfo(
         name="qemu_arm_virt_hyp",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",

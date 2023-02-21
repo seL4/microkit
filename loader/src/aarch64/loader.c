@@ -29,7 +29,10 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
-#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_hyp) || defined(BOARD_qemu_arm_virt_2_cores)
+#elif defined(BOARD_qemu_arm_virt) || \
+        defined(BOARD_qemu_arm_virt_cortex_a72) || \
+        defined(BOARD_qemu_arm_virt_hyp) || \
+        defined(BOARD_qemu_arm_virt_2_cores)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
 #elif defined(BOARD_odroidc2)
@@ -37,7 +40,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #define GICC_BASE 0xc4302000UL
 #endif
 
-/* 
+/*
  * seL4 expects platforms with a GICv2 to be configured. This configuration is
  * usually done by U-Boot and so the loader does not have to do anything.
  * However, in the case of using something like QEMU, where the system is run
@@ -47,6 +50,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102) || \
     defined(BOARD_odroidc2) || \
     defined(BOARD_qemu_arm_virt) || \
+    defined(BOARD_qemu_arm_virt_cortex_a72) || \
     defined(BOARD_qemu_arm_virt_hyp) || \
     defined(BOARD_qemu_arm_virt_2_cores)
     #define GIC_V2
@@ -167,7 +171,10 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_qemu_arm_virt) || defined(BOARD_qemu_arm_virt_hyp) || defined(BOARD_qemu_arm_virt_2_cores)
+#elif defined(BOARD_qemu_arm_virt) || \
+      defined(BOARD_qemu_arm_virt_cortex_a72) || \
+      defined(BOARD_qemu_arm_virt_hyp) || \
+      defined(BOARD_qemu_arm_virt_2_cores)
 #define UART_BASE 0x9000000
 #define UARTDR 0x000
 #define UARTFR 0x018
