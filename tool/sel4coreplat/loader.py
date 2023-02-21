@@ -194,7 +194,7 @@ class Loader:
                                                           kernel_first_vaddr,
                                                           kernel_first_paddr)
         else:
-            raise Exception(f"Unknown architecture: {kernel_config.arch}")
+            raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
 
         for var_name, var_data in pagetable_vars.items():
             var_addr, var_size = self._elf.find_symbol(var_name)
