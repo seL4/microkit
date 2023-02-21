@@ -54,6 +54,22 @@ def str_to_bool(s: str) -> bool:
         return False
     raise ValueError("invalid boolean value")
 
+def machine_wrap(n: int) -> int:
+    # Note that we assume a 64-bit word size.
+    # @ivanv: maybe a bad assumption
+    return n & ((2 ** 64) - 1)
+
+def machine_add(a: int, b: int) -> int:
+    return machine_wrap(a + b)
+
+def machine_sub(a: int, b: int) -> int:
+    return machine_wrap(a - b)
+
+def paddr_to_kernel_vaddr(kernel_virtual_base: int, paddr: int) -> int:
+    return machine_add(paddr, kernel_virtual_base)
+
+def kernel_vaddr_to_paddr(kernel_virtual_base: int, kernel_vaddr: int) -> int:
+    return machine_sub(kernel_vaddr, kernel_virtual_base)
 
 
 @dataclass
@@ -64,14 +80,22 @@ class MemoryRegion:
     base: int
     end: int
 
-    def aligned_power_of_two_regions(self, max_bits: int) -> List["MemoryRegion"]:
-        # Align
-        # find the first bit self
+    def aligned_power_of_two_regions(self, kernel_virtual_base: int, max_bits: int) -> List["MemoryRegion"]:
+        # During the boot phase, the kernel creates all of the untyped regions
+        # based on the kernel virtual addresses, rather than the physical
+        # memory addresses. This has a subtle side affect in the process of
+        # creating untypeds as even though all the kernel virtual addresses are
+        # a constant offest of the corresponding physical address, overflow can
+        # occur when dealing with virtual addresses. This precisely occurs in
+        # this function, causing different regions depending on whether
+        # you use kernel virtual or physical addresses. In order to properly
+        # emulate the kernel booting process, we also have to emulate the interger
+        # overflow that can occur.
         r = []
-        base = self.base
-        end = self.end
+        base = paddr_to_kernel_vaddr(kernel_virtual_base, self.base)
+        end = paddr_to_kernel_vaddr(kernel_virtual_base, self.end)
         while base != end:
-            size = end - base
+            size = machine_sub(end, base)
             size_bits = msb(size)
             if base == 0:
                 bits = size_bits
@@ -81,8 +105,10 @@ class MemoryRegion:
             if bits > max_bits:
                 bits = max_bits
             sz = 1 << bits
-            r.append(MemoryRegion(base, base + sz))
-            base += sz
+            base_paddr = kernel_vaddr_to_paddr(kernel_virtual_base, base)
+            end_paddr = kernel_vaddr_to_paddr(kernel_virtual_base, base + sz)
+            base = machine_add(base, sz)
+            r.append(MemoryRegion(base_paddr, end_paddr))
 
         return r
 
@@ -146,10 +172,10 @@ class DisjointMemoryRegion:
 
         self._check()
 
-    def aligned_power_of_two_regions(self, max_bits: int) -> List[MemoryRegion]:
+    def aligned_power_of_two_regions(self, kernel_virtual_base: int, max_bits: int) -> List[MemoryRegion]:
         r = []
         for region in self._regions:
-            r += region.aligned_power_of_two_regions(max_bits)
+            r += region.aligned_power_of_two_regions(kernel_virtual_base, max_bits)
         return r
 
     def allocate(self, size: int) -> int:

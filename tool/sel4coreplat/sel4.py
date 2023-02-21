@@ -1386,6 +1386,23 @@ def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
     return max(cnode_size_bits, vspace_bits)
 
 
+def calculate_kernel_virtual_base(kernel_config: KernelConfig) -> int:
+    if kernel_config.arch == KernelArch.AARCH64:
+        if kernel_config.hyp_mode:
+            return 2 ** 48 - 2 ** 39
+        else:
+            return 2 ** 64 - 2 ** 39
+    elif kernel_config.arch == KernelArch.RISCV64:
+        if kernel_config.riscv_page_table_levels == 3:
+            return 2 ** 64 - 2 ** 38
+        elif kernel_config.riscv_page_table_levels == 4:
+            return 2 ** 64 - 2 ** 39
+        else:
+            raise Exception("Unsupported number of RISC-V page table levels")
+    else:
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
+
+
 def _kernel_partial_boot(
         kernel_config: KernelConfig,
         kernel_elf: ElfFile) -> _KernelPartialBootInfo:
@@ -1494,8 +1511,13 @@ def emulate_kernel_boot(
         max_bits = 38
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
-    device_regions = reserved_region.aligned_power_of_two_regions(max_bits) + device_memory.aligned_power_of_two_regions(max_bits)
-    normal_regions = boot_region.aligned_power_of_two_regions(max_bits) + normal_memory.aligned_power_of_two_regions(max_bits)
+    # Cacluate the base address for kernel virtual memory, this is required
+    # for computing the aligned regions
+    kernel_virtual_base = calculate_kernel_virtual_base(kernel_config)
+    device_regions = reserved_region.aligned_power_of_two_regions(kernel_virtual_base, max_bits) \
+                        + device_memory.aligned_power_of_two_regions(kernel_virtual_base, max_bits)
+    normal_regions = boot_region.aligned_power_of_two_regions(kernel_virtual_base, max_bits) \
+                        + normal_memory.aligned_power_of_two_regions(kernel_virtual_base, max_bits)
     untyped_objects = []
     for cap, r in enumerate(device_regions, first_untyped_cap):
         untyped_objects.append(UntypedObject(cap, r, True))
