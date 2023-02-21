@@ -601,6 +601,10 @@ The QEMU command to run is:
        -serial mon:stdio \
        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0
 
+## Raspberry Pi 4B
+
+@ivanv: add documentation
+
 ## Spike
 
 Initial support is available for the Spike on 64-bit RISC-V.
