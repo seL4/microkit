@@ -473,6 +473,7 @@ The `irq` element has the following attributes:
 
 * `irq`: The hardware interrupt number.
 * `id`: The channel identifier.
+* `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defualts to "level".
 
 The `setvar` element has the following attributes:
 
