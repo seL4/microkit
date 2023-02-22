@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 from microkit.util import str_to_bool, UserError
+from microkit.sel4 import Sel4ArmIrqTrigger
 from typing import Dict, Iterable, Optional, Set, Tuple
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,7 @@ class SysMap:
 class SysIrq:
     irq: int
     id_: int
+    trigger: Sel4ArmIrqTrigger
 
 
 @dataclass(frozen=True, eq=True)
@@ -265,14 +267,22 @@ def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
                 if setvar_vaddr:
                     setvars.append(SysSetVar(setvar_vaddr, vaddr=vaddr))
             elif child.tag == "irq":
-                _check_attrs(child, ("irq", "id"))
+                _check_attrs(child, ("irq", "id", "trigger"))
                 irq = int(checked_lookup(child, "irq"), base=0)
                 id_ = int(checked_lookup(child, "id"), base=0)
                 if id_ >= 63:
                     raise ValueError("id must be < 63")
                 if id_ < 0:
                     raise ValueError("id must be >= 0")
-                irqs.append(SysIrq(irq, id_))
+
+                trigger_str = child.attrib.get("trigger", "level")
+                if trigger_str == "level":
+                    trigger = Sel4ArmIrqTrigger.Level
+                elif trigger_str == "edge":
+                    trigger = Sel4ArmIrqTrigger.Edge
+                else:
+                    raise ValueError(f"trigger must be either 'level' or 'edge'")
+                irqs.append(SysIrq(irq, id_, trigger))
             elif child.tag == "setvar":
                 _check_attrs(child, ("symbol", "region_paddr"))
                 symbol = checked_lookup(child, "symbol")
