@@ -158,6 +158,11 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
     return size
 
 
+class Sel4ArmIrqTrigger(IntEnum):
+    Level = 0
+    Edge = 1
+
+
 class Sel4Aarch64Regs:
     """
 typedef struct seL4_UserContext_ {
@@ -528,13 +533,14 @@ class Sel4AsidPoolAssign(Sel4Invocation):
 
 
 @dataclass
-class Sel4IrqControlGet(Sel4Invocation):
+class Sel4IrqControlGetTrigger(Sel4Invocation):
     _object_type = "IRQ Control"
     _method_name = "Get"
     _extra_caps = ("dest_root", )
-    label = Sel4Label.IRQIssueIRQHandler
+    label = Sel4Label.ARMIRQIssueIRQHandlerTrigger
     irq_control: int
     irq: int
+    trigger: int
     dest_root: int
     dest_index: int
     dest_depth: int

@@ -101,6 +101,9 @@ class ProtectionDomainParseTests(ExtendedTestCase):
     def test_write_only_mr(self):
         self._check_error("pd_write_only_mr.xml", f"Error: perms must not be 'w', write-only mappings are not allowed on element 'map':")
 
+    def test_irq_invalid_trigger(self):
+        self._check_error("irq_invalid_trigger.xml", "Error: trigger must be either 'level' or 'edge' on element 'irq'")
+
 
 class ChannelParseTests(ExtendedTestCase):
     def test_missing_pd(self):
