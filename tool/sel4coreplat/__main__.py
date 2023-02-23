@@ -1297,7 +1297,7 @@ def build_system(
             vaddr = mp.vaddr
             mr = all_mr_by_name[mp.mr] #system.mr_by_name[mp.mr]
             # Get arch-specific page attributes for the mapping
-            attrs = arch_get_map_attrs(kernel_config.arch, mp)
+            attrs = arch_get_map_attrs(kernel_config.arch, mp.cached, mp.perms)
             # Get page rights
             rights = 0
             if "r" in mp.perms:

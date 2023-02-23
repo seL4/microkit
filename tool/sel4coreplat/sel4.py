@@ -10,7 +10,6 @@ from struct import pack, Struct
 
 from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
 from sel4coreplat.elf import ElfFile
-from sel4coreplat.sysxml import SysMap
 
 
 class KernelArch:
@@ -1588,20 +1587,20 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
     return size
 
 
-def arch_get_map_attrs(arch: KernelArch, mp: SysMap) -> int:
+def arch_get_map_attrs(arch: KernelArch, cached: bool, perms: str) -> int:
     attrs = 0
     if arch == KernelArch.AARCH64:
         attrs = SEL4_ARM_PARITY_ENABLED
-        if mp.cached:
+        if cached:
             attrs |= SEL4_ARM_PAGE_CACHEABLE
-        if "x" not in mp.perms:
+        if "x" not in perms:
             attrs |= SEL4_ARM_EXECUTE_NEVER
     elif arch == KernelArch.RISCV64:
-        if "x" not in mp.perms:
+        if "x" not in perms:
             attrs |= SEL4_RISCV_EXECUTE_NEVER
     elif arch == KernelArch.X86_64:
         # @ivanv: I *think* to make something not cacheable it's seL4_X86_CacheDisabled, but not sure.
-        if not mp.cached:
+        if not cached:
             attrs |= SEL4_X86_CACHE_DISABLED
     else:
         raise Exception(f"Unexpected kernel architecture: {arch}")
