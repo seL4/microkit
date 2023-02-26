@@ -86,6 +86,7 @@ class ProtectionDomain:
     budget: int
     period: int
     pp: bool
+    passive: bool
     program_image: Path
     maps: Tuple[SysMap, ...]
     irqs: Tuple[SysIrq, ...]
@@ -223,7 +224,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 
 def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
-    _check_attrs(pd_xml, ("name", "priority", "pp", "budget", "period"))
+    _check_attrs(pd_xml, ("name", "priority", "pp", "budget", "period", "passive"))
     program_image: Optional[Path] = None
     name = checked_lookup(pd_xml, "name")
     priority = int(pd_xml.attrib.get("priority", "0"), base=0)
@@ -237,6 +238,7 @@ def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
         raise ValueError(f"budget ({budget}) must be less than, or equal to, period ({period})")
 
     pp = str_to_bool(pd_xml.attrib.get("pp", "false"))
+    passive = str_to_bool(pd_xml.attrib.get("passive", "false"))
 
     maps = []
     irqs = []
@@ -277,7 +279,7 @@ def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
     if program_image is None:
         raise ValueError("program_image must be specified")
 
-    return ProtectionDomain(name, priority, budget, period, pp, program_image, tuple(maps), tuple(irqs), tuple(setvars), pd_xml)
+    return ProtectionDomain(name, priority, budget, period, pp, passive, program_image, tuple(maps), tuple(irqs), tuple(setvars), pd_xml)
 
 
 def xml2channel(ch_xml: ET.Element) -> Channel:

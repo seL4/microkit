@@ -72,6 +72,20 @@ SUPPORTED_BOARDS = (
         examples = {
             "hello": Path("example/zcu102/hello")
         }
+    ),
+    BoardInfo(
+        name="imx8mm",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmExportPMUUser": True,
+        },
+        examples = {
+            "ethernet": Path("example/imx8mm/passive_server")
+        }
     )
 )
 
@@ -82,6 +96,14 @@ SUPPORTED_CONFIGS = (
         kernel_options = {},
     ),
     ConfigInfo(
+        name="benchmark",
+        debug=False,
+        kernel_options = {
+            "KernelDebugBuild": False,
+            "KernelBenchmarks": "track_utilisation"
+        },
+    ),
+    ConfigInfo(
         name="debug",
         debug=True,
         kernel_options = {
@@ -89,7 +111,7 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         }
-    ),
+    )
 )
 
 
