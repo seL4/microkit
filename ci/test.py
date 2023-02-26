@@ -26,6 +26,7 @@ RUNTIME_BOARDS = [
     "qemu_arm_virt",
     "qemu_arm_virt_hyp",
     "qemu_arm_virt_cortex_a72",
+    "qemu_arm_virt_cortex_a72_hyp",
     # "qemu_riscv_virt",
     # "spike",
 ]
@@ -51,7 +52,9 @@ TEST_RUN = [
 ]
 
 # TODO: potentially handle different QEMU CPUs (e.g cortex-a72, cortex-a57)
-QEMU_AARCH64_VIRT_CMD = "qemu-system-aarch64 -machine virt -cpu cortex-a53 -m size=2048M -chardev stdio,logfile=%s,id=char0,mux=on -serial chardev:char0 -mon chardev=char0 -nographic -device loader,file=%s,addr=0x70000000,cpu-num=0"
+QEMU_AARCH64_VIRT_CMD = "qemu-system-aarch64 -machine virt -cpu %s -m size=2048M -chardev stdio,logfile=%s,id=char0,mux=on -serial chardev:char0 -mon chardev=char0 -nographic -device loader,file=%s,addr=0x70000000,cpu-num=0"
+# @ivanv: do we need highmem=off?
+QEMU_AARCH64_VIRT_HYP_CMD = "qemu-system-aarch64 -machine virt,virtualization=on,highmem=off,secure=off -cpu %s -m size=2048M -chardev stdio,logfile=%s,id=char0,mux=on -serial chardev:char0 -mon chardev=char0 -nographic -device loader,file=%s,addr=0x70000000,cpu-num=0"
 QEMU_RISCV_VIRT_CMD = "qemu-system-riscv64 -machine virt -m size=3072M -nographic -bios %s"
 QEMU_SPIKE_CMD = "qemu-system-riscv64 -machine spike -m size=4095M -nographic -bios %s"
 SPIKE_CMD = "spike -m4095 %s"
@@ -107,14 +110,29 @@ def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, conf
         elif sel4_arch == "aarch64":
             if config_options["CONFIG_PLAT_QEMU_ARM_VIRT"]:
                 system(f"touch {test_build_dir}/log")
-                qemu_cmd = QEMU_AARCH64_VIRT_CMD % (f"{test_build_dir}/log", f"{test_build_dir}/loader.img")
+                if config_options["CONFIG_ARM_HYPERVISOR_SUPPORT"]:
+                    qemu_template_cmd = QEMU_AARCH64_VIRT_HYP_CMD
+                else:
+                    qemu_template_cmd = QEMU_AARCH64_VIRT_CMD
+                if config_options["CONFIG_ARM_CORTEX_A72"]:
+                    qemu_cpu = "cortex-a72"
+                elif config_options["CONFIG_ARM_CORTEX_A53"]:
+                    qemu_cpu = "cortex-a53"
+                else:
+                    raise Exception("Unexpected QEMU CPU")
+
+                qemu_test_cmd = qemu_template_cmd % (f"{qemu_cpu}", f"{test_build_dir}/log", f"{test_build_dir}/loader.img")
+
                 print(f"RUN TEST: {test_identifier}")
-                child = pexpect.spawn(qemu_cmd)
+                child = pexpect.spawn(qemu_test_cmd)
                 try:
+                    # @ivanv: fix
                     child.expect("hello, world", timeout=2)
                 except pexpect.exceptions.TIMEOUT:
-                    logging.error(f"TEST failed (timeout exception): {test_identifier}")
-                    logging.error(f"    QEMU command used was: {qemu_cmd}")
+                    logging.error(f"Test failed (timeout exception): {test_identifier}")
+                    logging.error(f"    QEMU command used was:")
+                    logging.error(f"    {qemu_test_cmd}")
+                    logging.error(f"Path to log file is: {test_build_dir}/log")
                     failed_tests.append(test_identifier)
             else:
                 raise Exception("Unexpected AArch64 runtime test board")
@@ -149,15 +167,11 @@ if __name__ == "__main__":
             for config in test_configs:
                 board = test["board"]
                 config_options = get_config_options(sdk_path, board, config)
-                # x = threading.Thread(target=run_test, args=(test_path, test["name"], sdk_path, build_dir, config, board, config_options))
-                # x.start()
                 run_test(test_path, test["name"], sdk_path, build_dir, config, board, config_options)
         else:
             for board in supported_boards:
                 for config in test_configs:
                     config_options = get_config_options(sdk_path, board, config)
-                    # x = threading.Thread(target=run_test, args=(test_path, test["name"], sdk_path, build_dir, config, board.name, config_options))
-                    # x.start()
                     run_test(test_path, test["name"], sdk_path, build_dir, config, board, config_options)
 
     for test in TEST_RUN:
@@ -167,16 +181,12 @@ if __name__ == "__main__":
             for config in test_configs:
                 board = test["board"]
                 config_options = get_config_options(sdk_path, board, config)
-                # x = threading.Thread(target=run_test, args=(test_path, test["name"], sdk_path, build_dir, config, board, config_options))
-                # x.start()
                 run_test(test_path, test["name"], sdk_path, build_dir, config, board, config_options)
         else:
             for board in supported_boards:
                 for config in test_configs:
                     config_options = get_config_options(sdk_path, board, config)
                     run_test(test_path, test["name"], sdk_path, build_dir, config, board, config_options)
-                    # x = threading.Thread(target=run_test, args=(test_path, test["name"], sdk_path, build_dir, config, board.name, config_options))
-                    # x.start()
 
     if len(failed_tests) > 0:
         print("Failed following tests: ")
