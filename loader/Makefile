@@ -46,7 +46,7 @@ endif
 ifeq ($(ARCH),aarch64)
 	# FIXME @ivanv: investigate why having -O3 causes QEMU ARM virt to not be able to boot.
 	C_FLAGS_ARCH := -mcpu=$(GCC_CPU)
-	ASM_CPP_FLAGS_ARCH := -mcpu=$(GCC_CPU)
+	ASM_CPP_FLAGS_ARCH := -mcpu=$(GCC_CPU) -DPA_SIZE_BITS=$(PA_SIZE_BITS)
 	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 else ifeq ($(ARCH),riscv64)
 	MARCH := rv64imac

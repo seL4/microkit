@@ -63,6 +63,7 @@ class KernelConfig:
     have_fpu: bool
     hyp_mode: bool
     num_cpus: int
+    arm_pa_size_bits: int
     riscv_page_table_levels: int
     x86_xsave_size: int
 
@@ -89,7 +90,7 @@ class Sel4Object(IntEnum):
 
     def get_id(self, kernel_config: KernelConfig) -> int:
         if kernel_config.arch == KernelArch.AARCH64:
-            if kernel_config.hyp_mode and self in AARCH64_HYP_OBJECTS:
+            if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40 and self in AARCH64_HYP_OBJECTS:
                 return AARCH64_HYP_OBJECTS[self]
             elif self in AARCH64_OBJECTS:
                 return AARCH64_OBJECTS[self]
@@ -112,7 +113,7 @@ class Sel4Object(IntEnum):
 
 
     def get_size(self, kernel_config: KernelConfig) -> Optional[int]:
-        if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and self in AARCH64_HYP_OBJECT_SIZES:
+        if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40 and self in AARCH64_HYP_OBJECT_SIZES:
             return AARCH64_HYP_OBJECT_SIZES[self]
         elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode and self in RISCV64_HYP_OBJECT_SIZES:
             return RISCV64_HYP_OBJECT_SIZES[self]
@@ -138,7 +139,8 @@ AARCH64_OBJECTS = {
 }
 
 AARCH64_HYP_OBJECTS = {
-     # A VSpace on AArch64 in hypervisor mode is represented by a PageUpperDirectory
+     # A VSpace on AArch64 in hypervisor mode (assuming CONFIG_ARM_PA_SIZE_BITS
+     # is 40) is represented by a PageUpperDirectory.
     Sel4Object.Vspace: 8,
 }
 
@@ -273,13 +275,10 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
 
 def _get_arch_n_paging(kernel_config: KernelConfig, region: MemoryRegion) -> int:
     if kernel_config.arch == KernelArch.AARCH64:
-        if kernel_config.hyp_mode:
-            # @ivanv hyp specific, also I think this assumes CONFIG_ARM_PA_SIZE_BITS_40
-            # but can't remember, double check in kernel
+        if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
             PT_INDEX_OFFSET  =  12
             PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
-            PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 10) # @ivanv: Double check this
-            PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
+            PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
 
             return (
                 _get_n_paging(region, PUD_INDEX_OFFSET) +
@@ -744,6 +743,7 @@ class Sel4Label(IntEnum):
     # ARM Page Upper Directory
     ARMPageUpperDirectoryMap = 40
     ARMPageUpperDirectoryUnmap = 41
+    # ARM Page Directory
     ARMPageDirectoryMap = 42
     ARMPageDirectoryUnmap = 43
     # ARM Page Table
@@ -787,8 +787,10 @@ class Sel4Label(IntEnum):
 
     def get_id(self, kernel_config: KernelConfig) -> int:
         if kernel_config.arch == KernelArch.AARCH64:
-            if self in AARCH64_HYP_LABELS and kernel_config.hyp_mode:
-                return AARCH64_HYP_LABELS[self]
+            if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40 and self in AARCH64_PA_40_HYP_LABELS:
+                return AARCH64_PA_40_HYP_LABELS[self]
+            elif kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 44 and self in AARCH64_PA_44_HYP_LABELS:
+                return AARCH64_PA_44_HYP_LABELS[self]
             elif self in AARCH64_LABELS:
                 return AARCH64_LABELS[self]
             else:
@@ -801,7 +803,10 @@ class Sel4Label(IntEnum):
         else:
             raise Exception("@ivanv")
 
-
+# @ivanv: revist and audit the way we deal with invocation labels being
+# different on the various kernel configs. Here we basically layout *all*
+# of the ARM specific invocations and then refer to the dictonary for the
+# respective kernel config. This has some duplication (the first 4 invocations are always the same).
 AARCH64_LABELS = {
     Sel4Label.ARMVSpaceClean_Data: 36,
     Sel4Label.ARMVSpaceInvalidate_Data: 37,
@@ -831,7 +836,42 @@ AARCH64_LABELS = {
     Sel4Label.ARMIRQIssueIRQHandlerTrigger: 55
 }
 
-AARCH64_HYP_LABELS = {
+AARCH64_PA_44_HYP_LABELS = {
+    Sel4Label.ARMVSpaceClean_Data: 36,
+    Sel4Label.ARMVSpaceInvalidate_Data: 37,
+    Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
+    Sel4Label.ARMVSpaceUnify_Instruction: 39,
+    # ARM Page Upper Directory
+    Sel4Label.ARMPageUpperDirectoryMap: 40,
+    Sel4Label.ARMPageUpperDirectoryUnmap: 41,
+    # ARM Page Directory
+    Sel4Label.ARMPageDirectoryMap: 42,
+    Sel4Label.ARMPageDirectoryUnmap: 43,
+    # ARM Page table
+    Sel4Label.ARMPageTableMap: 44,
+    Sel4Label.ARMPageTableUnmap: 45,
+    # ARM Page
+    Sel4Label.ARMPageMap: 46,
+    Sel4Label.ARMPageUnmap: 47,
+    Sel4Label.ARMPageClean_Data: 48,
+    Sel4Label.ARMPageInvalidate_Data: 49,
+    Sel4Label.ARMPageCleanInvalidate_Data: 50,
+    Sel4Label.ARMPageUnify_Instruction: 51,
+    Sel4Label.ARMPageGetAddress: 52,
+    # ARM Asid
+    Sel4Label.ARMASIDControlMakePool: 53,
+    Sel4Label.ARMASIDPoolAssign: 54,
+    # ARM VCPU
+    Sel4Label.ARMVCPUSetTCB: 55,
+    Sel4Label.ARMVCPUInjectIRQ: 56,
+    Sel4Label.ARMVCPUReadReg: 57,
+    Sel4Label.ARMVCPUWriteReg: 58,
+    Sel4Label.ARMVCPUAckVPPI: 59,
+    # ARM IRQ
+    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 60
+}
+
+AARCH64_PA_40_HYP_LABELS = {
     Sel4Label.ARMVSpaceClean_Data: 36,
     Sel4Label.ARMVSpaceInvalidate_Data: 37,
     Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
@@ -1380,7 +1420,7 @@ def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
     # @ivanv: remove hard-coding
     slot_bits = 5  # seL4_SlotBits
     root_cnode_bits = kernel_config.root_cnode_bits
-    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode:
+    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
         vspace_bits = 13  # seL4_VSpaceBits
     elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:
         vspace_bits = 14  # seL4_VSpaceBits
@@ -1394,7 +1434,7 @@ def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
 def calculate_kernel_virtual_base(kernel_config: KernelConfig) -> int:
     if kernel_config.arch == KernelArch.AARCH64:
         if kernel_config.hyp_mode:
-            return 2 ** 48 - 2 ** 39
+            return 0x0000008000000000
         else:
             return 2 ** 64 - 2 ** 39
     elif kernel_config.arch == KernelArch.RISCV64:
@@ -1565,7 +1605,7 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
     asid_pool_bits = 12  # seL4_ASIDPoolBits
     # @ivanv: remove hard-coding
     # Determining seL4_VSpaceBits
-    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode:
+    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
         # @ivanv Note that this assumes CONFIG_ARM_PA_SIZE_BITS_40 is set
         vspace_bits = 13
     elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:

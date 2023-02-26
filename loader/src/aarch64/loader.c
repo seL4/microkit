@@ -32,6 +32,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #elif defined(BOARD_qemu_arm_virt) || \
         defined(BOARD_qemu_arm_virt_cortex_a72) || \
         defined(BOARD_qemu_arm_virt_hyp) || \
+        defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
         defined(BOARD_qemu_arm_virt_2_cores)
 #define GICD_BASE 0x8010000UL
 #define GICC_BASE 0x8020000UL
@@ -52,6 +53,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
     defined(BOARD_qemu_arm_virt) || \
     defined(BOARD_qemu_arm_virt_cortex_a72) || \
     defined(BOARD_qemu_arm_virt_hyp) || \
+    defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
     defined(BOARD_qemu_arm_virt_2_cores)
     #define GIC_V2
 #endif
@@ -174,6 +176,7 @@ putc(uint8_t ch)
 #elif defined(BOARD_qemu_arm_virt) || \
       defined(BOARD_qemu_arm_virt_cortex_a72) || \
       defined(BOARD_qemu_arm_virt_hyp) || \
+      defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
       defined(BOARD_qemu_arm_virt_2_cores)
 #define UART_BASE 0x9000000
 #define UARTDR 0x000
@@ -212,7 +215,7 @@ putc(uint8_t ch)
     while (!(*UART_REG(MU_LSR) & MU_LSR_TXIDLE));
     *UART_REG(MU_IO) = (ch & 0xff);
 }
-#elif defined(BOARD_rpi4b)
+#elif defined(BOARD_rpi4b) || defined(BOARD_rpi4b_hyp)
 #define UART_BASE 0xfe215040
 #define MU_IO 0x00
 #define MU_LSR 0x14
@@ -221,6 +224,10 @@ putc(uint8_t ch)
 static void
 putc(uint8_t ch)
 {
+    if (ch == '\n') {
+        putc('\r');
+    }
+
     while (!(*UART_REG(MU_LSR) & MU_LSR_TXIDLE));
     *UART_REG(MU_IO) = (ch & 0xff);
 }

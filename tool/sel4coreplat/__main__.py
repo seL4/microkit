@@ -1216,7 +1216,7 @@ def build_system(
             if page_size == 0x1_000:
                 page_table_vaddrs.add(mask_bits(vaddr, 12 + 9))
 
-        if not kernel_config.hyp_mode:
+        if not (kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40):
             uds += [(idx, vaddr) for vaddr in sorted(upper_directory_vaddrs)]
         ds += [(idx, vaddr) for vaddr in sorted(directory_vaddrs)]
         pts += [(idx, vaddr) for vaddr in sorted(page_table_vaddrs)]
@@ -1229,14 +1229,15 @@ def build_system(
     # @ivanv: fix this so that the name of the object is correct depending if it's
     # a PD or VM
     if kernel_config.arch == KernelArch.AARCH64:
-        if not kernel_config.hyp_mode:
+        if not (kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40):
             ud_names = [f"PageUpperDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in uds]
             ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
 
         d_names = [f"PageDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
-        # PageUpperDirectory and PageDirectory are not present on RISC-V
+        # @ivanv: double check that CONFIG_PT_LEVELS is sv39
+        # Allocating for 3-level page table
         d_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
@@ -1638,7 +1639,7 @@ def build_system(
     elif kernel_config.arch == KernelArch.AARCH64:
         default_vm_attributes = SEL4_ARM_DEFAULT_VMATTRIBUTES
         # @ivanv: explain/justify the difference between hyp and normal mode
-        if kernel_config.hyp_mode:
+        if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
             vspace_invocations = [
                 (Sel4ARMPageDirectoryMap, ds, d_objects),
                 (Sel4ARMPageTableMap, pts, pt_objects),
@@ -1710,6 +1711,7 @@ def build_system(
                                                         schedcontext_obj.cap_addr,
                                                         fault_ep_endpoint_object.cap_addr))
 
+    # @ivanv: This should only be available on the benchmark config
     # Copy the PD's TCB cap into their address space for development purposes.
     for tcb_obj, cnode_obj in zip(tcb_objects, cnode_objects):
         system_invocations.append(Sel4CnodeCopy(cnode_obj.cap_addr,
@@ -1911,6 +1913,16 @@ def main() -> int:
 
     hyp_mode = (("CONFIG_ARM_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_ARM_HYPERVISOR_SUPPORT"]) or
                ("CONFIG_RISCV_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"]))
+    if sel4_arch == "aarch64":
+        if sel4_config["CONFIG_ARM_PA_SIZE_BITS_40"]:
+            arm_pa_size_bits = 40
+        elif sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"]:
+            arm_pa_size_bits = 44
+        else:
+            raise Exception("Unsupported number of physical adddress bits")
+    else:
+        arm_pa_size_bits = None
+
     kernel_config = KernelConfig(
         arch = arch,
         word_size = sel4_config["CONFIG_WORD_SIZE"],
@@ -1924,14 +1936,10 @@ def main() -> int:
         hyp_mode = hyp_mode,
         num_cpus = sel4_config["CONFIG_MAX_NUM_NODES"],
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
+        arm_pa_size_bits = arm_pa_size_bits,
         riscv_page_table_levels = sel4_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in sel4_config else None,
         x86_xsave_size = sel4_config["CONFIG_XSAVE_SIZE"] if "CONFIG_XSAVE_SIZE" in sel4_config else None,
     )
-    # @ivanv: add support for 44-bit physical addresses
-    # Certain values in hypervisor mode when CONFIG_ARM_PA_SIZE_BITS_44 change.
-    # Need to go through seL4 source code and fix this.
-    if "CONFIG_ARM_PA_SIZE_BITS_44" in sel4_config:
-        assert not (sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"] and kernel_config.hyp_mode), "TODO: add support for 44-bit physical addresses in hyp mode"
 
     default_platform_description = PlatformDescription(
         page_sizes = (0x1_000, 0x200_000),

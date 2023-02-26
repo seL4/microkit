@@ -60,6 +60,16 @@
 #define TCR_PS_16T        (4 << 16)
 #define TCR_PS_256T       (5 << 16)
 
+/* @ivanv: double check that this is correct, in that the else condition is
+   for all other PA size not just 44 */
+#if PA_SIZE_BITS == 40
+#define TCR_PS TCR_PS_1T
+#elif PA_SIZE_BITS == 44
+#define TCR_PS TCR_PS_16T
+#else
+#error "Unexpected number of physical address bits"
+#endif
+
 #define TCR_EL2_RES1      ((1 << 23) | (1 << 31))
 #define TCR_ASID16        (1 << 36)
 
@@ -341,6 +351,7 @@ BEGIN_FUNC(el2_mmu_enable)
      */
     bl      invalidate_icache
 
+    /* @ivanv: no MT_NORMAL_WT? */
     /* @ivanv: what is this doing */
     /*
      *   DEVICE_nGnRnE      000     00000000
@@ -357,8 +368,7 @@ BEGIN_FUNC(el2_mmu_enable)
     msr     mair_el2, x5
 
     /* @ivanv: what is this doing */
-    // @ivanv: explain these, especially TCR_PS_1T
-    ldr     x8, =TCR_T0SZ(48) | TCR_IRGN0_WBWC | TCR_ORGN0_WBWC | TCR_SH0_ISH | TCR_TG0_4K | TCR_PS_1T | TCR_EL2_RES1
+    ldr     x8, =TCR_T0SZ(48) | TCR_IRGN0_WBWC | TCR_ORGN0_WBWC | TCR_SH0_ISH | TCR_TG0_4K | TCR_PS | TCR_EL2_RES1
     msr     tcr_el2, x8
     isb
 

@@ -675,6 +675,14 @@ def main() -> None:
                 # On RISC-V the loader needs to know the expected first HART ID.
                 assert "CONFIG_FIRST_HART_ID" in sel4_config
                 loader_defines.append(("FIRST_HART_ID", sel4_config["CONFIG_FIRST_HART_ID"]))
+            elif board.arch == BoardArch.AARCH64:
+                if sel4_config["CONFIG_ARM_PA_SIZE_BITS_40"]:
+                    pa_size_bits = 40
+                elif sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"]:
+                    pa_size_bits = 44
+                else:
+                    raise Excpetion("Expected seL4 generated config to define number of physical address bits")
+                loader_defines.append(("PA_SIZE_BITS", pa_size_bits))
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libsel4cp", root_dir, build_dir, board, config)
