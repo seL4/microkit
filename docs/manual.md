@@ -602,6 +602,8 @@ The QEMU command to run is:
        -serial mon:stdio \
        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0
 
+@ivanv: Add documentation for running other conifgs, e.g a72 or hypervisor
+
 ## Raspberry Pi 4B
 
 @ivanv: add documentation
