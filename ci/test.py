@@ -24,6 +24,7 @@ LOG_FILE = CWD_DIR + "test_log"
 
 RUNTIME_BOARDS = [
     "qemu_arm_virt",
+    "qemu_arm_virt_hyp",
     "qemu_arm_virt_cortex_a72",
     # "qemu_riscv_virt",
     # "spike",
