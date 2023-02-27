@@ -195,13 +195,23 @@ putc(uint8_t ch)
 #define UART_STATUS 0xC
 #define UART_TX_FULL (1 << 21)
 
-#define REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
+static void
+putc(uint8_t ch)
+{
+    while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
+    *UART_REG(UART_WFIFO) = ch;
+}
+#elif defined(BOARD_odroidc4)
+#define UART_BASE 0xff803000
+#define UART_WFIFO 0x0
+#define UART_STATUS 0xC
+#define UART_TX_FULL (1 << 21)
 
 static void
 putc(uint8_t ch)
 {
-    while ((*REG(UART_STATUS) & UART_TX_FULL));
-    *REG(UART_WFIFO) = ch;
+    while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
+    *UART_REG(UART_WFIFO) = ch;
 }
 #elif defined(BOARD_rpi3b)
 #define UART_BASE 0x3f215040
