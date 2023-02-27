@@ -224,7 +224,17 @@ SUPPORTED_BOARDS = (
         kernel_options = {
             "KernelPlatform": "odroidc2",
             "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="odroidc2_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x20000000,
+        kernel_options = {
+            "KernelPlatform": "odroidc2",
+            "KernelIsMCS": True,
             "KernelArmHypervisorSupport": True,
         },
         examples = {}
@@ -237,6 +247,18 @@ SUPPORTED_BOARDS = (
         kernel_options = {
             "KernelPlatform": "odroidc4",
             "KernelIsMCS": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
+        name="odroidc4_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a55",
+        loader_link_address=0x20000000,
+        kernel_options = {
+            "KernelPlatform": "odroidc4",
+            "KernelIsMCS": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples = {}
     ),
