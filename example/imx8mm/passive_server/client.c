@@ -16,5 +16,5 @@ init(void)
 void
 notified(sel4cp_channel ch)
 {
-    sel4cp_dbg_puts("Client recieved a notification on an unexpected channel\n");
+    sel4cp_dbg_puts("client: recieved a notification on an unexpected channel\n");
 }
