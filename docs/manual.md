@@ -145,6 +145,7 @@ The PD has a number of scheduling attributes that are configured in the system d
 * priority (0 -- 254)
 * period (microseconds)
 * budget (microseconds)
+* passive (boolean)
 
 The budget and period bound the fraction of CPU time that a PD can consume.
 Specifically, the **budget** specifies the amount of time for which the PD is allowed to execute.
@@ -156,6 +157,8 @@ A budget that equals the period (aka. a "full" budget) behaves like a traditiona
 
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points have been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
+
+The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee. 
 
 ## Memory Regions {#mr}
 
@@ -445,6 +448,7 @@ It supports the following attributes:
 * `priority`: the priority of the protection domain (integer 0 to 254).
 * `budget`: (optional) the PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) the PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
+* `passive`: (optional) indicates that the protection domain will be passive and thus have it's scheduling context removed after initialisation; defaults to false.
 
 Additionally, it supports the following child elements:
 
