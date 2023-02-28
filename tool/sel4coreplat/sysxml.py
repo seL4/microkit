@@ -291,8 +291,8 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
                 _check_attrs(ch_xml, ("pd", "id"))
                 pd = checked_lookup(child, "pd")
                 id_ = int(checked_lookup(child, "id"))
-                if id_ >= 64:
-                    raise ValueError("id must be < 64")
+                if id_ >= 63:
+                    raise ValueError("id must be < 63")
                 if id_ < 0:
                     raise ValueError("id must be >= 0")
                 ends.append((pd, id_))

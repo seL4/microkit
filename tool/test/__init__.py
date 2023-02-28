@@ -99,8 +99,8 @@ class ChannelParseTests(ExtendedTestCase):
     def test_missing_id(self):
         self._check_missing("ch_missing_id.xml", "id", "end")
 
-    def test_id_greater_than_63(self):
-        self._check_error("ch_id_greater_than_63.xml", "Error: id must be < 64 on element 'end'")
+    def test_id_greater_than_62(self):
+        self._check_error("ch_id_greater_than_62.xml", "Error: id must be < 63 on element 'end'")
 
     def test_id_less_than_0(self):
         self._check_error("ch_id_less_than_0.xml", "Error: id must be >= 0 on element 'end'")
