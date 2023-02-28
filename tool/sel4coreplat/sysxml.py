@@ -233,7 +233,10 @@ class SystemDescription:
 
         # Ensure that all maps are correct
         for pd in self.protection_domains:
-            for map in pd.maps:
+            maps = pd.maps
+            if pd.virtual_machine:
+                maps += pd.virtual_machine.maps
+            for map in maps:
                 if map.mr not in self.mr_by_name:
                     raise UserError(f"Invalid memory region name '{map.mr}' on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
 
