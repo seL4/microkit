@@ -255,6 +255,19 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
+    BoardInfo(
+        name="rpi4b_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a72",
+        loader_link_address=0x10000000,
+        kernel_options = {
+            "KernelPlatform": "bcm2711",
+            "KernelARMPlatform": "rpi4",
+            "KernelIsMCS": True,
+            "KernelArmHypervisorSupport": True,
+        },
+        examples = {}
+    ),
     # For RISC-V the link address for the seL4CP loader is dependent on the
     # previous loader. Currently for RISC-V platforms we use OpenSBI which
     # is placed at the start of memory and since we use FW_PAYLOAD, it places
