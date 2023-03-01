@@ -160,6 +160,35 @@ SUPPORTED_BOARDS = (
         examples = {}
     ),
     BoardInfo(
+        name="ultra96v2",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options = {
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "ultra96v2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {
+            "hello": Path("example/ultra96v2/hello")
+        }
+    ),
+    BoardInfo(
+        name="ultra96v2_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options = {
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "ultra96v2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
         name="qemu_arm_virt",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",

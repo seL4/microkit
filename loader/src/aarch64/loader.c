@@ -26,7 +26,9 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #define STACK_SIZE 4096
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || \
+    defined(BOARD_ultra96v2) || \
+    defined(BOARD_ultra96v2_hyp)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
 #elif defined(BOARD_qemu_arm_virt) || \
@@ -51,6 +53,8 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102) || \
     defined(BOARD_odroidc2) || \
     defined(BOARD_odroidc2_hyp) || \
+    defined(BOARD_ultra96v2) || \
+    defined(BOARD_ultra96v2_hyp) || \
     defined(BOARD_qemu_arm_virt) || \
     defined(BOARD_qemu_arm_virt_cortex_a72) || \
     defined(BOARD_qemu_arm_virt_hyp) || \
@@ -262,6 +266,12 @@ static void
 putc(uint8_t ch)
 {
     *((volatile uint32_t *)(0x00FF000030)) = ch;
+}
+#elif defined(BOARD_ultra96v2) || defined(BOARD_ultra96v2_hyp)
+static void
+putc(uint8_t ch)
+{
+    *((volatile uint32_t *)(0x00FF010030)) = ch;
 }
 #else
 #error Board not defined
