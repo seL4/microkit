@@ -210,6 +210,7 @@ FIXED_OBJECT_SIZES = {
 }
 
 AARCH64_HYP_OBJECT_SIZES = {
+    Sel4Object.Vspace: 1 << 13,
     Sel4Object.PageUpperDirectory: 1 << 13,
 }
 
