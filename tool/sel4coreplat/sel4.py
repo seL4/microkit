@@ -606,8 +606,8 @@ class Sel4PageMap(Sel4Invocation):
     page: int
     vspace: int
     vaddr: int
-    attr: int
     rights: int
+    attr: int
 
 
 @dataclass
