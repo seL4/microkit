@@ -263,6 +263,10 @@ def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
                 _check_attrs(child, ("irq", "id"))
                 irq = int(checked_lookup(child, "irq"), base=0)
                 id_ = int(checked_lookup(child, "id"), base=0)
+                if id_ >= 63:
+                    raise ValueError("id must be < 63")
+                if id_ < 0:
+                    raise ValueError("id must be >= 0")
                 irqs.append(SysIrq(irq, id_))
             elif child.tag == "setvar":
                 _check_attrs(child, ("symbol", "region_paddr"))
