@@ -466,7 +466,7 @@ The `map` element has the following attributes:
 The `irq` element has the following attributes:
 
 * `irq`: The hardware interrupt number.
-* `id`: The channel identifier.
+* `id`: The channel identifier. Must be at least 0 and less than 63.
 
 The `setvar` element has the following attributes:
 
@@ -493,7 +493,7 @@ The `channel` element has exactly two `end` children elements for specifying the
 The `end` element has the following attributes:
 
 * `pd`: Name of the protection domain for this end.
-* `id`: Channel identifier in the context of the named protection domain.
+* `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
 The `id` should be passed to the `sel4cp_notify` and `sel4cp_ppcall` functions.
