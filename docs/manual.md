@@ -202,7 +202,7 @@ In this case the channel identifier is effectively a proxy identifier for the ot
 So, to extend the prior example, **A** can indirectly refer to **B** via the channel identifier **37**.
 Similarly, **B** can refer to **A** via the channel identifier **42**.
 
-The system supports a maximum up 64 channels and interrupts per protection domain.
+The system supports a maximum of 63 channels and interrupts per protection domain.
 
 ### Protected procedure
 
