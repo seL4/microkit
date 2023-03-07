@@ -161,7 +161,10 @@ putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mm_evk_2_cores) || defined(BOARD_imx8mm_evk_4_cores)
+#elif defined(BOARD_imx8mm_evk) || \
+      defined(BOARD_imx8mm_evk_hyp) || \
+      defined(BOARD_imx8mm_evk_2_cores) || \
+      defined(BOARD_imx8mm_evk_4_cores)
 
 #define UART_BASE 0x30890000
 #define STAT 0x98
