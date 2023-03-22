@@ -212,6 +212,7 @@ sel4cp_vm_stop(sel4cp_vm vm)
 #endif
 
 /* Wrappers over ARM specific hypervisor system calls. */
+// @ivanv: error checking for these
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static inline uint64_t
 sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
@@ -223,5 +224,17 @@ static inline uint64_t
 sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
 {
     return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
+}
+
+static inline uint64_t
+sel4cp_arm_vcpu_read_reg(sel4cp_vm vm, uint64_t reg)
+{
+    return seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vm, reg).value;
+}
+
+static inline uint64_t
+sel4cp_arm_vcpu_write_reg(sel4cp_vm vm, uint64_t reg, uint64_t value)
+{
+    return seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vm, reg, value);
 }
 #endif

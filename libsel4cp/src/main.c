@@ -73,6 +73,7 @@ handler_loop(void)
         uint64_t is_fault = (badge >> 62) & 1;
 
         have_reply = false;
+        have_signal = false;
 
         if (is_fault) {
             fault(badge & PD_MASK, tag);
