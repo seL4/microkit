@@ -211,30 +211,53 @@ sel4cp_vm_stop(sel4cp_vm vm)
 }
 #endif
 
+// @ivanv: Ideally these functions like vcpu_read_reg would be architecture
+// independent from the user's perspective.
 /* Wrappers over ARM specific hypervisor system calls. */
-// @ivanv: error checking for these
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
-static inline uint64_t
+static inline void
 sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
-    return seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
+    seL4_Error err;
+    err = seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_arm_vcpu_inject_irq: error injecting IRQ\n");
+        sel4cp_internal_crash(err);
+    }
 }
 
-static inline uint64_t
+static inline void
 sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
 {
-    return seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
+    seL4_Error err;
+    err = seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_arm_vcpu_ack_vppi: error acking VPPI\n");
+        sel4cp_internal_crash(err);
+    }
 }
 
-static inline uint64_t
+static inline seL4_Word
 sel4cp_arm_vcpu_read_reg(sel4cp_vm vm, uint64_t reg)
 {
-    return seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vm, reg).value;
+    seL4_ARM_VCPU_ReadRegs_t ret;
+    ret = seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vm, reg);
+    if (ret.error != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_arm_vcpu_read_reg: error reading VCPU register\n");
+        sel4cp_internal_crash(ret.error);
+    }
+
+    return ret.value;
 }
 
-static inline uint64_t
+static inline void
 sel4cp_arm_vcpu_write_reg(sel4cp_vm vm, uint64_t reg, uint64_t value)
 {
-    return seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vm, reg, value);
+    seL4_Error err;
+    err = seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vm, reg, value);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_arm_vcpu_write_reg: error VPPI\n");
+        sel4cp_internal_crash(err);
+    }
 }
 #endif
