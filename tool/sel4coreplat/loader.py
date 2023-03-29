@@ -86,7 +86,7 @@ def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
         # Check that this does not overlap any checked regions
         for b, e in checked:
             if not (end <= b or base >= e):
-                raise Exception(f"Overlapping: {base:x}--{end:x} overlaps {b:x} -- {e:x}")
+                raise Exception(f"Overlapping regions: [0x{base:x}..0x{end:x}] overlaps [0x{b:x}..0x{e:x}]")
 
         checked.append((base, end))
 
