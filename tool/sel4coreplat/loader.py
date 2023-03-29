@@ -221,7 +221,13 @@ class Loader:
 
         self._regions += regions
 
-        _check_non_overlapping(self._regions)
+        # In addition to checking that provided regions (e.g initial task
+        # and PD ELFs) do not overlap, we must make sure they do not overlap
+        # with the loader itself, as that would (and has) lead to corruption of
+        # the loader when copying regions to their respective locations.
+        all_regions = list(self._regions)
+        all_regions.append((loader_segment.virt_addr, self._image))
+        _check_non_overlapping(all_regions)
 
         # Currently the only flag passed to the loader is whether seL4
         # is configured as a hypervisor or not.
