@@ -320,53 +320,53 @@ SUPPORTED_BOARDS = (
     # the loader at fixed location of 2MiB after the start of memory. If you
     # were to use a different SBI implementation or not use FW_PAYLOAD with
     # OpenSBI, you will most likely have to change the loader_link_address.
-    BoardInfo(
-        name="spike",
-        arch=BoardArch.RISCV64,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "spike",
-        },
-        examples = {
-            "hello": Path("example/spike/hello")
-        }
-    ),
-    BoardInfo(
-        name="hifive_unleashed",
-        arch=BoardArch.RISCV64,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "hifive",
-        },
-        examples = {}
-    ),
-    BoardInfo(
-        name="qemu_riscv_virt",
-        arch=BoardArch.RISCV64,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "qemu-riscv-virt",
-        },
-        examples = {}
-    ),
-    BoardInfo(
-        name="qemu_riscv_virt_hyp",
-        arch=BoardArch.RISCV64,
-        gcc_flags = "",
-        loader_link_address=0x80200000,
-        kernel_options = {
-            "KernelIsMCS": True,
-            "KernelPlatform": "qemu-riscv-virt",
-            "KernelRiscVHypervisorSupport": True,
-        },
-        examples = {}
-    ),
+    # BoardInfo(
+    #     name="spike",
+    #     arch=BoardArch.RISCV64,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "spike",
+    #     },
+    #     examples = {
+    #         "hello": Path("example/spike/hello")
+    #     }
+    # ),
+    # BoardInfo(
+    #     name="hifive_unleashed",
+    #     arch=BoardArch.RISCV64,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "hifive",
+    #     },
+    #     examples = {}
+    # ),
+    # BoardInfo(
+    #     name="qemu_riscv_virt",
+    #     arch=BoardArch.RISCV64,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "qemu-riscv-virt",
+    #     },
+    #     examples = {}
+    # ),
+    # BoardInfo(
+    #     name="qemu_riscv_virt_hyp",
+    #     arch=BoardArch.RISCV64,
+    #     gcc_flags = "",
+    #     loader_link_address=0x80200000,
+    #     kernel_options = {
+    #         "KernelIsMCS": True,
+    #         "KernelPlatform": "qemu-riscv-virt",
+    #         "KernelRiscVHypervisorSupport": True,
+    #     },
+    #     examples = {}
+    # ),
     # BoardInfo(
     #     name="qemu_riscv_virt_no_hyp_32",
     #     arch=BoardArch.RISCV32,
