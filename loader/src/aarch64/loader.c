@@ -245,6 +245,18 @@ putc(uint8_t ch)
     while (!(*UART_REG(MU_LSR) & MU_LSR_TXIDLE));
     *UART_REG(MU_IO) = (ch & 0xff);
 }
+#elif defined(BOARD_jetson_tx2)
+#define UART_BASE   0x3100000
+#define UTHR        0x0
+#define ULSR        0x14
+#define ULSR_THRE   (1 << 5)
+
+static void
+putc(uint8_t ch)
+{
+    while ((*UART_REG(ULSR) & ULSR_THRE) == 0);
+    *UART_REG(UTHR) = ch;
+}
 #elif defined(BOARD_zcu102)
 static void
 putc(uint8_t ch)
