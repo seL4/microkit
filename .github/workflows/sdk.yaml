@@ -1,0 +1,49 @@
+# Copyright 2023, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
+# It is to be noted that this CI workflow is temporary and simply attempts
+# to build (but not test) the SDK. It is only for the purposes of seeing
+# whether a particular commit has devastatingly broken the Microkit SDK
+
+name: SDK
+
+on:
+  # Run the SDK CI on any activity on the main branch as well as on any pull
+  # request activity (e.g when it is created and also when it is updated).
+  pull_request:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build SDK (Linux x86-64)
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Microkit repository
+        uses: actions/checkout@v3
+      - name: Checkout seL4 repository
+        uses: actions/checkout@v3
+        with:
+            repository: seL4/seL4
+            ref: microkit
+            path: seL4
+      - name: Install SDK dependencies
+        run: |
+          sudo apt update
+          sudo apt install \
+            cmake pandoc device-tree-compiler ninja-build \
+            texlive-fonts-recommended texlive-formats-extra libxml2-utils \
+            gcc-aarch64-linux-gnu python3.9 python3-pip python3.9-venv \
+            musl-tools
+      - name: Install AArch64 GCC toolchain
+        run: |
+          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz\?revision\=79f65c42-1a1b-43f2-acb7-a795c8427085\&hash\=61BBFB526E785D234C5D8718D9BA8E61
+          tar xf aarch64-toolchain.tar.gz
+          echo "$(pwd)/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Build SDK
+        run: |
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/python build_sdk.py --sel4=seL4
