@@ -74,6 +74,7 @@ from sel4coreplat.sel4 import (
     Sel4IrqHandlerSetNotification,
     Sel4SchedControlConfigureFlags,
     Sel4ArmVcpuSetTcb,
+    Sel4RiscvVcpuSetTcb,
     Sel4PageMap,
     emulate_kernel_boot,
     emulate_kernel_boot_partial,
@@ -1757,7 +1758,12 @@ def build_system(
 
     # For all the virtual machines, we want to bind the TCB to the VCPU
     if len(virtual_machines) > 0:
-        invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[len(system.protection_domains)].cap_addr)
+        if kernel_config.arch == KernelArch.AARCH64:
+            invocation = Sel4ArmVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[len(system.protection_domains)].cap_addr)
+        elif kernel_config.arch == KernelArch.RISCV64:
+            invocation = Sel4RiscvVcpuSetTcb(vcpu_objects[0].cap_addr, tcb_objects[len(system.protection_domains)].cap_addr)
+        else:
+            raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
         invocation.repeat(count=len(virtual_machines), vcpu=1, tcb=1)
         system_invocations.append(invocation)
 

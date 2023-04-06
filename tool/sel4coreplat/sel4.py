@@ -1353,6 +1353,15 @@ class Sel4ArmVcpuSetTcb(Sel4Invocation):
     vcpu: int
     tcb: int
 
+@dataclass
+class Sel4RiscvVcpuSetTcb(Sel4Invocation):
+    _object_type = "VCPU"
+    _method_name = "Set TCB"
+    _extra_caps = ("tcb", )
+    label = Sel4Label.RISCVVCPUSetTCB
+    vcpu: int
+    tcb: int
+
 
 def _kernel_device_addrs(arch: KernelArch, kernel_elf: ElfFile) -> List[int]:
     """Extract the physical address of all kernel (only) devices"""
