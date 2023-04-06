@@ -42,6 +42,7 @@ def _check_attrs(el: ET.Element, valid_keys: Iterable[str]) -> None:
 class PlatformDescription:
     page_sizes: Tuple[int, ...]
     num_cpus: int
+    kernel_is_hypervisor: bool
 
 
 class LineNumberingParser(ET.XMLParser):
@@ -356,6 +357,8 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
             elif child.tag == "protection_domain":
                 child_pds.append(xml2pd(child, plat_desc, is_child=True))
             elif child.tag == "virtual_machine":
+                if not plat_desc.kernel_is_hypervisor:
+                    raise UserError("virtual_machine only available when kernel is built as a hypervisor")
                 if virtual_machine is not None:
                     raise UserError("virtual_machine must only be specified once")
                 virtual_machine = xml2vm(child, plat_desc)

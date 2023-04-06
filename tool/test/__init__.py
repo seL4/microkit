@@ -14,6 +14,7 @@ plat_desc = PlatformDescription(
     # The number of CPUs is dependent on the configuration of the platform that is being built.
     # For the tests we just decide a value for this.
     num_cpus = 4,
+    kernel_is_hypervisor = False,
 )
 
 def _file(filename: str) -> Path:

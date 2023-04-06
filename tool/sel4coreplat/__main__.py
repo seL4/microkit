@@ -1950,6 +1950,7 @@ def main() -> int:
     default_platform_description = PlatformDescription(
         page_sizes = (0x1_000, 0x200_000),
         num_cpus = kernel_config.num_cpus,
+        kernel_is_hypervisor = kernel_config.hyp_mode,
     )
     system_description = xml2system(args.system, default_platform_description)
 
