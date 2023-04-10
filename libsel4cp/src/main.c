@@ -38,7 +38,7 @@ __attribute__((weak)) sel4cp_msginfo protected(sel4cp_channel ch, sel4cp_msginfo
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
 
-__attribute__((weak)) void fault(sel4cp_pd pd, sel4cp_msginfo msginfo)
+__attribute__((weak)) void fault(sel4cp_id id, sel4cp_msginfo msginfo)
 {
 }
 

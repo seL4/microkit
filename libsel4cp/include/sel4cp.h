@@ -14,8 +14,7 @@
 #include <sel4/sel4.h>
 
 typedef unsigned int sel4cp_channel;
-typedef unsigned int sel4cp_pd;
-typedef unsigned int sel4cp_vm;
+typedef unsigned int sel4cp_id;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
 #define MONITOR_ENDPOINT_CAP 5
@@ -116,7 +115,7 @@ sel4cp_irq_ack_delayed(sel4cp_channel ch)
 }
 
 static inline void
-sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
+sel4cp_pd_restart(sel4cp_id pd, uintptr_t entry_point)
 {
     seL4_Error err;
     seL4_UserContext ctxt;
@@ -137,7 +136,7 @@ sel4cp_pd_restart(sel4cp_pd pd, uintptr_t entry_point)
 }
 
 static inline void
-sel4cp_pd_stop(sel4cp_pd pd)
+sel4cp_pd_stop(sel4cp_id pd)
 {
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
@@ -179,7 +178,9 @@ sel4cp_mr_get(uint8_t mr)
 
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT) || defined(CONFIG_RISCV_HYPERVISOR_SUPPORT)
 static inline void
-sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
+// @ivanv: the implementation of this is exactly the same as sel4cp_pd_restart (same
+// with pd_stop and vm_stop). Potentially could just use one.
+sel4cp_vm_restart(sel4cp_id vm, uintptr_t entry_point)
 {
     seL4_Error err;
     seL4_UserContext ctxt;
@@ -200,7 +201,7 @@ sel4cp_vm_restart(sel4cp_vm vm, uintptr_t entry_point)
 }
 
 static inline void
-sel4cp_vm_stop(sel4cp_vm vm)
+sel4cp_vm_stop(sel4cp_id vm)
 {
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_VM_TCB_CAP + vm);
@@ -216,7 +217,7 @@ sel4cp_vm_stop(sel4cp_vm vm)
 /* Wrappers over ARM specific hypervisor system calls. */
 #if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static inline void
-sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
+sel4cp_arm_vcpu_inject_irq(sel4cp_id vm, uint16_t irq, uint8_t priority, uint8_t group, uint8_t index)
 {
     seL4_Error err;
     err = seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vm, irq, priority, group, index);
@@ -227,7 +228,7 @@ sel4cp_arm_vcpu_inject_irq(sel4cp_vm vm, uint16_t irq, uint8_t priority, uint8_t
 }
 
 static inline void
-sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
+sel4cp_arm_vcpu_ack_vppi(sel4cp_id vm, uint64_t irq)
 {
     seL4_Error err;
     err = seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vm, irq);
@@ -238,7 +239,7 @@ sel4cp_arm_vcpu_ack_vppi(sel4cp_vm vm, uint64_t irq)
 }
 
 static inline seL4_Word
-sel4cp_arm_vcpu_read_reg(sel4cp_vm vm, uint64_t reg)
+sel4cp_arm_vcpu_read_reg(sel4cp_id vm, uint64_t reg)
 {
     seL4_ARM_VCPU_ReadRegs_t ret;
     ret = seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vm, reg);
@@ -251,7 +252,7 @@ sel4cp_arm_vcpu_read_reg(sel4cp_vm vm, uint64_t reg)
 }
 
 static inline void
-sel4cp_arm_vcpu_write_reg(sel4cp_vm vm, uint64_t reg, uint64_t value)
+sel4cp_arm_vcpu_write_reg(sel4cp_id vm, uint64_t reg, uint64_t value)
 {
     seL4_Error err;
     err = seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vm, reg, value);

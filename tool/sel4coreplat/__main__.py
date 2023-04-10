@@ -1366,10 +1366,10 @@ def build_system(
             fault_ep_cap = fault_ep_endpoint_object.cap_addr
             badge = idx
         else:
-            assert pd.pd_id is not None
+            assert pd.id_ is not None
             assert pd.parent is not None
             fault_ep_cap = pd_endpoint_objects[pd.parent].cap_addr
-            badge =  (1 << 62) | pd.pd_id
+            badge =  (1 << 62) | pd.id_
 
         invocation = Sel4CnodeMint(
             system_cnode_cap,
@@ -1398,7 +1398,7 @@ def build_system(
         fault_ep_cap = pd_endpoint_objects[parent_pd].cap_addr
         # @ivanv: Right now there's nothing stopping the vm_id being
         # the same as a pd_id. We should change this.
-        badge = (1 << 62) | vm.vm_id
+        badge = (1 << 62) | vm.id_
 
         invocation = Sel4CnodeMint(
             system_cnode_cap,
@@ -1478,7 +1478,7 @@ def build_system(
     for cnode_obj, pd in zip(cnode_objects, system.protection_domains):
         for maybe_child_tcb, maybe_child_pd in zip(tcb_objects, system.protection_domains):
             if maybe_child_pd.parent is pd:
-                cap_idx = BASE_TCB_CAP + maybe_child_pd.pd_id
+                cap_idx = BASE_TCB_CAP + maybe_child_pd.id_
                 system_invocations.append(
                     Sel4CnodeMint(
                         cnode_obj.cap_addr,
@@ -1496,7 +1496,7 @@ def build_system(
         if pd.virtual_machine:
             for maybe_vm_tcb, maybe_vm in zip(tcb_objects[len(system.protection_domains):], virtual_machines):
                 if pd.virtual_machine == maybe_vm:
-                    cap_idx = BASE_VM_TCB_CAP + maybe_vm.vm_id
+                    cap_idx = BASE_VM_TCB_CAP + maybe_vm.id_
                     system_invocations.append(
                         Sel4CnodeMint(
                             cnode_obj.cap_addr,
@@ -1514,7 +1514,7 @@ def build_system(
         if pd.virtual_machine:
             for vm_vcpu, vm in zip(vcpu_objects, virtual_machines):
                 if pd.virtual_machine == vm:
-                    cap_idx = BASE_VCPU_CAP + vm.vm_id
+                    cap_idx = BASE_VCPU_CAP + vm.id_
                     system_invocations.append(
                         Sel4CnodeMint(
                             cnode_obj.cap_addr,

@@ -47,17 +47,17 @@ protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
 }
 
 void
-fault(sel4cp_pd pd, sel4cp_msginfo msginfo)
+fault(sel4cp_id id, sel4cp_msginfo msginfo)
 {
     sel4cp_dbg_puts("restarter: received fault message for pd: ");
-    put8(pd);
+    put8(id);
     sel4cp_dbg_puts("\n");
     restart_count++;
     if (restart_count < 10) {
-        sel4cp_pd_restart(pd, 0x200000);
+        sel4cp_pd_restart(id, 0x200000);
         sel4cp_dbg_puts("restarter: restarted\n");
     } else {
-        sel4cp_pd_stop(pd);
+        sel4cp_pd_stop(id);
         sel4cp_dbg_puts("restarter: too many restarts - PD stopped\n");
     }
 }

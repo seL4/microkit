@@ -84,7 +84,7 @@ class SysSetVar:
 
 @dataclass(frozen=True, eq=True)
 class ProtectionDomain:
-    pd_id: Optional[int]
+    id_: Optional[int]
     name: str
     priority: int
     budget: int
@@ -128,7 +128,7 @@ class Channel:
 @dataclass(frozen=True, eq=True)
 class VirtualMachine:
     name: str
-    vm_id: int
+    id_: int
     cpu_affinity: int
     maps: Tuple[SysMap, ...]
     priority: int
@@ -140,9 +140,9 @@ def _pd_tree_to_list(root_pd: ProtectionDomain, parent_pd: Optional[ProtectionDo
     # Check child PDs have unique identifiers
     child_ids = set()
     for child_pd in root_pd.child_pds:
-        if child_pd.pd_id in child_ids:
-            raise UserError(f"duplicate pd_id: {child_pd.pd_id} in protection domain: '{root_pd.name}' @ {child_pd.element._loc_str}")  # type: ignore
-        child_ids.add(child_pd.pd_id)
+        if child_pd.id_ in child_ids:
+            raise UserError(f"duplicate id: {child_pd.id_} in protection domain: '{root_pd.name}' @ {child_pd.element._loc_str}")  # type: ignore
+        child_ids.add(child_pd.id_)
 
     new_root_pd = replace(root_pd, child_pds=tuple(), parent=parent_pd)
     new_child_pds = sum((_pd_tree_to_list(child_pd, new_root_pd) for child_pd in root_pd.child_pds), tuple())
@@ -283,7 +283,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=False) -> ProtectionDomain:
     root_attrs = ("name", "priority", "pp", "budget", "period", "cpu", "passive")
-    child_attrs = root_attrs + ("pd_id", )
+    child_attrs = root_attrs + ("id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
     program_image: Optional[Path] = None
     name = checked_lookup(pd_xml, "name")
@@ -297,13 +297,13 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
     if cpu < 0  or cpu >= plat_desc.num_cpus:
         raise ValueError(f"CPU affinity must be between 0 and {plat_desc.num_cpus - 1}")
 
-    pd_id = None
+    id_ = None
     if is_child:
-        pd_id = int(checked_lookup(pd_xml, "pd_id"), base=0)
-        if pd_id < 0 or pd_id > 255:
-            raise ValueError("pd_id must be between 0 and 255")
+        id_ = int(checked_lookup(pd_xml, "id"), base=0)
+        if id_ < 0 or id_ > 255:
+            raise ValueError("id must be between 0 and 255")
     else:
-        pd_id = None
+        id_ = None
 
     if budget > period:
         raise ValueError(f"budget ({budget}) must be less than, or equal to, period ({period})")
@@ -371,7 +371,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
         raise ValueError("program_image must be specified")
 
     return ProtectionDomain(
-        pd_id,
+        id_,
         name,
         priority,
         budget,
@@ -417,12 +417,12 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
 
 def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine:
-    _check_attrs(vm_xml, ("name", "vm_id", "priority", "cpu"))
+    _check_attrs(vm_xml, ("name", "id", "priority", "cpu"))
     name = checked_lookup(vm_xml, "name")
 
-    vm_id = int(checked_lookup(vm_xml, "vm_id"), base=0)
-    if vm_id < 0 or vm_id > 255:
-        raise ValueError("vm_id must be between 0 and 255")
+    id_ = int(checked_lookup(vm_xml, "id"), base=0)
+    if id_ < 0 or id_ > 255:
+        raise ValueError("id must be between 0 and 255")
 
     cpu = int(vm_xml.attrib.get("cpu", "0"), base=0)
     if cpu < 0  or cpu >= plat_desc.num_cpus:
@@ -449,7 +449,7 @@ def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine
 
     return VirtualMachine(
         name,
-        vm_id,
+        id_,
         cpu,
         tuple(maps),
         priority,
