@@ -79,7 +79,7 @@
  *
  * FIXME: This can be smaller once compression is enabled.
  */
-#define BOOTSTRAP_INVOCATION_DATA_SIZE 90
+#define BOOTSTRAP_INVOCATION_DATA_SIZE 110
 
 seL4_IPCBuffer *__sel4_ipc_buffer;
 
@@ -90,6 +90,8 @@ static char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word fault_ep;
 seL4_Word reply;
 seL4_Word tcbs[MAX_TCBS];
+seL4_Word scheduling_contexts[MAX_TCBS];
+seL4_Word notification_caps[MAX_TCBS];
 
 struct region {
     uintptr_t paddr;
@@ -220,9 +222,23 @@ check_untypeds_match(seL4_BootInfo *bi)
             fail("paddr mismatch");
         }
         if (untyped_info.regions[i].size_bits != bi->untypedList[i].sizeBits) {
+            puts("MON|ERROR: size_bits mismatch for untyped region: ");
+            puthex32(i);
+            puts("  expected size_bits: ");
+            puthex32(untyped_info.regions[i].size_bits);
+            puts("  boot info size_bits: ");
+            puthex32(bi->untypedList[i].sizeBits);
+            puts("\n");
             fail("size_bits mismatch");
         }
         if (untyped_info.regions[i].is_device != bi->untypedList[i].isDevice) {
+            puts("MON|ERROR: is_device mismatch for untyped region: ");
+            puthex32(i);
+            puts("  expected is_device: ");
+            puthex32(untyped_info.regions[i].is_device);
+            puts("  boot info is_device: ");
+            puthex32(bi->untypedList[i].isDevice);
+            puts("\n");
             fail("is_device mismatch");
         }
     }
@@ -368,6 +384,19 @@ monitor(void)
         puts("  tcb cap: ");
         puthex64(tcb_cap);
         puts("\n");
+
+        if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
+            /* This is a request from our PD to become passive */ 
+            err = seL4_SchedContext_UnbindObject(scheduling_contexts[badge], tcb_cap);
+            err = seL4_SchedContext_Bind(scheduling_contexts[badge], notification_caps[badge]);
+            if (err != seL4_NoError) {
+                puts("error binding scheduling context to notification");
+            } else {
+                puts(pd_names[badge]);
+                puts(" is now passive!\n");
+            }
+            continue;
+        }
 
         if (badge < MAX_PDS && pd_names[badge][0] != 0) {
             puts("faulting PD: ");

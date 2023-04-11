@@ -100,7 +100,7 @@ This document attempts to clearly describe all of these terms, however as the co
 ## System {#system}
 
 At the most basic level sel4cp provides the platform for running a *system* on a specific board.
-As a *user* of sel4cp you use the platform to create a softare system that implements your use case.
+As a *user* of sel4cp you use the platform to create a software system that implements your use case.
 The system is described in a declarative configuration file, and the sel4cp tool takes this system description as an input and produces an appropriate system image that can be loaded on the target board.
 
 The key elements that make up a system are *protection domains*, *memory regions* and *channels*.
@@ -140,11 +140,12 @@ The overall computational model for an sel4cp system is a set of isolated compon
 
 ### Scheduling
 
-The PD has a number of scheduling attrbites that are configured in the system description:
+The PD has a number of scheduling attributes that are configured in the system description:
 
 * priority (0 -- 254)
 * period (microseconds)
 * budget (microseconds)
+* passive (boolean)
 
 The budget and period bound the fraction of CPU time that a PD can consume.
 Specifically, the **budget** specifies the amount of time for which the PD is allowed to execute.
@@ -156,6 +157,8 @@ A budget that equals the period (aka. a "full" budget) behaves like a traditiona
 
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points have been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
+
+The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee. 
 
 ## Memory Regions {#mr}
 
@@ -197,9 +200,9 @@ For example if PDs **A** and **B** are connected by a channel, **A** may refer t
 PDs can only refer to other PDs indirectly if there is a channel between them.
 In this case the channel identifier is effectively a proxy identifier for the other PD.
 So, to extend the prior example, **A** can indirectly refer to **B** via the channel identifier **37**.
-Similary, **B** can refer to **A** via the channel identifier **42**.
+Similarly, **B** can refer to **A** via the channel identifier **42**.
 
-The system supports a maximum up 64 channels and interrupts per protection domain.
+The system supports a maximum of 63 channels and interrupts per protection domain.
 
 ### Protected procedure
 
@@ -306,7 +309,7 @@ Usage:
 
     sel4cp [-h] [-o OUTPUT] [-r REPORT] system
 
-The path to the sytem description file must be provided.
+The path to the system description file must be provided.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
@@ -445,6 +448,7 @@ It supports the following attributes:
 * `priority`: the priority of the protection domain (integer 0 to 254).
 * `budget`: (optional) the PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) the PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
+* `passive`: (optional) indicates that the protection domain will be passive and thus have it's scheduling context removed after initialisation; defaults to false.
 
 Additionally, it supports the following child elements:
 
@@ -466,7 +470,7 @@ The `map` element has the following attributes:
 The `irq` element has the following attributes:
 
 * `irq`: The hardware interrupt number.
-* `id`: The channel identifier.
+* `id`: The channel identifier. Must be at least 0 and less than 63.
 
 The `setvar` element has the following attributes:
 
@@ -493,7 +497,7 @@ The `channel` element has exactly two `end` children elements for specifying the
 The `end` element has the following attributes:
 
 * `pd`: Name of the protection domain for this end.
-* `id`: Channel identifier in the context of the named protection domain.
+* `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
 The `id` should be passed to the `sel4cp_notify` and `sel4cp_ppcall` functions.
@@ -622,4 +626,4 @@ The limitation on the number of protection domains in the system is relatively a
 Based on experience with the system and the types of systems being built it is possible for this to be increased in the future.
 
 The limitation on the number of channels for a protection domain is based on the size of the notification object in seL4.
-Changing this to be large than 64 would most likely require changes to seL4.
+Changing this to be larger than 64 would most likely require changes to seL4.

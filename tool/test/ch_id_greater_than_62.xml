@@ -12,7 +12,7 @@
         <program_image path="test" />
     </protection_domain>
     <channel>
-        <end pd="test1" id="64"/>
+        <end pd="test1" id="63"/>
         <end pd="test2" id="5"/>
     </channel>
 </system>
