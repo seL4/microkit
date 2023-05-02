@@ -1894,18 +1894,11 @@ def main() -> int:
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
     with open(sel4_config_path, "r") as f:
-        sel4_config_yaml = yaml_load(f, Loader=YamlLoader)
-    # What we really want is a dictionary that has every option as a key with it's correspoding value
-    sel4_config = {}
-    for option_dict in sel4_config_yaml:
-        # @ivanv, so gross... we'll definitely have to find a better way
-        option, value = list(option_dict.items())[0]
-        sel4_config[option] = value
-
+        sel4_config = yaml_load(f, Loader=YamlLoader)
     # Some of the kernel config we need can be found in the auto-generated
     # config YAML file. Which we use here since they can differ between
     # platforms and architecture.
-    sel4_arch = sel4_config["CONFIG_SEL4_ARCH"]
+    sel4_arch = sel4_config["SEL4_ARCH"]
     if sel4_arch == "aarch64":
         arch = KernelArch.AARCH64
     elif sel4_arch == "riscv64":
@@ -1917,12 +1910,12 @@ def main() -> int:
     else:
         raise Exception(f"Unsupported seL4 architecture: {sel4_arch}")
 
-    hyp_mode = (("CONFIG_ARM_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_ARM_HYPERVISOR_SUPPORT"]) or
-               ("CONFIG_RISCV_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["CONFIG_RISCV_HYPERVISOR_SUPPORT"]))
+    hyp_mode = (("ARM_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["ARM_HYPERVISOR_SUPPORT"]) or
+               ("RISCV_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["RISCV_HYPERVISOR_SUPPORT"]))
     if sel4_arch == "aarch64":
-        if sel4_config["CONFIG_ARM_PA_SIZE_BITS_40"]:
+        if sel4_config["ARM_PA_SIZE_BITS_40"]:
             arm_pa_size_bits = 40
-        elif sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"]:
+        elif sel4_config["ARM_PA_SIZE_BITS_44"]:
             arm_pa_size_bits = 44
         else:
             raise Exception("Unsupported number of physical adddress bits")
@@ -1931,20 +1924,20 @@ def main() -> int:
 
     kernel_config = KernelConfig(
         arch = arch,
-        word_size = sel4_config["CONFIG_WORD_SIZE"],
+        word_size = sel4_config["WORD_SIZE"],
         minimum_page_size = kb(4),
-        paddr_user_device_top = sel4_config["CONFIG_PADDR_USER_DEVICE_TOP"],
+        paddr_user_device_top = int(sel4_config["PADDR_USER_DEVICE_TOP"]),
         kernel_frame_size = (1 << 12),
-        root_cnode_bits = sel4_config["CONFIG_ROOT_CNODE_SIZE_BITS"],
+        root_cnode_bits = int(sel4_config["ROOT_CNODE_SIZE_BITS"]),
         cap_address_bits = 64,
-        fan_out_limit = sel4_config["CONFIG_RETYPE_FAN_OUT_LIMIT"],
-        have_fpu = sel4_config["CONFIG_HAVE_FPU"],
+        fan_out_limit = int(sel4_config["RETYPE_FAN_OUT_LIMIT"]),
+        have_fpu = sel4_config["HAVE_FPU"],
         hyp_mode = hyp_mode,
-        num_cpus = sel4_config["CONFIG_MAX_NUM_NODES"],
+        num_cpus = int(sel4_config["MAX_NUM_NODES"]),
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
         arm_pa_size_bits = arm_pa_size_bits,
-        riscv_page_table_levels = sel4_config["CONFIG_PT_LEVELS"] if "CONFIG_PT_LEVELS" in sel4_config else None,
-        x86_xsave_size = sel4_config["CONFIG_XSAVE_SIZE"] if "CONFIG_XSAVE_SIZE" in sel4_config else None,
+        riscv_page_table_levels = int(sel4_config["PT_LEVELS"]) if "PT_LEVELS" in sel4_config else None,
+        x86_xsave_size = int(sel4_config["XSAVE_SIZE"]) if "XSAVE_SIZE" in sel4_config else None,
     )
 
     default_platform_description = PlatformDescription(

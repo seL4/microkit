@@ -686,13 +686,8 @@ def build_sel4_config_component(
     sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.yaml"
     dest = root_dir / "board" / board.name / config.name / "config.yaml"
     with open(sel4_gen_config, "r") as f:
-        # Convert the loaded YAML into a dictionary with the config options as
-        # keys and the config option values as the values.
-        yaml_config = yaml_load(f, Loader=YamlLoader)
-        sel4_config = {}
-        for config_option in yaml_config:
-            option, value = list(config_option.items())[0]
-            sel4_config[option] = value
+        # Load the generated kernel configuration into a dictionary
+        sel4_config = yaml_load(f, Loader=YamlLoader)
 
     dest.unlink(missing_ok=True)
     copy(sel4_gen_config, dest)
@@ -749,20 +744,20 @@ def main() -> None:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
             sel4_config = build_sel4_config_component(root_dir, build_dir, board, config)
             # Get the defines needed by the loader from the auto-generated seL4 config.
-            assert "CONFIG_MAX_NUM_NODES" in sel4_config
-            num_cpus = sel4_config["CONFIG_MAX_NUM_NODES"]
+            assert "MAX_NUM_NODES" in sel4_config
+            num_cpus = sel4_config["MAX_NUM_NODES"]
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
                 ("NUM_CPUS", num_cpus),
             ]
             if board.arch == BoardArch.RISCV64:
                 # On RISC-V the loader needs to know the expected first HART ID.
-                assert "CONFIG_FIRST_HART_ID" in sel4_config
-                loader_defines.append(("FIRST_HART_ID", sel4_config["CONFIG_FIRST_HART_ID"]))
+                assert "FIRST_HART_ID" in sel4_config
+                loader_defines.append(("FIRST_HART_ID", sel4_config["FIRST_HART_ID"]))
             elif board.arch == BoardArch.AARCH64:
-                if sel4_config["CONFIG_ARM_PA_SIZE_BITS_40"]:
+                if sel4_config["ARM_PA_SIZE_BITS_40"]:
                     pa_size_bits = 40
-                elif sel4_config["CONFIG_ARM_PA_SIZE_BITS_44"]:
+                elif sel4_config["ARM_PA_SIZE_BITS_44"]:
                     pa_size_bits = 44
                 else:
                     raise Excpetion("Expected seL4 generated config to define number of physical address bits")

@@ -65,15 +65,7 @@ failed_tests = []
 def get_config_options(sdk_path: str, board: str, config: str) -> Dict:
     config_path = f"{sdk_path}/board/{board}/{config}/config.yaml"
     with open(config_path, "r") as f:
-        # Convert the loaded YAML into a dictionary with the config options as
-        # keys and the config option values as the values.
-        yaml = yaml_load(f, Loader=YamlLoader)
-        sel4_config = {}
-        for config_option in yaml:
-            option, value = list(config_option.items())[0]
-            sel4_config[option] = value
-
-    return sel4_config
+        return yaml_load(f, Loader=YamlLoader)
 
 
 def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, config: str, board: str, config_options: Dict):
@@ -84,11 +76,11 @@ def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, conf
     mkdir(test_build_dir)
     # TODO: properly output stuff to log file
     print(f"BUILD TEST: {test_identifier}")
-    sel4_arch = config_options["CONFIG_SEL4_ARCH"]
+    sel4_arch = config_options["SEL4_ARCH"]
     cmd = f"make -C {test_path} IMAGE_NAME=loader.img ARCH={sel4_arch} BUILD_DIR={test_build_dir} SEL4CP_SDK={sdk_path} SEL4CP_CONFIG={config} SEL4CP_BOARD={board}"
     # On RISC-V platforms (32-bit or 64-bit) we build an OpenSBI to run the image, the Makefile's expect a path to
     # the OpenSBI source.
-    if config_options["CONFIG_ARCH"] == "riscv":
+    if config_options["ARCH"] == "riscv":
         cmd += f" OPENSBI={OPENSBI_PATH}"
 
     cmd += f" > /dev/null"
@@ -100,23 +92,23 @@ def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, conf
 
     if board in RUNTIME_BOARDS:
         if sel4_arch == "riscv64":
-            if config_options["CONFIG_PLAT_SPIKE"]:
+            if config_options["PLAT_SPIKE"]:
                 system(QEMU_SPIKE_CMD % f"{test_build_dir}/platform/generic/firmware/fw_payload.elf")
                 system(SPIKE_CMD % f"{test_build_dir}/platform/generic/firmware/fw_payload.elf")
-            elif config_options["CONFIG_PLAT_QEMU_RISCV_VIRT"]:
+            elif config_options["PLAT_QEMU_RISCV_VIRT"]:
                 system(QEMU_RISCV_VIRT_CMD % f"{test_build_dir}/platform/generic/firmware/fw_payload.elf")
             else:
                 raise Exception("Unexpected RISC-V runtime test board")
         elif sel4_arch == "aarch64":
-            if config_options["CONFIG_PLAT_QEMU_ARM_VIRT"]:
+            if config_options["PLAT_QEMU_ARM_VIRT"]:
                 system(f"touch {test_build_dir}/log")
-                if config_options["CONFIG_ARM_HYPERVISOR_SUPPORT"]:
+                if config_options["ARM_HYPERVISOR_SUPPORT"]:
                     qemu_template_cmd = QEMU_AARCH64_VIRT_HYP_CMD
                 else:
                     qemu_template_cmd = QEMU_AARCH64_VIRT_CMD
-                if config_options["CONFIG_ARM_CORTEX_A72"]:
+                if config_options["ARM_CORTEX_A72"]:
                     qemu_cpu = "cortex-a72"
-                elif config_options["CONFIG_ARM_CORTEX_A53"]:
+                elif config_options["ARM_CORTEX_A53"]:
                     qemu_cpu = "cortex-a53"
                 else:
                     raise Exception("Unexpected QEMU CPU")
