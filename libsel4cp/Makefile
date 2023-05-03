@@ -20,7 +20,7 @@ endif
 # endif
 
 ifeq ($(ARCH),aarch64)
-	C_FLAGS_ARCH := -mcpu=$(GCC_CPU)
+	C_FLAGS_ARCH := -mcpu=$(GCC_CPU) -mgeneral-regs-only
 	ASM_CPP_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 	ARCH_DIR := aarch64
