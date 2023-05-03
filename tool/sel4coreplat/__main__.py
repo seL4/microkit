@@ -1910,8 +1910,8 @@ def main() -> int:
     else:
         raise Exception(f"Unsupported seL4 architecture: {sel4_arch}")
 
-    hyp_mode = (("ARM_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["ARM_HYPERVISOR_SUPPORT"]) or
-               ("RISCV_HYPERVISOR_SUPPORT" in sel4_config and sel4_config["RISCV_HYPERVISOR_SUPPORT"]))
+    hyp_mode = sel4_config.get("ARM_HYPERVISOR_SUPPORT", False) or \
+                sel4_config.get("RISCV_HYPERVISOR_SUPPORT", False)
     if sel4_arch == "aarch64":
         if sel4_config["ARM_PA_SIZE_BITS_40"]:
             arm_pa_size_bits = 40
