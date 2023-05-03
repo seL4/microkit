@@ -740,6 +740,7 @@ def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
     parser.add_argument("--tool-rebuild", action="store_true", default=False, help="Force a rebuild of the seL4CP tool")
+    parser.add_argument("--filter-boards", help="List of boards to build SDK for (comma separated)")
     args = parser.parse_args()
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
@@ -754,7 +755,27 @@ def main() -> None:
         root_dir / "bin",
         root_dir / "board",
     ]
-    for board in SUPPORTED_BOARDS:
+
+    selected_boards = SUPPORTED_BOARDS
+
+    # If list of boards was provided
+    if args.filter_boards:
+        selected_boards = ()
+        # Convert "args" into a Dictionary, find the Key "filter-boards" in it,
+        # then convert the value into a List of board names
+        args_dict = vars(parser.parse_args())
+        if "filter_boards" in args_dict.keys():
+            board_list = args_dict["filter_boards"].split(",")
+
+        # Filter out selected boards from the complete list of supported ones
+        # and put them into a narrower Tuple
+        b_idx = 0;
+        for board in SUPPORTED_BOARDS:
+            if board_list.count(board.name) > 0:
+                selected_boards += SUPPORTED_BOARDS[b_idx : b_idx + 1]
+            b_idx += 1
+
+    for board in selected_boards:
         board_dir = root_dir / "board" / board.name
         dir_structure.append(board_dir)
         for config in SUPPORTED_CONFIGS:
@@ -780,7 +801,7 @@ def main() -> None:
     build_doc(root_dir)
 
     build_dir = Path("build")
-    for board in SUPPORTED_BOARDS:
+    for board in selected_boards:
         for config in SUPPORTED_CONFIGS:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
             sel4_config = build_sel4_config_component(root_dir, build_dir, board, config)
