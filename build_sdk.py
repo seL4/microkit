@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
 from yaml import load  as yaml_load, Loader as YamlLoader
+import platform as host_platform
 
 from typing import Dict, Union, List, Tuple
 
@@ -469,12 +470,27 @@ def build_tool(tool_target: Path) -> None:
     pyoxidizer = ENV_BIN_DIR / "pyoxidizer"
     if not pyoxidizer.exists():
         raise Exception("pyoxidizer does not appear to be installed in your Python environment")
+
+    host_system = host_platform.system()
+    if host_system == "Linux":
+        target_triple = "x86_64-unknown-linux-musl"
+    elif host_system == "Darwin":
+        host_arch = host_platform.machine()
+        if host_arch == "x86_64":
+            target_triple = "x86_64-apple-darwin"
+        elif host_arch == "arm64":
+            target_triple = "aarch64-apple-darwin"
+        else:
+            raise Exception(f"Unexpected Darwin architecture: {host_arch}")
+    else:
+        raise Exception(f"The platform \"{host_system}\" is not supported")
+
     r = system(
-        f"{pyoxidizer} build --release --path tool --target-triple x86_64-unknown-linux-musl"
+        f"{pyoxidizer} build --release --path tool --target-triple {target_triple}"
     )
     assert r == 0
 
-    tool_output = "./tool/build/x86_64-unknown-linux-musl/release/install/sel4cp"
+    tool_output = f"./tool/build/{target_triple}/release/install/sel4cp"
 
     r = system(f"strip {tool_output}")
     assert r == 0
