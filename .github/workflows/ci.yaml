@@ -47,7 +47,7 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86_64
+            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86-64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
   build_macos:
     name: Build and upload SDK (macOS x86-64)
@@ -85,5 +85,5 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-x86_64
+            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-x86-64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
