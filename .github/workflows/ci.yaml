@@ -25,7 +25,7 @@ jobs:
             repository: Ivan-Velickovic/seL4
             ref: sel4cp-dev
             path: seL4
-      - name: Install SDK dependencies
+      - name: Install SDK dependencies (apt)
         run: |
           sudo apt update
           sudo apt install \
@@ -33,11 +33,16 @@ jobs:
             texlive-fonts-recommended texlive-formats-extra libxml2-utils \
             gcc-aarch64-linux-gnu python3.9 python3-pip python3.9-venv \
             qemu-system-arm qemu-system-misc musl-tools
-      - name: Install AArch64 GCC toolchain
+      - name: Download and install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz\?revision\=79f65c42-1a1b-43f2-acb7-a795c8427085\&hash\=61BBFB526E785D234C5D8718D9BA8E61
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Download and install RISC-V GCC toolchain
+        run: |
+          wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
+          tar xf riscv-toolchain.tar.gz
+          echo "$(pwd)/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
@@ -71,11 +76,16 @@ jobs:
           brew update
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9
           brew install --cask basictex
-      - name: Install AArch64 GCC toolchain
+      - name: Download and install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.2-2022.02/binrel/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz?rev=633246d6f26945ec892020aac1d9c1bc&hash=75A046A9C98DE75DF20F795ABB60B6CB0510AB9D
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz/bin" >> $GITHUB_PATH
+      - name: Download and install RISC-V GCC toolchain
+        run: |
+          wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
+          tar xf riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
+          echo "$(pwd)/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
