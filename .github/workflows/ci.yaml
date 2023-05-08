@@ -7,6 +7,11 @@ on:
   push:
     branches: [ "main", "dev" ]
 
+# @ivanv: The primary issue with the following CI is that it does not control
+# the dependencies of the system enough. We are at the mercy of the GitHub VMs
+# to not break the dependencies by updating a version of something etc.
+# Ideally we would instead install specific versions of everything, or build
+# everything from specified source code commits.
 jobs:
   build_linux:
     name: Build and upload SDK (Linux x86-64)
