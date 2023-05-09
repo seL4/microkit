@@ -73,7 +73,6 @@ jobs:
             path: seL4
       - name: Install SDK dependencies
         run: |
-          brew update
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils
           brew install --cask basictex
       - name: Download and install AArch64 GCC toolchain
