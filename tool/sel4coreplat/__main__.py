@@ -596,10 +596,11 @@ class InitSystem:
 class Region:
     name: str
     addr: int
+    offset: int
     data: bytearray
 
     def __repr__(self) -> str:
-        return f"<Region name={self.name} addr=0x{self.addr:x} size={len(self.data)}>"
+        return f"<Region name={self.name} addr=0x{self.addr:x} offset=0x{self.offset:x} size={len(self.data)}>"
 
 
 @dataclass
@@ -1035,8 +1036,6 @@ def build_system(
             if not segment.loadable:
                 continue
 
-            regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", phys_addr_next, segment.data))
-
             perms = ""
             if segment.is_readable:
                 perms += "r"
@@ -1048,6 +1047,8 @@ def build_system(
             base_vaddr = round_down(segment.virt_addr, kernel_config.minimum_page_size)
             end_vaddr = round_up(segment.virt_addr + segment.mem_size, kernel_config.minimum_page_size)
             aligned_size = end_vaddr - base_vaddr
+            offset_from_aligned = segment.virt_addr - base_vaddr
+            regions.append(Region(f"PD-ELF {pd.name}-{seg_idx}", phys_addr_next, offset_from_aligned, segment.data))
             name = f"ELF:{pd.name}-{seg_idx}"
             mr = SysMemoryRegion(name, aligned_size, 0x1000, aligned_size // 0x1000, phys_addr_next)
             seg_idx += 1
@@ -2031,7 +2032,7 @@ def main() -> int:
     system_invocation_data = bytes(system_invocation_data_array)
 
     regions: List[Tuple[int, Union[bytes, bytearray]]] = [(built_system.reserved_region.base, system_invocation_data)]
-    regions += [(r.addr, r.data) for r in built_system.regions]
+    regions += [(r.addr, bytes([0] * r.offset) + r.data) for r in built_system.regions]
 
     tcb_caps = built_system.tcb_caps
     sched_caps = built_system.sched_caps
