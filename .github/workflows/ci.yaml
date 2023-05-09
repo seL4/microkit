@@ -74,17 +74,20 @@ jobs:
       - name: Install SDK dependencies
         run: |
           brew update
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils
           brew install --cask basictex
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.2-2022.02/binrel/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz?rev=633246d6f26945ec892020aac1d9c1bc&hash=75A046A9C98DE75DF20F795ABB60B6CB0510AB9D
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz/bin" >> $GITHUB_PATH
+      - name: Check SHA256 of AArch64 GCC toolchain
+        run: |
+          echo "12ba942a0b939783cd76d7839ee06404cbc0871b9b8d27afef646abb5d073025 aarch64-toolchain.tar.gz" | sha256sum -c
       - name: Download and install RISC-V GCC toolchain
         run: |
           wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
-          tar xf riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
+          tar xf riscv-toolchain.tar.gz
           echo "$(pwd)/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
