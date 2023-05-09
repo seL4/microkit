@@ -268,10 +268,20 @@ putc(uint8_t ch)
     *((volatile uint32_t *)(0x00FF000030)) = ch;
 }
 #elif defined(BOARD_ultra96v2) || defined(BOARD_ultra96v2_hyp)
+/* Use UART1 available through USB-to-JTAG/UART pod */
+#define UART_BASE 0x00FF010000
+#define R_UART_CHANNEL_STS          0x2C
+#define UART_CHANNEL_STS_TXEMPTY    0x08
+#define UART_CHANNEL_STS_TACTIVE    0x800
+#define R_UART_TX_RX_FIFO           0x30
+
 static void
 putc(uint8_t ch)
 {
-    *((volatile uint32_t *)(0x00FF010030)) = ch;
+    while (!(*UART_REG(R_UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY)) {};
+    while (*UART_REG(R_UART_CHANNEL_STS) & UART_CHANNEL_STS_TACTIVE) {};
+
+    *((volatile uint32_t *)(UART_BASE + R_UART_TX_RX_FIFO)) = ch;
 }
 #else
 #error Board not defined
