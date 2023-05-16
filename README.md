@@ -81,11 +81,9 @@ At this point in time there are some minor changes to the seL4 kernel required f
 
 Please clone seL4 from:
 
-    git@github.com:BreakawayConsulting/seL4.git
+    git@github.com:Ivan-Velickovic/seL4.git
 
-The correct branch to use is `sel4cp-core-support`.
-
-Testing has been performed using commit `92f0f3ab28f00c97851512216c855f4180534a60`.
+The correct branch to use is `sel4cp-dev`.
 
 ## Building the SDK
 
