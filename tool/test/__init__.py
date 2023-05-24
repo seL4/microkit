@@ -97,6 +97,9 @@ class ProtectionDomainParseTests(ExtendedTestCase):
     def test_irq_less_than_0(self):
         self._check_error("irq_id_less_than_0.xml", "Error: id must be >= 0 on element 'irq'")
 
+    def test_write_only_mr(self):
+        self._check_error("pd_write_only_mr.xml", f"Error: perms must not be 'w', write-only mappings are not allowed on element 'map':")
+
 
 class ChannelParseTests(ExtendedTestCase):
     def test_missing_pd(self):

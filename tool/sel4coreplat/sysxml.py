@@ -255,6 +255,10 @@ def xml2pd(pd_xml: ET.Element) -> ProtectionDomain:
                 mr = checked_lookup(child, "mr")
                 vaddr = int(checked_lookup(child, "vaddr"), base=0)
                 perms = child.attrib.get("perms", "rw")
+                # On all architectures, the kernel does not allow write-only mappings
+                if perms == "w":
+                    raise ValueError("perms must not be 'w', write-only mappings are not allowed")
+
                 cached = str_to_bool(child.attrib.get("cached", "true"))
                 maps.append(SysMap(mr, vaddr, perms, cached, child))
 
