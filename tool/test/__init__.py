@@ -101,6 +101,9 @@ class ProtectionDomainParseTests(ExtendedTestCase):
     def test_cpu_less_than_0(self):
         self._check_error("pd_cpu_less_than_0.xml", f"Error: CPU affinity must be between 0 and {plat_desc.num_cpus - 1} on element 'protection_domain':")
 
+    def test_write_only_mr(self):
+        self._check_error("pd_write_only_mr.xml", f"Error: perms must not be 'w', write-only mappings are not allowed on element 'map':")
+
 
 class ChannelParseTests(ExtendedTestCase):
     def test_missing_pd(self):

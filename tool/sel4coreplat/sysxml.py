@@ -327,10 +327,11 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
                 _check_attrs(child, ("mr", "vaddr", "perms", "cached", "setvar_vaddr"))
                 mr = checked_lookup(child, "mr")
                 vaddr = int(checked_lookup(child, "vaddr"), base=0)
-                # @ivanv: on ARM, mapping a page as write only is not allowed by the kernel for some reason.
-                # it would be better to know this before running the systems and getting a bunch of sel4 errors
-                # though.
                 perms = child.attrib.get("perms", "rw")
+                # On all architectures, the kernel does not allow write-only mappings
+                if perms == "w":
+                    raise ValueError("perms must not be 'w', write-only mappings are not allowed")
+
                 cached = str_to_bool(child.attrib.get("cached", "true"))
                 maps.append(SysMap(mr, vaddr, perms, cached, child))
 
