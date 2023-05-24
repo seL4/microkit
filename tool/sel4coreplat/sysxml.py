@@ -297,13 +297,13 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
     if cpu < 0  or cpu >= plat_desc.num_cpus:
         raise ValueError(f"CPU affinity must be between 0 and {plat_desc.num_cpus - 1}")
 
-    id_ = None
+    pd_id = None
     if is_child:
-        id_ = int(checked_lookup(pd_xml, "id"), base=0)
-        if id_ < 0 or id_ > 255:
+        pd_id = int(checked_lookup(pd_xml, "id"), base=0)
+        if pd_id < 0 or pd_id > 255:
             raise ValueError("id must be between 0 and 255")
     else:
-        id_ = None
+        pd_id = None
 
     if budget > period:
         raise ValueError(f"budget ({budget}) must be less than, or equal to, period ({period})")
@@ -341,7 +341,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
             elif child.tag == "irq":
                 _check_attrs(child, ("irq", "id", "trigger"))
                 irq = int(checked_lookup(child, "irq"), base=0)
-                id_ = int(checked_lookup(child, "id"), base=0)
+                irq_id = int(checked_lookup(child, "id"), base=0)
                 trigger_str = child.attrib.get("trigger", "level")
                 if trigger_str == "level":
                     trigger = Sel4ArmIrqTrigger.Level
@@ -349,7 +349,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
                     trigger = Sel4ArmIrqTrigger.Edge
                 else:
                     raise UserError(f"Invalid IRQ trigger '{trigger_str}': {child._loc_str}")
-                irqs.append(SysIrq(irq, id_, trigger))
+                irqs.append(SysIrq(irq, irq_id, trigger))
             elif child.tag == "setvar":
                 _check_attrs(child, ("symbol", "region_paddr"))
                 symbol = checked_lookup(child, "symbol")
@@ -372,7 +372,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
         raise ValueError("program_image must be specified")
 
     return ProtectionDomain(
-        id_,
+        pd_id,
         name,
         priority,
         budget,
@@ -400,12 +400,12 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
             if child.tag == "end":
                 _check_attrs(ch_xml, ("pd", "id"))
                 pd = checked_lookup(child, "pd")
-                id_ = int(checked_lookup(child, "id"))
-                if id_ >= 64:
+                pd_id = int(checked_lookup(child, "id"))
+                if pd_id >= 64:
                     raise ValueError("id must be < 64")
-                if id_ < 0:
+                if pd_id < 0:
                     raise ValueError("id must be >= 0")
-                ends.append((pd, id_))
+                ends.append((pd, pd_id))
             else:
                 raise UserError(f"Invalid XML element '{child.tag}': {child._loc_str}")  # type: ignore
         except ValueError as e:
@@ -421,8 +421,8 @@ def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine
     _check_attrs(vm_xml, ("name", "id", "priority", "cpu"))
     name = checked_lookup(vm_xml, "name")
 
-    id_ = int(checked_lookup(vm_xml, "id"), base=0)
-    if id_ < 0 or id_ > 255:
+    vm_id = int(checked_lookup(vm_xml, "id"), base=0)
+    if vm_id < 0 or vm_id > 255:
         raise ValueError("id must be between 0 and 255")
 
     cpu = int(vm_xml.attrib.get("cpu", "0"), base=0)
@@ -450,7 +450,7 @@ def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine
 
     return VirtualMachine(
         name,
-        id_,
+        vm_id,
         cpu,
         tuple(maps),
         priority,
