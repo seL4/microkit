@@ -715,6 +715,7 @@ def build_sel4_config_component(
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
+    parser.add_argument("--tool-rebuild", action="store_true", default=False, help="Force a rebuild of the seL4CP tool")
     args = parser.parse_args()
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
@@ -748,7 +749,7 @@ def main() -> None:
 
     tool_target = root_dir / "bin" / "sel4cp"
 
-    if not tool_target.exists():
+    if not tool_target.exists() or args.tool_rebuild:
         test_tool()
         build_tool(tool_target)
 
