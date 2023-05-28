@@ -63,9 +63,9 @@ class KernelConfig:
     have_fpu: bool
     hyp_mode: bool
     num_cpus: int
-    arm_pa_size_bits: int
-    riscv_page_table_levels: int
-    x86_xsave_size: int
+    arm_pa_size_bits: Optional[int]
+    riscv_page_table_levels: Optional[int]
+    x86_xsave_size: Optional[int]
 
 # Kernel Objects:
 
@@ -258,8 +258,8 @@ INIT_VSPACE_CAP_ADDRESS = 3
 IRQ_CONTROL_CAP_ADDRESS = 4  # Singleton
 ASID_CONTROL_CAP_ADDRESS = 5  # Singleton
 INIT_ASID_POOL_CAP_ADDRESS = 6
-IO_PORT_CONTROL_CAP_ADDRESS = 7  # Null on this platform @ivanv clarify "this platform"
-IO_SPACE_CAP_ADDRESS = 8  # Null on this platform
+IO_PORT_CONTROL_CAP_ADDRESS = 7  # Specific to x86
+IO_SPACE_CAP_ADDRESS = 8  # Only for ARM platforms with a IOMMU (system-MMU)
 BOOT_INFO_FRAME_CAP_ADDRESS = 9
 INIT_THREAD_IPC_BUFFER_CAP_ADDRESS = 10
 DOMAIN_CAP_ADDRESS = 11
@@ -1427,10 +1427,13 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
 
 
 def _rootserver_max_size_bits(kernel_config: KernelConfig) -> int:
-    # @ivanv: remove hard-coding
+    # @ivanv: All of these values should be exported by the kernel
+    # build-system, rather than being hard-coded here.
     slot_bits = 5  # seL4_SlotBits
     root_cnode_bits = kernel_config.root_cnode_bits
-    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
+    if kernel_config.arch == KernelArch.AARCH64 and \
+       kernel_config.hyp_mode and \
+       kernel_config.arm_pa_size_bits == 40:
         vspace_bits = 13  # seL4_VSpaceBits
     elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:
         vspace_bits = 14  # seL4_VSpaceBits
@@ -1604,7 +1607,6 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
         else:
             tcb_bits = 10
     elif kernel_config.arch == KernelArch.X86_64:
-        # @ivanv: figure out whether there's a better way
         if kernel_config.x86_xsave_size >= 832:
             tcb_bits = 12
         else:
@@ -1613,10 +1615,10 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
         raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    # @ivanv: remove hard-coding
     # Determining seL4_VSpaceBits
-    if kernel_config.arch == KernelArch.AARCH64 and kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
-        # @ivanv Note that this assumes CONFIG_ARM_PA_SIZE_BITS_40 is set
+    if kernel_config.arch == KernelArch.AARCH64 and \
+       kernel_config.hyp_mode and \
+       kernel_config.arm_pa_size_bits == 40:
         vspace_bits = 13
     elif kernel_config.arch == KernelArch.RISCV64 and kernel_config.hyp_mode:
         vspace_bits = 14

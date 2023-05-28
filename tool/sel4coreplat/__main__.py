@@ -1237,7 +1237,10 @@ def build_system(
         d_names = [f"PageDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
-        # @ivanv: double check that CONFIG_PT_LEVELS is sv39
+        # This code assumes a 64-bit system with Sv39, which is actually all seL4 currently
+        # supports.
+        # FIXME: add support for Sv48 or even Sv57
+        assert kernel_config.riscv_page_table_levels == 3
         # Allocating for 3-level page table
         d_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
@@ -1608,17 +1611,17 @@ def build_system(
             )
 
     # mint a cap between monitor and passive PDs.
-    # @ivanv: need to handle VMs?
+    # @ivanv: need to handle VMs and add the ability for passive VMs
     for idx, (cnode_obj, pd) in enumerate(zip(cnode_objects, system.protection_domains), 1):
         if pd.passive:
             system_invocations.append(Sel4CnodeMint(
-                                        cnode_obj.cap_addr, 
-                                        MONITOR_EP_CAP_IDX, 
-                                        PD_CAP_BITS, 
-                                        root_cnode_cap, 
-                                        fault_ep_endpoint_object.cap_addr, 
+                                        cnode_obj.cap_addr,
+                                        MONITOR_EP_CAP_IDX,
+                                        PD_CAP_BITS,
+                                        root_cnode_cap,
+                                        fault_ep_endpoint_object.cap_addr,
                                         kernel_config.cap_address_bits,
-                                        SEL4_RIGHTS_ALL, 
+                                        SEL4_RIGHTS_ALL,
                                         idx))
 
     # All minting is complete at this point
