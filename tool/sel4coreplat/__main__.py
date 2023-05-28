@@ -971,7 +971,7 @@ def build_system(
         arch_page_table_map = Sel4X86PageTableMap
         arch_vm_attributes = SEL4_X86_DEFAULT_VMATTRIBUTES
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
 
     invocation = arch_page_table_map(system_cap_address_mask | base_page_table_cap,
                                      INIT_VSPACE_CAP_ADDRESS,
@@ -989,7 +989,7 @@ def build_system(
     elif kernel_config.arch == KernelArch.X86_64:
         arch_vm_attributes = SEL4_X86_DEFAULT_VMATTRIBUTES
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
     invocation = Sel4PageMap(kernel_config.arch,
                              system_cap_address_mask | base_page_cap,
                              INIT_VSPACE_CAP_ADDRESS,
@@ -1242,7 +1242,7 @@ def build_system(
         d_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
         d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
 
     pt_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, pt_names)
@@ -1652,7 +1652,7 @@ def build_system(
                 (Sel4ARMPageTableMap, pts, pt_objects),
             ]
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
 
     for map_cls, descriptors, objects in vspace_invocations:
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects):
@@ -1903,8 +1903,6 @@ def main() -> int:
         arch = KernelArch.AARCH64
     elif sel4_arch == "riscv64":
         arch = KernelArch.RISCV64
-    elif sel4_arch == "riscv32":
-        arch = KernelArch.RISCV32
     elif sel4_arch == "x86_64":
         arch = KernelArch.X86_64
     else:

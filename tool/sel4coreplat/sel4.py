@@ -12,7 +12,7 @@ from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb
 from sel4coreplat.elf import ElfFile
 
 
-class KernelArch:
+class KernelArch(IntEnum):
     AARCH64 = 1
     RISCV64 = 2
     X86_64 = 3
@@ -109,7 +109,7 @@ class Sel4Object(IntEnum):
             else:
                 return self
         else:
-            raise Exception(f"Unknown kernel architecture {arch}")
+            raise Exception(f"Unknown kernel architecture {kernel_config.arch}")
 
 
     def get_size(self, kernel_config: KernelConfig) -> Optional[int]:
@@ -802,7 +802,7 @@ class Sel4Label(IntEnum):
             else:
                 return self
         else:
-            raise Exception("@ivanv")
+            raise Exception(f"Unknown kernel architecture: {kernel_config.arch}")
 
 # @ivanv: revist and audit the way we deal with invocation labels being
 # different on the various kernel configs. Here we basically layout *all*
@@ -1565,7 +1565,7 @@ def emulate_kernel_boot(
     elif kernel_config.arch == KernelArch.RISCV64:
         max_bits = 38
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
     # Cacluate the base address for kernel virtual memory, this is required
     # for computing the aligned regions
     kernel_virtual_base = calculate_kernel_virtual_base(kernel_config)
@@ -1610,7 +1610,7 @@ def calculate_rootserver_size(kernel_config: KernelConfig, initial_task_region: 
         else:
             tcb_bits = 11
     else:
-        raise Exception(f"Unexpected kernel architecture: {arch}")
+        raise Exception(f"Unexpected kernel architecture: {kernel_config.arch}")
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
     # @ivanv: remove hard-coding
