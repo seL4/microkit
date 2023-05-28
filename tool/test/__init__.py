@@ -14,7 +14,7 @@ plat_desc = PlatformDescription(
     # The number of CPUs is dependent on the configuration of the platform that is being built.
     # For the tests we just decide a value for this.
     num_cpus = 4,
-    kernel_is_hypervisor = False,
+    kernel_is_hypervisor = True,
 )
 
 def _file(filename: str) -> Path:
@@ -103,6 +103,11 @@ class ProtectionDomainParseTests(ExtendedTestCase):
 
     def test_write_only_mr(self):
         self._check_error("pd_write_only_mr.xml", f"Error: perms must not be 'w', write-only mappings are not allowed on element 'map':")
+
+
+class VirtualMachineParseTests(ExtendedTestCase):
+    def test_duplicate_name(self):
+        self._check_error("vm_duplicate_name.xml", f"Duplicate virtual machine name 'test-vm'.")
 
 
 class ChannelParseTests(ExtendedTestCase):

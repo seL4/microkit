@@ -175,6 +175,7 @@ class SystemDescription:
         # we want to perform duplicate checks as we
         # build the data structure
         self.pd_by_name: Dict[str, ProtectionDomain] = {}
+        self.vm_by_name: Dict[str, VirtualMachine] = {}
         self.mr_by_name: Dict[str, SysMemoryRegion] = {}
 
         # Ensure there is at least one protection domain
@@ -196,7 +197,13 @@ class SystemDescription:
                 raise UserError(f"Duplicate memory region name '{mr.name}'.")
             self.mr_by_name[mr.name] = mr
 
-        # Ensure no duplicate VMs @ivanv
+        # Ensure no duplicate VMs
+        for pd in self.protection_domains:
+            if pd.virtual_machine:
+                vm = pd.virtual_machine
+                if vm.name in self.vm_by_name:
+                    raise UserError(f"Duplicate virtual machine name '{vm.name}'.")
+                self.vm_by_name[vm.name] = vm
 
         # Ensure all CCs make senses
         for cc in self.channels:
