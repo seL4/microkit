@@ -756,24 +756,11 @@ def main() -> None:
         root_dir / "board",
     ]
 
-    selected_boards = SUPPORTED_BOARDS
-
-    # If list of boards was provided
     if args.filter_boards:
-        selected_boards = ()
-        # Convert "args" into a Dictionary, find the Key "filter-boards" in it,
-        # then convert the value into a List of board names
-        args_dict = vars(parser.parse_args())
-        if "filter_boards" in args_dict.keys():
-            board_list = args_dict["filter_boards"].split(",")
-
-        # Filter out selected boards from the complete list of supported ones
-        # and put them into a narrower Tuple
-        b_idx = 0;
-        for board in SUPPORTED_BOARDS:
-            if board_list.count(board.name) > 0:
-                selected_boards += SUPPORTED_BOARDS[b_idx : b_idx + 1]
-            b_idx += 1
+        filter_board_names = args.filter_boards.split(",")
+        selected_boards = list(filter(lambda b : b.name in filter_board_names, SUPPORTED_BOARDS))
+    else:
+        selected_boards = SUPPORTED_BOARDS
 
     for board in selected_boards:
         board_dir = root_dir / "board" / board.name
