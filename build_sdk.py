@@ -758,6 +758,12 @@ def main() -> None:
 
     if args.filter_boards:
         filter_board_names = args.filter_boards.split(",")
+        supported_board_names = [board.name for board in SUPPORTED_BOARDS]
+        # Check that we are filtering boards that actually are supported
+        for board in filter_board_names:
+            if board not in supported_board_names:
+                raise Exception(f"Trying to build a board: {board} that does not exist in supported list.")
+        # Filter the boards
         selected_boards = list(filter(lambda b : b.name in filter_board_names, SUPPORTED_BOARDS))
     else:
         selected_boards = SUPPORTED_BOARDS
