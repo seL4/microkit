@@ -691,9 +691,9 @@ def build_system(
     )
 
     reserved_base = available_memory.allocate(reserved_size)
-    initial_task_phys_base = available_memory.allocate(initial_task_size)
-    # The kernel relies on this ordering. The previous allocation functions do *NOT* enforce
-    # this though, should fix that.
+    # The kernel relies on the initial task being allocated above the reserved region, so we have
+    # the address of the end of the reserved region as the lower bound for allocating the initial task.
+    initial_task_phys_base = available_memory.allocate_initial_task(initial_task_size, reserved_base + reserved_size)
     assert reserved_base < initial_task_phys_base
 
     initial_task_phys_region = MemoryRegion(initial_task_phys_base, initial_task_phys_base + initial_task_size)
