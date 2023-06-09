@@ -79,7 +79,7 @@ jobs:
         run: |
           wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz
           tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz/bin" >> $GITHUB_PATH
+          echo "$(pwd)/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
         run: |
           echo "12ba942a0b939783cd76d7839ee06404cbc0871b9b8d27afef646abb5d073025 aarch64-toolchain.tar.gz" | sha256sum -c
