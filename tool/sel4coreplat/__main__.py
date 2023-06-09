@@ -45,7 +45,7 @@ from struct import pack, Struct
 from os import environ
 from math import log2, ceil
 from sys import argv, executable, stderr
-from yaml import load as yaml_load, Loader as YamlLoader
+from json import load as json_load
 
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1865,7 +1865,7 @@ def main() -> int:
     if args.config not in available_configs:
         parser.error(f"argument --config: invalid choice: '{args.config}' (choose from {available_configs})")
 
-    sel4_config_path = SDK_DIR / "board" / args.board / args.config / "config.yaml"
+    sel4_config_path = SDK_DIR / "board" / args.board / args.config / "config.json"
     elf_path = SDK_DIR / "board" / args.board / args.config / "elf"
     loader_elf_path = elf_path / "loader.elf"
     kernel_elf_path = elf_path / "sel4.elf"
@@ -1897,7 +1897,7 @@ def main() -> int:
     kernel_elf = ElfFile.from_path(kernel_elf_path)
 
     with open(sel4_config_path, "r") as f:
-        sel4_config = yaml_load(f, Loader=YamlLoader)
+        sel4_config = json_load(f)
     # Some of the kernel config we need can be found in the auto-generated
     # config YAML file. Which we use here since they can differ between
     # platforms and architecture.

@@ -16,7 +16,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
-from yaml import load  as yaml_load, Loader as YamlLoader
+from json import load as json_load
 import platform as host_platform
 
 from typing import Dict, Union, List, Tuple
@@ -719,15 +719,15 @@ def build_sel4_config_component(
     board: BoardInfo,
     config: ConfigInfo,
 ) -> Dict:
-    # Here we are just copying the auto-generated kernel config, "gen_config.yaml".
+    # Here we are just copying the auto-generated kernel config, "gen_config.json".
     # This is because it is needed for the tool so it can deal with seL4/platform
     # specific configuration. It is also used in this build script.
     sel4_build_dir = build_dir / board.name / config.name / "sel4" / "build"
-    sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.yaml"
-    dest = root_dir / "board" / board.name / config.name / "config.yaml"
+    sel4_gen_config = sel4_build_dir / "gen_config" / "kernel" / "gen_config.json"
+    dest = root_dir / "board" / board.name / config.name / "config.json"
     with open(sel4_gen_config, "r") as f:
         # Load the generated kernel configuration into a dictionary
-        sel4_config = yaml_load(f, Loader=YamlLoader)
+        sel4_config = json_load(f)
 
     dest.unlink(missing_ok=True)
     copy(sel4_gen_config, dest)

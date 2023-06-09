@@ -12,7 +12,7 @@ import os
 import pexpect
 from os import system, getcwd, mkdir
 from shutil import rmtree
-from yaml import load as yaml_load, Loader as YamlLoader
+from json import load as json_load
 
 from typing import Dict
 
@@ -63,9 +63,9 @@ failed_tests = []
 
 
 def get_config_options(sdk_path: str, board: str, config: str) -> Dict:
-    config_path = f"{sdk_path}/board/{board}/{config}/config.yaml"
+    config_path = f"{sdk_path}/board/{board}/{config}/config.json"
     with open(config_path, "r") as f:
-        return yaml_load(f, Loader=YamlLoader)
+        return json_load(f)
 
 
 def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, config: str, board: str, config_options: Dict):
