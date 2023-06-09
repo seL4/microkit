@@ -791,7 +791,7 @@ def main() -> None:
         test_tool()
         build_tool(tool_target)
 
-    build_doc(root_dir)
+    # build_doc(root_dir)
 
     build_dir = Path("build")
     for board in selected_boards:
