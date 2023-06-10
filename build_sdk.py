@@ -241,19 +241,22 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
-    BoardInfo(
-        name="qemu_arm_virt_2_cores",
-        arch=BoardArch.AARCH64,
-        gcc_flags="GCC_CPU=cortex-a53",
-        loader_link_address=0x70000000,
-        kernel_options = {
-            "KernelPlatform": "qemu-arm-virt",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelMaxNumNodes": 2,
-        },
-        examples = {}
-    ),
+    # @ivanv: there were issues with turning on
+    # secondary cores in the loader with QEMU,
+    # need to re-investigate.
+    # BoardInfo(
+    #     name="qemu_arm_virt_2_cores",
+    #     arch=BoardArch.AARCH64,
+    #     gcc_flags="GCC_CPU=cortex-a53",
+    #     loader_link_address=0x70000000,
+    #     kernel_options = {
+    #         "KernelPlatform": "qemu-arm-virt",
+    #         "KernelIsMCS": True,
+    #         "KernelArmExportPCNTUser": True,
+    #         "KernelMaxNumNodes": 2,
+    #     },
+    #     examples = {}
+    # ),
     BoardInfo(
         name="odroidc2",
         arch=BoardArch.AARCH64,
