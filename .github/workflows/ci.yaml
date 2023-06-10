@@ -59,7 +59,7 @@ jobs:
         with:
             name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86-64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
-  build_macos:
+  build_macos_x86_64:
     name: Build and upload SDK (macOS x86-64)
     runs-on: macos-12
     steps:
@@ -104,4 +104,50 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
             name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-x86-64
+            path: ./release/sel4cp-sdk-1.2.6.tar.gz
+  build_macos_aarch64:
+    name: Build and upload SDK (macOS AArch64)
+    runs-on: macos-12
+    steps:
+      - name: Checkout seL4 Core Platform repository
+        uses: actions/checkout@v3
+      - name: Checkout seL4 repository
+        uses: actions/checkout@v3
+        with:
+            repository: Ivan-Velickovic/seL4
+            ref: sel4cp-dev
+            path: seL4
+      - name: Install SDK dependencies
+        run: |
+          brew tap messense/macos-cross-toolchains
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu
+          brew install --cask basictex
+      - name: Download and install AArch64 GCC toolchain
+        run: |
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
+          tar xf aarch64-toolchain.tar.gz
+          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Check SHA256 of AArch64 GCC toolchain
+        run: |
+          echo "cb8ee50df1d54135dc0e57a1787eda8c090fa5561aaa20fcbcc0548dfb8dceb2 aarch64-toolchain.tar.gz" | sha256sum -c
+      - name: Download and install RISC-V GCC toolchain
+        run: |
+          wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
+          tar xf riscv-toolchain.tar.gz
+          echo "$(pwd)/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin/bin" >> $GITHUB_PATH
+      - name: Build SDK
+        run: |
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/python build_sdk.py --sel4=seL4 --tool-target-triple=aarch64-apple-darwin
+      - name: Test SDK
+        run: ./pyenv/bin/python ./ci/test.py
+      - name: Get shortened commit SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Archive SDK
+        uses: actions/upload-artifact@v3
+        with:
+            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-aarch64
             path: ./release/sel4cp-sdk-1.2.6.tar.gz
