@@ -141,8 +141,8 @@ jobs:
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
           ./pyenv/bin/python build_sdk.py --sel4=seL4 --tool-target-triple=aarch64-apple-darwin
-      - name: Test SDK
-        run: ./pyenv/bin/python ./ci/test.py
+      # Since we're cross compiling the tool and not actually running on AArch64, we can't test
+      # the tool like we usually would
       - name: Get shortened commit SHA
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
