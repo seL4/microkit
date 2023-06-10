@@ -78,12 +78,12 @@ jobs:
           brew install --cask basictex
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf.tar.xz
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
           tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/gcc-arm-11.2-2022.02-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
         run: |
-          echo "12ba942a0b939783cd76d7839ee06404cbc0871b9b8d27afef646abb5d073025 aarch64-toolchain.tar.gz" | sha256sum -c
+          echo "cb8ee50df1d54135dc0e57a1787eda8c090fa5561aaa20fcbcc0548dfb8dceb2 aarch64-toolchain.tar.gz" | sha256sum -c
       - name: Download and install RISC-V GCC toolchain
         run: |
           wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-apple-darwin.tar.gz
