@@ -165,6 +165,22 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
     return tarinfo
 
 
+def get_tool_target_triple() -> str:
+    host_system = host_platform.system()
+    if host_system == "Linux":
+        return "x86_64-unknown-linux-musl"
+    elif host_system == "Darwin":
+        host_arch = host_platform.machine()
+        if host_arch == "x86_64":
+            return "x86_64-apple-darwin"
+        elif host_arch == "arm64":
+            return "aarch64-apple-darwin"
+        else:
+            raise Exception(f"Unexpected Darwin architecture: {host_arch}")
+    else:
+        raise Exception(f"The platform \"{host_system}\" is not supported")
+
+
 def test_tool() -> None:
     r = system(
         f"{executable} -m unittest discover -s tool -v"
@@ -172,24 +188,10 @@ def test_tool() -> None:
     assert r == 0
 
 
-def build_tool(tool_target: Path) -> None:
+def build_tool(tool_target: Path, target_triple: str) -> None:
     pyoxidizer = ENV_BIN_DIR / "pyoxidizer"
     if not pyoxidizer.exists():
         raise Exception("pyoxidizer does not appear to be installed in your Python environment")
-
-    host_system = host_platform.system()
-    if host_system == "Linux":
-        target_triple = "x86_64-unknown-linux-musl"
-    elif host_system == "Darwin":
-        host_arch = host_platform.machine()
-        if host_arch == "x86_64":
-            target_triple = "x86_64-apple-darwin"
-        elif host_arch == "arm64":
-            target_triple = "aarch64-apple-darwin"
-        else:
-            raise Exception(f"Unexpected Darwin architecture: {host_arch}")
-    else:
-        raise Exception(f"The platform \"{host_system}\" is not supported")
 
     r = system(
         f"{pyoxidizer} build --release --path tool --target-triple {target_triple}"
@@ -370,6 +372,7 @@ def build_lib_component(
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
+    parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
     args = parser.parse_args()
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
@@ -415,7 +418,7 @@ def main() -> None:
 
     if not tool_target.exists():
         test_tool()
-        build_tool(tool_target)
+        build_tool(tool_target, args.tool_target_triple)
 
     build_doc(root_dir)
 
