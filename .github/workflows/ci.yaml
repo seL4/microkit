@@ -73,7 +73,8 @@ jobs:
             path: seL4
       - name: Install SDK dependencies
         run: |
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils
+          brew tap messense/macos-cross-toolchains
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu
           brew install --cask basictex
       - name: Download and install AArch64 GCC toolchain
         run: |
