@@ -63,7 +63,7 @@ $(BUILD_DIR)/hello.elf: $(addprefix $(BUILD_DIR)/, $(HELLO_OBJS))
 
 $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hello.system
 	$(SEL4CP_TOOL) hello.system --search-path $(BUILD_DIR) --board $(SEL4CP_BOARD) --config $(SEL4CP_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
-ifeq ($(ARCH),riscv64)
-	make -C $(OPENSBI) -j$(nproc) PLATFORM=generic CROSS_COMPILE=$(TOOLCHAIN)- FW_PAYLOAD_PATH=$(IMAGE_FILE) \
-	PLATFORM_RISCV_XLEN=64 PLATFORM_RISCV_ISA=rv64imac PLATFORM_RISCV_ABI=lp64 O=$(BUILD_DIR)
-endif
+# ifeq ($(ARCH),riscv64)
+# 	make -C $(OPENSBI) -j$(nproc) PLATFORM=generic CROSS_COMPILE=$(TOOLCHAIN)- FW_PAYLOAD_PATH=$(IMAGE_FILE) \
+# 	PLATFORM_RISCV_XLEN=64 PLATFORM_RISCV_ISA=rv64imac PLATFORM_RISCV_ABI=lp64 O=$(BUILD_DIR)
+# endif
