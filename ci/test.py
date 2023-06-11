@@ -78,6 +78,7 @@ def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, conf
     print(f"BUILD TEST: {test_identifier}")
     sel4_arch = config_options["SEL4_ARCH"]
     cmd = f"make -C {test_path} IMAGE_NAME=loader.img ARCH={sel4_arch} BUILD_DIR={test_build_dir} SEL4CP_SDK={sdk_path} SEL4CP_CONFIG={config} SEL4CP_BOARD={board}"
+    print(f"BUILD COMMAND: {cmd}")
     # On RISC-V platforms (32-bit or 64-bit) we build an OpenSBI to run the image, the Makefile's expect a path to
     # the OpenSBI source.
     if config_options["ARCH"] == "riscv":
