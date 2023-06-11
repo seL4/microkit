@@ -685,15 +685,20 @@ def build_system(
 
     # Now that the size is determine, find a free region in the physical memory
     # space.
-    available_memory = emulate_kernel_boot_partial(
+    available_memory, kernel_boot_region = emulate_kernel_boot_partial(
         kernel_config,
         kernel_elf,
     )
 
-    reserved_base = available_memory.allocate(reserved_size)
-    # The kernel relies on the initial task being allocated above the reserved region, so we have
-    # the address of the end of the reserved region as the lower bound for allocating the initial task.
-    initial_task_phys_base = available_memory.allocate_initial_task(initial_task_size, reserved_base + reserved_size)
+    # The kernel relies on the reserved region being allocated above the kernel
+    # boot/ELF region, so we have the end of the kernel boot region as the lower
+    # bound for allocating the reserved region.
+    reserved_base = available_memory.allocate_from(reserved_size, kernel_boot_region.end)
+    assert kernel_boot_region.base < reserved_base
+    # The kernel relies on the initial task being allocated above the reserved
+    # region, so we have the address of the end of the reserved region as the
+    # lower bound for allocating the initial task.
+    initial_task_phys_base = available_memory.allocate_from(initial_task_size, reserved_base + reserved_size)
     assert reserved_base < initial_task_phys_base
 
     initial_task_phys_region = MemoryRegion(initial_task_phys_base, initial_task_phys_base + initial_task_size)

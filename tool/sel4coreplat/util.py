@@ -200,7 +200,7 @@ class DisjointMemoryRegion:
 
         return region.base
 
-    def allocate_initial_task(self, size: int, lower_bound: int) -> int:
+    def allocate_from(self, size: int, lower_bound: int) -> int:
         for region in self._regions:
             if size <= region.size and region.base >= lower_bound:
                 break

@@ -1512,14 +1512,14 @@ def _kernel_partial_boot(
 def emulate_kernel_boot_partial(
         kernel_config: KernelConfig,
         kernel_elf: ElfFile,
-    ) -> DisjointMemoryRegion:
+    ) -> Tuple[DisjointMemoryRegion, MemoryRegion]:
     """Return the memory available after a 'partial' boot emulation.
 
     This allows the caller to allocate a reserved memory region at an
     appropriate location.
     """
     partial_info = _kernel_partial_boot(kernel_config, kernel_elf)
-    return partial_info.normal_memory
+    return partial_info.normal_memory, partial_info.boot_region
 
 
 def emulate_kernel_boot(
