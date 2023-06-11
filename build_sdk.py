@@ -418,6 +418,19 @@ SUPPORTED_BOARDS = (
     #     },
     #     examples = {}
     # ),
+    BoardInfo(
+        name="star64",
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x60000000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "star64",
+        },
+        examples = {
+            "hello": Path("example/star64/hello")
+        }
+    ),
     # BoardInfo(
     #     name="x86_64",
     #     arch=BoardArch.X86_64,
