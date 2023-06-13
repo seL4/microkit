@@ -160,6 +160,20 @@ SUPPORTED_BOARDS = (
         examples = {}
     ),
     BoardInfo(
+        name="imx8mm_evk_4_cores_hyp",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options = {
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelMaxNumNodes": 4,
+            "KernelArmHypervisorSupport": True,
+        },
+        examples = {}
+    ),
+    BoardInfo(
         name="ultra96v2",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",
