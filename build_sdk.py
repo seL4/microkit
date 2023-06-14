@@ -783,6 +783,8 @@ def main() -> None:
     parser.add_argument("--tool-rebuild", action="store_true", default=False, help="Force a rebuild of the seL4CP tool")
     parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Target triple of the seL4CP tool")
     parser.add_argument("--filter-boards", help="List of boards to build SDK for (comma separated)")
+    parser.add_argument("--no-archive", action="store_true",
+        help="Disable archiving, useful when you are impatient like myself and don't want to wait for the SDK to be archived again")
     args = parser.parse_args()
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
@@ -876,18 +878,19 @@ def main() -> None:
                 copy(p, dest)
                 dest.chmod(0o444)
 
-    # At this point we create a tar.gz file
-    with tar_open(tar_file, "w:gz") as tar:
-        tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
+    if not args.no_archive:
+        # At this point we create a tar.gz file
+        with tar_open(tar_file, "w:gz") as tar:
+            tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
 
-    # Build the source tar
-    process = popen("git ls-files")
-    filenames = [Path(fn.strip()) for fn in process.readlines()]
-    process.close()
-    source_prefix = Path(f"{NAME}-source-{VERSION}")
-    with tar_open(source_tar_file, "w:gz") as tar:
-        for filename in filenames:
-            tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+        # Build the source tar
+        process = popen("git ls-files")
+        filenames = [Path(fn.strip()) for fn in process.readlines()]
+        process.close()
+        source_prefix = Path(f"{NAME}-source-{VERSION}")
+        with tar_open(source_tar_file, "w:gz") as tar:
+            for filename in filenames:
+                tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
 
 if __name__ == "__main__":
     main()
