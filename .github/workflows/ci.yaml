@@ -74,8 +74,7 @@ jobs:
       - name: Install SDK dependencies
         run: |
           brew tap messense/macos-cross-toolchains
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu
-          brew install --cask basictex
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
@@ -120,8 +119,7 @@ jobs:
       - name: Install SDK dependencies
         run: |
           brew tap messense/macos-cross-toolchains
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu
-          brew install --cask basictex
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
