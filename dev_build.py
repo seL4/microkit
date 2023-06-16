@@ -12,8 +12,6 @@ from sys import executable
 CWD = Path.cwd()
 BUILD_DIR = CWD / "tmp_build"
 
-sel4cp_config = "debug"
-
 
 def find_releases():
     releases = []
@@ -69,6 +67,11 @@ def main():
         "--extra-args",
         help="Extra arguments to be passed to the example Makefile"
     )
+    parser.add_argument(
+        "--config",
+        default="debug",
+        help="Configuration option to be passed to the tool"
+    )
     args = parser.parse_args()
 
     # TODO: Support choosing a release by specifying on command line
@@ -84,7 +87,7 @@ def main():
     make_env = environ.copy()
     make_env["BUILD_DIR"] = str(BUILD_DIR.absolute())
     make_env["SEL4CP_BOARD"] = args.board
-    make_env["SEL4CP_CONFIG"] = sel4cp_config
+    make_env["SEL4CP_CONFIG"] = args.config
     make_env["SEL4CP_SDK"] = str(release)
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
