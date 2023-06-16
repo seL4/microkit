@@ -10,7 +10,7 @@
 void
 putc(uint8_t ch)
 {
-#if defined(CONFIG_DEBUG_BUILD)
+#if defined(CONFIG_PRINTING)
     seL4_DebugPutChar(ch);
 #endif
 }

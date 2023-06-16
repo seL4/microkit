@@ -11,7 +11,7 @@
 void
 microkit_dbg_putc(int c)
 {
-#if defined(CONFIG_DEBUG_BUILD)
+#if defined(CONFIG_PRINTING)
     seL4_DebugPutChar(c);
 #endif
 }
