@@ -1115,8 +1115,6 @@ def build_system(
             fixed_pages.append((phys_addr, mr))
             phys_addr += mr_page_bytes(mr)
 
-    # @ivanv: figure this out... I don't remember why I made this change and then commented it out
-    # fixed_pages.sort(key=lambda page: page[0])
     fixed_pages.sort()
 
     # FIXME: At this point we can recombine them into
