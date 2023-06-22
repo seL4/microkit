@@ -47,7 +47,7 @@ jobs:
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
-          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/pip install -r requirements.txt --no-cache-dir
           ./pyenv/bin/python build_sdk.py --sel4=seL4
       - name: Test SDK
         run: ./pyenv/bin/python ./ci/test.py
@@ -92,7 +92,7 @@ jobs:
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
-          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/pip install -r requirements.txt --no-cache-dir
           ./pyenv/bin/python build_sdk.py --sel4=seL4
       - name: Test SDK
         run: ./pyenv/bin/python ./ci/test.py
@@ -137,7 +137,7 @@ jobs:
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
-          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/pip install -r requirements.txt --no-cache-dir
           ./pyenv/bin/python build_sdk.py --sel4=seL4 --tool-target-triple=aarch64-apple-darwin
       # Since we're cross compiling the tool and not actually running on AArch64, we can't test
       # the tool like we usually would
