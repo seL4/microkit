@@ -158,7 +158,36 @@ A budget that equals the period (aka. a "full" budget) behaves like a traditiona
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points have been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
-The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee. 
+The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee.
+
+If a PD runs out of its budget, it is preempted and resumed the next time period. An example of a task like that is below - the `for` loop will be preempted several times, depending on your budget:
+
+```C
+void
+notified(sel4cp_channel ch)
+{
+	switch (ch) {
+		case START_BIG_TASK: {
+				sel4cp_dbg_puts("Starting a big task\n");
+				int i = 0;
+				for (i = 0; i<100000000; i++) {
+					if (i % 10000000 == 0) {
+						sel4cp_dbg_puts(".");
+					}
+					asm("nop");
+				}
+				sel4cp_dbg_puts("Big task done\n");
+				break;
+			}
+		default: {
+			sel4cp_dbg_puts("received notification on unexpected channel\n");
+			break;
+			}
+		}
+}
+```
+
+On the other hand, if a PD has `budget` available, but receives no notification, it is not run at all. Returning from `notified()` function and calling `seL4_Yield()` during the PD execution has the same effect, and donates the remaining budget of the PD.
 
 ## Memory Regions {#mr}
 
@@ -262,6 +291,8 @@ Without interrupts a system would not do much after system initialisation.
 sel4cp does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
+
+An interrupt must be acknowledged with `sel4cp_irq_ack()` in the `notified()` function, otherwise it will not be fired again.
 
 # SDK {#sdk}
 
