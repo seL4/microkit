@@ -859,7 +859,7 @@ def main() -> None:
                 elif sel4_config["ARM_PA_SIZE_BITS_44"]:
                     pa_size_bits = 44
                 else:
-                    raise Excpetion("Expected seL4 generated config to define number of physical address bits")
+                    raise Exception("Expected seL4 generated config to define number of physical address bits")
                 loader_defines.append(("PA_SIZE_BITS", pa_size_bits))
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
