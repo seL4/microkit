@@ -292,7 +292,7 @@ sel4cp does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
-An interrupt must be acknowledged with `sel4cp_irq_ack()` in the `notified()` function, otherwise it will not be fired again.
+An interrupt must be acknowledged with `sel4cp_irq_ack()` in the `notified()` function, otherwise it will not be delivered again.
 
 # SDK {#sdk}
 
