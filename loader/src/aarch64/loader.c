@@ -263,10 +263,16 @@ putc(uint8_t ch)
     *UART_REG(UTHR) = ch;
 }
 #elif defined(BOARD_zcu102)
+#define UART_BASE 0xff000000
+#define UART_CHANNEL_STS_TXEMPTY 0x8
+#define UART_CHANNEL_STS         0x2C
+#define UART_TX_RX_FIFO          0x30
+
 static void
 putc(uint8_t ch)
 {
-    *((volatile uint32_t *)(0x00FF000030)) = ch;
+    while (!(*UART_REG(UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY));
+    *UART_REG(UART_TX_RX_FIFO) = ch;
 }
 #elif defined(BOARD_ultra96v2) || defined(BOARD_ultra96v2_hyp)
 /* Use UART1 available through USB-to-JTAG/UART pod */
