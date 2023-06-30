@@ -90,6 +90,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "zcu102",
             "KernelIsMCS": True,
+            "KernelArmHypervisorSupport": True,
             "KernelArmExportPCNTUser": True,
         },
         examples = {
