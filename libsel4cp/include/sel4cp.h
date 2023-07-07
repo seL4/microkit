@@ -262,3 +262,29 @@ sel4cp_arm_vcpu_write_reg(sel4cp_id vm, uint64_t reg, uint64_t value)
     }
 }
 #endif
+
+#if defined(CONFIG_RISCV_HYPERVISOR_SUPPORT)
+static inline seL4_Word
+sel4cp_riscv_vcpu_read_reg(sel4cp_id vm, uint64_t reg)
+{
+    seL4_RISCV_VCPU_ReadRegs_t ret;
+    ret = seL4_RISCV_VCPU_ReadRegs(BASE_VCPU_CAP + vm, reg);
+    if (ret.error != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_riscv_vcpu_read_reg: error reading VCPU register\n");
+        sel4cp_internal_crash(ret.error);
+    }
+
+    return ret.value;
+}
+
+static inline void
+sel4cp_riscv_vcpu_write_reg(sel4cp_id vm, uint64_t reg, uint64_t value)
+{
+    seL4_Error err;
+    err = seL4_RISCV_VCPU_WriteRegs(BASE_VCPU_CAP + vm, reg, value);
+    if (err != seL4_NoError) {
+        sel4cp_dbg_puts("sel4cp_riscv_vcpu_write_reg: error VPPI\n");
+        sel4cp_internal_crash(err);
+    }
+}
+#endif
