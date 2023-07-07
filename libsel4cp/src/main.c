@@ -13,7 +13,6 @@
 #include <sel4cp.h>
 
 #define INPUT_CAP 1
-#define REPLY_CAP 4
 
 #define PD_MASK 0xff
 #define CHANNEL_MASK 0x3f

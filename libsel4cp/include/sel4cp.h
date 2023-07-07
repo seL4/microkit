@@ -17,6 +17,7 @@ typedef unsigned int sel4cp_channel;
 typedef unsigned int sel4cp_id;
 typedef seL4_MessageInfo_t sel4cp_msginfo;
 
+#define REPLY_CAP 4
 #define MONITOR_ENDPOINT_CAP 5
 #define TCB_CAP 6
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
@@ -144,6 +145,13 @@ sel4cp_pd_stop(sel4cp_id pd)
         sel4cp_dbg_puts("sel4cp_pd_stop: error suspending TCB\n");
         sel4cp_internal_crash(err);
     }
+}
+
+static inline void
+sel4cp_fault_reply(sel4cp_msginfo msginfo)
+{
+    // @ivanv: revisit
+    seL4_Send(REPLY_CAP, msginfo);
 }
 
 static inline sel4cp_msginfo
