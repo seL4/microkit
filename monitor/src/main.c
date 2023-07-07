@@ -455,6 +455,7 @@ print_registers(seL4_UserContext regs)
     puts("\n");
     puts("tp : ");
     puthex64(regs.tp);
+    puts("\n");
 #elif defined(ARCH_aarch64)
     // FIXME: Would be good to print the whole register set
     puts("Registers: \n");
