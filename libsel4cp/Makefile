@@ -55,8 +55,7 @@ else
 endif
 
 LIBS := libsel4cp.a
-OBJS := main.o dbg.o
-OTHER_OBJS := crt0.o
+OBJS := main.o crt0.o dbg.o
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(GCC) $(ASM_CPP_FLAGS) $< -o $@
@@ -78,7 +77,7 @@ $(BUILD_DIR)/%.o : src/%.c
 
 LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 
-all: $(LIB) $(addprefix $(BUILD_DIR)/, $(OTHER_OBJS))
+all: $(LIB)
 
 $(LIB): $(addprefix $(BUILD_DIR)/, $(OBJS))
 	$(TOOLCHAIN)ar -rv $@ $^
