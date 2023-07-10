@@ -11,8 +11,6 @@ PHDRS
 
 ENTRY(_start);
 
-STARTUP(crt0.o);
-
 SECTIONS
 {
     . = 0x200000;

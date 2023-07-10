@@ -15,8 +15,7 @@ TOOLCHAIN := aarch64-none-elf-
 CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
 
 LIBS := libmicrokit.a
-OBJS := main.o dbg.o
-OTHER_OBJS :=  crt0.o
+OBJS := main.o crt0.o dbg.o
 
 $(BUILD_DIR)/%.o : src/%.S
 	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g3  -mcpu=$(GCC_CPU)  $< -o $@
@@ -29,7 +28,7 @@ $(BUILD_DIR)/%.o : src/%.c
 
 LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 
-all: $(LIB) $(addprefix $(BUILD_DIR)/, $(OTHER_OBJS))
+all: $(LIB)
 
 $(LIB): $(addprefix $(BUILD_DIR)/, $(OBJS))
 	$(TOOLCHAIN)ar -rv $@ $^
