@@ -584,20 +584,23 @@ def build_sel4(
         config_strs.append(s)
     config_str = " ".join(config_strs)
 
-    # if board.arch == BoardArch.RISCV64 or board.arch == BoardArch.RISCV32:
-    #     toolchain_option = f"-DCROSS_COMPILER_PREFIX={RISCV_TOOLCHAIN}"
-    # elif board.arch == BoardArch.AARCH64:
-    #     toolchain_option = f"-DCROSS_COMPILER_PREFIX={AARCH64_TOOLCHAIN}"
-    # elif board.arch == BoardArch.X86_64:
-    #     toolchain_option = ""
-    # else:
-    #     raise Exception(f"Unexpected board arch: {board.arch}")
+    if board.arch == BoardArch.RISCV64 or board.arch == BoardArch.RISCV32:
+        toolchain_config = f"-DCROSS_COMPILER_PREFIX={RISCV_TOOLCHAIN}"
+    elif board.arch == BoardArch.AARCH64:
+        toolchain_config = f"-DCROSS_COMPILER_PREFIX={AARCH64_TOOLCHAIN}"
+    elif board.arch == BoardArch.X86_64:
+        if host_arch != "x86_64":
+            assert False, "@ivanv: Figure out cross-compiling to x86-64"
+        else:
+            toolchain_config = ""
+    else:
+        raise Exception(f"Unexpected board arch: {board.arch}")
 
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "\
         f" -DPYTHON3={executable} " \
         f" {config_str} " \
-        # f" {toolchain_option} " \
+        f" {toolchain_config} " \
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
     r = system(cmd)
