@@ -505,6 +505,20 @@ monitor(void)
 
         seL4_Word tcb_cap = tcbs[badge];
 
+        if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
+            /* This is a request from our PD to become passive */ 
+            err = seL4_SchedContext_UnbindObject(scheduling_contexts[badge], tcb_cap);
+            err = seL4_SchedContext_Bind(scheduling_contexts[badge], notification_caps[badge]);
+            if (err != seL4_NoError) {
+                puts("MON|ERROR: could not bind scheduling context to notification object");
+            } else {
+                puts("MON|INFO: PD '");
+                puts(pd_names[badge]);
+                puts("' is now passive!\n");
+            }
+            continue;
+        }
+
         puts("MON|ERROR: received message ");
         puthex32(label);
         puts("  badge: ");
@@ -512,19 +526,6 @@ monitor(void)
         puts("  tcb cap: ");
         puthex64(tcb_cap);
         puts("\n");
-
-        if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
-            /* This is a request from our PD to become passive */ 
-            err = seL4_SchedContext_UnbindObject(scheduling_contexts[badge], tcb_cap);
-            err = seL4_SchedContext_Bind(scheduling_contexts[badge], notification_caps[badge]);
-            if (err != seL4_NoError) {
-                puts("error binding scheduling context to notification");
-            } else {
-                puts(pd_names[badge]);
-                puts(" is now passive!\n");
-            }
-            continue;
-        }
 
         if (badge < MAX_PDS && pd_names[badge][0] != 0) {
             puts("MON|ERROR: faulting PD: ");
