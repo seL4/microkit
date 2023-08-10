@@ -33,7 +33,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #define GICC_BASE 0x00F9020000UL
 #elif defined(BOARD_qemu_arm_virt) || \
         defined(BOARD_qemu_arm_virt_cortex_a72) || \
-        defined(BOARD_qemu_arm_virt_hyp) || \
         defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
         defined(BOARD_qemu_arm_virt_2_cores)
 #define GICD_BASE 0x8010000UL
@@ -57,7 +56,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
     defined(BOARD_ultra96v2_hyp) || \
     defined(BOARD_qemu_arm_virt) || \
     defined(BOARD_qemu_arm_virt_cortex_a72) || \
-    defined(BOARD_qemu_arm_virt_hyp) || \
     defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
     defined(BOARD_qemu_arm_virt_2_cores)
     #define GIC_V2
@@ -184,7 +182,6 @@ putc(uint8_t ch)
 }
 #elif defined(BOARD_qemu_arm_virt) || \
       defined(BOARD_qemu_arm_virt_cortex_a72) || \
-      defined(BOARD_qemu_arm_virt_hyp) || \
       defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
       defined(BOARD_qemu_arm_virt_2_cores)
 #define UART_BASE 0x9000000
@@ -210,7 +207,7 @@ putc(uint8_t ch)
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
 }
-#elif defined(BOARD_odroidc4) || defined(BOARD_odroidc4_hyp)
+#elif defined(BOARD_odroidc4)
 #define UART_BASE 0xff803000
 #define UART_WFIFO 0x0
 #define UART_STATUS 0xC
