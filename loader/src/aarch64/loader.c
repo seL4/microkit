@@ -523,6 +523,9 @@ ensure_correct_el(void)
         if (el != EL2) {
             puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
             return 1;
+        } else {
+            puts("LDR|INFO: Resetting CNTVOFF\n");
+            asm volatile("msr cntvoff_el2, xzr");
         }
     } else {
         if (el == EL2) {
