@@ -81,6 +81,19 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/zcu102/hello")
         }
     ),
+    BoardInfo(
+        name="maaxboard",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40480000,
+        kernel_options={
+            "KernelPlatform": "maaxboard",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples={
+            "hello": Path("example/maaxboard/hello")
+        }
+    ),
     # BoardInfo(
     #     name="imx8mm",
     #     gcc_cpu="cortex-a53",
