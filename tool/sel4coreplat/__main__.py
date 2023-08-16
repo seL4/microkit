@@ -55,8 +55,6 @@ from sel4coreplat.sel4 import (
     Sel4Aarch64Regs,
     Sel4RiscvRegs,
     Sel4Invocation,
-    Sel4ARMPageUpperDirectoryMap,
-    Sel4ARMPageDirectoryMap,
     Sel4ARMPageTableMap,
     Sel4RISCVPageTableMap,
     Sel4TcbSetSchedParams,
@@ -1235,11 +1233,11 @@ def build_system(
     # a PD or VM
     if kernel_config.arch == KernelArch.AARCH64:
         if not (kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40):
-            ud_names = [f"PageUpperDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in uds]
-            ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageUpperDirectory, ud_names)
+            ud_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in uds]
+            ud_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, ud_names)
 
-        d_names = [f"PageDirectory: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
-        d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageDirectory, d_names)
+        d_names = [f"PageTable: PD/VM={names[idx]} VADDR=0x{vaddr:x}" for idx, vaddr in ds]
+        d_objects = init_system.allocate_objects(kernel_config, Sel4Object.PageTable, d_names)
     elif kernel_config.arch == KernelArch.RISCV64:
         # This code assumes a 64-bit system with Sv39, which is actually all seL4 currently
         # supports.
@@ -1649,13 +1647,13 @@ def build_system(
         # @ivanv: explain/justify the difference between hyp and normal mode
         if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40:
             vspace_invocations = [
-                (Sel4ARMPageDirectoryMap, ds, d_objects),
+                (Sel4ARMPageTableMap, ds, d_objects),
                 (Sel4ARMPageTableMap, pts, pt_objects),
             ]
         else:
             vspace_invocations = [
-                (Sel4ARMPageUpperDirectoryMap, uds, ud_objects),
-                (Sel4ARMPageDirectoryMap, ds, d_objects),
+                (Sel4ARMPageTableMap, uds, ud_objects),
+                (Sel4ARMPageTableMap, ds, d_objects),
                 (Sel4ARMPageTableMap, pts, pt_objects),
             ]
     else:
