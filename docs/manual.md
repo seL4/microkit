@@ -595,7 +595,7 @@ Initial support is available for [QEMU's "virt" platform](https://www.qemu.org/d
 The QEMU command to run is:
 
     $ qemu-system-aarch64 \
-       -machine virt \
+       -machine virt,virtualization=on \
        -cpu cortex-a53 \
        -m size=2048M \
        -nographic \
