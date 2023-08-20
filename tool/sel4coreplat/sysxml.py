@@ -209,7 +209,7 @@ class SystemDescription:
         for cc in self.channels:
             for pd_name in (cc.pd_a, cc.pd_b):
                 if pd_name not in self.pd_by_name:
-                    raise UserError(f"Invalid pd name '{pd_name}'. on element '{cc.element.tag}': {cc.element._loc_str}")  # type: ignore
+                    raise UserError(f"Protection domain with name '{pd_name}' on element '{cc.element.tag}' does not exist: {cc.element._loc_str}")  # type: ignore
 
         # Ensure no duplicate IRQs
         all_irqs = set()

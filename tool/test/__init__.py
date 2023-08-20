@@ -135,7 +135,7 @@ class SystemParseTests(ExtendedTestCase):
         self._check_error("sys_duplicate_mr_name.xml", "Duplicate memory region name 'test'.")
 
     def test_channel_invalid_pd(self):
-        self._check_error("sys_channel_invalid_pd.xml", "Invalid pd name 'invalidpd'. on element 'channel': ")
+        self._check_error("sys_channel_invalid_pd.xml", "Protection domain with name 'invalidpd' on element 'channel' does not exist: ")
 
     def test_duplicate_irq_number(self):
         self._check_error("sys_duplicate_irq_number.xml", "duplicate irq: 112 in protection domain: 'test2' @ ")
