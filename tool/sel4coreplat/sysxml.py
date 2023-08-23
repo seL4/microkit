@@ -425,7 +425,7 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
 
 
 def xml2vm(vm_xml: ET.Element, plat_desc: PlatformDescription) -> VirtualMachine:
-    _check_attrs(vm_xml, ("name", "id", "priority", "cpu"))
+    _check_attrs(vm_xml, ("name", "id", "budget", "period", "priority", "cpu"))
     name = checked_lookup(vm_xml, "name")
 
     vm_id = int(checked_lookup(vm_xml, "id"), base=0)
