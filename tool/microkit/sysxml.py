@@ -320,10 +320,9 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
     pp = str_to_bool(pd_xml.attrib.get("pp", "false"))
     passive = str_to_bool(pd_xml.attrib.get("passive", "false"))
 
-    if plat_desc.aarch64_smc_calls_allowed:
-        smc = str_to_bool(pd_xml.attrib.get("smc", "false"))
-    else:
-        smc = False;
+    smc = str_to_bool(pd_xml.attrib.get("smc", "false"))
+    if smc and not plat_desc.aarch64_smc_calls_allowed:
+        raise ValueError(f"SMC call forwarding is set on PD '{name}', but it is not supported by the platform")
 
     maps = []
     irqs = []
