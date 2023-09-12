@@ -153,19 +153,19 @@ Once the PD has consumed its budget, it is no longer runnable until the budget i
 This means that the maximum fraction of CPU time the PD can consume is budget/period.
 
 The budget cannot be larger than the period.
-A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. On other words, PDs with full budgets are scheduled round-robin with a time slice defined by the period.
+A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. In other words, PDs with full budgets are scheduled round-robin with a time slice defined by the period.
 
-The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points have been invoked and it has budget remaining in the current period.
+The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points has been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
-The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee. 
+The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee.
 
 ## Memory Regions {#mr}
 
 A *memory region* is a contiguous range of physical memory.
 A memory region may have a *fixed* physical address.
-For memory regions without a fixed physical address the physical address is allocated as part of the build process.
-Typically, memory regions with a fixed physical address represents memory-mapped device registers.
+For memory regions without a fixed physical address, the physical address is allocated as part of the build process.
+Typically, memory regions with a fixed physical address represent memory-mapped device registers.
 
 The size of a memory region must be a multiple of a supported page size.
 The supported page sizes are architecture dependent.
@@ -189,7 +189,7 @@ domains, the attributes used for different mapping may vary.
 ## Channels
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
-Each connects connects exactly two PDs; there are no multi-party channels.
+Each connects exactly two PDs; there are no multi-party channels.
 
 When a channel is created between two PDs, a *channel identifier* is configured for each PD.
 The *channel identifier* is used by the PD to reference the channel.
@@ -198,7 +198,7 @@ For example if PDs **A** and **B** are connected by a channel, **A** may refer t
 
 **Note:** There is no way for a PD to directly refer to another PD in the system.
 PDs can only refer to other PDs indirectly if there is a channel between them.
-In this case the channel identifier is effectively a proxy identifier for the other PD.
+In this case, the channel identifier is effectively a proxy identifier for the other PD.
 So, to extend the prior example, **A** can indirectly refer to **B** via the channel identifier **37**.
 Similarly, **B** can refer to **A** via the channel identifier **42**.
 
@@ -214,7 +214,7 @@ When a protection domain calls a protected procedure, the procedure executes wit
 
 A protected call is only possible if the callee has strictly higher priority than the caller.
 Transitive calls are possible, and as such a PD may call a *protected procedure* in another PD from a `protected` entry point.
-However the overall call graph between PDs forms a directed, acyclic graph.
+However the overall call graph between PDs form a directed, acyclic graph.
 It follows that a PD can not call itself, even indirectly.
 For example, `A calls B calls C` is valid (subject to the priority constraint), while `A calls B calls A` is not valid.
 
@@ -358,12 +358,12 @@ This is called by the system at boot time.
 ## `sel4cp_message protected(sel4cp_channel channel, sel4cp_message message)`
 
 The `protected` entry point is optional.
-This is called when another PD call `sel4cp_ppcall` on a channel shared with the PD.
+This is invoked when another PD calls `sel4cp_ppcall` on a channel shared with the PD.
 
 The `channel` argument identifies the channel on which the PP was invoked.
 Indirectly this identifies the PD performing the call.
 Channel identifiers are specified in the system configuration.
-**Note:** The channel argument is passed by the system and is unforgable.
+**Note:** The channel argument is passed by the system and is unforgeable.
 
 The `message` argument is the argument passed to the PP and is provided by the calling PD.
 The contents of the message is up to a pre-arranged protocol between the PDs.
@@ -371,7 +371,7 @@ The message contents are opaque to the system.
 Note: The message is *copied* from the caller.
 
 The returned `message` is the return value of the protected procedure.
-As with arguments this is *copied* to the caller.
+As with arguments, this is *copied* to the caller.
 
 ## `void notified(sel4cp_channel channel)`
 
@@ -475,7 +475,7 @@ The `irq` element has the following attributes:
 The `setvar` element has the following attributes:
 
 * `symbol`: Name of a symbol in the ELF file.
-* `region_paddr`: Name of an MR. The symbol's value shall be updated to this MRs physical address.
+* `region_paddr`: Name of an MR. The symbol's value shall be updated to this MR's physical address.
 
 ## `memory_region`
 
@@ -486,7 +486,7 @@ It supports the following attributes:
 * `name`: a unique name for the memory region
 * `size`: size of the memory region in bytes (must be a multiple of the page size)
 * `page_size`: (optional) size of the pages used in the memory region; must be a supported page size if provided.
-* `phys_addr`: (optional) the physical address for the start of the memory region.
+* `phys_addr`: (optional) the physical address for the start of the memory region (must be a multiple of the page size).
 
 The `memory_region` element does not support any child elements.
 
