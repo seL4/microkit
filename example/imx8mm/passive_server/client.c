@@ -6,10 +6,9 @@
 
 #include <microkit.h>
 
-#define SERVER_CH 0 
+#define SERVER_CH 0
 
-void
-init(void)
+void init(void)
 {
     microkit_dbg_puts("client: client protection domain init function running\n");
 
@@ -18,8 +17,7 @@ init(void)
     (void) microkit_ppcall(SERVER_CH, microkit_msginfo_new(1, 1));
 }
 
-void
-notified(microkit_channel ch)
+void notified(microkit_channel ch)
 {
     microkit_dbg_puts("client: recieved a notification on an unexpected channel\n");
 }
