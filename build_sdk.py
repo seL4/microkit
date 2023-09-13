@@ -359,7 +359,18 @@ def main() -> None:
     for dr in dir_structure:
         dr.mkdir(exist_ok=True, parents=True)
 
-    copy(Path("LICENSE"), root_dir)
+    copy(Path("LICENSE.md"), root_dir)
+    licenses_dir = Path("LICENSES")
+    licenses_dest_dir = root_dir / "LICENSES"
+    for p in licenses_dir.rglob("*"):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(licenses_dir)
+        dest = licenses_dest_dir / rel
+        dest.parent.mkdir(exist_ok=True, parents=True)
+        dest.unlink(missing_ok=True)
+        copy(p, dest)
+        dest.chmod(0o444)
 
     tool_target = root_dir / "bin" / "microkit"
 
