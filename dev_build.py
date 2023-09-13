@@ -1,3 +1,6 @@
+# Copyright 2021, Breakaway Consulting Pty. Ltd.
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Build a specific example during development.
 
 This is designed to make it easy to build and run examples during development.

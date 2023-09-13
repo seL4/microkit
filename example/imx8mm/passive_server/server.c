@@ -1,7 +1,12 @@
+/*
+ * Copyright 2022, UNSW
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
 #include <microkit.h>
 
-microkit_msginfo 
+microkit_msginfo
 protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     switch (microkit_msginfo_get_label(msginfo)) {

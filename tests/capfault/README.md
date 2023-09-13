@@ -1,3 +1,8 @@
+<!--
+     Copyright 2021, Breakaway Consulting Pty. Ltd.
+     SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Cap Fault Test
 
 The purpose of the capfault test is to verify that the monitor will

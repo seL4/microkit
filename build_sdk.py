@@ -1,3 +1,6 @@
+# Copyright 2021, Breakaway Consulting Pty. Ltd.
+# SPDX-License-Identifier: BSD-2-Clause
+
 """The SDK build script.
 
 # Why Python (and not make, or something else)?
