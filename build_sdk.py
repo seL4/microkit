@@ -29,6 +29,10 @@ ENV_BIN_DIR = Path(executable).parent
 
 MICROKIT_EPOCH = 1616367257
 
+# Due to only supporting AArch64 (for now), we hard-code
+# the prefix of the toolchain used to compile seL4.
+TOOLCHAIN_PREFIX = "aarch64-none-elf-"
+
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
@@ -192,6 +196,7 @@ def build_sel4(
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "
         f" -DPYTHON3={executable} "
+        f" -DCROSS_COMPILER_PREFIX={TOOLCHAIN_PREFIX}"
         f" -DKernelPlatform={platform} {config_str} "
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
