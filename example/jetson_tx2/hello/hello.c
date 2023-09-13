@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 void
 init(void)
 {
-    sel4cp_dbg_puts("hello, world\n");
+    microkit_dbg_puts("hello, world\n");
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
 }

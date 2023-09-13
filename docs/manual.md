@@ -1,5 +1,5 @@
 ---
-title: seL4 Core Platform User Manual (v1.2-pre)
+title: Microkit User Manual (v1.2-pre)
 papersize:
 - a4
 fontsize:
@@ -27,13 +27,13 @@ colorlinks: true
 
 # Introduction
 
-seL4 Core Platform (sel4cp) is a small and simple operating system (OS) built on the seL4 microkernel.
-sel4cp is designed for building system with a *static architecture*.
+The seL4 Microkit is a small and simple operating system (OS) built on the seL4 microkernel.
+Microkit is designed for building system with a *static architecture*.
 A static architecture is one where system resources are assigned up-front at system initialisation time.
 
 ## Purpose
 
-The seL4 Core Platform is intended to:
+The Microkit is intended to:
 
 * provide a small and simple OS for a wide range of IoT, cyberphysical and other embedded use cases;
 * provide a reasonable degree of application portability appropriate for the targeted use cases;
@@ -44,48 +44,48 @@ The seL4 Core Platform is intended to:
 
 ## Overview
 
-An sel4cp system is built from a set of individual programs that are isolated from each other, and the system, in *protection domains*.
+A Microkit system is built from a set of individual programs that are isolated from each other, and the system, in *protection domains*.
 Protection domains can interact by calling *protected procedures* or sending *notifications*.
 
-sel4cp is distributed as a software development kit (SDK).
-The SDK includes the tools, libraries and binaries required to build an sel4cp system.
-The sel4cp source is also available which allows you to customize or extend sel4cp and produce your own SDK.
+Microkit is distributed as a software development kit (SDK).
+The SDK includes the tools, libraries and binaries required to build an Microkit system.
+The Microkit source is also available which allows you to customize or extend Microkit and produce your own SDK.
 
-To build an sel4cp system you will write some programs that use `libsel4cp`.
-sel4cp programs are a little different to a typical progress on a Linux-like operating system.
+To build an Microkit system you will write some programs that use `libmicrokit`.
+Microkit programs are a little different to a typical progress on a Linux-like operating system.
 Rather than a single `main` entry point, a program has three distinct entry points: `init`, `notified` and, optionally, `protected`.
 
 The individual programs are combined to produce a single bootable *system image*.
 The format of the image is suitable for loading by the target board's bootloader.
-The sel4cp tool, which is provided as part of the SDK, is used to generate the system image.
+The Microkit tool, which is provided as part of the SDK, is used to generate the system image.
 
-The sel4cp tool takes a *system description* as input.
+The Microkit tool takes a *system description* as input.
 The system description is an XML file that specifies all the objects that make up the system.
 
-*Note*: sel4cp does **not** impose any specific build system; you are free to choose the build system that works best for you.
+*Note*: Microkit does **not** impose any specific build system; you are free to choose the build system that works best for you.
 
 \clearpage
 
 ## Document Structure
 
-The [Concepts](#concepts) chapter describes the various concepts that make up sel4cp.
+The [Concepts](#concepts) chapter describes the various concepts that make up Microkit.
 It is recommended that you familiarise yourself with these concepts before trying to build a system.
 
 The [SDK](#sdk) chapter describes the software development kit, including its components and system requirements for use.
 
-The [sel4cp tool](#tool) chapter describes the host system tool used for generating a firmware image from the system description.
+The [Microkit tool](#tool) chapter describes the host system tool used for generating a firmware image from the system description.
 
-The [libsel4cp](#libsel4cp) chapter describes the interfaces to the core platform library.
+The [libmicrokit](#libmicrokit) chapter describes the interfaces to the Microkit library.
 
 The [System Description Format](#sysdesc) chapter describes the format of the system description XML file.
 
 The [Board Support Packages](#bsps) chapter describes each of the board support packages included in the SDK.
 
-The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of in sel4cp.
+The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of in Microkit.
 
 # Concepts {#concepts}
 
-This chapter describes the key concepts provided by sel4cp.
+This chapter describes the key concepts provided by Microkit.
 
 As with any set of concepts there are words that take on special meanings.
 This document attempts to clearly describe all of these terms, however as the concepts are inter-related it is sometimes necessary to use a term prior to its formal introduction.
@@ -99,9 +99,9 @@ This document attempts to clearly describe all of these terms, however as the co
 
 ## System {#system}
 
-At the most basic level sel4cp provides the platform for running a *system* on a specific board.
-As a *user* of sel4cp you use the platform to create a software system that implements your use case.
-The system is described in a declarative configuration file, and the sel4cp tool takes this system description as an input and produces an appropriate system image that can be loaded on the target board.
+At the most basic level Microkit provides the platform for running a *system* on a specific board.
+As a *user* of Microkit you use the platform to create a software system that implements your use case.
+The system is described in a declarative configuration file, and the Microkit tool takes this system description as an input and produces an appropriate system image that can be loaded on the target board.
 
 The key elements that make up a system are *protection domains*, *memory regions* and *channels*.
 
@@ -125,7 +125,7 @@ A process on a typical operating system will have a `main` function which is inv
 When the `main` function returns the process is destroyed.
 By comparison a protection domain has three entry points: `init`, `notify` and, optionally, `protected`.
 
-When an seL4 Core Platform system is booted, all PDs in the system execute the `init` entry point.
+When an Microkit system is booted, all PDs in the system execute the `init` entry point.
 
 The `notified` entry point will be invoked whenever the protection domain receives a *notification* on a *channel*.
 The `protected` entry point is invoked when a PD's *protected procedure* is called by another PD.
@@ -136,7 +136,7 @@ These entry points are described in more detail in subsequent sections.
 **Note:** The processing of `init` entry points is **not** synchronised across protection domains.
 Specifically, it is possible for a high priority PD's `notified` or `protected` entry point to be called prior to the completion of a low priority PD's `init` entry point.
 
-The overall computational model for an sel4cp system is a set of isolated components reacting to incoming events.
+The overall computational model for a Microkit system is a set of isolated components reacting to incoming events.
 
 ### Scheduling
 
@@ -166,7 +166,7 @@ Typically, memory regions with a fixed physical address represents memory-mapped
 
 The size of a memory region must be a multiple of a supported page size.
 The supported page sizes are architecture dependent.
-For example, on AArch64 architectures, sel4cp support 4KiB and 2MiB pages.
+For example, on AArch64 architectures, Microkit support 4KiB and 2MiB pages.
 The page size for a memory region may be specified explicitly in the system description.
 If page size is not specified, the smallest supported page size is used.
 
@@ -225,7 +225,7 @@ In the present version the callee must trust the callee to conform.
 
 In general, PPs are provided by services for use by clients that trust the protection domain to provide that service.
 
-To call a PP, a PD calls `sel4cp_ppcall` passing the channel identifier and a *message* structure.
+To call a PP, a PD calls `microkit_ppcall` passing the channel identifier and a *message* structure.
 A *message* structure is returned from this function.
 
 When a PD's protected procedure is invoked, the `protected` entry point is invoked with the channel identifier and message structure passed as arguments.
@@ -236,7 +236,7 @@ The `protected` entry point must return a message structure.
 A notification is a (binary) semaphore-like synchronisation mechanism.
 A PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
 
-To notify another PD, a PD calls `sel4cp_notify`, passing the channel identifier.
+To notify another PD, a PD calls `microkit_notify`, passing the channel identifier.
 When a PD receives a notification, the `notified` entry point is invoked with the appropriate channel identifier passed as an argument.
 
 Unlike protected procedures, notifications can be sent in either direction on a channel regardless of priority.
@@ -256,7 +256,7 @@ A specific hardware interrupt can only be associated with at most one protection
 Although interrupts are the final concept to be described here, they are in some ways the most important.
 Without interrupts a system would not do much after system initialisation.
 
-sel4cp does not provides timers, nor any *sleep* API.
+Microkit does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
@@ -266,7 +266,7 @@ That notified function may in turn notify or call other protection domains that 
 
 # SDK {#sdk}
 
-sel4cp is distributed as a software development kit (SDK).
+Microkit is distributed as a software development kit (SDK).
 
 The SDK includes support for one or more *boards*.
 Two *configurations* are supported for each board: *debug* and *release*.
@@ -274,41 +274,41 @@ The *debug* configuration includes a debug build of the seL4 kernel to allow con
 
 The SDK contains:
 
-* sel4cp user manual (this document)
-* sel4cp tool
+* Microkit user manual (this document)
+* Microkit tool
 
 Additionally, for each supported board configuration the following are provided:
 
-* `libsel4cp`
+* `libmicrokit`
 * `loader.elf`
 * `kernel.elf`
 * `monitor.elf`
 
 For some boards there are also examples provided in the `examples` directory.
 
-The sel4cp SDK does **not** provide, nor require, any specific build system.
+The Microkit SDK does **not** provide, nor require, any specific build system.
 The user is free to build their system using whatever build system is deemed most appropriate for their specific use case.
 
-The sel4cp tool should be invoked by the system build process to transform a system description (and any referenced program images) into an image file which can be loaded by the target board's bootloader.
+The Microkit tool should be invoked by the system build process to transform a system description (and any referenced program images) into an image file which can be loaded by the target board's bootloader.
 
-The ELF files provided as program images should be standard ELF files and have been linked against the provided libsel4cp.
+The ELF files provided as program images should be standard ELF files and have been linked against the provided libmicrokit.
 
 ## System Requirements
 
-The sel4cp tool requires Linux x86_64.
-The sel4cp tool is statically linked and should run on any Linux distribution.
-The sel4cp tool does not depend on any additional system binaries.
+The Microkit tool requires Linux x86_64.
+The Microkit tool is statically linked and should run on any Linux distribution.
+The Microkit tool does not depend on any additional system binaries.
 
-# sel4cp tool {#tool}
+# Microkit tool {#tool}
 
-The sel4cp tool is available in `bin/sel4cp`.
+The Microkit tool is available in `bin/microkit`.
 
-The sel4cp tool takes as input a system description.
+The Microkit tool takes as input a system description.
 The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    sel4cp [-h] [-o OUTPUT] [-r REPORT] system
+    microkit [-h] [-o OUTPUT] [-r REPORT] system
 
 The path to the system description file must be provided.
 
@@ -325,30 +325,30 @@ The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
 
-# libsel4cp {#libsel4cp}
+# libmicrokit {#libmicrokit}
 
-All program images should link against `libsel4cp.a`.
+All program images should link against `libmicrokit.a`.
 
-The library provides the C runtime for the protection domain, along with interfaces for the sel4cp APIs.
+The library provides the C runtime for the protection domain, along with interfaces for the Microkit APIs.
 
 The component must provide the following functions:
 
     void init(void);
-    void notified(sel4cp_channel ch);
+    void notified(microkit_channel ch);
 
 Additionally, if the protection domain provides a protected procedure it must also implement:
 
-    sel4cp_msginfo protected(sel4cp_channel ch, sel4cp_msginfo msginfo);
+    microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
 
-`libsel4cp` provides the following functions:
+`libmicrokit` provides the following functions:
 
-    sel4cp_msginfo sel4cp_ppcall(sel4cp_channel ch, sel4cp_msginfo msginfo);
-    void sel4cp_notify(sel4cp_channel ch);
-    sel4cp_msginfo sel4cp_msginfo_new(uint64_t label, uint16_t count);
-    uint64_t sel4cp_msginfo_get_label(sel4cp_msginfo msginfo);
-    void sel4cp_irq_ack(sel4cp_channel ch);
-    void sel4cp_mr_set(uint8_t mr, uint64_t value);
-    uint64_t sel4cp_mr_get(uint8_t mr);
+    microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo);
+    void microkit_notify(microkit_channel ch);
+    microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count);
+    uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo);
+    void microkit_irq_ack(microkit_channel ch);
+    void microkit_mr_set(uint8_t mr, uint64_t value);
+    uint64_t microkit_mr_get(uint8_t mr);
 
 
 ## `void init(void)`
@@ -356,10 +356,10 @@ Additionally, if the protection domain provides a protected procedure it must al
 Every PD must expose an `init` entry point.
 This is called by the system at boot time.
 
-## `sel4cp_message protected(sel4cp_channel channel, sel4cp_message message)`
+## `microkit_message protected(microkit_channel channel, microkit_message message)`
 
 The `protected` entry point is optional.
-This is called when another PD call `sel4cp_ppcall` on a channel shared with the PD.
+This is called when another PD calls `microkit_ppcall` on a channel shared with the PD.
 
 The `channel` argument identifies the channel on which the PP was invoked.
 Indirectly this identifies the PD performing the call.
@@ -374,7 +374,7 @@ Note: The message is *copied* from the caller.
 The returned `message` is the return value of the protected procedure.
 As with arguments this is *copied* to the caller.
 
-## `void notified(sel4cp_channel channel)`
+## `void notified(microkit_channel channel)`
 
 The `notified` entry point is called by the system when a PD has received a notification on a channel.
 
@@ -385,40 +385,40 @@ The `notified` entry point is called by the system when a PD has received a noti
 Channel identifiers are specified in the system configuration.
 
 
-## `sel4cp_message sel4cp_ppcall(sel4cp_channel channel, sel4cp_message message)`
+## `microkit_message microkit_ppcall(microkit_channel channel, microkit_message message)`
 
 Performs a call to a protected procedure in a different PD.
 The `channel` argument identifies the protected procedure to be called.
 `message` is passed as argument to the protected procedure.
 Channel identifiers are specified in the system configuration.
 
-The protected procedure's return data is returned in the `sel4cp_message`.
+The protected procedure's return data is returned in the `microkit_message`.
 
-## `void sel4cp_notify(sel4cp_channel channel)`
+## `void microkit_notify(microkit_channel channel)`
 
 Notify the `channel`.
 Channel identifiers are specified in the system configuration.
 
-## `void sel4cp_irq_ack(sel4cp_channel ch)`
+## `void microkit_irq_ack(microkit_channel ch)`
 
 Acknowledge the interrupt identified by the specified channel.
 
 
-## `sel4cp_message sel4cp_msginfo_new(uint64_t label, uint16_t count)`
+## `microkit_message microkit_msginfo_new(uint64_t label, uint16_t count)`
 
 Creates a new message structure.
 
-The message can be passed to `sel4cp_ppcall` or returned from `protected`.
+The message can be passed to `microkit_ppcall` or returned from `protected`.
 
-## `uint64_t sel4cp_msginfo_get_label(sel4cp_message message)`
+## `uint64_t microkit_msginfo_get_label(microkit_message message)`
 
 Returns the label from a message.
 
-## `uint64_t sel4cp_mr_get(uint8_t mr)`
+## `uint64_t microkit_mr_get(uint8_t mr)`
 
 Get a message register.
 
-## `void sel4cp_mr_set(uint8_t mr, uint64_t)`
+## `void microkit_mr_set(uint8_t mr, uint64_t)`
 
 Set a message register.
 
@@ -426,7 +426,7 @@ Set a message register.
 # System Description Format {#sysdesc}
 
 This section describes the format of the system description file.
-This file is provided as the input to the `sel4cp` tool.
+This file is provided as the input to the `microkit` tool.
 
 The system description file is an XML file.
 
@@ -503,7 +503,7 @@ The `end` element has the following attributes:
 * `id`: Channel identifier in the context of the named protection domain.
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
-The `id` should be passed to the `sel4cp_notify` and `sel4cp_ppcall` functions.
+The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functions.
 
 # Board Support Packages {#bsps}
 
@@ -534,7 +534,7 @@ You will likely want to disable autoboot:
 The board can be reset by pressing switch **S4** (located next to the Ethernet port).
 Alternatively, you can use the `reset` command from the U-Boot prompt.
 
-During development the most convenient way to boot an sel4cp image is via network booting.
+During development the most convenient way to boot an Microkit image is via network booting.
 U-boot support booting via the *tftp* protocol.
 To support this you'll want to configure the network.
 U-Boot supports DHCP, however it is often more reliable to explicitly set an IP address.
@@ -551,7 +551,7 @@ To use tftp you also need to set the file to load and the memory address to load
     => env set loadaddr 0x80280000
     => env save
 
-The system image generated by the sel4cp tool is a raw binary file.
+The system image generated by the Microkit tool is a raw binary file.
 
 An example sequence of commands for booting is:
 
@@ -562,9 +562,9 @@ An example sequence of commands for booting is:
 
 Rather than typing these each time you can create a U-Boot script:
 
-    => env set sel4cp 'tftpboot; dcache flush; icache flush; go ${loadaddr}'
+    => env set microkit 'tftpboot; dcache flush; icache flush; go ${loadaddr}'
     => env save
-    => run sel4cp
+    => run microkit
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
@@ -650,14 +650,14 @@ TODO @ivanv: Add documentation for getting the HiFive Unleashed up and running.
 
 # Rationale
 
-This section describes the rationales driving the sel4cp design choices.
+This section describes the rationales driving the Microkit design choices.
 
 ## Overview
 
 The seL4 microkernel provides a set of powerful and flexible mechanisms that can be used for building almost arbitrary systems.
 While minimising constraints on the nature of system designs and scope of deployments, this flexibility makes it challenging to design the best system for a particular use case, requiring extensive seL4 experience from developers.
 
-The seL4 Core Platform addresses this challenge by constraining the
+The Microkit addresses this challenge by constraining the
 system architecture to one that provides enough features and power for
 its target usage class (IoT, cyberphysical and other embedded systems
 with a static architecture), enabling a much simpler set of developer-visible abstractions.
@@ -676,7 +676,7 @@ This greatly simplifies reasoning about real-time properties in the system; in p
 
 While it would be possible to achieve the same by allowing PPs between PDs of the same priority, this would be much harder to statically analyse for loop-freedom (and thus deadlock-freedom).
 The drawback is that we waste a part of the priority space where a logical entity is split into multiple PDs, eg to separate out a particularly critical component to formally verify it, when the complete entity would be too complex for formal verification.
-For the kinds of systems targeted by the seL4 Core Platform, this reduction of the usable priority space is unlikely to cause problems.
+For the kinds of systems targeted by the Microkit, this reduction of the usable priority space is unlikely to cause problems.
 
 ## Protected Procedure Argument Size
 

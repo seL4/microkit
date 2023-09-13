@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# This script is used to build the seL4 Core Platform SDK as part of the CI
+# This script is used to build the Microkit SDK as part of the CI
 # process. The intention is that it can also easily be used to reproduce the
 # CI artefacts locally.
 
@@ -13,6 +13,6 @@ if [ -d seL4 ]; then
 	exit 1
 fi
 
-git clone https://github.com/Ivan-Velickovic/seL4.git --branch sel4cp-dev
+git clone https://github.com/Ivan-Velickovic/seL4.git --branch microkit-dev
 ./pyenv/bin/python build_sdk.py --sel4=seL4
 

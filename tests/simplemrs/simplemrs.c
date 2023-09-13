@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 volatile uint8_t *p;
 volatile uint8_t *q;
@@ -17,6 +17,6 @@ init(void)
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
 }

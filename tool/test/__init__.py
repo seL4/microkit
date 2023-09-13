@@ -6,7 +6,7 @@
 from pathlib import Path
 import unittest
 
-from sel4coreplat.sysxml import xml2system, UserError, PlatformDescription
+from microkit.sysxml import xml2system, UserError, PlatformDescription
 
 
 plat_desc = PlatformDescription(

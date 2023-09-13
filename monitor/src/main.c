@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 /*
- * The seL4 Core Platform Monitor.
+ * The Microkit Monitor.
  *
- * The monitor is the initial task in a core platform system.
+ * The monitor is the initial task in a Microkit system.
  *
  * The monitor fulfills two purposes:
  *
@@ -665,7 +665,7 @@ void
 main(seL4_BootInfo *bi)
 {
     __sel4_ipc_buffer = bi->ipcBuffer;
-    puts("MON|INFO: seL4 Core Platform Bootstrap\n");
+    puts("MON|INFO: Microkit Bootstrap\n");
 
 #if 0
     /* This can be useful to enable during new platform bring up

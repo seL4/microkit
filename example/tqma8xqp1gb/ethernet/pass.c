@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 #define GPT_CH 0
 #define OUTER_INPUT_CH 1
@@ -59,7 +59,7 @@ puthex16(uint16_t x)
     buffer[4] = hexchar((x >> 4) & 0xf);
     buffer[5] = hexchar(x & 0xf);
     buffer[6] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 static void
@@ -77,7 +77,7 @@ puthex32(uint32_t x)
     buffer[8] = hexchar((x >> 4) & 0xf);
     buffer[9] = hexchar(x & 0xf);
     buffer[10] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 
@@ -104,7 +104,7 @@ puthex64(uint64_t x)
     buffer[16] = hexchar((x >> 4) & 0xf);
     buffer[17] = hexchar(x & 0xf);
     buffer[18] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 static void
@@ -138,22 +138,22 @@ dump_hex(const uint8_t *d, unsigned int length)
     unsigned int i = 0;
     while (length) {
         puthex16(i);
-        sel4cp_dbg_puts(": ");
+        microkit_dbg_puts(": ");
         while (length) {
-            sel4cp_dbg_putc(hexchar((d[i] >> 4) & 0xf));
-            sel4cp_dbg_putc(hexchar(d[i] & 0xf));
+            microkit_dbg_putc(hexchar((d[i] >> 4) & 0xf));
+            microkit_dbg_putc(hexchar(d[i] & 0xf));
             length--;
             i++;
             if (i % 16 == 0) {
-                sel4cp_dbg_putc('\n');
+                microkit_dbg_putc('\n');
                 break;
             } else {
-                sel4cp_dbg_putc(' ');
+                microkit_dbg_putc(' ');
             }
         }
     }
     if (i % 16) {
-        sel4cp_dbg_putc('\n');
+        microkit_dbg_putc('\n');
     }
 }
 
@@ -162,39 +162,39 @@ dump_hex(const uint8_t *d, unsigned int length)
 static inline uint64_t
 gpt_ticks(void)
 {
-    (void) sel4cp_ppcall(GPT_CHANNEL, sel4cp_msginfo_new(0, 0));
-    return sel4cp_mr_get(0);
+    (void) microkit_ppcall(GPT_CHANNEL, microkit_msginfo_new(0, 0));
+    return microkit_mr_get(0);
 }
 
 static inline void
 gpt_timer(uint64_t timeout)
 {
-    sel4cp_mr_set(0, timeout);
-    (void) sel4cp_ppcall(GPT_CHANNEL, sel4cp_msginfo_new(1, 1));
+    microkit_mr_set(0, timeout);
+    (void) microkit_ppcall(GPT_CHANNEL, microkit_msginfo_new(1, 1));
 }
 
 
 void
 init(void)
 {
-    sel4cp_dbg_puts("pass protection domain init function running\n");
+    microkit_dbg_puts("pass protection domain init function running\n");
 
     /* Example calling a PP */
-    sel4cp_dbg_puts("ticks: ");
+    microkit_dbg_puts("ticks: ");
     puthex32(gpt_ticks());
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 
     gpt_timer(0x1000000);
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
     switch (ch) {
         case GPT_CH:
-            sel4cp_dbg_puts("tick! ticks=");
+            microkit_dbg_puts("tick! ticks=");
             puthex64(gpt_ticks());
-            sel4cp_dbg_puts("\n");
+            microkit_dbg_puts("\n");
             gpt_timer(0x1000000);
 
         case OUTER_INPUT_CH:
@@ -214,14 +214,14 @@ notified(sel4cp_channel ch)
                 volatile struct buffer_descriptor *obd = (void *)(uintptr_t)(INNER_OUTPUT + (BUFFER_SIZE * inner_output_index));
                 volatile void *opkt = (void *)(uintptr_t)(INNER_OUTPUT + (BUFFER_SIZE * inner_output_index) + DATA_OFFSET);
                 if (obd->flags == 1) {
-                    sel4cp_dbg_puts("PASS: outer can't pass buffer (no space for inner)\n");
+                    microkit_dbg_puts("PASS: outer can't pass buffer (no space for inner)\n");
                 } else {
                     obd->data_length = bd->data_length;
 
                     mycpy(opkt, pkt, bd->data_length);
                     obd->flags = 1;
 
-                    sel4cp_notify(INNER_OUTPUT_CH);
+                    microkit_notify(INNER_OUTPUT_CH);
 
                     inner_output_index++;
                     if (inner_output_index == BUFFER_MAX) {
@@ -234,7 +234,7 @@ notified(sel4cp_channel ch)
             break;
 
         case OUTER_OUTPUT_CH:
-            sel4cp_dbg_puts("outer output\n");
+            microkit_dbg_puts("outer output\n");
             break;
 
         case INNER_INPUT_CH:
@@ -253,13 +253,13 @@ notified(sel4cp_channel ch)
                 volatile struct buffer_descriptor *obd = (void *)(uintptr_t)(OUTER_OUTPUT + (BUFFER_SIZE * outer_output_index));
                 volatile void *opkt = (void *)(uintptr_t)(OUTER_OUTPUT + (BUFFER_SIZE * outer_output_index) + DATA_OFFSET);
                 if (obd->flags == 1) {
-                    sel4cp_dbg_puts("PASS: inner can't pass buffer (no space for outer)\n");
+                    microkit_dbg_puts("PASS: inner can't pass buffer (no space for outer)\n");
                 } else {
                     obd->data_length = bd->data_length;
                     mycpy(opkt, pkt, bd->data_length);
                     obd->flags = 1;
 
-                    sel4cp_notify(OUTER_OUTPUT_CH);
+                    microkit_notify(OUTER_OUTPUT_CH);
 
                     outer_output_index++;
                     if (outer_output_index == BUFFER_MAX) {
@@ -273,11 +273,11 @@ notified(sel4cp_channel ch)
             break;
 
         case INNER_OUTPUT_CH:
-            sel4cp_dbg_puts("inner output\n");
+            microkit_dbg_puts("inner output\n");
             break;
 
         default:
-            sel4cp_dbg_puts("foo: received notification on unexpected channel\n");
+            microkit_dbg_puts("foo: received notification on unexpected channel\n");
             break;
         /* ignore any other channels */
     }

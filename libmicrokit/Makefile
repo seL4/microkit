@@ -54,7 +54,7 @@ else
 	AS := $(TOOLCHAIN)as
 endif
 
-LIBS := libsel4cp.a
+LIBS := libmicrokit.a
 OBJS := main.o crt0.o dbg.o
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S

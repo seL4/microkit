@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 static uint8_t restart_count = 0;
 
@@ -24,40 +24,40 @@ put8(uint8_t x)
         tmp[--i] = decchar(c);
         x /= 10;
     } while (x);
-    sel4cp_dbg_puts(&tmp[i]);
+    microkit_dbg_puts(&tmp[i]);
 }
 
 void
 init(void)
 {
-    sel4cp_dbg_puts("restarter: starting\n");
+    microkit_dbg_puts("restarter: starting\n");
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
 }
 
 seL4_MessageInfo_t
-protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
+protected(microkit_channel ch, microkit_msginfo msginfo)
 {
-    sel4cp_dbg_puts("restarter: received protected message\n");
+    microkit_dbg_puts("restarter: received protected message\n");
 
-    return sel4cp_msginfo_new(0, 0);
+    return microkit_msginfo_new(0, 0);
 }
 
 void
-fault(sel4cp_id id, sel4cp_msginfo msginfo)
+fault(microkit_id id, microkit_msginfo msginfo)
 {
-    sel4cp_dbg_puts("restarter: received fault message for pd: ");
+    microkit_dbg_puts("restarter: received fault message for pd: ");
     put8(id);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
     restart_count++;
     if (restart_count < 10) {
-        sel4cp_pd_restart(id, 0x200000);
-        sel4cp_dbg_puts("restarter: restarted\n");
+        microkit_pd_restart(id, 0x200000);
+        microkit_dbg_puts("restarter: restarted\n");
     } else {
-        sel4cp_pd_stop(id);
-        sel4cp_dbg_puts("restarter: too many restarts - PD stopped\n");
+        microkit_pd_stop(id);
+        microkit_dbg_puts("restarter: too many restarts - PD stopped\n");
     }
 }

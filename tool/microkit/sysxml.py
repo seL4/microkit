@@ -13,8 +13,8 @@ import xml.etree.ElementTree as ET
 
 from typing import Dict, Iterable, Optional, Set, Tuple
 
-from sel4coreplat.util import str_to_bool, UserError
-from sel4coreplat.sel4 import Sel4ArmIrqTrigger
+from microkit.util import str_to_bool, UserError
+from microkit.sel4 import Sel4ArmIrqTrigger
 
 # @ivanv: when we parse mappings, should we warn that settings cached doesn't do anything on RISC-V systems?
 

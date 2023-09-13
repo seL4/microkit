@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v3
         with:
             repository: Ivan-Velickovic/seL4
-            ref: sel4cp-dev
+            ref: microkit-dev
             path: seL4
       - name: Install SDK dependencies (apt)
         run: |
@@ -57,8 +57,8 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86-64
-            path: ./release/sel4cp-sdk-1.2.6.tar.gz
+            name: microkit-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-linux-x86-64
+            path: ./release/microkit-sdk-1.2.6.tar.gz
   build_macos_x86_64:
     name: Build and upload SDK (macOS x86-64)
     runs-on: macos-12
@@ -69,7 +69,7 @@ jobs:
         uses: actions/checkout@v3
         with:
             repository: Ivan-Velickovic/seL4
-            ref: sel4cp-dev
+            ref: microkit-dev
             path: seL4
       - name: Install SDK dependencies
         run: |
@@ -102,8 +102,8 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-x86-64
-            path: ./release/sel4cp-sdk-1.2.6.tar.gz
+            name: microkit-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-x86-64
+            path: ./release/microkit-sdk-1.2.6.tar.gz
   build_macos_aarch64:
     name: Build and upload SDK (macOS AArch64)
     runs-on: macos-12
@@ -114,7 +114,7 @@ jobs:
         uses: actions/checkout@v3
         with:
             repository: Ivan-Velickovic/seL4
-            ref: sel4cp-dev
+            ref: microkit-dev
             path: seL4
       - name: Install SDK dependencies
         run: |
@@ -147,5 +147,5 @@ jobs:
       - name: Archive SDK
         uses: actions/upload-artifact@v3
         with:
-            name: sel4cp-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-aarch64
-            path: ./release/sel4cp-sdk-1.2.6.tar.gz
+            name: microkit-sdk-${{ github.ref_name }}-${{ steps.vars.outputs.sha_short }}-macos-aarch64
+            path: ./release/microkit-sdk-1.2.6.tar.gz

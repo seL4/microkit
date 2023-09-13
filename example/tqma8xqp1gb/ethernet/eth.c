@@ -5,7 +5,7 @@
  */
 #include <stdbool.h>
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 #define OUTPUT_CH 1 /* output from this PD -- becomes input for peer */
 #define INPUT_CH 2 /* intput to this PD -- comes from peer output */
@@ -302,14 +302,14 @@ dump_reg(const char *name, uint32_t val)
             val >>= 4;
         }
     }
-    sel4cp_dbg_puts(name);
+    microkit_dbg_puts(name);
     // unsigned int l = 10 - slen(name);
     // for (unsigned i = 0; i < l; i++) {
-    //     sel4cp_dbg_putc(' ');
+    //     microkit_dbg_putc(' ');
     // }
-    sel4cp_dbg_puts(": ");
-    sel4cp_dbg_puts(buffer);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts(": ");
+    microkit_dbg_puts(buffer);
+    microkit_dbg_puts("\n");
 }
 
 static void
@@ -335,7 +335,7 @@ puthex64(uint64_t x)
     buffer[16] = hexchar((x >> 4) & 0xf);
     buffer[17] = hexchar(x & 0xf);
     buffer[18] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 static void
@@ -353,7 +353,7 @@ puthex32(uint32_t x)
     buffer[8] = hexchar((x >> 4) & 0xf);
     buffer[9] = hexchar(x & 0xf);
     buffer[10] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 
@@ -368,7 +368,7 @@ puthex16(uint16_t x)
     buffer[4] = hexchar((x >> 4) & 0xf);
     buffer[5] = hexchar(x & 0xf);
     buffer[6] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 static void
@@ -382,7 +382,7 @@ put8(uint8_t x)
         tmp[--i] = decchar(c);
         x /= 10;
     } while (x);
-    sel4cp_dbg_puts(&tmp[i]);
+    microkit_dbg_puts(&tmp[i]);
 }
 
 static void
@@ -495,10 +495,10 @@ static void
 dump_mac(uint8_t *mac)
 {
     for (unsigned i = 0; i < 6; i++) {
-        sel4cp_dbg_putc(hexchar((mac[i] >> 4) & 0xf));
-        sel4cp_dbg_putc(hexchar(mac[i] & 0xf));
+        microkit_dbg_putc(hexchar((mac[i] >> 4) & 0xf));
+        microkit_dbg_putc(hexchar(mac[i] & 0xf));
         if (i < 5) {
-            sel4cp_dbg_putc(':');
+            microkit_dbg_putc(':');
         }
     }
 }
@@ -509,7 +509,7 @@ dump_ip(uint8_t *ip)
     for (unsigned i = 0; i < 4; i++) {
         put8(ip[i]);
         if (i < 3) {
-            sel4cp_dbg_putc('.');
+            microkit_dbg_putc('.');
         }
     }
 }
@@ -520,22 +520,22 @@ dump_hex(const uint8_t *d, unsigned int length)
     unsigned int i = 0;
     while (length) {
         puthex16(i);
-        sel4cp_dbg_puts(": ");
+        microkit_dbg_puts(": ");
         while (length) {
-            sel4cp_dbg_putc(hexchar((d[i] >> 4) & 0xf));
-            sel4cp_dbg_putc(hexchar(d[i] & 0xf));
+            microkit_dbg_putc(hexchar((d[i] >> 4) & 0xf));
+            microkit_dbg_putc(hexchar(d[i] & 0xf));
             length--;
             i++;
             if (i % 16 == 0) {
-                sel4cp_dbg_putc('\n');
+                microkit_dbg_putc('\n');
                 break;
             } else {
-                sel4cp_dbg_putc(' ');
+                microkit_dbg_putc(' ');
             }
         }
     }
     if (i % 16) {
-        sel4cp_dbg_putc('\n');
+        microkit_dbg_putc('\n');
     }
 }
 
@@ -586,22 +586,22 @@ send_frame(uint8_t *d, unsigned int length)
     flags = tbd[tbd_index].flags;
 
     if (flags & (1 << 15)) {
-        sel4cp_dbg_puts(sel4cp_name);
-        sel4cp_dbg_puts(": ran out of tx buffers!!\n");
+        microkit_dbg_puts(microkit_name);
+        microkit_dbg_puts(": ran out of tx buffers!!\n");
         return;
     }
 
 #if 0
-    sel4cp_dbg_puts(sel4cp_name);
-    sel4cp_dbg_puts(": sending -- tbd_index: ");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(": sending -- tbd_index: ");
     puthex16(tbd_index);
-    sel4cp_dbg_puts(" - ");
+    microkit_dbg_puts(" - ");
     {
         uint64_t t;
         asm volatile("mrs %0, cntpct_el0" : "=r"(t));
         puthex64(t);
     }
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 #endif
 
     packet = (void *)(uintptr_t)(packet_buffer_vaddr + ((RBD_COUNT + tbd_index) * PACKET_BUFFER_SIZE));
@@ -637,9 +637,9 @@ static void
 eth_setup(void)
 {
     get_mac_addr(eth, mac);
-    sel4cp_dbg_puts("MAC: ");
+    microkit_dbg_puts("MAC: ");
     dump_mac(mac);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 
     rbd = (void *)ring_buffer_vaddr;
     tbd = (void *)(ring_buffer_vaddr + (sizeof(struct rbd) * RBD_COUNT));
@@ -649,11 +649,11 @@ eth_setup(void)
         rbd[i].flags = (1UL << 15);
         rbd[i].addr = packet_buffer_paddr + (i * PACKET_BUFFER_SIZE);
 #if 0
-        sel4cp_dbg_puts("ETH: ");
-        sel4cp_dbg_puts(sel4cp_name);
-        sel4cp_dbg_puts("  rbd[i].addr ");
+        microkit_dbg_puts("ETH: ");
+        microkit_dbg_puts(microkit_name);
+        microkit_dbg_puts("  rbd[i].addr ");
         puthex32(rbd[i].addr);
-        sel4cp_dbg_puts("\n");
+        microkit_dbg_puts("\n");
 #endif
     }
 
@@ -662,11 +662,11 @@ eth_setup(void)
         tbd[i].flags = 0;
         tbd[i].addr = packet_buffer_paddr + ((RBD_COUNT + i) * PACKET_BUFFER_SIZE);
 #if 0
-        sel4cp_dbg_puts("ETH: ");
-        sel4cp_dbg_puts(sel4cp_name);
-        sel4cp_dbg_puts("  tbd[i].addr ");
+        microkit_dbg_puts("ETH: ");
+        microkit_dbg_puts(microkit_name);
+        microkit_dbg_puts("  tbd[i].addr ");
         puthex32(rbd[i].addr);
-        sel4cp_dbg_puts("\n");
+        microkit_dbg_puts("\n");
 #endif
     }
 
@@ -678,9 +678,9 @@ eth_setup(void)
 
     /* Set RDSR */
     get_mac_addr(eth, mac);
-    sel4cp_dbg_puts("RING BUFFER ADDR=: ");
+    microkit_dbg_puts("RING BUFFER ADDR=: ");
     puthex64((uintptr_t)ring_buffer_paddr);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 
     eth->erdsr = ring_buffer_paddr;
     eth->etdsr = ring_buffer_paddr + (sizeof(struct rbd) * RBD_COUNT);
@@ -698,12 +698,12 @@ eth_setup(void)
 
     eth->rdar = (1 << 24);
 
-    sel4cp_dbg_puts(sel4cp_name);
-    sel4cp_dbg_puts(": init complete -- waiting for interrupt\n");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(": init complete -- waiting for interrupt\n");
 }
 
 static void
-handle_rx(sel4cp_channel ch, volatile struct regs *eth)
+handle_rx(microkit_channel ch, volatile struct regs *eth)
 {
     uint16_t flags;
     int r;
@@ -718,9 +718,9 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
         packet_length = rbd[rbd_index].data_length;
 
 //        uint64_t c = get_sys_counter();
-//        sel4cp_dbg_puts("counter: ");
+//        microkit_dbg_puts("counter: ");
 //        puthex64(c);
-//        sel4cp_dbg_puts("\n");
+//        microkit_dbg_puts("\n");
 
         if ((flags & (1 << 15))) {
             /* buffer is empty, can stop */
@@ -729,33 +729,33 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
 
 
 #if 0
-        sel4cp_dbg_puts("rbd_index: ");
+        microkit_dbg_puts("rbd_index: ");
         puthex16(rbd_index);
         dump_reg("  flags", flags);
-        sel4cp_dbg_puts(" -- length ");
+        microkit_dbg_puts(" -- length ");
         puthex16(rbd[rbd_index].data_length);
-        sel4cp_dbg_puts("\n");
+        microkit_dbg_puts("\n");
 #endif
 #if 0
-        if (mycmp(sel4cp_name, "eth_inner") == 0) {
-            sel4cp_dbg_puts("XX BUFFER\n");
+        if (mycmp(microkit_name, "eth_inner") == 0) {
+            microkit_dbg_puts("XX BUFFER\n");
             for (unsigned xx=0; xx < 16; xx++) {
-                sel4cp_dbg_puts("XX rbd_index: ");
+                microkit_dbg_puts("XX rbd_index: ");
                 puthex16(xx);
                 dump_reg("  flags", rbd[xx].flags);
-                sel4cp_dbg_puts(" -- length ");
+                microkit_dbg_puts(" -- length ");
                 puthex16(rbd[xx].data_length);
-                sel4cp_dbg_puts("\n");
+                microkit_dbg_puts("\n");
             }
         }
 #endif
 
         if (packet_length == 0) {
-            sel4cp_dbg_puts("ETH: ");
-            sel4cp_dbg_puts(sel4cp_name);
-            sel4cp_dbg_puts(" UNEXPECTED ZERO LENGTH RX PACKET rbd_index: ");
+            microkit_dbg_puts("ETH: ");
+            microkit_dbg_puts(microkit_name);
+            microkit_dbg_puts(" UNEXPECTED ZERO LENGTH RX PACKET rbd_index: ");
             puthex16(rbd_index);
-            sel4cp_dbg_puts("\n");
+            microkit_dbg_puts("\n");
             for (;;) { }
             goto make_avail;
         }
@@ -764,67 +764,67 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
         packet = (void *)(packet_buffer_vaddr + (rbd_index * PACKET_BUFFER_SIZE));
         r = seL4_ARM_VSpace_Invalidate_Data(3, (uintptr_t)packet, ((uintptr_t)packet) + packet_length);
         if (r != 0) {
-            sel4cp_dbg_puts("ERR: I\n");
-            sel4cp_dbg_puts("ETH: ");
-            sel4cp_dbg_puts(sel4cp_name);
-            sel4cp_dbg_puts("  --  invalidate with: packet ");
+            microkit_dbg_puts("ERR: I\n");
+            microkit_dbg_puts("ETH: ");
+            microkit_dbg_puts(microkit_name);
+            microkit_dbg_puts("  --  invalidate with: packet ");
             puthex64((uint64_t)packet);
-            sel4cp_dbg_puts("    length: ");
+            microkit_dbg_puts("    length: ");
             puthex16(packet_length);
-            sel4cp_dbg_puts("   rbd_index: ");
+            microkit_dbg_puts("   rbd_index: ");
             puthex16(rbd_index);
-            sel4cp_dbg_puts("\n");
+            microkit_dbg_puts("\n");
             for (;;) {
 
             }
         }
 
 #if 1
-        if (mycmp(sel4cp_name, "eth_outer") == 0) {
+        if (mycmp(microkit_name, "eth_outer") == 0) {
                 struct eth_header *hdr = packet;
 
                 if (mac_match(hdr->dest_mac, mac) || mac_match(hdr->dest_mac, broadcast_mac)) {
                     pass_through = false;
         #if 0
-                    sel4cp_dbg_puts("DEST MAC: ");
+                    microkit_dbg_puts("DEST MAC: ");
                     dump_mac(hdr->dest_mac);
-                    sel4cp_dbg_puts("\n");
-                    sel4cp_dbg_puts("SRC MAC: ");
+                    microkit_dbg_puts("\n");
+                    microkit_dbg_puts("SRC MAC: ");
                     dump_mac(hdr->src_mac);
-                    sel4cp_dbg_puts("\n");
-                    sel4cp_dbg_puts("Ethertype: ");
+                    microkit_dbg_puts("\n");
+                    microkit_dbg_puts("Ethertype: ");
                     puthex16(swap16(hdr->ethertype));
-                    sel4cp_dbg_puts("  (");
-                    sel4cp_dbg_puts(ethertype_to_str(swap16(hdr->ethertype)));
-                    sel4cp_dbg_puts(")\n");
+                    microkit_dbg_puts("  (");
+                    microkit_dbg_puts(ethertype_to_str(swap16(hdr->ethertype)));
+                    microkit_dbg_puts(")\n");
                     if (mac_match(hdr->dest_mac, mac)) {
-                        sel4cp_dbg_puts("exact match\n");
+                        microkit_dbg_puts("exact match\n");
                     }
 
                     if (mac_match(hdr->dest_mac, broadcast_mac)) {
-                        sel4cp_dbg_puts("broadcast match\n");
+                        microkit_dbg_puts("broadcast match\n");
                     }
         #endif
                     if (swap16(hdr->ethertype) == ETHERTYPE_ARP) {
                         struct arp *a = (struct arp *)&hdr->payload[0];
         #if 0
-                        sel4cp_dbg_puts("   arp.htype: ");
+                        microkit_dbg_puts("   arp.htype: ");
                         puthex16(swap16(a->htype));
-                        sel4cp_dbg_puts("\n   arp.ptype: ");
+                        microkit_dbg_puts("\n   arp.ptype: ");
                         puthex16(swap16(a->ptype));
-                        sel4cp_dbg_puts("\n   arp.plen: ");
+                        microkit_dbg_puts("\n   arp.plen: ");
                         put8(a->plen);
-                        sel4cp_dbg_puts("\n   arp.hlen: ");
+                        microkit_dbg_puts("\n   arp.hlen: ");
                         put8(a->hlen);
-                        sel4cp_dbg_puts("\n   arp.spa: ");
+                        microkit_dbg_puts("\n   arp.spa: ");
                         dump_ip(a->spa);
-                        sel4cp_dbg_puts("\n   arp.tpa: ");
+                        microkit_dbg_puts("\n   arp.tpa: ");
                         dump_ip(a->tpa);
-                        sel4cp_dbg_puts("\n   arp.sha: ");
+                        microkit_dbg_puts("\n   arp.sha: ");
                         dump_mac(a->sha);
-                        sel4cp_dbg_puts("\n   arp.tha: ");
+                        microkit_dbg_puts("\n   arp.tha: ");
                         dump_mac(a->tha);
-                        sel4cp_dbg_puts("\n");
+                        microkit_dbg_puts("\n");
         #endif
                         if (
                             (swap16(a->htype) == 1) &&
@@ -834,7 +834,7 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
                             (ip_match(a->tpa, my_ip))
                         ) {
         #if 0
-                            sel4cp_dbg_puts("HELP: ARP packet we should reply to\n");
+                            microkit_dbg_puts("HELP: ARP packet we should reply to\n");
         #endif
                             mycpy(temp_packet, packet,  rbd[rbd_index].data_length);
 
@@ -860,39 +860,39 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
                         uint8_t header_len = (i->ver_ihl & 0xf) * 4;
         #if 0
                         uint8_t version = i->ver_ihl >> 4;
-                        sel4cp_dbg_puts("IP\n");
-                        sel4cp_dbg_puts("   ip.version: ");
+                        microkit_dbg_puts("IP\n");
+                        microkit_dbg_puts("   ip.version: ");
                         put8(version);
-                        sel4cp_dbg_puts("   ip.header_length: ");
+                        microkit_dbg_puts("   ip.header_length: ");
                         put8(header_len);
-                        sel4cp_dbg_puts("   ip.protocol: ");
+                        microkit_dbg_puts("   ip.protocol: ");
                         put8(i->protocol);
-                        sel4cp_dbg_puts("\n   ip.tos: ");
+                        microkit_dbg_puts("\n   ip.tos: ");
                         put8(i->tos);
-                        sel4cp_dbg_puts("\n   ip.len: ");
+                        microkit_dbg_puts("\n   ip.len: ");
                         puthex16(swap16(i->len));
-                        sel4cp_dbg_puts("\n   ip.src: ");
+                        microkit_dbg_puts("\n   ip.src: ");
                         dump_ip(i->source_address);
-                        sel4cp_dbg_puts("\n   ip.dst: ");
+                        microkit_dbg_puts("\n   ip.dst: ");
                         dump_ip(i->dest_address);
-                        sel4cp_dbg_puts("\n");
+                        microkit_dbg_puts("\n");
         #endif
                         if (i->protocol == 1) {
                             struct icmp *icmp = (struct icmp *)(&hdr->payload[header_len]);
         #if 0
-                            sel4cp_dbg_puts("ICMP\n");
-                            sel4cp_dbg_puts("   icmp.type: ");
+                            microkit_dbg_puts("ICMP\n");
+                            microkit_dbg_puts("   icmp.type: ");
                             put8(icmp->type);
-                            sel4cp_dbg_puts("   icmp.code: ");
+                            microkit_dbg_puts("   icmp.code: ");
                             put8(icmp->code);
-                            sel4cp_dbg_puts("   icmp.rest_of_header: ");
+                            microkit_dbg_puts("   icmp.rest_of_header: ");
                             puthex16(swap16(icmp->rest_of_header));
-                            sel4cp_dbg_puts("\n");
+                            microkit_dbg_puts("\n");
         #endif
 
                             if (icmp->type == 8) {
         #if 0
-                                sel4cp_dbg_puts("ICMP ECHO REQUEST\n");
+                                microkit_dbg_puts("ICMP ECHO REQUEST\n");
         #endif
                                 mycpy(temp_packet, packet,  rbd[rbd_index].data_length);
 
@@ -913,9 +913,9 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
                                 snd_icmp->checksum = 0;
                                 snd_icmp->checksum = cksum((uint8_t *) snd_icmp, swap16(i->len) - header_len);//sizeof(struct icmp));
         #if 0
-                                sel4cp_dbg_puts("CHECKSUM: ");
+                                microkit_dbg_puts("CHECKSUM: ");
                                 puthex16(snd_icmp->checksum);
-                                sel4cp_dbg_puts("\n");
+                                microkit_dbg_puts("\n");
         #endif
                                 send_frame(temp_packet, rbd[rbd_index].data_length);
                             }
@@ -924,7 +924,7 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
 
                     }
         #if 0
-                    sel4cp_dbg_puts("\n");
+                    microkit_dbg_puts("\n");
         #endif
                 }
         }
@@ -935,9 +935,9 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
             volatile struct buffer_descriptor *bd = (void *)(uintptr_t)(OUTPUT_BUFFER + (BUFFER_SIZE * output_index));
             volatile void *output_packet = (void *)(uintptr_t)(OUTPUT_BUFFER + (BUFFER_SIZE * output_index) + DATA_OFFSET);
             if (bd->flags == 1) {
-                sel4cp_dbg_puts("ETH: ");
-                sel4cp_dbg_puts(sel4cp_name);
-                sel4cp_dbg_puts("dropping packet, no space in channel buffer\n");
+                microkit_dbg_puts("ETH: ");
+                microkit_dbg_puts(microkit_name);
+                microkit_dbg_puts("dropping packet, no space in channel buffer\n");
             } else {
                 bd->data_length = rbd[rbd_index].data_length - 4; /* For the frame check sequence */
                 mycpy((void *)output_packet, packet, bd->data_length);
@@ -946,7 +946,7 @@ handle_rx(sel4cp_channel ch, volatile struct regs *eth)
                 if (output_index == BUFFER_MAX) {
                     output_index = 0;
                 }
-                sel4cp_notify(OUTPUT_CH);
+                microkit_notify(OUTPUT_CH);
             }
         }
 
@@ -969,7 +969,7 @@ make_avail:
 }
 
 static void
-handle_eth(sel4cp_channel ch, volatile struct regs *eth)
+handle_eth(microkit_channel ch, volatile struct regs *eth)
 {
     uint32_t eir = eth->eir;
     eth->eir = eir;
@@ -1001,7 +1001,7 @@ handle_eth(sel4cp_channel ch, volatile struct regs *eth)
     if (eir & (1 << 27)) {
     }
 
-    sel4cp_irq_ack(ch);
+    microkit_irq_ack(ch);
 }
 
 
@@ -1010,21 +1010,21 @@ static void example_constructor(void) __attribute__ ((constructor));
 static void
 example_constructor(void)
 {
-    sel4cp_dbg_puts("Example constructor\n");
+    microkit_dbg_puts("Example constructor\n");
 }
 
 
 void
 init(void)
 {
-    sel4cp_dbg_puts(sel4cp_name);
-    sel4cp_dbg_puts(": elf PD init function running\n");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(": elf PD init function running\n");
 
     eth_setup();
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
     switch (ch) {
 
@@ -1034,9 +1034,9 @@ notified(sel4cp_channel ch)
 
         case INPUT_CH:
 #if 0
-            sel4cp_dbg_puts("ETH: ");
-            sel4cp_dbg_puts(sel4cp_name);
-            sel4cp_dbg_puts("  got input notification\n");
+            microkit_dbg_puts("ETH: ");
+            microkit_dbg_puts(microkit_name);
+            microkit_dbg_puts("  got input notification\n");
 #endif
             for (;;) {
                 volatile struct buffer_descriptor *bd = (void *)(uintptr_t)(INPUT_BUFFER + (BUFFER_SIZE * input_index));
@@ -1045,11 +1045,11 @@ notified(sel4cp_channel ch)
                     break;
                 }
 #if 0
-                sel4cp_dbg_puts("ETH: packet: ");
+                microkit_dbg_puts("ETH: packet: ");
                 puthex16(input_index);
-                sel4cp_dbg_puts("packet length: ");
+                microkit_dbg_puts("packet length: ");
                 puthex16(bd->data_length);
-                sel4cp_dbg_puts("\n");
+                microkit_dbg_puts("\n");
 #endif
                 send_frame((void*)pkt, bd->data_length);
                 bd->flags = 0;
@@ -1063,14 +1063,14 @@ notified(sel4cp_channel ch)
 
         case OUTPUT_CH:
 #if 0
-            sel4cp_dbg_puts("ETH: ");
-            sel4cp_dbg_puts(sel4cp_name);
-            sel4cp_dbg_puts("got output ack (is this needed?)\n");
+            microkit_dbg_puts("ETH: ");
+            microkit_dbg_puts(microkit_name);
+            microkit_dbg_puts("got output ack (is this needed?)\n");
 #endif
             break;
 
         default:
-            sel4cp_dbg_puts("hello: received notification on unexpected channel\n");
+            microkit_dbg_puts("hello: received notification on unexpected channel\n");
             dump_reg("CH", ch);
             break;
     }

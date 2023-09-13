@@ -1,4 +1,4 @@
-# The purpose of this script is to test the basic functionality of seL4CP and
+# The purpose of this script is to test the basic functionality of Microkit and
 # make sure that we have not broken anything drastic while making changes. Most
 # of the time I have (accidentally) made erroneous changes, they have affected
 # the tool (which is not too platform specific) and therefore while we are only
@@ -17,7 +17,7 @@ from json import load as json_load
 from typing import Dict
 
 CWD_DIR = getcwd()
-DEFAULT_SDK_PATH = CWD_DIR + "/release/sel4cp-sdk-1.2.6"
+DEFAULT_SDK_PATH = CWD_DIR + "/release/microkit-sdk-1.2.6"
 DEFAULT_BUILD_DIR = CWD_DIR + "/test_build"
 OPENSBI_PATH = CWD_DIR + "/opensbi"
 LOG_FILE = CWD_DIR + "test_log"
@@ -76,7 +76,7 @@ def run_test(test_path: str, test_name: str, sdk_path: str, build_dir: str, conf
     # TODO: properly output stuff to log file
     print(f"BUILD TEST: {test_identifier}")
     sel4_arch = config_options["SEL4_ARCH"]
-    cmd = f"make -C {test_path} IMAGE_NAME=loader.img ARCH={sel4_arch} BUILD_DIR={test_build_dir} SEL4CP_SDK={sdk_path} SEL4CP_CONFIG={config} SEL4CP_BOARD={board}"
+    cmd = f"make -C {test_path} IMAGE_NAME=loader.img ARCH={sel4_arch} BUILD_DIR={test_build_dir} MICROKIT_SDK={sdk_path} MICROKIT_CONFIG={config} MICROKIT_BOARD={board}"
     print(f"BUILD COMMAND: {cmd}")
     # On RISC-V platforms (32-bit or 64-bit) we build an OpenSBI to run the image, the Makefile's expect a path to
     # the OpenSBI source.

@@ -8,8 +8,8 @@ from enum import Enum, IntEnum
 from typing import List, Optional, Set, Tuple, Dict
 from struct import pack, Struct
 
-from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
-from sel4coreplat.elf import ElfFile
+from microkit.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
+from microkit.elf import ElfFile
 
 
 class KernelArch(IntEnum):

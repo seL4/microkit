@@ -8,9 +8,9 @@ from struct import pack
 
 from typing import Dict, List, Optional, Tuple, Union
 
-from sel4coreplat.elf import ElfFile
-from sel4coreplat.util import kb, mb, round_up, MemoryRegion
-from sel4coreplat.sel4 import KernelConfig, KernelArch
+from microkit.elf import ElfFile
+from microkit.util import kb, mb, round_up, MemoryRegion
+from microkit.sel4 import KernelConfig, KernelArch
 
 AARCH64_PAGE_TABLE_SIZE = 4096
 

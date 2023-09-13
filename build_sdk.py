@@ -21,12 +21,12 @@ import platform as host_platform
 
 from typing import Dict, Union, List, Tuple
 
-NAME = "sel4cp"
+NAME = "microkit"
 VERSION = "1.2.6"
 
 ENV_BIN_DIR = Path(executable).parent
 
-SEL4CP_EPOCH = 1616367257
+MICROKIT_EPOCH = 1616367257
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
@@ -347,7 +347,7 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
-    # For RISC-V the link address for the seL4CP loader is dependent on the
+    # For RISC-V the link address for the Microkit loader is dependent on the
     # previous loader. Currently for RISC-V platforms we use OpenSBI which
     # is placed at the start of memory and since we use FW_PAYLOAD, it places
     # the loader at fixed location of 2MiB after the start of memory. If you
@@ -490,10 +490,10 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
     """
     # Force uid/gid
     tarinfo.uid = tarinfo.gid = 0
-    tarinfo.uname = tarinfo.gname = "sel4cp"
+    tarinfo.uname = tarinfo.gname = "microkit"
     # This is unlikely to be set, but force it anyway
     tarinfo.pax_headers = {}
-    tarinfo.mtime = SEL4CP_EPOCH
+    tarinfo.mtime = MICROKIT_EPOCH
     assert tarinfo.isfile() or tarinfo.isdir()
     # Set the permissions properly
     if tarinfo.isdir():
@@ -538,7 +538,7 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
     )
     assert r == 0
 
-    tool_output = f"./tool/build/{target_triple}/release/install/sel4cp"
+    tool_output = f"./tool/build/{target_triple}/release/install/microkit"
 
     r = system(f"strip {tool_output}")
     assert r == 0
@@ -673,7 +673,7 @@ def build_elf_component(
 
 
 def build_doc(root_dir):
-    output = root_dir / "doc" / "sel4cp_user_manual.pdf"
+    output = root_dir / "doc" / "microkit_user_manual.pdf"
 
     r = system(f'pandoc docs/manual.md -o {output}')
     assert r == 0
@@ -716,8 +716,8 @@ def build_lib_component(
     copy(lib, dest)
 
 
-    link_script = Path(component_name) / "sel4cp.ld"
-    dest = lib_dir / "sel4cp.ld"
+    link_script = Path(component_name) / "microkit.ld"
+    dest = lib_dir / "microkit.ld"
     dest.unlink(missing_ok=True)
     copy(link_script, dest)
 
@@ -763,8 +763,8 @@ def build_sel4_config_component(
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
-    parser.add_argument("--tool-rebuild", action="store_true", default=False, help="Force a rebuild of the seL4CP tool")
-    parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Target triple of the seL4CP tool")
+    parser.add_argument("--tool-rebuild", action="store_true", default=False, help="Force a rebuild of the Microkit tool")
+    parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Target triple of the Microkit tool")
     parser.add_argument("--filter-boards", help="List of boards to build SDK for (comma separated)")
     parser.add_argument("--no-archive", action="store_true",
         help="Disable archiving, useful when you are impatient like myself and don't want to wait for the SDK to be archived again")
@@ -812,7 +812,7 @@ def main() -> None:
 
     copy(Path("LICENSE"), root_dir)
 
-    tool_target = root_dir / "bin" / "sel4cp"
+    tool_target = root_dir / "bin" / "microkit"
 
     if not tool_target.exists() or args.tool_rebuild:
         test_tool()
@@ -846,7 +846,7 @@ def main() -> None:
                 loader_defines.append(("PA_SIZE_BITS", pa_size_bits))
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
-            build_lib_component("libsel4cp", root_dir, build_dir, board, config)
+            build_lib_component("libmicrokit", root_dir, build_dir, board, config)
         # Setup the examples
         for example, example_path in board.examples.items():
             include_dir = root_dir / "board" / board.name / "example" / example
