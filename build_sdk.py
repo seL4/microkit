@@ -359,7 +359,7 @@ def main() -> None:
     for dr in dir_structure:
         dr.mkdir(exist_ok=True, parents=True)
 
-    copy(Path("LICENSE"), root_dir)
+    copy(Path("LICENSE.md"), root_dir)
 
     tool_target = root_dir / "bin" / "microkit"
 
