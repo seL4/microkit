@@ -1,27 +1,27 @@
-# seL4 Core Platform
+# seL4 Microkit
 
-The purpose of the seL4 Core Platform (sel4cp) is to enable system designers to create static software systems based on the seL4 microkernel.
+The purpose of the seL4 Microkit is to enable system designers to create static software systems based on the seL4 microkernel.
 
-The seL4 Core Platform consists of three parts:
+The seL4 Microkit consists of three parts:
 
-   * seL4 Core Platform Library
-   * seL4 Core Platform initial task
-   * seL4 Core Platform tool
+   * Microkit Library
+   * Microkit initial task
+   * Microkit tool
 
-The seL4 Core Platform is distributed as a software development kit (SDK).
+The Microkit is distributed as a software development kit (SDK).
 
-This repository is the source for the sel4cp SDK.
+This repository is the source for the Microkit SDK.
 
-If you are *developing* sel4cp itself this is the repo you want!
+If you are *developing* Microkit itself this is the repo you want!
 
-If you are a system designer and want to *use* the sel4cp SDK please download a pre-built SDK.
+If you are a system designer and want to *use* the Microkit SDK please download a pre-built SDK.
 Please see the manual in the SDK for instructions on using the SDK itself.
 
-The remainder of this README is for sel4cp developers.
+The remainder of this README is for Microkit developers.
 
 ## Developer system requirements
 
-Development of sel4cp has primarily been performed on Ubuntu 18.04 LTS (x86_64).
+Development of Microkit has primarily been performed on Ubuntu 18.04 LTS (x86_64).
 
 This section attempts to list the packages or external development tools which are required during development.
 At this stage it may be incomplete.
@@ -61,20 +61,20 @@ The specific version used for development is the x86_64-aarch64-none-elf version
 
 https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz?revision=79f65c42-1a1b-43f2-acb7-a795c8427085&hash=61BBFB526E785D234C5D8718D9BA8E61
 
-Note: There are no plans to support development of sel4cp on any platforms other than Linux x86_64.
+Note: There are no plans to support development of Microkit on any platforms other than Linux x86_64.
 
 ## seL4 Version
 
 The SDK includes a binary of the seL4 kernel.
 During the SDK build process the kernel is build from source.
 
-At this point in time there are some minor changes to the seL4 kernel required for seL4 Core Platform.
+At this point in time there are some minor changes to the seL4 kernel required for Microkit.
 
 Please clone seL4 from:
 
-    git@github.com:BreakawayConsulting/seL4.git
+    https://github.com/seL4/seL4.git
 
-The correct branch to use is `sel4cp-core-support`.
+The correct branch to use is `microkit`.
 
 Testing has been performed using commit `92f0f3ab28f00c97851512216c855f4180534a60`.
 
@@ -89,37 +89,37 @@ Please see the SDK user manual for documentation on the SDK itself.
 
 When developing the SDK it is helpful to be able to build examples system quickly for testing purposes.
 The `dev_build.py` script can be used for this purpose.
-This script is not included in the SDK and is just meant for use of use of sel4cp developers.
+This script is not included in the SDK and is just meant for use of use of Microkit developers.
 
 By default `dev_build.py` will use the example source directly from the source directory.
 In some cases you may want to test that the example source has been correctly included into the SDK.
 To test this pass `--example-from-sdk` to the build script.
 
-By default `dev_build.py` will use the the sel4cp tool directory from source (in `tool/sel4coreplat`).
-However, in some cases it is desirable to test the sel4cp tool built into the SDK.
+By default `dev_build.py` will use the the Microkit tool directory from source (in `tool/microkit`).
+However, in some cases it is desirable to test the Microkit tool built into the SDK.
 In this case pass `--tool-from-sdk` to use the tool that is built into the SDK.
 
 Finally, by default the `dev_build.py` script relies on the default Makefile dependecy resolution.
 However, in some cases it is useful to force a rebuild while doing SDK development.
-For example, the `Makefile` can't know about the state of the sel4cp tool source code.
+For example, the `Makefile` can't know about the state of the Microkit tool source code.
 To support this a `--rebuild` option is provided.
 
 ## SDK Layout
 
 The SDK is delivered as a `tar.gz` file.
 
-The SDK top-level directory is `sel4cp-sdk-$VERSION`.
+The SDK top-level directory is `microkit-sdk-$VERSION`.
 
 The directory layout underneath the top-level directory is:
 
 ```
 bin/
-bin/sel4cp
+bin/microkit
 bsp/$board/$config/include/
-bsp/$board/$config/include/sel4cp.h
+bsp/$board/$config/include/microkit.h
 bsp/$board/$config/lib/
-bsp/$board/$config/lib/libsel4cp.a
-bsp/$board/$config/lib/sel4cp.ld
+bsp/$board/$config/lib/libmicrokit.a
+bsp/$board/$config/lib/microkit.ld
 bsp/$board/$config/elf
 bsp/$board/$config/elf/loader.elf
 bsp/$board/$config/elf/kernel.elf

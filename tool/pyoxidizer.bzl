@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# PyOxidizer configuration file for generation sel4cp tool
+# PyOxidizer configuration file for generation Microkit tool
 def make_exe():
     dist = default_python_distribution()
 
@@ -16,10 +16,10 @@ def make_exe():
 
     # Configure the config
     python_config = dist.make_python_interpreter_config()
-    python_config.run_module = "sel4coreplat"
+    python_config.run_module = "microkit"
 
-    exe = dist.to_python_executable(name="sel4cp", packaging_policy=policy, config=python_config)
-    resources = exe.read_package_root(path="tool", packages=["sel4coreplat"])
+    exe = dist.to_python_executable(name="microkit", packaging_policy=policy, config=python_config)
+    resources = exe.read_package_root(path="tool", packages=["microkit"])
     exe.add_python_resources(resources)
 
     return exe

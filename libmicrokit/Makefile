@@ -14,7 +14,7 @@ endif
 TOOLCHAIN := aarch64-none-elf-
 CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include
 
-LIBS := libsel4cp.a
+LIBS := libmicrokit.a
 OBJS := main.o dbg.o
 OTHER_OBJS :=  crt0.o
 

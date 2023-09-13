@@ -10,7 +10,7 @@
 #define __thread
 #include <sel4/sel4.h>
 
-#include <sel4cp.h>
+#include <microkit.h>
 
 #define INPUT_CAP 1
 #define REPLY_CAP 4
@@ -20,7 +20,7 @@
 char _stack[4096]  __attribute__((__aligned__(16)));
 
 bool passive;
-char sel4cp_name[16];
+char microkit_name[16];
 bool have_signal = false;
 seL4_CPtr signal;
 seL4_MessageInfo_t signal_msg;
@@ -32,7 +32,7 @@ seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 extern const void (*const __init_array_start []) (void);
 extern const void (*const __init_array_end []) (void);
 
-__attribute__((weak)) sel4cp_msginfo protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
+__attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }

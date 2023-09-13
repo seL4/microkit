@@ -8,8 +8,8 @@ from enum import IntEnum
 from typing import List, Optional, Set, Tuple
 from struct import pack, Struct
 
-from sel4coreplat.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
-from sel4coreplat.elf import ElfFile
+from microkit.util import MemoryRegion, DisjointMemoryRegion, UserError, lsb, round_down, round_up
+from microkit.elf import ElfFile
 
 
 SLOT_BITS = 5

@@ -3,13 +3,13 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-#include <sel4cp.h>
+#include <microkit.h>
 
 #define __thread
 #include <sel4/sel4.h>
 
 void
-sel4cp_dbg_putc(int c)
+microkit_dbg_putc(int c)
 {
 #if defined(CONFIG_DEBUG_BUILD)
     seL4_DebugPutChar(c);
@@ -19,10 +19,10 @@ sel4cp_dbg_putc(int c)
 
 
 void
-sel4cp_dbg_puts(const char *s)
+microkit_dbg_puts(const char *s)
 {
     while (*s) {
-        sel4cp_dbg_putc(*s);
+        microkit_dbg_putc(*s);
         s++;
     }
 }
@@ -31,11 +31,11 @@ sel4cp_dbg_puts(const char *s)
 void
 __assert_fail(const char  *str, const char *file, int line, const char *function)
 {
-    sel4cp_dbg_puts("assert failed: ");
-    sel4cp_dbg_puts(str);
-    sel4cp_dbg_puts(" ");
-    sel4cp_dbg_puts(file);
-    sel4cp_dbg_puts(" ");
-    sel4cp_dbg_puts(function);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("assert failed: ");
+    microkit_dbg_puts(str);
+    microkit_dbg_puts(" ");
+    microkit_dbg_puts(file);
+    microkit_dbg_puts(" ");
+    microkit_dbg_puts(function);
+    microkit_dbg_puts("\n");
 }
