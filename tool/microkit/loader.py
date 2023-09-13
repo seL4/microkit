@@ -8,8 +8,8 @@ from struct import pack
 
 from typing import Dict, List, Optional, Tuple, Union
 
-from sel4coreplat.elf import ElfFile
-from sel4coreplat.util import kb, mb, round_up, MemoryRegion
+from microkit.elf import ElfFile
+from microkit.util import kb, mb, round_up, MemoryRegion
 
 AARCH64_1GB_BLOCK_BITS = 30
 AARCH64_2MB_BLOCK_BITS = 21

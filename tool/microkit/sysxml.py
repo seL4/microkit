@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 from typing import Dict, Iterable, Optional, Set, Tuple
 
-from sel4coreplat.util import str_to_bool, UserError
+from microkit.util import str_to_bool, UserError
 
 MIN_PAGE_SIZE = 0x1000 # FIXME: This shouldn't be here
 

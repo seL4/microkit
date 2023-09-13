@@ -5,7 +5,7 @@
  */
 #include <stdbool.h>
 #include <stdint.h>
-#include <sel4cp.h>
+#include <microkit.h>
 
 #define IRQ_CH 3
 
@@ -14,8 +14,8 @@ uintptr_t gpt_regs_clk;
 static volatile uint32_t *gpt;
 static volatile uint32_t *lpcg;
 
-static uint64_t timeouts[SEL4CP_MAX_CHANNELS];
-static sel4cp_channel active_channel = -1;
+static uint64_t timeouts[MICROKIT_MAX_CHANNELS];
+static microkit_channel active_channel = -1;
 static bool timeout_active;
 static uint64_t current_timeout;
 static uint32_t overflow_count;
@@ -53,19 +53,19 @@ puthex32(uint32_t x)
     buffer[8] = hexchar((x >> 4) & 0xf);
     buffer[9] = hexchar(x & 0xf);
     buffer[10] = 0;
-    sel4cp_dbg_puts(buffer);
+    microkit_dbg_puts(buffer);
 }
 
 void
 init(void)
 {
-    sel4cp_dbg_puts(sel4cp_name);
-    sel4cp_dbg_puts(": gpt PD init function running\n");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(": gpt PD init function running\n");
     gpt = (volatile uint32_t *) gpt_regs;
     lpcg = (volatile uint32_t *) gpt_regs_clk;
-    sel4cp_dbg_puts("LPCG: ");
+    microkit_dbg_puts("LPCG: ");
     puthex32(lpcg[0]);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 
 
     uint32_t cr = (
@@ -79,23 +79,23 @@ init(void)
         (1 << 5) // rollover interrupt
     );
 
-    sel4cp_dbg_puts("CR: ");
+    microkit_dbg_puts("CR: ");
     puthex32(gpt[0]);
-    sel4cp_dbg_puts("\n");
-    sel4cp_dbg_puts("PR: ");
+    microkit_dbg_puts("\n");
+    microkit_dbg_puts("PR: ");
     puthex32(gpt[1]);
-    sel4cp_dbg_puts("\n");
+    microkit_dbg_puts("\n");
 }
 
 void
-notified(sel4cp_channel ch)
+notified(microkit_channel ch)
 {
     switch (ch) {
 
         case IRQ_CH: {
             uint32_t sr = gpt[SR];
             gpt[SR] = sr;
-            sel4cp_irq_ack(ch);
+            microkit_irq_ack(ch);
 
             if (sr & (1 << 5)) {
                 overflow_count++;
@@ -104,24 +104,24 @@ notified(sel4cp_channel ch)
             if (sr & 1) {
                 gpt[IR] &= ~1;
                 timeout_active = false;
-                sel4cp_channel sel4cp_current_channel = active_channel;
-                timeouts[sel4cp_current_channel] = 0;
+                microkit_channel microkit_current_channel = active_channel;
+                timeouts[microkit_current_channel] = 0;
                 /* FIXME: set the next timeout if any are available */
 #if 0
-            sel4cp_dbg_puts("GPT: irq sr=");
+            microkit_dbg_puts("GPT: irq sr=");
             puthex32(sr);
-            sel4cp_dbg_puts(" cnt=");
+            microkit_dbg_puts(" cnt=");
             puthex32(gpt[0x24 / 4]);
-            sel4cp_dbg_puts("\n");
+            microkit_dbg_puts("\n");
 #endif
-                sel4cp_notify(sel4cp_current_channel);
+                microkit_notify(microkit_current_channel);
             }
 
             if (pending_timeouts && !timeout_active) {
                 /* find next timeout */
                 uint64_t next_timeout = UINT64_MAX;
-                sel4cp_channel ch = -1;
-                for (unsigned i = 0; i < SEL4CP_MAX_CHANNELS; i++) {
+                microkit_channel ch = -1;
+                for (unsigned i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
                     if (timeouts[i] != 0 && timeouts[i] < next_timeout) {
                         next_timeout = timeouts[i];
                         ch = i;
@@ -141,7 +141,7 @@ notified(sel4cp_channel ch)
             break;
         }
         default:
-            sel4cp_dbg_puts("gpt: received notification on unexpected channel\n");
+            microkit_dbg_puts("gpt: received notification on unexpected channel\n");
             break;
     }
 }
@@ -161,13 +161,13 @@ static uint64_t get_ticks(void) {
 }
 
 seL4_MessageInfo_t
-protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
+protected(microkit_channel ch, microkit_msginfo msginfo)
 {
-    switch (sel4cp_msginfo_get_label(msginfo)) {
+    switch (microkit_msginfo_get_label(msginfo)) {
         case 0:
 
             seL4_SetMR(0, get_ticks());
-            return sel4cp_msginfo_new(0, 1);
+            return microkit_msginfo_new(0, 1);
         case 1: {
             /* FIXME: There is a race here, if there are higher priority
              * protection domains it is possible arbitrary amount of time
@@ -192,15 +192,15 @@ protected(sel4cp_channel ch, sel4cp_msginfo msginfo)
                 pending_timeouts++;
             }
 #if 0
-            sel4cp_dbg_puts("GPT: set timeout ch = ");
+            microkit_dbg_puts("GPT: set timeout ch = ");
             puthex32(ch);
-            sel4cp_dbg_puts(" - " );
+            microkit_dbg_puts(" - " );
             puthex32(timeout);
-            sel4cp_dbg_puts("\n");
+            microkit_dbg_puts("\n");
 #endif
-            return sel4cp_msginfo_new(0, 1);
+            return microkit_msginfo_new(0, 1);
         }
     }
 
-    return sel4cp_msginfo_new(0, 0);
+    return microkit_msginfo_new(0, 0);
 }

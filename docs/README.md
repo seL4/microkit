@@ -19,23 +19,23 @@ The initial images will need to be packed into the initial tasks image, and then
 
 The root server ELF image will need to be manipulated appropriately to include a packed memory image (as well as other data structures).
 
-## seL4 Core Platform Library
+## Microkit Library
 
-The header and source files for the library are in the `libsel4cp` directory.
+The header and source files for the library are in the `libmicrokit` directory.
 
 To compile against the library you need flags such as:
 
-    -I$(LIBSEL4CP)/include -L$(LIBSEL4CP) -llibsel4cp
+    -I$(LIBMICROKIT)/include -L$(LIBMICROKIT) -llibmicrokit
 
-Where LIBSELCP variable refers to the `libsel4cp` directory.
+Where LIBSELCP variable refers to the `libmicrokit` directory.
 
 Note: current state is that this is used in place.
 Ftuture state is that this shall be merged with an seL4 SDK to simplify distribution and configuration.
 
 ### Functions
 
-This section provides a brief summary of the functions made available in the seL4 Core Platform Library.
+This section provides a brief summary of the functions made available in the Microkit Library.
 
-* `void sel4cp_dbg_putc(int c)`: Output a single character to the debug console.
-* `void sel4cp_dbg_puts(const char *s)`: Output a string to the debug console.
+* `void microkit_dbg_putc(int c)`: Output a single character to the debug console.
+* `void microkit_dbg_puts(const char *s)`: Output a string to the debug console.
 

@@ -19,12 +19,12 @@ from tarfile import open as tar_open, TarInfo
 
 from typing import Dict, Union, List, Tuple
 
-NAME = "sel4cp"
+NAME = "microkit"
 VERSION = "1.2.6"
 
 ENV_BIN_DIR = Path(executable).parent
 
-SEL4CP_EPOCH = 1616367257
+MICROKIT_EPOCH = 1616367257
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
@@ -113,10 +113,10 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
     """
     # Force uid/gid
     tarinfo.uid = tarinfo.gid = 0
-    tarinfo.uname = tarinfo.gname = "sel4cp"
+    tarinfo.uname = tarinfo.gname = "microkit"
     # This is unlikely to be set, but force it anyway
     tarinfo.pax_headers = {}
-    tarinfo.mtime = SEL4CP_EPOCH
+    tarinfo.mtime = MICROKIT_EPOCH
     assert tarinfo.isfile() or tarinfo.isdir()
     # Set the permissions properly
     if tarinfo.isdir():
@@ -145,7 +145,7 @@ def build_tool(tool_target: Path) -> None:
     )
     assert r == 0
 
-    tool_output = "./tool/build/x86_64-unknown-linux-musl/release/install/sel4cp"
+    tool_output = "./tool/build/x86_64-unknown-linux-musl/release/install/microkit"
 
     r = system(f"strip {tool_output}")
     assert r == 0
@@ -261,7 +261,7 @@ def build_elf_component(
 
 
 def build_doc(root_dir):
-    output = root_dir / "doc" / "sel4cp_user_manual.pdf"
+    output = root_dir / "doc" / "microkit_user_manual.pdf"
 
     r = system(f'pandoc docs/manual.md -o {output}')
     assert r == 0
@@ -297,8 +297,8 @@ def build_lib_component(
     dest.chmod(0o444)
 
 
-    link_script = Path(component_name) / "sel4cp.ld"
-    dest = lib_dir / "sel4cp.ld"
+    link_script = Path(component_name) / "microkit.ld"
+    dest = lib_dir / "microkit.ld"
     dest.unlink(missing_ok=True)
     copy(link_script, dest)
     # Make output read-only
@@ -358,7 +358,7 @@ def main() -> None:
 
     copy(Path("LICENSE"), root_dir)
 
-    tool_target = root_dir / "bin" / "sel4cp"
+    tool_target = root_dir / "bin" / "microkit"
 
     if not tool_target.exists():
         test_tool()
@@ -375,7 +375,7 @@ def main() -> None:
             ]
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
-            build_lib_component("libsel4cp", root_dir, build_dir, board, config)
+            build_lib_component("libmicrokit", root_dir, build_dir, board, config)
         # Setup the examples
         for example, example_path in board.examples.items():
             include_dir = root_dir / "board" / board.name / "example" / example

@@ -47,9 +47,9 @@ from sys import argv, executable, stderr
 
 from typing import Dict, List, Optional, Tuple, Union
 
-from sel4coreplat.elf import ElfFile
-from sel4coreplat.util import kb, mb, lsb, msb, round_up, round_down, mask_bits, is_power_of_two, MemoryRegion, UserError
-from sel4coreplat.sel4 import (
+from microkit.elf import ElfFile
+from microkit.util import kb, mb, lsb, msb, round_up, round_down, mask_bits, is_power_of_two, MemoryRegion, UserError
+from microkit.sel4 import (
     Sel4Aarch64Regs,
     Sel4Invocation,
     Sel4AsidPoolAssign,
@@ -107,9 +107,9 @@ from sel4coreplat.sel4 import (
     SEL4_PAGE_TABLE_SIZE,
     SEL4_OBJECT_TYPE_NAMES,
 )
-from sel4coreplat.sysxml import ProtectionDomain, xml2system, SystemDescription, PlatformDescription
-from sel4coreplat.sysxml import SysMap, SysMemoryRegion # This shouldn't be needed here as such
-from sel4coreplat.loader import Loader
+from microkit.sysxml import ProtectionDomain, xml2system, SystemDescription, PlatformDescription
+from microkit.sysxml import SysMap, SysMemoryRegion # This shouldn't be needed here as such
+from microkit.loader import Loader
 
 # This is a workaround for: https://github.com/indygreg/PyOxidizer/issues/307
 # Basically, pyoxidizer generates code that results in argv[0] being set to None.
@@ -1502,7 +1502,7 @@ def build_system(
 
     for pd in system.protection_domains:
         # Could use pd.elf_file.write_symbol here to update variables if required.
-        pd_elf_files[pd].write_symbol("sel4cp_name", pack("<16s", pd.name.encode("utf8")))
+        pd_elf_files[pd].write_symbol("microkit_name", pack("<16s", pd.name.encode("utf8")))
         pd_elf_files[pd].write_symbol("passive", pack("?", pd.passive))
 
     for pd in system.protection_domains:
@@ -1542,22 +1542,22 @@ def build_system(
 
 
 def main() -> int:
-    if "SEL4CP_SDK" in environ:
-        SDK_DIR = Path(environ["SEL4CP_SDK"])
+    if "MICROKIT_SDK" in environ:
+        SDK_DIR = Path(environ["MICROKIT_SDK"])
     elif getattr(sys, 'oxidized', False):
         # If we a compiled binary we know where the root is
         SDK_DIR = Path(executable).parent.parent
     else:
-        print("Error: SEL4CP_SDK must be set")
+        print("Error: MICROKIT_SDK must be set")
         return 1
     assert SDK_DIR is not None
     if not SDK_DIR.exists():
-        print(f"Error: SDK directory '{SDK_DIR}' does not exist. Check SEL4CP_SDK environment variable is set correctly")
+        print(f"Error: SDK directory '{SDK_DIR}' does not exist. Check MICROKIT_SDK environment variable is set correctly")
         return 1
 
     boards_path = SDK_DIR / "board"
     if not boards_path.exists():
-        print(f"Error: SDK  directory '{SDK_DIR}' does not have a 'board' sub-directory. Check SEL4CP_SDK environment variable is set correctly")
+        print(f"Error: SDK  directory '{SDK_DIR}' does not have a 'board' sub-directory. Check MICROKIT_SDK environment variable is set correctly")
         return 1
 
     available_boards = [p.name for p in boards_path.iterdir() if p.is_dir()]
