@@ -68,7 +68,7 @@ Note: There are no plans to support development of Microkit on any platforms oth
 The SDK includes a binary of the seL4 kernel.
 During the SDK build process the kernel is build from source.
 
-At this point in time there are some minor changes to the seL4 kernel required for Microkit.
+At this point in time there are some minor changes to the seL4 kernel required for Microkit. This is temporary, more details can be found [here](https://github.com/seL4/microkit/issues/52).
 
 Please clone seL4 from:
 
