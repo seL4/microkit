@@ -1,3 +1,8 @@
+<!--
+     Copyright 2021, Breakaway Consulting Pty. Ltd.
+     SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 ---
 title: Microkit User Manual (v1.2-pre)
 papersize:

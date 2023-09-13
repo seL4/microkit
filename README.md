@@ -1,3 +1,8 @@
+<!--
+     Copyright 2021, Breakaway Consulting Pty. Ltd.
+     SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # seL4 Microkit
 
 The purpose of the seL4 Microkit is to enable system designers to create static software systems based on the seL4 microkernel.
