@@ -32,6 +32,7 @@ MICROKIT_EPOCH = 1616367257
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
 
+
 @dataclass
 class BoardInfo:
     name: str
@@ -53,12 +54,12 @@ SUPPORTED_BOARDS = (
         name="tqma8xqp1gb",
         gcc_cpu="cortex-a35",
         loader_link_address=0x80280000,
-        kernel_options = {
+        kernel_options={
             "KernelPlatform": "tqma8xqp1gb",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
         },
-        examples = {
+        examples={
             "ethernet": Path("example/tqma8xqp1gb/ethernet")
         }
     ),
@@ -66,13 +67,13 @@ SUPPORTED_BOARDS = (
         name="zcu102",
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
-        kernel_options = {
+        kernel_options={
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "zcu102",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
         },
-        examples = {
+        examples={
             "hello": Path("example/zcu102/hello")
         }
     ),
@@ -80,12 +81,12 @@ SUPPORTED_BOARDS = (
     #     name="imx8mm",
     #     gcc_cpu="cortex-a53",
     #     loader_link_address=0x41000000,
-    #     kernel_options = {
+    #     kernel_options={
     #         "KernelPlatform": "imx8mm-evk",
     #         "KernelIsMCS": True,
     #         "KernelArmExportPCNTUser": True,
     #     },
-    #     examples = {
+    #     examples={
     #         "passive_server": Path("example/imx8mm/passive_server")
     #     }
     # )
@@ -95,12 +96,12 @@ SUPPORTED_CONFIGS = (
     ConfigInfo(
         name="release",
         debug=False,
-        kernel_options = {},
+        kernel_options={},
     ),
     ConfigInfo(
         name="debug",
         debug=True,
-        kernel_options = {
+        kernel_options={
             "KernelDebugBuild": True,
             "KernelPrinting": True,
             "KernelVerificationBuild": False
@@ -138,6 +139,7 @@ def test_tool() -> None:
         f"{executable} -m unittest discover -s tool -v"
     )
     assert r == 0
+
 
 def build_tool(tool_target: Path) -> None:
     pyoxidizer = ENV_BIN_DIR / "pyoxidizer"
@@ -188,9 +190,9 @@ def build_sel4(
 
     platform = board.name
     cmd = (
-        f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "\
-        f" -DPYTHON3={executable} " \
-        f" -DKernelPlatform={platform} {config_str} " \
+        f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "
+        f" -DPYTHON3={executable} "
+        f" -DKernelPlatform={platform} {config_str} "
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
     r = system(cmd)
@@ -299,7 +301,6 @@ def build_lib_component(
     # Make output read-only
     dest.chmod(0o444)
 
-
     link_script = Path(component_name) / "microkit.ld"
     dest = lib_dir / "microkit.ld"
     dest.unlink(missing_ok=True)
@@ -334,7 +335,6 @@ def main() -> None:
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
-
 
     root_dir = Path("release") / f"{NAME}-sdk-{VERSION}"
     tar_file = Path("release") / f"{NAME}-sdk-{VERSION}.tar.gz"
@@ -405,6 +405,7 @@ def main() -> None:
     with tar_open(source_tar_file, "w:gz") as tar:
         for filename in filenames:
             tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+
 
 if __name__ == "__main__":
     main()
