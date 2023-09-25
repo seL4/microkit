@@ -360,7 +360,7 @@ Additionally, if the protection domain provides a protected procedure it must al
 Every PD must expose an `init` entry point.
 This is called by the system at boot time.
 
-## `microkit_message protected(microkit_channel channel, microkit_message message)`
+## `microkit_msginfo protected(microkit_channel channel, microkit_msginfo message)`
 
 The `protected` entry point is optional.
 This is invoked when another PD calls `microkit_ppcall` on a channel shared with the PD.
@@ -389,14 +389,14 @@ The `notified` entry point is called by the system when a PD has received a noti
 Channel identifiers are specified in the system configuration.
 
 
-## `microkit_message microkit_ppcall(microkit_channel channel, microkit_message message)`
+## `microkit_msginfo microkit_ppcall(microkit_channel channel, microkit_msginfo message)`
 
 Performs a call to a protected procedure in a different PD.
 The `channel` argument identifies the protected procedure to be called.
 `message` is passed as argument to the protected procedure.
 Channel identifiers are specified in the system configuration.
 
-The protected procedure's return data is returned in the `microkit_message`.
+The protected procedure's return data is returned in the `microkit_msginfo`.
 
 ## `void microkit_notify(microkit_channel channel)`
 
@@ -408,13 +408,13 @@ Channel identifiers are specified in the system configuration.
 Acknowledge the interrupt identified by the specified channel.
 
 
-## `microkit_message microkit_msginfo_new(uint64_t label, uint16_t count)`
+## `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
 
 Creates a new message structure.
 
 The message can be passed to `microkit_ppcall` or returned from `protected`.
 
-## `uint64_t microkit_msginfo_get_label(microkit_message message)`
+## `uint64_t microkit_msginfo_get_label(microkit_msginfo message)`
 
 Returns the label from a message.
 
