@@ -58,6 +58,7 @@ static void handler_loop(void)
             tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
         } else if (have_signal) {
             tag = seL4_NBSendRecv(signal, signal_msg, INPUT_CAP, &badge, REPLY_CAP);
+            have_signal = false;
         } else {
             tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
         }
