@@ -34,8 +34,7 @@ jobs:
           sudo apt install \
             cmake pandoc device-tree-compiler ninja-build \
             texlive-fonts-recommended texlive-formats-extra libxml2-utils \
-            gcc-aarch64-linux-gnu python3.9 python3-pip python3.9-venv \
-            musl-tools
+            python3.9 python3-pip python3.9-venv musl-tools
       - name: Install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz\?revision\=79f65c42-1a1b-43f2-acb7-a795c8427085\&hash\=61BBFB526E785D234C5D8718D9BA8E61
