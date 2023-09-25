@@ -53,7 +53,7 @@ run_init_funcs(void)
 static void
 handler_loop(void)
 {
-    bool have_reply;
+    bool have_reply = false;
     seL4_MessageInfo_t reply_tag;
 
     for (;;) {
