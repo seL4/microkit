@@ -29,16 +29,15 @@ extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 
-extern const void (*const __init_array_start []) (void);
-extern const void (*const __init_array_end []) (void);
+extern const void (*const __init_array_start [])(void);
+extern const void (*const __init_array_end [])(void);
 
 __attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
 
-static void
-run_init_funcs(void)
+static void run_init_funcs(void)
 {
     size_t count = __init_array_end - __init_array_start;
     for (size_t i = 0; i < count; i++) {
@@ -46,8 +45,7 @@ run_init_funcs(void)
     }
 }
 
-static void
-handler_loop(void)
+static void handler_loop(void)
 {
     bool have_reply = false;
     seL4_MessageInfo_t reply_tag;
@@ -83,18 +81,17 @@ handler_loop(void)
     }
 }
 
-void
-main(void)
+void main(void)
 {
     run_init_funcs();
     init();
 
-    /* 
-     If we are passive, now our initialisation is complete we can
-     signal the monitor to unbind our scheduling context and bind
-     it to our notification object. 
-     We delay this signal so we are ready waiting on a recv() syscall
-    */
+    /*
+     * If we are passive, now our initialisation is complete we can
+     * signal the monitor to unbind our scheduling context and bind
+     * it to our notification object.
+     * We delay this signal so we are ready waiting on a recv() syscall
+     */
     if (passive) {
         have_signal = true;
         signal_msg = seL4_MessageInfo_new(0, 0, 0, 1);
