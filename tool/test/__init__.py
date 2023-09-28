@@ -15,6 +15,7 @@ plat_desc = PlatformDescription(
     # For the tests we just decide a value for this.
     num_cpus = 4,
     kernel_is_hypervisor = True,
+    aarch64_smc_calls_allowed = False,
 )
 
 def _file(filename: str) -> Path:

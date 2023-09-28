@@ -200,6 +200,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelAllowSMCCalls": True,
         },
         examples = {}
     ),

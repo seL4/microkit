@@ -91,6 +91,7 @@ from microkit.sel4 import (
     INIT_VSPACE_CAP_ADDRESS,
     INIT_ASID_POOL_CAP_ADDRESS,
     IRQ_CONTROL_CAP_ADDRESS,
+    SMC_CAP_ADDRESS,
     SEL4_SLOT_SIZE,
     SEL4_RIGHTS_ALL,
     SEL4_RIGHTS_READ,
@@ -148,6 +149,7 @@ VSPACE_CAP_IDX = 3
 REPLY_CAP_IDX = 4
 MONITOR_EP_CAP_IDX = 5
 TCB_CAP_IDX = 6
+SMC_CAP_IDX = 7
 BASE_OUTPUT_NOTIFICATION_CAP = 10
 BASE_OUTPUT_ENDPOINT_CAP = BASE_OUTPUT_NOTIFICATION_CAP + 64
 BASE_IRQ_CAP = BASE_OUTPUT_ENDPOINT_CAP + 64
@@ -653,6 +655,7 @@ def build_system(
     cap_address_names[INIT_VSPACE_CAP_ADDRESS] = "VSpace: init"
     cap_address_names[INIT_ASID_POOL_CAP_ADDRESS] = "ASID Pool: init"
     cap_address_names[IRQ_CONTROL_CAP_ADDRESS] = "IRQ Control"
+    cap_address_names[SMC_CAP_ADDRESS] = "SMC Cap"
 
     system_cnode_bits = int(log2(system_cnode_size))
 
@@ -1626,6 +1629,19 @@ def build_system(
                                         SEL4_RIGHTS_ALL,
                                         idx))
 
+    # mint SMC cap for PDs which are marked as allowed to invoke SMC calls
+    for idx, (cnode_obj, pd) in enumerate(zip(cnode_objects, system.protection_domains), 1):
+        if pd.smc:
+            system_invocations.append(Sel4CnodeMint(
+                                        cnode_obj.cap_addr,
+                                        SMC_CAP_IDX,
+                                        PD_CAP_BITS,
+                                        root_cnode_cap,
+                                        SMC_CAP_ADDRESS,
+                                        kernel_config.cap_address_bits,
+                                        SEL4_RIGHTS_ALL, # FIXME: set the reasonable permissions
+                                        0))
+
     # All minting is complete at this point
 
     # Associate badges
@@ -1925,6 +1941,8 @@ def main() -> int:
     else:
         arm_pa_size_bits = None
 
+    aarch64_smc_calls = sel4_config.get("ALLOW_SMC_CALLS", False)
+
     kernel_config = KernelConfig(
         arch = arch,
         word_size = sel4_config["WORD_SIZE"],
@@ -1936,6 +1954,7 @@ def main() -> int:
         fan_out_limit = int(sel4_config["RETYPE_FAN_OUT_LIMIT"]),
         have_fpu = sel4_config["HAVE_FPU"],
         hyp_mode = hyp_mode,
+        aarch64_smc_calls = aarch64_smc_calls,
         num_cpus = int(sel4_config["MAX_NUM_NODES"]),
         # @ivanv: Perhaps there is a better way of seperating out arch specific config and regular config
         arm_pa_size_bits = arm_pa_size_bits,
@@ -1947,6 +1966,7 @@ def main() -> int:
         page_sizes = (0x1_000, 0x200_000),
         num_cpus = kernel_config.num_cpus,
         kernel_is_hypervisor = kernel_config.hyp_mode,
+        aarch64_smc_calls_allowed = kernel_config.aarch64_smc_calls,
     )
     system_description = xml2system(args.system, default_platform_description)
 

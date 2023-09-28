@@ -43,6 +43,7 @@ class PlatformDescription:
     page_sizes: Tuple[int, ...]
     num_cpus: int
     kernel_is_hypervisor: bool
+    aarch64_smc_calls_allowed: bool
 
 
 class LineNumberingParser(ET.XMLParser):
@@ -92,6 +93,7 @@ class ProtectionDomain:
     cpu_affinity: int
     pp: bool
     passive: bool
+    smc: bool
     program_image: Path
     maps: Tuple[SysMap, ...]
     irqs: Tuple[SysIrq, ...]
@@ -289,7 +291,7 @@ def xml2mr(mr_xml: ET.Element, plat_desc: PlatformDescription) -> SysMemoryRegio
 
 
 def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=False) -> ProtectionDomain:
-    root_attrs = ("name", "priority", "pp", "budget", "period", "cpu", "passive")
+    root_attrs = ("name", "priority", "pp", "budget", "period", "cpu", "passive", "smc")
     child_attrs = root_attrs + ("id", )
     _check_attrs(pd_xml, child_attrs if is_child else root_attrs)
     program_image: Optional[Path] = None
@@ -317,6 +319,11 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
 
     pp = str_to_bool(pd_xml.attrib.get("pp", "false"))
     passive = str_to_bool(pd_xml.attrib.get("passive", "false"))
+
+    if plat_desc.aarch64_smc_calls_allowed:
+        smc = str_to_bool(pd_xml.attrib.get("smc", "false"))
+    else:
+        smc = False;
 
     maps = []
     irqs = []
@@ -387,6 +394,7 @@ def xml2pd(pd_xml: ET.Element, plat_desc: PlatformDescription, is_child: bool=Fa
         cpu,
         pp,
         passive,
+        smc,
         program_image,
         tuple(maps),
         tuple(irqs),

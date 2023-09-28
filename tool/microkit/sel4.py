@@ -62,6 +62,7 @@ class KernelConfig:
     fan_out_limit: int
     have_fpu: bool
     hyp_mode: bool
+    aarch64_smc_calls: bool
     num_cpus: int
     arm_pa_size_bits: Optional[int]
     riscv_page_table_levels: Optional[int]
@@ -253,8 +254,8 @@ INIT_THREAD_IPC_BUFFER_CAP_ADDRESS = 10
 DOMAIN_CAP_ADDRESS = 11
 SMMU_SID_CONTROL_CAP_ADDRESS = 12
 SMMU_CB_CONTROL_CAP_ADDRESS = 13
-INIT_THREAD_SC_CAP_ADDRESS = 14
-
+SMC_CAP_ADDRESS = 14
+INIT_THREAD_SC_CAP_ADDRESS = 15
 
 def _get_n_paging(region: MemoryRegion, bits: int) -> int:
     start = round_down(region.base, 1 << bits)
@@ -1433,7 +1434,7 @@ def emulate_kernel_boot(
     else:
         raise Exception("Couldn't find appropriate region for initial task kernel objects")
 
-    fixed_cap_count = 0xf
+    fixed_cap_count = 0x10
     sched_control_cap_count = kernel_config.num_cpus
     paging_cap_count = _get_arch_n_paging(kernel_config, initial_task_virt_region)
     page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
