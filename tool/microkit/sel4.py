@@ -729,51 +729,51 @@ class Sel4Label(IntEnum):
     ARMVSpaceInvalidate_Data = 37
     ARMVSpaceCleanInvalidate_Data = 38
     ARMVSpaceUnify_Instruction = 39
+    # ARM SMC forwarding
+    ARMSMCCall = 40
     # ARM Page Table
-    ARMPageTableMap = 44
-    ARMPageTableUnmap = 45
+    ARMPageTableMap = 41
+    ARMPageTableUnmap = 42
     # ARM Page
-    ARMPageMap = 46
-    ARMPageUnmap = 47
-    ARMPageClean_Data = 48
-    ARMPageInvalidate_Data = 49
-    ARMPageCleanInvalidate_Data = 50
-    ARMPageUnify_Instruction = 51
-    ARMPageGetAddress = 52
+    ARMPageMap = 43
+    ARMPageUnmap = 44
+    ARMPageClean_Data = 45
+    ARMPageInvalidate_Data = 46
+    ARMPageCleanInvalidate_Data = 47
+    ARMPageUnify_Instruction = 48
+    ARMPageGetAddress = 49
     # ARM ASID
-    ARMASIDControlMakePool = 53
-    ARMASIDPoolAssign = 54
+    ARMASIDControlMakePool = 50
+    ARMASIDPoolAssign = 51
     # ARM VCPU
-    ARMVCPUSetTCB = 55
-    ARMVCPUInjectIRQ = 56
-    ARMVCPUReadReg = 57
-    ARMVCPUWriteReg = 58
-    ARMVCPUAckVPPI = 59
+    ARMVCPUSetTCB = 52
+    ARMVCPUInjectIRQ = 53
+    ARMVCPUReadReg = 54
+    ARMVCPUWriteReg = 55
+    ARMVCPUAckVPPI = 56
     # ARM IRQ
-    ARMIRQIssueIRQHandlerTrigger = 60
+    ARMIRQIssueIRQHandlerTrigger = 57
     # RISC-V Page Table
-    RISCVPageTableMap = 61
-    RISCVPageTableUnmap = 62
+    RISCVPageTableMap = 58
+    RISCVPageTableUnmap = 59
     # RISC-V Page
-    RISCVPageMap = 63
-    RISCVPageUnmap = 64
-    RISCVPageGetAddress = 65
+    RISCVPageMap = 60
+    RISCVPageUnmap = 61
+    RISCVPageGetAddress = 62
     # RISC-V ASID
-    RISCVASIDControlMakePool = 66
-    RISCVASIDPoolAssign = 67
+    RISCVASIDControlMakePool = 63
+    RISCVASIDPoolAssign = 64
     # RISC-V IRQ
-    RISCVIRQIssueIRQHandlerTrigger = 68
+    RISCVIRQIssueIRQHandlerTrigger = 65
     # RISC-V VCPU
-    RISCVVCPUSetTCB = 69
-    RISCVVCPUReadReg = 70
-    RISCVVCPUWriteReg = 71
+    RISCVVCPUSetTCB = 66
+    RISCVVCPUReadReg = 67
+    RISCVVCPUWriteReg = 68
 
     def get_id(self, kernel_config: KernelConfig) -> int:
         if kernel_config.arch == KernelArch.AARCH64:
-            if kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 40 and self in AARCH64_PA_40_HYP_LABELS:
-                return AARCH64_PA_40_HYP_LABELS[self]
-            elif kernel_config.hyp_mode and kernel_config.arm_pa_size_bits == 44 and self in AARCH64_PA_44_HYP_LABELS:
-                return AARCH64_PA_44_HYP_LABELS[self]
+            if kernel_config.hyp_mode and self in AARCH64_HYP_LABELS:
+                return AARCH64_HYP_LABELS[self]
             elif self in AARCH64_LABELS:
                 return AARCH64_LABELS[self]
             else:
@@ -791,84 +791,19 @@ class Sel4Label(IntEnum):
 # of the ARM specific invocations and then refer to the dictonary for the
 # respective kernel config. This has some duplication (the first 4 invocations are always the same).
 AARCH64_LABELS = {
-    Sel4Label.ARMVSpaceClean_Data: 36,
-    Sel4Label.ARMVSpaceInvalidate_Data: 37,
-    Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
-    Sel4Label.ARMVSpaceUnify_Instruction: 39,
-    # ARM Page table
-    Sel4Label.ARMPageTableMap: 40,
-    Sel4Label.ARMPageTableUnmap: 41,
-    # ARM Page
-    Sel4Label.ARMPageMap: 42,
-    Sel4Label.ARMPageUnmap: 43,
-    Sel4Label.ARMPageClean_Data: 44,
-    Sel4Label.ARMPageInvalidate_Data: 45,
-    Sel4Label.ARMPageCleanInvalidate_Data: 46,
-    Sel4Label.ARMPageUnify_Instruction: 47,
-    Sel4Label.ARMPageGetAddress: 48,
-    # ARM Asid
-    Sel4Label.ARMASIDControlMakePool: 49,
-    Sel4Label.ARMASIDPoolAssign: 50,
     # ARM IRQ
-    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 51
+    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 52
 }
 
-AARCH64_PA_44_HYP_LABELS = {
-    Sel4Label.ARMVSpaceClean_Data: 36,
-    Sel4Label.ARMVSpaceInvalidate_Data: 37,
-    Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
-    Sel4Label.ARMVSpaceUnify_Instruction: 39,
-    # ARM Page table
-    Sel4Label.ARMPageTableMap: 40,
-    Sel4Label.ARMPageTableUnmap: 41,
-    # ARM Page
-    Sel4Label.ARMPageMap: 42,
-    Sel4Label.ARMPageUnmap: 43,
-    Sel4Label.ARMPageClean_Data: 44,
-    Sel4Label.ARMPageInvalidate_Data: 45,
-    Sel4Label.ARMPageCleanInvalidate_Data: 46,
-    Sel4Label.ARMPageUnify_Instruction: 47,
-    Sel4Label.ARMPageGetAddress: 48,
-    # ARM Asid
-    Sel4Label.ARMASIDControlMakePool: 49,
-    Sel4Label.ARMASIDPoolAssign: 50,
+AARCH64_HYP_LABELS = {
     # ARM VCPU
-    Sel4Label.ARMVCPUSetTCB: 51,
-    Sel4Label.ARMVCPUInjectIRQ: 52,
-    Sel4Label.ARMVCPUReadReg: 53,
-    Sel4Label.ARMVCPUWriteReg: 54,
-    Sel4Label.ARMVCPUAckVPPI: 55,
+    Sel4Label.ARMVCPUSetTCB: 52,
+    Sel4Label.ARMVCPUInjectIRQ: 53,
+    Sel4Label.ARMVCPUReadReg: 54,
+    Sel4Label.ARMVCPUWriteReg: 55,
+    Sel4Label.ARMVCPUAckVPPI: 56,
     # ARM IRQ
-    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 56
-}
-
-AARCH64_PA_40_HYP_LABELS = {
-    Sel4Label.ARMVSpaceClean_Data: 36,
-    Sel4Label.ARMVSpaceInvalidate_Data: 37,
-    Sel4Label.ARMVSpaceCleanInvalidate_Data: 38,
-    Sel4Label.ARMVSpaceUnify_Instruction: 39,
-    # ARM Page table
-    Sel4Label.ARMPageTableMap: 40,
-    Sel4Label.ARMPageTableUnmap: 41,
-    # ARM Page
-    Sel4Label.ARMPageMap: 42,
-    Sel4Label.ARMPageUnmap: 43,
-    Sel4Label.ARMPageClean_Data: 44,
-    Sel4Label.ARMPageInvalidate_Data: 45,
-    Sel4Label.ARMPageCleanInvalidate_Data: 46,
-    Sel4Label.ARMPageUnify_Instruction: 47,
-    Sel4Label.ARMPageGetAddress: 48,
-    # ARM Asid
-    Sel4Label.ARMASIDControlMakePool: 49,
-    Sel4Label.ARMASIDPoolAssign: 50,
-    # ARM VCPU
-    Sel4Label.ARMVCPUSetTCB: 51,
-    Sel4Label.ARMVCPUInjectIRQ: 52,
-    Sel4Label.ARMVCPUReadReg: 53,
-    Sel4Label.ARMVCPUWriteReg: 54,
-    Sel4Label.ARMVCPUAckVPPI: 55,
-    # ARM IRQ
-    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 56
+    Sel4Label.ARMIRQIssueIRQHandlerTrigger: 57
 }
 
 RISCV_LABELS = {
