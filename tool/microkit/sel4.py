@@ -1091,13 +1091,27 @@ class Sel4IrqControlGetTrigger(Sel4Invocation):
     _object_type = "IRQ Control"
     _method_name = "Get"
     _extra_caps = ("dest_root", )
-    label = Sel4Label.ARMIRQIssueIRQHandlerTrigger
     irq_control: int
     irq: int
     trigger: int
     dest_root: int
     dest_index: int
     dest_depth: int
+
+    def __init__(self, arch: KernelArch, irq_control: int, irq: int, trigger: int, dest_root: int, dest_index: int, dest_depth: int):
+        if arch == KernelArch.AARCH64:
+            self.label = Sel4Label.ARMIRQIssueIRQHandlerTrigger
+        elif arch == KernelArch.RISCV64 or arch == KernelArch.RISCV32:
+            self.label = Sel4Label.RISCVIRQIssueIRQHandlerTrigger
+        else:
+            raise Exception(f"Unexpected kernel architecture: {arch}")
+
+        self.irq_control = irq_control
+        self.irq = irq
+        self.trigger = trigger
+        self.dest_root = dest_root
+        self.dest_index = dest_index
+        self.dest_depth = dest_depth
 
 
 @dataclass

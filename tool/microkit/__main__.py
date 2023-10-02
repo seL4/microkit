@@ -1273,6 +1273,7 @@ def build_system(
             cap_address = system_cap_address_mask | cap_slot
             system_invocations.append(
                 Sel4IrqControlGetTrigger(
+                    kernel_config.arch,
                     IRQ_CONTROL_CAP_ADDRESS,
                     sysirq.irq,
                     sysirq.trigger.value,
