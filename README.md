@@ -32,7 +32,7 @@ Please file an issue if additional packages are required.
 * python3.9
 * python3.9-venv
 * musl-1.2.2
-* ARM GCC toolchain; 10.2-2020.11
+* ARM GCC toolchain; 11.3.1 20220712
 * RISC-V GCC toolchain; 10.2.0-2020.12.8
 
 On Ubuntu 18.04 there are no packages available for musl-1.2.2; it must be compiled from source.
@@ -56,11 +56,11 @@ At this point in time this is not fully realised, however it is a high priority 
 
 The ARM toolchain is available from:
 
-https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads/10-2-2020-11
+https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads
 
 The specific version used for development is the x86_64-aarch64-none-elf version:
 
-https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz?revision=79f65c42-1a1b-43f2-acb7-a795c8427085&hash=61BBFB526E785D234C5D8718D9BA8E61
+https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-aarch64-none-elf.tar.xz?rev=73ff9780c12348b1b6772a1f54ab4bb3&hash=B80470312E67CF1F157D0A883FDEB279
 
 The RISC-V toolchain is available from:
 
