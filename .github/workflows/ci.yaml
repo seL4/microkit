@@ -87,7 +87,7 @@ jobs:
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/downloads/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
+          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
@@ -132,7 +132,7 @@ jobs:
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/downloads/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz
+          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
