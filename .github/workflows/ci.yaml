@@ -32,7 +32,17 @@ jobs:
             cmake pandoc device-tree-compiler ninja-build \
             texlive-fonts-recommended texlive-formats-extra libxml2-utils \
             gcc-aarch64-linux-gnu python3.9 python3-pip python3.9-venv \
-            qemu-system-arm qemu-system-misc musl-tools
+            musl-tools
+      - name: Install Nix
+        uses: cachix/install-nix-action@v22
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      # Unfortunately `apt` decides to ship really old versions of QEMU,
+      # too old for our purposes as seL4 requires a newer version of QEMU.
+      # The CI is too slow to build QEMU from source, so we just install
+      # Nix instead.
+      - name: Install SDK dependencies (Nix)
+        run: nix-env -i qemu -f '<nixpkgs>'
       - name: Download and install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz\?revision\=79f65c42-1a1b-43f2-acb7-a795c8427085\&hash\=61BBFB526E785D234C5D8718D9BA8E61
