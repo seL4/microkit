@@ -379,17 +379,21 @@ SUPPORTED_BOARDS = (
     #     },
     #     examples = {}
     # ),
-    # BoardInfo(
-    #     name="qemu_riscv_virt",
-    #     arch=BoardArch.RISCV64,
-    #     gcc_flags = "",
-    #     loader_link_address=0x80200000,
-    #     kernel_options = {
-    #         "KernelIsMCS": True,
-    #         "KernelPlatform": "qemu-riscv-virt",
-    #     },
-    #     examples = {}
-    # ),
+    BoardInfo(
+        name="qemu_riscv_virt",
+        arch=BoardArch.RISCV64,
+        gcc_flags = "",
+        loader_link_address=0x80200000,
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "qemu-riscv-virt",
+            "KernelRiscVHypervisorSupport": True,
+            "KernelRiscvUseClintMtime": False, # @ivanv: fix kernel to get this working, right now it's getting overwritten
+        },
+        examples = {
+            "hello": Path("example/qemu_riscv_virt/hello")
+        }
+    ),
     # BoardInfo(
     #     name="qemu_riscv_virt_hyp",
     #     arch=BoardArch.RISCV64,
@@ -398,7 +402,6 @@ SUPPORTED_BOARDS = (
     #     kernel_options = {
     #         "KernelIsMCS": True,
     #         "KernelPlatform": "qemu-riscv-virt",
-    #         "KernelRiscVHypervisorSupport": True,
     #     },
     #     examples = {}
     # ),
