@@ -348,9 +348,9 @@ perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
             puts(sel4_strerror(result));
             puts("  invocation idx: ");
             puthex32(idx);
-            puts(".");
+            puts(" (iteration: ");
             puthex32(i);
-            puts("\n");
+            puts(")\n");
             fail("invocation error");
         }
 #if 0
