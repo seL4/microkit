@@ -45,9 +45,12 @@ jobs:
         run: nix-env -i qemu -f '<nixpkgs>'
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-aarch64-none-elf.tar.xz?rev=73ff9780c12348b1b6772a1f54ab4bb3&hash=B80470312E67CF1F157D0A883FDEB279
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-x86_64-aarch64-none-elf.tar.xz%3Frev%3D73ff9780c12348b1b6772a1f54ab4bb3
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Check SHA256 of AArch64 GCC toolchain
+        run: |
+          echo "fb9e562a90de1b3a2961b952193c1c6520872aa1482c0a5e0ab79970ec6e7690 aarch64-toolchain.tar.gz" | sha256sum -c
       - name: Download and install RISC-V GCC toolchain
         run: |
           wget -O riscv-toolchain.tar.gz https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
@@ -87,7 +90,7 @@ jobs:
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D51c39c753f8c4a54875b7c5dccfb84ef
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
@@ -132,7 +135,7 @@ jobs:
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils aarch64-unknown-linux-gnu texlive
       - name: Download and install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          wget -O aarch64-toolchain.tar.gz https://sel4.ivanvelickovic.com/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D51c39c753f8c4a54875b7c5dccfb84ef
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Check SHA256 of AArch64 GCC toolchain
