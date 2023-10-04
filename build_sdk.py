@@ -119,18 +119,6 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "imx8mm-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
-        },
-        examples = {}
-    ),
-    BoardInfo(
-        name="imx8mm_evk_hyp",
-        arch=BoardArch.AARCH64,
-        gcc_flags="GCC_CPU=cortex-a53",
-        loader_link_address=0x41000000,
-        kernel_options = {
-            "KernelPlatform": "imx8mm-evk",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
         },
         examples = {}
