@@ -324,7 +324,8 @@ class ElfFile:
 
             f.seek(shstrtab_shent.offset)
 
-            assert symtab_shent is not None
+            # Microkit requires the symbol table to exist
+            assert symtab_shent is not None, f"The symbol table for the given ELF '{path}' could not be found"
             f.seek(symtab_shent.offset)
             _symtab = f.read(symtab_shent.size)
 
