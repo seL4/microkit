@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <strings.h>
+#include <stddef.h>
 
 // @ivanv: merge this with loader.c aarch64
 
