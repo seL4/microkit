@@ -112,7 +112,7 @@ The key elements that make up a system are *protection domains*, *memory regions
 
 ## Protection Domains {#pd}
 
-A **protection domain** (PD) is the fundamental runtime abstraction in the seL4 platform.
+A **protection domain** (PD) is the fundamental runtime abstraction in Microkit.
 It is analogous, but very different in detail, to a process on a UNIX system.
 
 A PD provides a thread of control that executes within a fixed virtual address space.
