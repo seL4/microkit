@@ -312,9 +312,12 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT] system
+    microkit [-h] [-o OUTPUT] [-r REPORT] --board [BOARD] --config CONFIG
+             [--search-path [SEARCH_PATH ...]] system
 
-The path to the system description file must be provided.
+The path to the system description file, board to build the system for, and configuration to build for must be provided.
+
+The search paths provided tell the tool where to find any program images specified in the system description file.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
