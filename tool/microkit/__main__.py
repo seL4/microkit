@@ -1200,7 +1200,7 @@ def build_system(
         # For each page, in each map determine we determine
         # which upper directory, directory and page table is resides
         # in, and then page sure this is set
-        if is_pd:
+        if is_pd and kernel_config.arch != KernelArch.RISCV64:
             vaddrs = [(ipc_buffer_vaddr, 0x1000)]
         else:
             vaddrs = []
@@ -1696,18 +1696,19 @@ def build_system(
         system_invocations.append(invocation)
 
     # And, finally, map all the IPC buffers
-    for vspace_obj, pd, ipc_buffer_obj in zip(vspace_objects, system.protection_domains, ipc_buffer_objects):
-        vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
-        system_invocations.append(
-            Sel4PageMap(
-                kernel_config.arch,
-                ipc_buffer_obj.cap_addr,
-                vspace_obj.cap_addr,
-                vaddr,
-                rights,
-                attrs | SEL4_ARM_PAGE_CACHEABLE # @ivanv: fix
+    if kernel_config.arch != KernelArch.RISCV64:
+        for vspace_obj, pd, ipc_buffer_obj in zip(vspace_objects, system.protection_domains, ipc_buffer_objects):
+            vaddr, _ = pd_elf_files[pd].find_symbol("__sel4_ipc_buffer_obj")
+            system_invocations.append(
+                Sel4PageMap(
+                    kernel_config.arch,
+                    ipc_buffer_obj.cap_addr,
+                    vspace_obj.cap_addr,
+                    vaddr,
+                    rights,
+                    attrs | SEL4_ARM_PAGE_CACHEABLE # @ivanv: fix
+                )
             )
-        )
 
     # Initialise the TCBs
     #
