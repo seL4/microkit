@@ -312,18 +312,6 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "bcm2711",
             "KernelARMPlatform": "rpi4",
             "KernelIsMCS": True,
-        },
-        examples = {}
-    ),
-    BoardInfo(
-        name="rpi4b_hyp",
-        arch=BoardArch.AARCH64,
-        gcc_flags="GCC_CPU=cortex-a72",
-        loader_link_address=0x10000000,
-        kernel_options = {
-            "KernelPlatform": "bcm2711",
-            "KernelARMPlatform": "rpi4",
-            "KernelIsMCS": True,
             "KernelArmHypervisorSupport": True,
         },
         examples = {}
