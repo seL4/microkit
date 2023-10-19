@@ -17,6 +17,8 @@ The Microkit is distributed as a software development kit (SDK).
 
 This repository is the source for the Microkit SDK.
 
+The development of Microkit is on-going, more information can be found on the [roadmap](https://github.com/seL4/microkit/issues/61).
+
 If you are *developing* Microkit itself this is the repo you want!
 
 If you are a system designer and want to *use* the Microkit SDK please download a pre-built SDK.
