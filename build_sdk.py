@@ -285,6 +285,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelIRQReporting": False,
         },
         examples = {}
     ),
