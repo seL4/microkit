@@ -40,7 +40,7 @@ void fault(microkit_channel ch, microkit_msginfo msginfo);
 extern char microkit_name[16];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
 extern bool have_signal;
-extern seL4_CPtr signal;
+extern seL4_CPtr signal_cap;
 extern seL4_MessageInfo_t signal_msg;
 
 /*
@@ -106,7 +106,7 @@ microkit_notify_delayed(microkit_channel ch)
 {
     have_signal = true;
     signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
-    signal = (BASE_OUTPUT_NOTIFICATION_CAP + ch);
+    signal_cap = (BASE_OUTPUT_NOTIFICATION_CAP + ch);
 }
 
 static inline void
@@ -114,7 +114,7 @@ microkit_irq_ack_delayed(microkit_channel ch)
 {
     have_signal = true;
     signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
-    signal = (BASE_IRQ_CAP + ch);
+    signal_cap = (BASE_IRQ_CAP + ch);
 }
 
 static inline void
