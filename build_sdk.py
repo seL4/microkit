@@ -313,6 +313,7 @@ SUPPORTED_BOARDS = (
             "KernelARMPlatform": "rpi4",
             "KernelIsMCS": True,
             "KernelArmHypervisorSupport": True,
+            "RPI4_MEMORY": 4096,
         },
         examples = {}
     ),
