@@ -229,7 +229,7 @@ The control returns to the caller when the `protected` entry point returns.
 The caller is blocked until the callee returns.
 Protected procedures must execute in bounded time.
 It is intended that future version of the platform will enforce this condition through static analysis.
-In the present version the callee must trust the callee to conform.
+In the present version the caller must trust the callee to conform.
 
 In general, PPs are provided by services for use by clients that trust the protection domain to provide that service.
 
