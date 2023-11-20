@@ -121,7 +121,7 @@ The isolation provided by the virtual address space is enforced by the underlyin
 The virtual address space for a PD has mappings for the PD's *program image* along with any memory regions that the PD can access.
 The program image is an ELF file containing the code and data which implements the isolated component.
 
-The platform supports a maximum of 63 protection domains.
+Microkit supports a maximum of 63 protection domains.
 
 ### Entry points
 
@@ -228,7 +228,7 @@ The control returns to the caller when the `protected` entry point returns.
 
 The caller is blocked until the callee returns.
 Protected procedures must execute in bounded time.
-It is intended that future version of the platform will enforce this condition through static analysis.
+It is intended that a future version of Microkit will enforce this condition through static analysis.
 In the present version the caller must trust the callee to conform.
 
 In general, PPs are provided by services for use by clients that trust the protection domain to provide that service.
