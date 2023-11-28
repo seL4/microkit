@@ -449,6 +449,8 @@ static void monitor(void)
         puthex64(tcb_cap);
         puts("\n");
 
+        bool cont = false;
+
         if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
             /* This is a request from our PD to become passive */
             err = seL4_SchedContext_UnbindObject(scheduling_contexts[badge], tcb_cap);
@@ -459,181 +461,183 @@ static void monitor(void)
                 puts(pd_names[badge]);
                 puts(" is now passive!\n");
             }
-            continue;
+            cont = true;
         }
 
-        if (badge < MAX_PDS && pd_names[badge][0] != 0) {
-            puts("faulting PD: ");
-            puts(pd_names[badge]);
-            puts("\n");
-        } else {
-            fail("unknown/invalid badge\n");
-        }
-
-        seL4_UserContext regs;
-
-        err = seL4_TCB_ReadRegisters(tcb_cap, false, 0, sizeof(seL4_UserContext) / sizeof(seL4_Word), &regs);
-        if (err != seL4_NoError) {
-            fail("error reading registers");
-        }
-
-        // FIXME: Would be good to print the whole register set
-        puts("Registers: \n");
-        puts("pc : ");
-        puthex64(regs.pc);
-        puts("\n");
-        puts("spsr : ");
-        puthex64(regs.spsr);
-        puts("\n");
-        puts("x0 : ");
-        puthex64(regs.x0);
-        puts("\n");
-        puts("x1 : ");
-        puthex64(regs.x1);
-        puts("\n");
-        puts("x2 : ");
-        puthex64(regs.x2);
-        puts("\n");
-        puts("x3 : ");
-        puthex64(regs.x3);
-        puts("\n");
-        puts("x4 : ");
-        puthex64(regs.x4);
-        puts("\n");
-        puts("x5 : ");
-        puthex64(regs.x5);
-        puts("\n");
-        puts("x6 : ");
-        puthex64(regs.x6);
-        puts("\n");
-        puts("x7 : ");
-        puthex64(regs.x7);
-        puts("\n");
-
-        switch (label) {
-        case seL4_Fault_CapFault: {
-            seL4_Word ip = seL4_GetMR(seL4_CapFault_IP);
-            seL4_Word fault_addr = seL4_GetMR(seL4_CapFault_Addr);
-            seL4_Word in_recv_phase = seL4_GetMR(seL4_CapFault_InRecvPhase);
-            seL4_Word lookup_failure_type = seL4_GetMR(seL4_CapFault_LookupFailureType);
-            seL4_Word bits_left = seL4_GetMR(seL4_CapFault_BitsLeft);
-            seL4_Word depth_bits_found = seL4_GetMR(seL4_CapFault_DepthMismatch_BitsFound);
-            seL4_Word guard_found = seL4_GetMR(seL4_CapFault_GuardMismatch_GuardFound);
-            seL4_Word guard_bits_found = seL4_GetMR(seL4_CapFault_GuardMismatch_BitsFound);
-
-            puts("CapFault: ip=");
-            puthex64(ip);
-            puts("  fault_addr=");
-            puthex64(fault_addr);
-            puts("  in_recv_phase=");
-            puts(in_recv_phase == 0 ? "false" : "true");
-            puts("  lookup_failure_type=");
-
-            switch (lookup_failure_type) {
-            case seL4_NoFailure:
-                puts("seL4_NoFailure");
-                break;
-            case seL4_InvalidRoot:
-                puts("seL4_InvalidRoot");
-                break;
-            case seL4_MissingCapability:
-                puts("seL4_MissingCapability");
-                break;
-            case seL4_DepthMismatch:
-                puts("seL4_DepthMismatch");
-                break;
-            case seL4_GuardMismatch:
-                puts("seL4_GuardMismatch");
-                break;
-            default:
-                puthex64(lookup_failure_type);
+        if(cont == false) {
+            if (badge < MAX_PDS && pd_names[badge][0] != 0) {
+                puts("faulting PD: ");
+                puts(pd_names[badge]);
+                puts("\n");
+            } else {
+                fail("unknown/invalid badge\n");
             }
 
-            if (
-                lookup_failure_type == seL4_MissingCapability ||
-                lookup_failure_type == seL4_DepthMismatch ||
-                lookup_failure_type == seL4_GuardMismatch) {
-                puts("  bits_left=");
-                puthex64(bits_left);
+            seL4_UserContext regs;
+
+            err = seL4_TCB_ReadRegisters(tcb_cap, false, 0, sizeof(seL4_UserContext) / sizeof(seL4_Word), &regs);
+            if (err != seL4_NoError) {
+                fail("error reading registers");
             }
-            if (lookup_failure_type == seL4_DepthMismatch) {
-                puts("  depth_bits_found=");
-                puthex64(depth_bits_found);
-            }
-            if (lookup_failure_type == seL4_GuardMismatch) {
-                puts("  guard_found=");
-                puthex64(guard_found);
-                puts("  guard_bits_found=");
-                puthex64(guard_bits_found);
-            }
+
+            // FIXME: Would be good to print the whole register set
+            puts("Registers: \n");
+            puts("pc : ");
+            puthex64(regs.pc);
             puts("\n");
-            break;
-        }
-        case seL4_Fault_UserException: {
-            puts("UserException\n");
-            break;
-        }
-        case seL4_Fault_VMFault: {
-            seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
-            seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
-            seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
-            seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
-            seL4_Word ec = fsr >> 26;
-            seL4_Word il = fsr >> 25 & 1;
-            seL4_Word iss = fsr & 0x1ffffffUL;
-            puts("VMFault: ip=");
-            puthex64(ip);
-            puts("  fault_addr=");
-            puthex64(fault_addr);
-            puts("  fsr=");
-            puthex64(fsr);
-            puts("  ");
-            puts(is_instruction ? "(instruction fault)" : "(data fault)");
+            puts("spsr : ");
+            puthex64(regs.spsr);
             puts("\n");
-            puts("   ec: ");
-            puthex32(ec);
-            puts("  ");
-            puts(ec_to_string(ec));
-            puts("   il: ");
-            puts(il ? "1" : "0");
-            puts("   iss: ");
-            puthex32(iss);
+            puts("x0 : ");
+            puthex64(regs.x0);
+            puts("\n");
+            puts("x1 : ");
+            puthex64(regs.x1);
+            puts("\n");
+            puts("x2 : ");
+            puthex64(regs.x2);
+            puts("\n");
+            puts("x3 : ");
+            puthex64(regs.x3);
+            puts("\n");
+            puts("x4 : ");
+            puthex64(regs.x4);
+            puts("\n");
+            puts("x5 : ");
+            puthex64(regs.x5);
+            puts("\n");
+            puts("x6 : ");
+            puthex64(regs.x6);
+            puts("\n");
+            puts("x7 : ");
+            puthex64(regs.x7);
             puts("\n");
 
-            if (ec == 0x24) {
-                /* FIXME: Note, this is not a complete decoding of the fault! Just some of the more
-                   common fields!
-                */
-                seL4_Word dfsc = iss & 0x3f;
-                bool ea = (iss >> 9) & 1;
-                bool cm = (iss >> 8) & 1;
-                bool s1ptw = (iss >> 7) & 1;
-                bool wnr = (iss >> 6) & 1;
-                puts("   dfsc = ");
-                puts(data_abort_dfsc_to_string(dfsc));
-                puts(" (");
-                puthex32(dfsc);
-                puts(")");
-                if (ea) {
-                    puts(" -- external abort");
+            switch (label) {
+            case seL4_Fault_CapFault: {
+                seL4_Word ip = seL4_GetMR(seL4_CapFault_IP);
+                seL4_Word fault_addr = seL4_GetMR(seL4_CapFault_Addr);
+                seL4_Word in_recv_phase = seL4_GetMR(seL4_CapFault_InRecvPhase);
+                seL4_Word lookup_failure_type = seL4_GetMR(seL4_CapFault_LookupFailureType);
+                seL4_Word bits_left = seL4_GetMR(seL4_CapFault_BitsLeft);
+                seL4_Word depth_bits_found = seL4_GetMR(seL4_CapFault_DepthMismatch_BitsFound);
+                seL4_Word guard_found = seL4_GetMR(seL4_CapFault_GuardMismatch_GuardFound);
+                seL4_Word guard_bits_found = seL4_GetMR(seL4_CapFault_GuardMismatch_BitsFound);
+
+                puts("CapFault: ip=");
+                puthex64(ip);
+                puts("  fault_addr=");
+                puthex64(fault_addr);
+                puts("  in_recv_phase=");
+                puts(in_recv_phase == 0 ? "false" : "true");
+                puts("  lookup_failure_type=");
+
+                switch (lookup_failure_type) {
+                case seL4_NoFailure:
+                    puts("seL4_NoFailure");
+                    break;
+                case seL4_InvalidRoot:
+                    puts("seL4_InvalidRoot");
+                    break;
+                case seL4_MissingCapability:
+                    puts("seL4_MissingCapability");
+                    break;
+                case seL4_DepthMismatch:
+                    puts("seL4_DepthMismatch");
+                    break;
+                case seL4_GuardMismatch:
+                    puts("seL4_GuardMismatch");
+                    break;
+                default:
+                    puthex64(lookup_failure_type);
                 }
-                if (cm) {
-                    puts(" -- cache maint");
+
+                if (
+                    lookup_failure_type == seL4_MissingCapability ||
+                    lookup_failure_type == seL4_DepthMismatch ||
+                    lookup_failure_type == seL4_GuardMismatch) {
+                    puts("  bits_left=");
+                    puthex64(bits_left);
                 }
-                if (s1ptw) {
-                    puts(" -- stage 2 fault for stage 1 page table walk");
+                if (lookup_failure_type == seL4_DepthMismatch) {
+                    puts("  depth_bits_found=");
+                    puthex64(depth_bits_found);
                 }
-                if (wnr) {
-                    puts(" -- write not read");
+                if (lookup_failure_type == seL4_GuardMismatch) {
+                    puts("  guard_found=");
+                    puthex64(guard_found);
+                    puts("  guard_bits_found=");
+                    puthex64(guard_bits_found);
                 }
                 puts("\n");
+                break;
             }
+            case seL4_Fault_UserException: {
+                puts("UserException\n");
+                break;
+            }
+            case seL4_Fault_VMFault: {
+                seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
+                seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+                seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+                seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
+                seL4_Word ec = fsr >> 26;
+                seL4_Word il = fsr >> 25 & 1;
+                seL4_Word iss = fsr & 0x1ffffffUL;
+                puts("VMFault: ip=");
+                puthex64(ip);
+                puts("  fault_addr=");
+                puthex64(fault_addr);
+                puts("  fsr=");
+                puthex64(fsr);
+                puts("  ");
+                puts(is_instruction ? "(instruction fault)" : "(data fault)");
+                puts("\n");
+                puts("   ec: ");
+                puthex32(ec);
+                puts("  ");
+                puts(ec_to_string(ec));
+                puts("   il: ");
+                puts(il ? "1" : "0");
+                puts("   iss: ");
+                puthex32(iss);
+                puts("\n");
 
-            break;
-        }
-        default:
-            puts("Unknown fault\n");
-            break;
+                if (ec == 0x24) {
+                    /* FIXME: Note, this is not a complete decoding of the fault! Just some of the more
+                       common fields!
+                    */
+                    seL4_Word dfsc = iss & 0x3f;
+                    bool ea = (iss >> 9) & 1;
+                    bool cm = (iss >> 8) & 1;
+                    bool s1ptw = (iss >> 7) & 1;
+                    bool wnr = (iss >> 6) & 1;
+                    puts("   dfsc = ");
+                    puts(data_abort_dfsc_to_string(dfsc));
+                    puts(" (");
+                    puthex32(dfsc);
+                    puts(")");
+                    if (ea) {
+                        puts(" -- external abort");
+                    }
+                    if (cm) {
+                        puts(" -- cache maint");
+                    }
+                    if (s1ptw) {
+                        puts(" -- stage 2 fault for stage 1 page table walk");
+                    }
+                    if (wnr) {
+                        puts(" -- write not read");
+                    }
+                    puts("\n");
+                }
+
+                break;
+            }
+            default:
+                puts("Unknown fault\n");
+                break;
+            }
         }
     }
 }
