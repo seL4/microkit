@@ -464,7 +464,7 @@ static void monitor(void)
             cont = true;
         }
 
-        if(cont == false) {
+        if (cont == false) {
             if (badge < MAX_PDS && pd_names[badge][0] != 0) {
                 puts("faulting PD: ");
                 puts(pd_names[badge]);
