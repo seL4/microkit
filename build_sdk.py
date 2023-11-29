@@ -202,6 +202,7 @@ SUPPORTED_BOARDS = (
         kernel_options = {
             "KernelPlatform": "qemu-arm-virt",
             "KernelIsMCS": True,
+            "KernelArmExportPTMRUser": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
