@@ -507,7 +507,10 @@ class InitSystem:
             while padding_required > 0:
                 wm_lsb = lsb(wm)
                 sz_msb = msb(padding_required)
-                pad_object_size = 1 << min(wm_lsb, sz_msb)
+                if wm == 0:
+                    pad_object_size = 1 << sz_msb
+                else:
+                    pad_object_size = 1 << min(wm_lsb, sz_msb)
                 padding_sizes.append(pad_object_size)
                 wm += pad_object_size
                 padding_required -= pad_object_size
