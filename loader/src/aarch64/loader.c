@@ -181,6 +181,7 @@ putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 #elif defined(BOARD_qemu_arm_virt) || \
+      defined(BOARD_qemu_arm_virt_gicv3) || \
       defined(BOARD_qemu_arm_virt_cortex_a72) || \
       defined(BOARD_qemu_arm_virt_cortex_a72_hyp) || \
       defined(BOARD_qemu_arm_virt_2_cores)
