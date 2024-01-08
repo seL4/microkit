@@ -599,6 +599,42 @@ For simulating the ZCU102 using QEMU, use the following command:
        -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
        -serial mon:stdio
 
+## Adding platform support
+
+The following section is a guide for adding support for a new platform to Microkit. Currently only AArch64
+is supported in Microkit, so this guide assumes you are trying to add support for an AArch64 platform.
+
+### Prerequisites
+
+Before you can start with adding platform support to Microkit, the platform must be supported by the seL4 kernel.
+You can find information on how to do so [here](https://docs.sel4.systems/projects/sel4/porting.html).
+
+### Getting Microkit components working
+
+The first step to adding Microkit support is to modify the `build_sdk.py` script in order to build the required
+artefacts for the new platform. This involves adding to the `SUPPORTED_BOARDS` list with the `BoardInfo` options
+containing the platform specific attributes. This should be fairly self-explanatory by looking at the existing
+entries with the exception of the `loader_link_address`.
+
+The `loader_link_address` parameter specifies the physical address of where the bootloader for Microkit (which
+is responsible for setting up the system before seL4 starts) is going to be loaded. This address needs to
+match where in main memory the final system image is actually loaded (e.g where a previous bootloader such as U-Boot
+loads the image to). This means that the address is restricted to the platform's main memory region.
+
+The other component of Microkit that is platform dependent is the loader itself. The loader will attempt to access
+the UART for debug output which requires a basic `putc` implementation. The UART device used in the loader should be
+the same as what is used for the seL4 kernel debug output.
+
+Once you have patched the loader and the SDK build script, there should be no other changes required to have a working
+platform port. It is a good idea at this point to boot a hello world system to confirm the port is working.
+
+If there are issues with porting the platform, please [open an issue on GitHub](https://github.com/sel4/microkit).
+
+### Contributing platform support
+
+Once you believe that the port works, you can [open a pull request](https://github.com/seL4/microkit/pulls) with required
+changes as well as documentation in the manual about the platform and how to run Microkit images on it.
+
 # Rationale
 
 This section describes the rationales driving the Microkit design choices.
