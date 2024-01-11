@@ -539,7 +539,7 @@ You will likely want to disable autoboot:
 The board can be reset by pressing switch **S4** (located next to the Ethernet port).
 Alternatively, you can use the `reset` command from the U-Boot prompt.
 
-During development the most convenient way to boot an Microkit image is via network booting.
+During development the most convenient way to boot a Microkit image is via network booting.
 U-boot support booting via the *tftp* protocol.
 To support this you'll want to configure the network.
 U-Boot supports DHCP, however it is often more reliable to explicitly set an IP address.
