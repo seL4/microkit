@@ -82,7 +82,7 @@ The [Microkit tool](#tool) chapter describes the host system tool used for gener
 
 The [libmicrokit](#libmicrokit) chapter describes the interfaces to the Microkit library.
 
-The [System Description Format](#sysdesc) chapter describes the format of the system description XML file.
+The [System Description File](#sysdesc) chapter describes the format of the system description XML file.
 
 The [Board Support Packages](#bsps) chapter describes each of the board support packages included in the SDK.
 
@@ -430,12 +430,12 @@ Get a message register.
 Set a message register.
 
 
-# System Description Format {#sysdesc}
+# System Description File {#sysdesc}
 
-This section describes the format of the system description file.
-This file is provided as the input to the `microkit` tool.
+This section describes the format of the System Description File (SDF).
 
-The system description file is an XML file.
+The system description file is an XML file that is provided as input to the
+`microkit` tool.
 
 The root element of the XML file is `system`.
 
