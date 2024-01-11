@@ -150,14 +150,17 @@ The SDK top-level directory is `microkit-sdk-$VERSION`.
 The directory layout underneath the top-level directory is:
 
 ```
+doc/
+doc/microkit_user_manual.pdf
 bin/
 bin/microkit
+board/
 board/$board/$config/include/
 board/$board/$config/include/microkit.h
 board/$board/$config/lib/
 board/$board/$config/lib/libmicrokit.a
 board/$board/$config/lib/microkit.ld
-board/$board/$config/elf
+board/$board/$config/elf/
 board/$board/$config/elf/loader.elf
 board/$board/$config/elf/kernel.elf
 board/$board/$config/elf/monitor.elf
