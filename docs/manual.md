@@ -425,7 +425,7 @@ Returns the label from a message.
 
 Get a message register.
 
-## `void microkit_mr_set(uint8_t mr, uint64_t)`
+## `void microkit_mr_set(uint8_t mr, uint64_t value)`
 
 Set a message register.
 
