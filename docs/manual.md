@@ -625,8 +625,6 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x40000000
 
-Note that the loading address must be `0x40000000`.
-
 For simulating the ZCU102 using QEMU, use the following command:
 
     $ qemu-system-aarch64 \
