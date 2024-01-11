@@ -166,9 +166,10 @@ board/$board/$config/elf/kernel.elf
 board/$board/$config/elf/monitor.elf
 ```
 
-The currently supported boards:
+The currently supported boards are:
 
 * tqma8xqp1gb
+* zcu102
 
 The currently supported configurations are:
 
@@ -177,18 +178,7 @@ The currently supported configurations are:
 
 ## Supported Boards
 
-### tqma8xqp-1gb
-
-The TQMa8Xx Embedded Module from TQ Group configured with the NXP i.MX8QXP SoC and 1GiB of DDR3 ECC memory.
-
-https://www.tq-group.com/en/products/tq-embedded/arm-architecture/tqma8xx/
-
-All testing has been performed with the module on the MBa8Xx carrier board which is included in the starter kit.
-
-The provided board support should be at the module level and does not make any assumptions about the carrier board.
-
-Note: There are different configured of the TQMa8Xx board which include different NXP SoCs and different memory configurations.
-Such modules are not supported.
+For documentation on each supported board see the [manual](https://github.com/seL4/microkit/blob/main/docs/manual.md#board-support-packages-bsps).
 
 ## Supported Configurations
 
