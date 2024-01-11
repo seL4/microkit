@@ -312,13 +312,6 @@ def build_lib_component(
     # Make output read-only
     dest.chmod(0o444)
 
-    crt0 = build_dir / "crt0.o"
-    dest = lib_dir / "crt0.o"
-    dest.unlink(missing_ok=True)
-    copy(crt0, dest)
-    # Make output read-only
-    dest.chmod(0o444)
-
     include_dir = root_dir / "board" / board.name / config.name / "include"
     source_dir = Path(component_name) / "include"
     for p in source_dir.rglob("*"):
