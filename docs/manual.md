@@ -527,7 +527,7 @@ The MBa8Xx provides access to the TQMa8XQP UART via UART-USB bridge.
 To access the UART connect a USB micro cable to port **X13**.
 The UART-USB bridge supports 4 individual UARTs; the UART is connected to the 2nd port.
 
-By default the SoM will autoboot using U-boot.
+By default the SoM will autoboot using U-Boot.
 Hit any key during the boot process to stop the autoboot.
 
 A new board will autoboot to Linux.
@@ -540,7 +540,7 @@ The board can be reset by pressing switch **S4** (located next to the Ethernet p
 Alternatively, you can use the `reset` command from the U-Boot prompt.
 
 During development the most convenient way to boot a Microkit image is via network booting.
-U-boot support booting via the *tftp* protocol.
+U-Boot support booting via the *tftp* protocol.
 To support this you'll want to configure the network.
 U-Boot supports DHCP, however it is often more reliable to explicitly set an IP address.
 For example:
