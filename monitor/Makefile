@@ -16,6 +16,7 @@ CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -Wall -Wn
 
 PROGS := monitor.elf
 OBJECTS := main.o crt0.o debug.o util.o
+VERIFICATION := main_verification.c
 LINKSCRIPT := monitor.ld
 
 $(BUILD_DIR)/%.o : src/%.S
@@ -24,12 +25,16 @@ $(BUILD_DIR)/%.o : src/%.S
 $(BUILD_DIR)/%.o : src/%.s
 	$(TOOLCHAIN)as -g -mcpu=$(GCC_CPU) $< -o $@
 
+# For verification, we concatenate and preprocess all the C source files.
+$(BUILD_DIR)/%_verification.c: src/%.c
+	$(TOOLCHAIN)gcc $(CFLAGS) -E $< > $@
+
 $(BUILD_DIR)/%.o : src/%.c
 	$(TOOLCHAIN)gcc -c $(CFLAGS)  $< -o $@
 
 OBJPROG = $(addprefix $(BUILD_DIR)/, $(PROGS))
 
-all: $(OBJPROG)
+all: $(OBJPROG) $(addprefix $(BUILD_DIR)/, $(VERIFICATION))
 
 $(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS)) $(LINKSCRIPT)
 	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $(addprefix $(BUILD_DIR)/, $(OBJECTS)) -o $@
