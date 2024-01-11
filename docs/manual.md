@@ -576,13 +576,19 @@ When debugging is enabled the kernel will use the same UART as U-Boot.
 
 ## ZCU102
 
-Initial support is available for the ZCU102.
+Initial support is available for the Xilinx ZCU102.
 
 **FIXME:** Additional documentation required here.
 
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
 
-An QEMU command line:
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x40000000
+
+Note that the loading address must be `0x40000000`.
+
+For simulating the ZCU102 using QEMU, use the following command:
 
     $ qemu-system-aarch64 \
        -m 4G  \
