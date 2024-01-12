@@ -130,10 +130,10 @@ def _get_n_paging(region: MemoryRegion, bits: int) -> int:
 
 
 def _get_arch_n_paging(region: MemoryRegion) -> int:
-    PT_INDEX_OFFSET  =  12
-    PD_INDEX_OFFSET  =  (PT_INDEX_OFFSET + 9)
-    PUD_INDEX_OFFSET =  (PD_INDEX_OFFSET + 9)
-    PGD_INDEX_OFFSET =  (PUD_INDEX_OFFSET + 9)
+    PT_INDEX_OFFSET = 12
+    PD_INDEX_OFFSET = (PT_INDEX_OFFSET + 9)
+    PUD_INDEX_OFFSET = (PD_INDEX_OFFSET + 9)
+    PGD_INDEX_OFFSET = (PUD_INDEX_OFFSET + 9)
 
     return (
         _get_n_paging(region, PGD_INDEX_OFFSET) +
@@ -152,9 +152,9 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
     tcb_bits = 11  # seL4_TCBBits
     page_bits = 12  # seL4_PageBits
     asid_pool_bits = 12  # seL4_ASIDPoolBits
-    vspace_bits = 12  #seL4_VSpaceBits
+    vspace_bits = 12  # seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
-    min_sched_context_bits = 8 # seL4_MinSchedContextBits
+    min_sched_context_bits = 8  # seL4_MinSchedContextBits
 
     size = 0
     size += 1 << (root_cnode_bits + slot_bits)
@@ -163,7 +163,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
     size += 1 << asid_pool_bits
     size += 1 << vspace_bits
     size += _get_arch_n_paging(initial_task_region) * (1 << page_table_bits)
-    size += 1 <<min_sched_context_bits
+    size += 1 << min_sched_context_bits
 
     return size
 
@@ -183,79 +183,80 @@ typedef struct seL4_UserContext_ {
     # FIXME: This is pretty terrible, but for now... explicit better than implicit
     # NOTE: We could optimize so that we can see how many register are actually set
     # in a given set to reduce space
+
     def __init__(self,
-        pc: Optional[int] = None,
-        sp: Optional[int] = None,
-        spsr: Optional[int] = None,
-        x0: Optional[int] = None,
-        x1: Optional[int] = None,
-        x2: Optional[int] = None,
-        x3: Optional[int] = None,
-        x4: Optional[int] = None,
-        x5: Optional[int] = None,
-        x6: Optional[int] = None,
-        x7: Optional[int] = None,
-        x8: Optional[int] = None,
-        x16: Optional[int] = None,
-        x17: Optional[int] = None,
-        x18: Optional[int] = None,
-        x29: Optional[int] = None,
-        x30: Optional[int] = None,
-        x9: Optional[int] = None,
-        x10: Optional[int] = None,
-        x11: Optional[int] = None,
-        x12: Optional[int] = None,
-        x13: Optional[int] = None,
-        x14: Optional[int] = None,
-        x15: Optional[int] = None,
-        x19: Optional[int] = None,
-        x20: Optional[int] = None,
-        x21: Optional[int] = None,
-        x22: Optional[int] = None,
-        x23: Optional[int] = None,
-        x24: Optional[int] = None,
-        x25: Optional[int] = None,
-        x26: Optional[int] = None,
-        x27: Optional[int] = None,
-        x28: Optional[int] = None,
-        tpidr_el0: Optional[int] = None,
-        tpidrro_el0: Optional[int] = None,
-    ):
-        self.pc          = pc
-        self.sp          = sp
-        self.spsr        = spsr
-        self.x0          = x0
-        self.x1          = x1
-        self.x2          = x2
-        self.x3          = x3
-        self.x4          = x4
-        self.x5          = x5
-        self.x6          = x6
-        self.x7          = x7
-        self.x8          = x8
-        self.x16         = x16
-        self.x17         = x17
-        self.x18         = x18
-        self.x29         = x29
-        self.x30         = x30
-        self.x9          = x9
-        self.x10         = x10
-        self.x11         = x11
-        self.x12         = x12
-        self.x13         = x13
-        self.x14         = x14
-        self.x15         = x15
-        self.x19         = x19
-        self.x20         = x20
-        self.x21         = x21
-        self.x22         = x22
-        self.x23         = x23
-        self.x24         = x24
-        self.x25         = x25
-        self.x26         = x26
-        self.x27         = x27
-        self.x28         = x28
-        self.tpidr_el0   = tpidr_el0
+                 pc: Optional[int] = None,
+                 sp: Optional[int] = None,
+                 spsr: Optional[int] = None,
+                 x0: Optional[int] = None,
+                 x1: Optional[int] = None,
+                 x2: Optional[int] = None,
+                 x3: Optional[int] = None,
+                 x4: Optional[int] = None,
+                 x5: Optional[int] = None,
+                 x6: Optional[int] = None,
+                 x7: Optional[int] = None,
+                 x8: Optional[int] = None,
+                 x16: Optional[int] = None,
+                 x17: Optional[int] = None,
+                 x18: Optional[int] = None,
+                 x29: Optional[int] = None,
+                 x30: Optional[int] = None,
+                 x9: Optional[int] = None,
+                 x10: Optional[int] = None,
+                 x11: Optional[int] = None,
+                 x12: Optional[int] = None,
+                 x13: Optional[int] = None,
+                 x14: Optional[int] = None,
+                 x15: Optional[int] = None,
+                 x19: Optional[int] = None,
+                 x20: Optional[int] = None,
+                 x21: Optional[int] = None,
+                 x22: Optional[int] = None,
+                 x23: Optional[int] = None,
+                 x24: Optional[int] = None,
+                 x25: Optional[int] = None,
+                 x26: Optional[int] = None,
+                 x27: Optional[int] = None,
+                 x28: Optional[int] = None,
+                 tpidr_el0: Optional[int] = None,
+                 tpidrro_el0: Optional[int] = None,
+                 ):
+        self.pc = pc
+        self.sp = sp
+        self.spsr = spsr
+        self.x0 = x0
+        self.x1 = x1
+        self.x2 = x2
+        self.x3 = x3
+        self.x4 = x4
+        self.x5 = x5
+        self.x6 = x6
+        self.x7 = x7
+        self.x8 = x8
+        self.x16 = x16
+        self.x17 = x17
+        self.x18 = x18
+        self.x29 = x29
+        self.x30 = x30
+        self.x9 = x9
+        self.x10 = x10
+        self.x11 = x11
+        self.x12 = x12
+        self.x13 = x13
+        self.x14 = x14
+        self.x15 = x15
+        self.x19 = x19
+        self.x20 = x20
+        self.x21 = x21
+        self.x22 = x22
+        self.x23 = x23
+        self.x24 = x24
+        self.x25 = x25
+        self.x26 = x26
+        self.x27 = x27
+        self.x28 = x28
+        self.tpidr_el0 = tpidr_el0
         self.tpidrro_el0 = tpidrro_el0
 
     def count(self) -> int:
@@ -263,43 +264,43 @@ typedef struct seL4_UserContext_ {
         return len(self.as_tuple())
 
     def as_tuple(self) -> Tuple[int, ...]:
-        raw =  (
-        self.pc         ,
-        self.sp         ,
-        self.spsr       ,
-        self.x0         ,
-        self.x1         ,
-        self.x2         ,
-        self.x3         ,
-        self.x4         ,
-        self.x5         ,
-        self.x6         ,
-        self.x7         ,
-        self.x8         ,
-        self.x16        ,
-        self.x17        ,
-        self.x18        ,
-        self.x29        ,
-        self.x30        ,
-        self.x9         ,
-        self.x10        ,
-        self.x11        ,
-        self.x12        ,
-        self.x13        ,
-        self.x14        ,
-        self.x15        ,
-        self.x19        ,
-        self.x20        ,
-        self.x21        ,
-        self.x22        ,
-        self.x23        ,
-        self.x24        ,
-        self.x25        ,
-        self.x26        ,
-        self.x27        ,
-        self.x28        ,
-        self.tpidr_el0  ,
-        self.tpidrro_el0,
+        raw = (
+            self.pc,
+            self.sp,
+            self.spsr,
+            self.x0,
+            self.x1,
+            self.x2,
+            self.x3,
+            self.x4,
+            self.x5,
+            self.x6,
+            self.x7,
+            self.x8,
+            self.x16,
+            self.x17,
+            self.x18,
+            self.x29,
+            self.x30,
+            self.x9,
+            self.x10,
+            self.x11,
+            self.x12,
+            self.x13,
+            self.x14,
+            self.x15,
+            self.x19,
+            self.x20,
+            self.x21,
+            self.x22,
+            self.x23,
+            self.x24,
+            self.x25,
+            self.x26,
+            self.x27,
+            self.x28,
+            self.tpidr_el0,
+            self.tpidrro_el0,
         )
         return tuple(0 if x is None else x for x in raw)
 
@@ -374,7 +375,7 @@ class Sel4Label(IntEnum):
     ARMIRQIssueIRQHandlerTrigger = 55
 
 
-### Invocations
+# Invocations
 
 class Sel4Invocation:
     label: Sel4Label
@@ -518,6 +519,7 @@ class Sel4TcbWriteRegisters(Sel4Invocation):
 
         return self._generic_invocation((), params)
 
+
 @dataclass
 class Sel4TcbBindNotification(Sel4Invocation):
     _object_type = "TCB"
@@ -625,6 +627,7 @@ class Sel4CnodeMint(Sel4Invocation):
     rights: int
     badge: int
 
+
 @dataclass
 class Sel4CnodeCopy(Sel4Invocation):
     _object_type = "CNode"
@@ -638,6 +641,7 @@ class Sel4CnodeCopy(Sel4Invocation):
     src_obj: int
     src_depth: int
     rights: int
+
 
 @dataclass
 class Sel4CnodeMutate(Sel4Invocation):
@@ -653,6 +657,7 @@ class Sel4CnodeMutate(Sel4Invocation):
     src_depth: int
     badge: int
 
+
 @dataclass
 class Sel4SchedControlConfigureFlags(Sel4Invocation):
     _object_type = "SchedControl"
@@ -667,6 +672,7 @@ class Sel4SchedControlConfigureFlags(Sel4Invocation):
     badge: int
     flags: int
 
+
 @dataclass(frozen=True, eq=True)
 class UntypedObject:
     cap: int
@@ -680,7 +686,6 @@ class UntypedObject:
     @property
     def size_bits(self) -> int:
         return lsb(self.region.end - self.region.base)
-
 
 
 @dataclass(frozen=True, eq=True)
@@ -745,7 +750,7 @@ def _kernel_phys_mem(kernel_elf: ElfFile) -> List[Tuple[int, int]]:
 def _kernel_self_mem(kernel_elf: ElfFile) -> Tuple[int, int]:
     """Return the physical memory range used by the kernel itself."""
     base = kernel_elf.segments[0].phys_addr
-    ki_end_v, _= kernel_elf.find_symbol("ki_end")
+    ki_end_v, _ = kernel_elf.find_symbol("ki_end")
     ki_end_p = ki_end_v - kernel_elf.segments[0].virt_addr + base
     return (base, ki_end_p)
 
@@ -760,7 +765,7 @@ def _kernel_boot_mem(kernel_elf: ElfFile) -> MemoryRegion:
 def _rootserver_max_size_bits() -> int:
     slot_bits = 5  # seL4_SlotBits
     root_cnode_bits = 12  # CONFIG_ROOT_CNODE_SIZE_BITS
-    vspace_bits = 12  #seL4_VSpaceBits
+    vspace_bits = 12  # seL4_VSpaceBits
 
     cnode_size_bits = root_cnode_bits + slot_bits
     return max(cnode_size_bits, vspace_bits)
@@ -808,9 +813,9 @@ def _kernel_partial_boot(
 
 
 def emulate_kernel_boot_partial(
-        kernel_config: KernelConfig,
-        kernel_elf: ElfFile,
-    ) -> DisjointMemoryRegion:
+    kernel_config: KernelConfig,
+    kernel_elf: ElfFile,
+) -> DisjointMemoryRegion:
     """Return the memory available after a 'partial' boot emulation.
 
     This allows the caller to allocation a reserved memory region at an
@@ -869,10 +874,10 @@ def emulate_kernel_boot(
         untyped_objects.append(UntypedObject(cap, r, False))
 
     return KernelBootInfo(
-        fixed_cap_count = fixed_cap_count,
-        paging_cap_count = paging_cap_count,
-        page_cap_count = page_cap_count,
-        schedcontrol_cap = schedcontrol_cap,
-        first_available_cap = first_untyped_cap + len(device_regions) + len(normal_regions),
-        untyped_objects = untyped_objects,
+        fixed_cap_count=fixed_cap_count,
+        paging_cap_count=paging_cap_count,
+        page_cap_count=page_cap_count,
+        schedcontrol_cap=schedcontrol_cap,
+        first_available_cap=first_untyped_cap + len(device_regions) + len(normal_regions),
+        untyped_objects=untyped_objects,
     )

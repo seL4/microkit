@@ -20,6 +20,7 @@ AARCH64_LVL2_BITS = 9
 
 PAGE_TABLE_SIZE = 4096
 
+
 def mask(x: int) -> int:
     return ((1 << x) - 1)
 
@@ -62,29 +63,30 @@ def _check_non_overlapping(regions: List[Tuple[int, bytes]]) -> None:
 
         checked.append((base, end))
 
+
 class Loader:
 
     def __init__(self,
-        loader_elf_path: Path,
-        kernel_elf: ElfFile,
-        initial_task_elf: ElfFile,
-        initial_task_phys_base: Optional[int],
-        reserved_region: MemoryRegion,
-        regions: List[Tuple[int, bytes]]
-    ) -> None:
+                 loader_elf_path: Path,
+                 kernel_elf: ElfFile,
+                 initial_task_elf: ElfFile,
+                 initial_task_phys_base: Optional[int],
+                 reserved_region: MemoryRegion,
+                 regions: List[Tuple[int, bytes]]
+                 ) -> None:
         """
 
         Note: If initial_task_phys_base is not None, then it just this address
         as the base physical address of the initial task, rather than the address
         that comes from the initial_task_elf file.
         """
-            # Setup the pagetable data structures (directly embedded in the loader)
+        # Setup the pagetable data structures (directly embedded in the loader)
         self._elf = ElfFile.from_path(loader_elf_path)
         sz = self._elf.word_size
 
         self._header_struct_fmt = "<IIIIIiIIII" if sz == 32 else "<QQQQQqQQQQ"
         self._region_struct_fmt = "<IIII" if sz == 32 else "<QQQQ"
-        self._magic = 0x5e14dead if sz== 32 else 0x5e14dead14de5ead
+        self._magic = 0x5e14dead if sz == 32 else 0x5e14dead14de5ead
 
         for loader_segment in self._elf.segments:
             if loader_segment.loadable:
@@ -126,8 +128,6 @@ class Loader:
                     segment.phys_addr,
                     segment.data
                 ))
-
-
 
         assert kernel_first_paddr is not None
 
@@ -172,7 +172,7 @@ class Loader:
         assert inittask_last_vaddr is not None
         assert inittask_p_v_offset is not None
         ui_p_reg_end = inittask_last_vaddr - inittask_p_v_offset
-        assert(ui_p_reg_end > ui_p_reg_start)
+        assert (ui_p_reg_end > ui_p_reg_start)
         v_entry = initial_task_elf.entry
 
         extra_device_addr_p = reserved_region.base
@@ -210,33 +210,33 @@ class Loader:
         for i in range(512):
             pt_entry = (
                 (i << AARCH64_1GB_BLOCK_BITS) |
-                (1 << 10) | # access flag
-                (0 << 2) | # strongly ordered memory
-                (1) # 1G block
+                (1 << 10) |  # access flag
+                (0 << 2) |  # strongly ordered memory
+                (1)  # 1G block
             )
-            boot_lvl1_lower[8*i:8*(i+1)] = pack("<Q", pt_entry)
+            boot_lvl1_lower[8 * i:8 * (i + 1)] = pack("<Q", pt_entry)
 
         boot_lvl0_upper = bytearray(PAGE_TABLE_SIZE)
         ptentry = boot_lvl1_upper_addr | 3
         idx = lvl0_index(first_vaddr)
-        boot_lvl0_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+        boot_lvl0_upper[8 * idx:8 * (idx + 1)] = pack("<Q", ptentry)
 
         boot_lvl1_upper = bytearray(PAGE_TABLE_SIZE)
         ptentry = boot_lvl2_upper_addr | 3
         idx = lvl1_index(first_vaddr)
-        boot_lvl1_upper[8 * idx:8 * (idx+1)] = pack("<Q", ptentry)
+        boot_lvl1_upper[8 * idx:8 * (idx + 1)] = pack("<Q", ptentry)
 
         boot_lvl2_upper = bytearray(PAGE_TABLE_SIZE)
         for i in range(lvl2_index(first_vaddr), 512):
             pt_entry = (
                 first_paddr |
-                (1 << 10) | # access flag
-                (3 << 8) | # make sure the shareability is the same as the kernel's
-                (4 << 2) | #MT_NORMAL memory
-                (1 << 0) # 2M block
+                (1 << 10) |  # access flag
+                (3 << 8) |  # make sure the shareability is the same as the kernel's
+                (4 << 2) |  # MT_NORMAL memory
+                (1 << 0)  # 2M block
             )
             first_paddr += (1 << AARCH64_2MB_BLOCK_BITS)
-            boot_lvl2_upper[8*i:8*(i+1)] = pack("<Q", pt_entry)
+            boot_lvl2_upper[8 * i:8 * (i + 1)] = pack("<Q", pt_entry)
 
         return {
             "boot_lvl0_lower": boot_lvl0_lower,
