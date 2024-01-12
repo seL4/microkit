@@ -3,19 +3,18 @@
 #
 # SPDX-License-Identifier: BSD-2-Clause
 #
+from microkit.util import str_to_bool, UserError
+from typing import Dict, Iterable, Optional, Set, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 # See: https://stackoverflow.com/questions/6949395/is-there-a-way-to-get-a-line-number-from-an-elementtree-element
 # Force use of Python elementtree to avoid overloading
 import sys
 sys.modules['_elementtree'] = None  # type: ignore
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # noqa: E402
 
-from typing import Dict, Iterable, Optional, Set, Tuple
 
-from microkit.util import str_to_bool, UserError
-
-MIN_PAGE_SIZE = 0x1000 # FIXME: This shouldn't be here
+MIN_PAGE_SIZE = 0x1000  # FIXME: This shouldn't be here
 
 
 class MissingAttribute(Exception):
@@ -111,6 +110,7 @@ class Channel:
     id_b: int
     element: ET.Element
 
+
 class SystemDescription:
     def __init__(
         self,
@@ -189,7 +189,6 @@ class SystemDescription:
                 extra = map.vaddr % mr.page_size
                 if extra != 0:
                     raise UserError(f"Invalid vaddr alignment on '{map.element.tag}' @ {map.element._loc_str}")  # type: ignore
-
 
         # Note: Overlapping memory is checked in the build.
 
@@ -313,7 +312,6 @@ def xml2channel(ch_xml: ET.Element) -> Channel:
         raise ValueError("exactly two end elements must be specified")
 
     return Channel(ends[0][0], ends[0][1], ends[1][0], ends[1][1], ch_xml)
-
 
 
 def _check_no_text(el: ET.Element) -> None:

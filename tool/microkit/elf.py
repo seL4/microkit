@@ -44,6 +44,7 @@ class SegmentType(IntEnum):
     PT_SHLID = 5
     PT_PHDR = 6
 
+
 class SegmentAttributes(IntFlag):
     PF_X = 0x1
     PF_W = 0x2
@@ -162,6 +163,7 @@ ELF_SYMBOL64_FIELDS = (
     "value",
     "size",
 )
+
 
 class InvalidElf(Exception):
     pass
@@ -302,7 +304,6 @@ class ElfFile:
                 zeros = bytes(phent.memsz - phent.filesz)
                 elf.segments.append(ElfSegment(phent.paddr, phent.vaddr, bytearray(data + zeros), phent.type_ == 1, SegmentAttributes(phent.flags)))
 
-
             # FIXME: Add support for sections and symbols
             f.seek(hdr.shoff)
             shents = []
@@ -353,7 +354,7 @@ class ElfFile:
                 ident_version=ElfVersion.EV_CURRENT,
                 ident_osabi=OperatingSystemAbi.ELFOSABI_STANDALINE,
                 ident_abiversion=0,
-                type_ = ObjectFileType.ET_EXEC,
+                type_=ObjectFileType.ET_EXEC,
                 machine=MachineType.EM_AARCH64,
                 version=ElfVersion.EV_CURRENT,
                 entry=self.entry,
@@ -375,15 +376,15 @@ class ElfFile:
             data_offset = ehsize + len(self.segments) * phentsize
             for segment in self.segments:
                 pheader = ElfProgramHeader(
-                    type_ = SegmentType.PT_LOAD,
-                    offset = data_offset,
-                    vaddr = segment.virt_addr,
-                    paddr = segment.phys_addr,
-                    filesz = segment.mem_size,
-                    memsz = segment.mem_size,
+                    type_=SegmentType.PT_LOAD,
+                    offset=data_offset,
+                    vaddr=segment.virt_addr,
+                    paddr=segment.phys_addr,
+                    filesz=segment.mem_size,
+                    memsz=segment.mem_size,
                     # FIXME: Need to do something better with permissions in the future!
-                    flags = SegmentAttributes.PF_R | SegmentAttributes.PF_W | SegmentAttributes.PF_X,
-                    align = 1,
+                    flags=SegmentAttributes.PF_R | SegmentAttributes.PF_W | SegmentAttributes.PF_X,
+                    align=1,
                 )
                 pheader_bytes = ELF_PROGRAM_HEADER64.pack(*(getattr(pheader, field) for field in ELF_PROGRAM_HEADER64_FIELDS))
                 f.write(pheader_bytes)
@@ -392,19 +393,17 @@ class ElfFile:
             for segment in self.segments:
                 f.write(segment.data)
 
-
     def add_segment(self, segment: ElfSegment) -> None:
         # TODO: Check that the segment doesn't overlap any existing
         # segment
         # TODO: We may want to keep segments in order.
         self.segments.append(segment)
 
-
     def get_data(self, vaddr: int, size: int) -> bytes:
         for seg in self.segments:
             if vaddr >= seg.virt_addr and vaddr + size <= seg.virt_addr + len(seg.data):
                 offset = vaddr - seg.virt_addr
-                return seg.data[offset:offset+size]
+                return seg.data[offset:offset + size]
 
         raise Exception(f"Unable to find data for vaddr=0x{vaddr:x} size=0x{size:x}")
 
@@ -414,8 +413,7 @@ class ElfFile:
             if vaddr >= seg.virt_addr and vaddr + size <= seg.virt_addr + len(seg.data):
                 offset = vaddr - seg.virt_addr
                 assert len(data) <= size
-                seg.data[offset:offset+len(data)] = data
-
+                seg.data[offset:offset + len(data)] = data
 
     # def read(self, offset: int, size: int) -> bytes:
     #     self._f.seek(offset)
@@ -442,11 +440,10 @@ class ElfFile:
             raise KeyError(f"No symbol named {variable_name} found")
         # symbol_type = found_sym.info & 0xf
         # symbol_binding = found_sym.info >> 4
-        #if symbol_type != 1:
+        # if symbol_type != 1:
         #    raise Exception(f"Unexpected symbol type {symbol_type}. Expect STT_OBJECT")
         return found_sym.value, found_sym.size
 
     def read_struct(self, variable_name: str, struct_: Struct) -> Tuple[int, ...]:
         vaddr, size = self.find_symbol(variable_name)
         return struct_.unpack_from(self.get_data(vaddr, size))
-

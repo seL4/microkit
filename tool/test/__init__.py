@@ -10,8 +10,9 @@ from microkit.sysxml import xml2system, UserError, PlatformDescription
 
 
 plat_desc = PlatformDescription(
-    page_sizes = [0x1_000, 0x200_000]
+    page_sizes=[0x1_000, 0x200_000]
 )
+
 
 def _file(filename: str) -> Path:
     return Path(__file__).parent / filename
@@ -116,6 +117,7 @@ class ChannelParseTests(ExtendedTestCase):
 
     def test_invalid_attrs(self):
         self._check_error("ch_invalid_attrs.xml", "Error: invalid attribute 'foo' on element 'channel': ")
+
 
 class SystemParseTests(ExtendedTestCase):
     def test_duplicate_pd_names(self):

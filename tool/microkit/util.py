@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
+
 class UserError(Exception):
     pass
 
@@ -35,6 +36,7 @@ def round_down(n: int, x: int) -> int:
     d, m = divmod(n, x)
     return n if m == 0 else n - m
 
+
 def mask_bits(n: int, bits: int) -> int:
     """mask out (set to zero) the lower bits from n"""
     assert n > 0
@@ -53,7 +55,6 @@ def str_to_bool(s: str) -> bool:
     elif s.lower() == "false":
         return False
     raise ValueError("invalid boolean value")
-
 
 
 @dataclass
