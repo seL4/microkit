@@ -346,6 +346,20 @@ SUPPORTED_BOARDS = (
         },
         examples = {}
     ),
+    BoardInfo(
+        name="maaxboard",
+        arch=BoardArch.AARCH64,
+        gcc_flags="GCC_CPU=cortex-a53",
+        loader_link_address=0x40480000,
+        kernel_options = {
+            "KernelPlatform": "maaxboard",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples = {
+            "hello": Path("example/maaxboard/hello")
+        }
+    ),
     # For RISC-V the link address for the Microkit loader is dependent on the
     # previous loader. Currently for RISC-V platforms we use OpenSBI which
     # is placed at the start of memory and since we use FW_PAYLOAD, it places

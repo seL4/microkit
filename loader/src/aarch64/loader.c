@@ -288,6 +288,18 @@ putc(uint8_t ch)
 
     *((volatile uint32_t *)(UART_BASE + R_UART_TX_RX_FIFO)) = ch;
 }
+#elif defined(BOARD_maaxboard)
+#define UART_BASE 0x30860000
+#define STAT 0x98
+#define TRANSMIT 0x40
+#define STAT_TDRE (1 << 14)
+
+static void
+putc(uint8_t ch)
+{
+    while (!(*UART_REG(STAT) & STAT_TDRE)) { }
+    *UART_REG(TRANSMIT) = ch;
+}
 #else
 #error Board not defined
 #endif
