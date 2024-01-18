@@ -55,19 +55,6 @@ class ConfigInfo:
 
 SUPPORTED_BOARDS = (
     BoardInfo(
-        name="tqma8xqp1gb",
-        gcc_cpu="cortex-a35",
-        loader_link_address=0x80280000,
-        kernel_options={
-            "KernelPlatform": "tqma8xqp1gb",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-        },
-        examples={
-            "ethernet": Path("example/tqma8xqp1gb/ethernet")
-        }
-    ),
-    BoardInfo(
         name="zcu102",
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
@@ -78,7 +65,19 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
         },
         examples={
-            "hello": Path("example/zcu102/hello")
+        }
+    ),
+    BoardInfo(
+        name="rockpro64",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x20000000,
+        kernel_options={
+            "KernelPlatform": "rockpro64",
+            "KernelARMPlatform": "rockpro64",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples={
         }
     ),
     # BoardInfo(
