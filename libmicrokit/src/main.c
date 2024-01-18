@@ -45,6 +45,7 @@ static void run_init_funcs(void)
     }
 }
 
+seL4_Word gbadge;
 static void handler_loop(void)
 {
     bool have_reply = false;
@@ -55,7 +56,8 @@ static void handler_loop(void)
         seL4_MessageInfo_t tag;
 
         if (have_reply) {
-            tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
+            tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &gbadge, REPLY_CAP);
+            badge = gbadge;
         } else if (have_signal) {
             tag = seL4_NBSendRecv(signal, signal_msg, INPUT_CAP, &badge, REPLY_CAP);
             have_signal = false;

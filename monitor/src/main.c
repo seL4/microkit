@@ -429,14 +429,19 @@ static unsigned perform_invocation(seL4_Word *invocation_data, unsigned offset, 
     return next_offset;
 }
 
+seL4_Word gbadge;
+seL4_UserContext gregs;
 static void monitor(void)
 {
     for (;;) {
-        seL4_Word badge, label;
+        seL4_Word badge;
+        seL4_Word label;
         seL4_MessageInfo_t tag;
         seL4_Error err;
 
-        tag = seL4_Recv(fault_ep, &badge, reply);
+        tag = seL4_Recv(fault_ep, &gbadge, reply);
+        badge = gbadge;
+
         label = seL4_MessageInfo_get_label(tag);
 
         seL4_Word tcb_cap = tcbs[badge];
@@ -473,10 +478,11 @@ static void monitor(void)
 
         seL4_UserContext regs;
 
-        err = seL4_TCB_ReadRegisters(tcb_cap, false, 0, sizeof(seL4_UserContext) / sizeof(seL4_Word), &regs);
+        err = seL4_TCB_ReadRegisters(tcb_cap, false, 0, sizeof(seL4_UserContext) / sizeof(seL4_Word), &gregs);
         if (err != seL4_NoError) {
             fail("error reading registers");
         }
+        regs = gregs;
 
         // FIXME: Would be good to print the whole register set
         puts("Registers: \n");
