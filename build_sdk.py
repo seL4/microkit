@@ -95,7 +95,7 @@ SUPPORTED_BOARDS = (
         }
     ),
     BoardInfo(
-        name="imx8mm",
+        name="imx8mm_evk",
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         kernel_options={
@@ -104,7 +104,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
         },
         examples={
-            "passive_server": Path("example/imx8mm/passive_server")
+            "passive_server": Path("example/imx8mm_evk/passive_server")
         }
     )
 )
