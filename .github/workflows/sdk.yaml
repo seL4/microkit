@@ -16,7 +16,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build_linux_x64:
     name: Build SDK (Linux x86-64)
     runs-on: ubuntu-20.04
     steps:
@@ -46,3 +46,53 @@ jobs:
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
           ./pyenv/bin/python build_sdk.py --sel4=seL4
+  build_macos_x64:
+    name: Build SDK (macOS x86-64)
+    runs-on: macos-12
+    steps:
+      - name: Checkout Microkit repository
+        uses: actions/checkout@v3
+      - name: Checkout seL4 repository
+        uses: actions/checkout@v3
+        with:
+            repository: seL4/seL4
+            ref: microkit
+            path: seL4
+      - name: Install SDK dependencies
+        run: brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
+      - name: Install AArch64 GCC toolchain
+        run: |
+          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          tar xf aarch64-toolchain.tar.gz
+          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Build SDK
+        run: |
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/python build_sdk.py --sel4=seL4
+  build_macos_arm64:
+    name: Build SDK (macOS ARM64)
+    runs-on: macos-12
+    steps:
+      - name: Checkout Microkit repository
+        uses: actions/checkout@v3
+      - name: Checkout seL4 repository
+        uses: actions/checkout@v3
+        with:
+            repository: seL4/seL4
+            ref: microkit
+            path: seL4
+      - name: Install SDK dependencies
+        run: brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
+      - name: Install AArch64 GCC toolchain
+        run: |
+          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          tar xf aarch64-toolchain.tar.gz
+          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Build SDK
+        run: |
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+          ./pyenv/bin/python build_sdk.py --sel4=seL4 --tool-target-triple=aarch64-apple-darwin
