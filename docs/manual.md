@@ -514,6 +514,12 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 This chapter describes the board support packages that are available in the SDK.
 
+## i.MX8MM-EVK
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x41000000
+
 ## MaaXBoard
 
 The MaaXBoard is a low-cost ARM SBC based on the NXP i.MX8MQ system-on-chip.
