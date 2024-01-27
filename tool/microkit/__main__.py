@@ -53,8 +53,6 @@ from microkit.sel4 import (
     Sel4Aarch64Regs,
     Sel4Invocation,
     Sel4AsidPoolAssign,
-    Sel4PageUpperDirectoryMap,
-    Sel4PageDirectoryMap,
     Sel4PageTableMap,
     Sel4PageMap,
     Sel4TcbSetSchedParams,
@@ -83,8 +81,6 @@ from microkit.sel4 import (
     SEL4_ENDPOINT_OBJECT,
     SEL4_NOTIFICATION_OBJECT,
     SEL4_VSPACE_OBJECT,
-    SEL4_PAGE_UPPER_DIRECTORY_OBJECT,
-    SEL4_PAGE_DIRECTORY_OBJECT,
     SEL4_SMALL_PAGE_OBJECT,
     SEL4_LARGE_PAGE_OBJECT,
     SEL4_PAGE_TABLE_OBJECT,
@@ -1154,11 +1150,11 @@ def build_system(
 
     vspace_objects = init_system.allocate_objects(SEL4_VSPACE_OBJECT, vspace_names)
 
-    ud_names = [f"PageUpperDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
-    ud_objects = init_system.allocate_objects(SEL4_PAGE_UPPER_DIRECTORY_OBJECT, ud_names)
+    ud_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in uds]
+    ud_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, ud_names)
 
-    d_names = [f"PageDirectory: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
-    d_objects = init_system.allocate_objects(SEL4_PAGE_DIRECTORY_OBJECT, d_names)
+    d_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in ds]
+    d_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, d_names)
 
     pt_names = [f"PageTable: PD={pd_names[pd_idx]} VADDR=0x{vaddr:x}" for pd_idx, vaddr in pts]
     pt_objects = init_system.allocate_objects(SEL4_PAGE_TABLE_OBJECT, pt_names)
@@ -1413,8 +1409,8 @@ def build_system(
 
     # Initialise the VSpaces -- assign them all the the initial asid pool.
     for map_cls, descriptors, objects in [
-        (Sel4PageUpperDirectoryMap, uds, ud_objects),
-        (Sel4PageDirectoryMap, ds, d_objects),
+        (Sel4PageTableMap, uds, ud_objects),
+        (Sel4PageTableMap, ds, d_objects),
         (Sel4PageTableMap, pts, pt_objects),
     ]:
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects):

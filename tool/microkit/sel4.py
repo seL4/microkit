@@ -20,8 +20,6 @@ SEL4_ENDPOINT_SIZE = (1 << 4)
 SEL4_NOTIFICATION_SIZE = (1 << 6)
 SEL4_REPLY_SIZE = (1 << 5)
 SEL4_PAGE_TABLE_SIZE = (1 << 12)
-SEL4_PAGE_DIRECTORY_SIZE = (1 << 12)
-SEL4_PAGE_UPPER_DIRECTORY_SIZE = (1 << 12)
 SEL4_LARGE_PAGE_SIZE = (2 * 1024 * 1024)
 SEL4_SMALL_PAGE_SIZE = (4 * 1024)
 SEL4_VSPACE_SIZE = (4 * 1024)
@@ -40,14 +38,10 @@ SEL4_SCHEDCONTEXT_OBJECT = 5
 SEL4_REPLY_OBJECT = 6
 
 SEL4_HUGE_PAGE_OBJECT = 7
-SEL4_PAGE_UPPER_DIRECTORY_OBJECT = 8
-SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT = 9
-SEL4_SMALL_PAGE_OBJECT = 10
-SEL4_LARGE_PAGE_OBJECT = 11
-SEL4_PAGE_TABLE_OBJECT = 12
-SEL4_PAGE_DIRECTORY_OBJECT = 13
-
-SEL4_VSPACE_OBJECT = SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT
+SEL4_VSPACE_OBJECT = 8
+SEL4_SMALL_PAGE_OBJECT = 9
+SEL4_LARGE_PAGE_OBJECT = 10
+SEL4_PAGE_TABLE_OBJECT = 11
 
 SEL4_OBJECT_TYPE_NAMES = {
     SEL4_UNTYPED_OBJECT: "SEL4_UNTYPED_OBJECT",
@@ -58,12 +52,10 @@ SEL4_OBJECT_TYPE_NAMES = {
     SEL4_SCHEDCONTEXT_OBJECT: "SEL4_SCHEDCONTEXT_OBJECT",
     SEL4_REPLY_OBJECT: "SEL4_REPLY_OBJECT",
     SEL4_HUGE_PAGE_OBJECT: "SEL4_HUGE_PAGE_OBJECT",
-    SEL4_PAGE_UPPER_DIRECTORY_OBJECT: "SEL4_PAGE_UPPER_DIRECTORY_OBJECT",
-    SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT: "SEL4_PAGE_GLOBAL_DIRECTORY_OBJECT",
     SEL4_SMALL_PAGE_OBJECT: "SEL4_SMALL_PAGE_OBJECT",
     SEL4_LARGE_PAGE_OBJECT: "SEL4_LARGE_PAGE_OBJECT",
     SEL4_PAGE_TABLE_OBJECT: "SEL4_PAGE_TABLE_OBJECT",
-    SEL4_PAGE_DIRECTORY_OBJECT: "SEL4_PAGE_DIRECTORY_OBJECT",
+    SEL4_VSPACE_OBJECT: "SEL4_VSPACE_OBJECT",
 }
 
 FIXED_OBJECT_SIZES = {
@@ -73,8 +65,6 @@ FIXED_OBJECT_SIZES = {
     SEL4_REPLY_OBJECT: SEL4_REPLY_SIZE,
 
     SEL4_VSPACE_OBJECT: SEL4_VSPACE_SIZE,
-    SEL4_PAGE_UPPER_DIRECTORY_OBJECT: SEL4_PAGE_UPPER_DIRECTORY_SIZE,
-    SEL4_PAGE_DIRECTORY_OBJECT: SEL4_PAGE_DIRECTORY_SIZE,
     SEL4_PAGE_TABLE_OBJECT: SEL4_PAGE_TABLE_SIZE,
 
     SEL4_LARGE_PAGE_OBJECT: SEL4_LARGE_PAGE_SIZE,
@@ -154,7 +144,7 @@ def calculate_rootserver_size(initial_task_region: MemoryRegion) -> int:
     asid_pool_bits = 12  # seL4_ASIDPoolBits
     vspace_bits = 12  # seL4_VSpaceBits
     page_table_bits = 12  # seL4_PageTableBits
-    min_sched_context_bits = 8  # seL4_MinSchedContextBits
+    min_sched_context_bits = 7  # seL4_MinSchedContextBits
 
     size = 0
     size += 1 << (root_cnode_bits + slot_bits)
@@ -352,27 +342,24 @@ class Sel4Label(IntEnum):
     ARMVSpaceInvalidate_Data = 37
     ARMVSpaceCleanInvalidate_Data = 38
     ARMVSpaceUnify_Instruction = 39
-    # ARM Page Upper Directory
-    ARMPageUpperDirectoryMap = 40
-    ARMPageUpperDirectoryUnmap = 41
-    ARMPageDirectoryMap = 42
-    ARMPageDirectoryUnmap = 43
+    # ARM SMC
+    ARMSMCCall = 40
     # ARM Page table
-    ARMPageTableMap = 44
-    ARMPageTableUnmap = 45
+    ARMPageTableMap = 41
+    ARMPageTableUnmap = 42
     # ARM Page
-    ARMPageMap = 46
-    ARMPageUnmap = 47
-    ARMPageClean_Data = 48
-    ARMPageInvalidate_Data = 49
-    ARMPageCleanInvalidate_Data = 50
-    ARMPageUnify_Instruction = 51
-    ARMPageGetAddress = 52
+    ARMPageMap = 43
+    ARMPageUnmap = 44
+    ARMPageClean_Data = 45
+    ARMPageInvalidate_Data = 46
+    ARMPageCleanInvalidate_Data = 47
+    ARMPageUnify_Instruction = 48
+    ARMPageGetAddress = 49
     # ARM Asid
-    ARMASIDControlMakePool = 53
-    ARMASIDPoolAssign = 54
+    ARMASIDControlMakePool = 50
+    ARMASIDPoolAssign = 51
     # ARM IRQ
-    ARMIRQIssueIRQHandlerTrigger = 55
+    ARMIRQIssueIRQHandlerTrigger = 52
 
 
 # Invocations
@@ -561,30 +548,6 @@ class Sel4IrqHandlerSetNotification(Sel4Invocation):
     label = Sel4Label.IRQSetIRQHandler
     irq_handler: int
     notification: int
-
-
-@dataclass
-class Sel4PageUpperDirectoryMap(Sel4Invocation):
-    _object_type = "Page Upper Directory"
-    _method_name = "Map"
-    _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageUpperDirectoryMap
-    page_upper_directory: int
-    vspace: int
-    vaddr: int
-    attr: int
-
-
-@dataclass
-class Sel4PageDirectoryMap(Sel4Invocation):
-    _object_type = "Page Directory"
-    _method_name = "Map"
-    _extra_caps = ("vspace", )
-    label = Sel4Label.ARMPageDirectoryMap
-    page_directory: int
-    vspace: int
-    vaddr: int
-    attr: int
 
 
 @dataclass
@@ -858,7 +821,7 @@ def emulate_kernel_boot(
     else:
         raise Exception("Couldn't find appropriate region for initial task kernel objects")
 
-    fixed_cap_count = 0xf
+    fixed_cap_count = 0x10
     sched_control_cap_count = 1
     paging_cap_count = _get_arch_n_paging(initial_task_virt_region)
     page_cap_count = initial_task_virt_region.size // kernel_config.minimum_page_size
