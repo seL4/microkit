@@ -96,10 +96,9 @@ uint64_t boot_lvl1_lower[1 << 9] ALIGN(1 << 12);
 uintptr_t exception_register_state[32];
 
 extern char _bss_end;
-const struct loader_data *loader_data = (void *)&_bss_end;
+const struct loader_data *loader_data = (void *) &_bss_end;
 
-static void
-memcpy(void *dst, const void *src, size_t sz)
+static void memcpy(void *dst, const void *src, size_t sz)
 {
     char *dst_ = dst;
     const char *src_ = src;
@@ -114,8 +113,7 @@ memcpy(void *dst, const void *src, size_t sz)
 #define TRANSMIT 0x1c
 #define STAT_TDRE (1 << 23)
 
-static void
-putc(uint8_t ch)
+static void putc(uint8_t ch)
 {
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
@@ -126,8 +124,7 @@ putc(uint8_t ch)
 #define TRANSMIT 0x40
 #define STAT_TDRE (1 << 14)
 
-static void
-putc(uint8_t ch)
+static void putc(uint8_t ch)
 {
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
@@ -138,8 +135,7 @@ putc(uint8_t ch)
 #define TRANSMIT 0x1c
 #define STAT_TDRE (1 << 23)
 
-static void
-putc(uint8_t ch)
+static void putc(uint8_t ch)
 {
     *((volatile uint32_t *)(0x00FF000030)) = ch;
 }
@@ -149,8 +145,7 @@ putc(uint8_t ch)
 #define TRANSMIT 0x40
 #define STAT_TDRE (1 << 14)
 
-static void
-putc(uint8_t ch)
+static void putc(uint8_t ch)
 {
     if (ch == '\n') {
         // ensure FIFO has space
@@ -166,8 +161,7 @@ putc(uint8_t ch)
 #error Board not defined
 #endif
 
-static void
-puts(const char *s)
+static void puts(const char *s)
 {
     while (*s) {
         putc(*s);
@@ -175,14 +169,12 @@ puts(const char *s)
     }
 }
 
-static char
-hexchar(unsigned int v)
+static char hexchar(unsigned int v)
 {
     return v < 10 ? '0' + v : ('a' - 10) + v;
 }
 
-static void
-puthex32(uint32_t val)
+static void puthex32(uint32_t val)
 {
     char buffer[8 + 3];
     buffer[0] = '0';
@@ -195,8 +187,7 @@ puthex32(uint32_t val)
     puts(buffer);
 }
 
-static void
-puthex64(uint64_t val)
+static void puthex64(uint64_t val)
 {
     char buffer[16 + 3];
     buffer[0] = '0';
@@ -209,8 +200,7 @@ puthex64(uint64_t val)
     puts(buffer);
 }
 
-static void
-puthex(uintptr_t val)
+static void puthex(uintptr_t val)
 {
 #if WORD_SIZE == 32
     puthex32(val);
@@ -220,8 +210,7 @@ puthex(uintptr_t val)
 }
 
 /* Returns the current execption level */
-static enum el
-current_el(void)
+static enum el current_el(void)
 {
     /* See: C5.2.1 CurrentEL */
     uint32_t val;
@@ -230,78 +219,126 @@ current_el(void)
     return (enum el) val >> 2;
 }
 
-static char *
-el_to_string(enum el el)
+static char *el_to_string(enum el el)
 {
     switch (el) {
-        case EL0: return "EL0";
-        case EL1: return "EL1";
-        case EL2: return "EL2";
-        case EL3: return "EL3";
+    case EL0:
+        return "EL0";
+    case EL1:
+        return "EL1";
+    case EL2:
+        return "EL2";
+    case EL3:
+        return "EL3";
     }
 
     return "<invalid el>";
 }
 
-static char *
-ex_to_string(uintptr_t ex)
+static char *ex_to_string(uintptr_t ex)
 {
     switch (ex) {
-        case 0: return "Synchronous EL1t";
-        case 1: return "IRQ EL1t";
-        case 2: return "FIQ EL1t";
-        case 3: return "SError EL1t";
-        case 4: return "Synchronous EL1h";
-        case 5: return "IRQ EL1h";
-        case 6: return "FIQ EL1h";
-        case 7: return "SError EL1h";
-        case 8: return "Synchronous 64-bit EL0";
-        case 9: return "IRQ 64-bit EL0";
-        case 10: return "FIQ 64-bit EL0";
-        case 11: return "SError 64-bit EL0";
-        case 12: return "Synchronous 32-bit EL0";
-        case 13: return "IRQ 32-bit EL0";
-        case 14: return "FIQ 32-bit EL0";
-        case 15: return "SError 32-bit EL0";
+    case 0:
+        return "Synchronous EL1t";
+    case 1:
+        return "IRQ EL1t";
+    case 2:
+        return "FIQ EL1t";
+    case 3:
+        return "SError EL1t";
+    case 4:
+        return "Synchronous EL1h";
+    case 5:
+        return "IRQ EL1h";
+    case 6:
+        return "FIQ EL1h";
+    case 7:
+        return "SError EL1h";
+    case 8:
+        return "Synchronous 64-bit EL0";
+    case 9:
+        return "IRQ 64-bit EL0";
+    case 10:
+        return "FIQ 64-bit EL0";
+    case 11:
+        return "SError 64-bit EL0";
+    case 12:
+        return "Synchronous 32-bit EL0";
+    case 13:
+        return "IRQ 32-bit EL0";
+    case 14:
+        return "FIQ 32-bit EL0";
+    case 15:
+        return "SError 32-bit EL0";
     }
     return "<invalid ex>";
 }
 
-static char *
-ec_to_string(uintptr_t ec)
+static char *ec_to_string(uintptr_t ec)
 {
     switch (ec) {
-        case 0: return "Unknown reason";
-        case 1: return "Trapped WFI or WFE instruction execution";
-        case 3: return "Trapped MCR or MRC access with (coproc==0b1111) this is not reported using EC 0b000000";
-        case 4: return "Trapped MCRR or MRRC access with (coproc==0b1111) this is not reported using EC 0b000000";
-        case 5: return "Trapped MCR or MRC access with (coproc==0b1110)";
-        case 6: return "Trapped LDC or STC access";
-        case 7: return "Access to SVC, Advanced SIMD or floating-point functionality trapped";
-        case 12: return "Trapped MRRC access with (coproc==0b1110)";
-        case 13: return "Branch Target Exception";
-        case 17: return "SVC instruction execution in AArch32 state";
-        case 21: return "SVC instruction execution in AArch64 state";
-        case 24: return "Trapped MSR, MRS or System instruction exuection in AArch64 state, this is not reported using EC 0xb000000, 0b000001 or 0b000111";
-        case 25: return "Access to SVE functionality trapped";
-        case 28: return "Exception from a Pointer Authentication instruction authentication failure";
-        case 32: return "Instruction Abort from a lower Exception level";
-        case 33: return "Instruction Abort taken without a change in Exception level";
-        case 34: return "PC alignment fault exception";
-        case 36: return "Data Abort from a lower Exception level";
-        case 37: return "Data Abort taken without a change in Exception level";
-        case 38: return "SP alignment faultr exception";
-        case 40: return "Trapped floating-point exception taken from AArch32 state";
-        case 44: return "Trapped floating-point exception taken from AArch64 state";
-        case 47: return "SError interrupt";
-        case 48: return "Breakpoint exception from a lower Exception level";
-        case 49: return "Breakpoint exception taken without a change in Exception level";
-        case 50: return "Software Step exception from a lower Exception level";
-        case 51: return "Software Step exception taken without a change in Exception level";
-        case 52: return "Watchpoint exception from a lower Exception level";
-        case 53: return "Watchpoint exception taken without a change in Exception level";
-        case 56: return "BKPT instruction execution in AArch32 state";
-        case 60: return "BRK instruction execution in AArch64 state";
+    case 0:
+        return "Unknown reason";
+    case 1:
+        return "Trapped WFI or WFE instruction execution";
+    case 3:
+        return "Trapped MCR or MRC access with (coproc==0b1111) this is not reported using EC 0b000000";
+    case 4:
+        return "Trapped MCRR or MRRC access with (coproc==0b1111) this is not reported using EC 0b000000";
+    case 5:
+        return "Trapped MCR or MRC access with (coproc==0b1110)";
+    case 6:
+        return "Trapped LDC or STC access";
+    case 7:
+        return "Access to SVC, Advanced SIMD or floating-point functionality trapped";
+    case 12:
+        return "Trapped MRRC access with (coproc==0b1110)";
+    case 13:
+        return "Branch Target Exception";
+    case 17:
+        return "SVC instruction execution in AArch32 state";
+    case 21:
+        return "SVC instruction execution in AArch64 state";
+    case 24:
+        return "Trapped MSR, MRS or System instruction exuection in AArch64 state, this is not reported using EC 0xb000000, 0b000001 or 0b000111";
+    case 25:
+        return "Access to SVE functionality trapped";
+    case 28:
+        return "Exception from a Pointer Authentication instruction authentication failure";
+    case 32:
+        return "Instruction Abort from a lower Exception level";
+    case 33:
+        return "Instruction Abort taken without a change in Exception level";
+    case 34:
+        return "PC alignment fault exception";
+    case 36:
+        return "Data Abort from a lower Exception level";
+    case 37:
+        return "Data Abort taken without a change in Exception level";
+    case 38:
+        return "SP alignment faultr exception";
+    case 40:
+        return "Trapped floating-point exception taken from AArch32 state";
+    case 44:
+        return "Trapped floating-point exception taken from AArch64 state";
+    case 47:
+        return "SError interrupt";
+    case 48:
+        return "Breakpoint exception from a lower Exception level";
+    case 49:
+        return "Breakpoint exception taken without a change in Exception level";
+    case 50:
+        return "Software Step exception from a lower Exception level";
+    case 51:
+        return "Software Step exception taken without a change in Exception level";
+    case 52:
+        return "Watchpoint exception from a lower Exception level";
+    case 53:
+        return "Watchpoint exception taken without a change in Exception level";
+    case 56:
+        return "BKPT instruction execution in AArch32 state";
+    case 60:
+        return "BRK instruction execution in AArch64 state";
     }
     return "<invalid EC>";
 }
@@ -313,16 +350,14 @@ ec_to_string(uintptr_t ec)
  * debugging to verify that the data structures are
  * being interpretted correctly by the loader.
  */
-static void
-print_flags(void)
+static void print_flags(void)
 {
     if (loader_data->flags & FLAG_SEL4_HYP) {
         puts("             seL4 configured as hypervisor\n");
     }
 }
 
-static void
-print_loader_data(void)
+static void print_loader_data(void)
 {
     puts("LDR|INFO: Flags:                ");
     puthex64(loader_data->flags);
@@ -360,8 +395,7 @@ print_loader_data(void)
     }
 }
 
-static void
-copy_data(void)
+static void copy_data(void)
 {
     const void *base = &loader_data->regions[loader_data->num_regions];
     for (uint32_t i = 0; i < loader_data->num_regions; i++) {
@@ -373,8 +407,7 @@ copy_data(void)
     }
 }
 
-static int
-ensure_correct_el(void)
+static int ensure_correct_el(void)
 {
     enum el el = current_el();
 
@@ -421,8 +454,7 @@ ensure_correct_el(void)
     return 0;
 }
 
-static void
-start_kernel(void)
+static void start_kernel(void)
 {
     ((sel4_entry)(loader_data->kernel_entry))(
         loader_data->ui_p_reg_start,
@@ -437,8 +469,7 @@ start_kernel(void)
 }
 
 #if defined(BOARD_zcu102)
-static void
-configure_gicv2(void)
+static void configure_gicv2(void)
 {
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
      *
@@ -483,8 +514,7 @@ configure_gicv2(void)
 #endif
 
 
-int
-main(void)
+int main(void)
 {
     int r;
 
@@ -528,8 +558,7 @@ fail:
     }
 }
 
-void
-exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
+void exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
 {
     uintptr_t ec = (esr >> 26) & 0x3f;
     puts("LDR|ERROR: loader trapped kernel exception: ");
