@@ -21,7 +21,7 @@ endif
 
 
 TOOLCHAIN := aarch64-none-elf-
-CFLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o util64.o
@@ -29,7 +29,7 @@ LINKSCRIPT_INPUT := loader.ld
 LINKSCRIPT := $(BUILD_DIR)/link.ld
 
 $(BUILD_DIR)/%.o : src/%.S
-	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g3  -mcpu=$(GCC_CPU)  $< -o $@
+	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g  -mcpu=$(GCC_CPU)  $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.s
 	$(TOOLCHAIN)as -g -mcpu=$(GCC_CPU) $< -o $@
