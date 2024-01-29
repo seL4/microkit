@@ -16,7 +16,7 @@ AS := $(TOOLCHAIN)-as
 OVERLAPPING_PAGES_OBJS := overlapping_pages.o
 
 IMAGES := overlapping_pages.elf
-CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g3 -O3 -Wall  -Wno-unused-function -Werror -I$(SEL4_SDK)/include -I$(LIBMICROKIT)/include
+CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(SEL4_SDK)/include -I$(LIBMICROKIT)/include
 LDFLAGS := -L$(LIBMICROKIT) -Tmicrokit.ld
 LIBS := -lmicrokit
 
@@ -27,7 +27,7 @@ all: $(IMAGES)
 	$(CC) -c $(CFLAGS) $< -o $@
 
 %.o: %.s Makefile
-	$(AS) -g3 -mcpu=$(CPU) $< -o $@
+	$(AS) -g -mcpu=$(CPU) $< -o $@
 
 overlapping_pages.elf: $(OVERLAPPING_PAGES_OBJS)
 	$(LD) $(LDFLAGS) $(OVERLAPPING_PAGES_OBJS) $(LIBS) -o $@
