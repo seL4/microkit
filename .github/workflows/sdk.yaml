@@ -37,9 +37,9 @@ jobs:
             python3.9 python3-pip python3.9-venv musl-tools
       - name: Install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz\?revision\=79f65c42-1a1b-43f2-acb7-a795c8427085\&hash\=61BBFB526E785D234C5D8718D9BA8E61
+          wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz%3Frev%3D28d5199f6db34e5980aae1062e5a6703%26hash%3DF6F5604BC1A2BBAAEAC4F6E98D8DC35B
           tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+          echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
@@ -62,9 +62,9 @@ jobs:
         run: brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
       - name: Install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
           tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+          echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
@@ -87,9 +87,9 @@ jobs:
         run: brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
       - name: Install AArch64 GCC toolchain
         run: |
-          wget -O aarch64-toolchain.tar.gz https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=51c39c753f8c4a54875b7c5dccfb84ef&hash=DB5BC5D16E3FE6AB60E8F51B97CE5777
+          wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
           tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/arm-gnu-toolchain-11.3.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+          echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
