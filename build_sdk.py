@@ -350,7 +350,7 @@ SUPPORTED_BOARDS = (
         name="maaxboard",
         arch=BoardArch.AARCH64,
         gcc_flags="GCC_CPU=cortex-a53",
-        loader_link_address=0x40480000,
+        loader_link_address=0x50000000,
         kernel_options = {
             "KernelPlatform": "maaxboard",
             "KernelIsMCS": True,
