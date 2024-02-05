@@ -355,6 +355,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "maaxboard",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples = {
             "hello": Path("example/maaxboard/hello")
