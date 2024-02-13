@@ -62,13 +62,18 @@ At this point in time this is not fully realised, however it is a high priority 
 
 The ARM toolchain is available from:
 
-https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads/10-2-2020-11
+https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads.
 
-The specific version used for development is the x86_64-aarch64-none-elf version:
+Development is done with the aarch64-none-elf- toolchain.
 
-https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-aarch64-none-elf.tar.xz?revision=79f65c42-1a1b-43f2-acb7-a795c8427085&hash=61BBFB526E785D234C5D8718D9BA8E61
+On Linux x86-64 the following version is used:
+https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz?rev=28d5199f6db34e5980aae1062e5a6703&hash=F6F5604BC1A2BBAAEAC4F6E98D8DC35B
 
-Note: There are no plans to support development of Microkit on any platforms other than Linux x86_64.
+On macOS Apple Silicon/AArch64 the following version is used:
+https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-arm64-aarch64-none-elf.tar.xz?rev=c5523a33dc7e49278f2a943a6a9822c4&hash=6DC6989BB1E6A9C7F8CBFEAA84842FA1
+
+On macOS Intel/x86-64 the following version is used:
+https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=09b11f159fc24fdda01e05bb32695dd5&hash=6AAF4239F28AE17389AB3E611DFFE0A6
 
 ## seL4 Version
 
