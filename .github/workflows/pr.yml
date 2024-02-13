@@ -32,3 +32,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: seL4/ci-actions/style@master
+
+  mypy:
+    name: 'mypy on tool'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Microkit repository
+        uses: actions/checkout@v3
+      - name: Install mypy
+        run: |
+          sudo add-apt-repository ppa:deadsnakes/ppa
+          sudo apt update
+          sudo apt install python3.9 python3-pip python3.9-venv
+          python3.9 -m venv pyenv
+          ./pyenv/bin/pip install --upgrade pip setuptools wheel
+          ./pyenv/bin/pip install -r requirements.txt
+      - name: Run mypy
+        run: ./pyenv/bin/mypy tool/microkit
