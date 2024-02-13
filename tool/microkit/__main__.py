@@ -45,7 +45,7 @@ from os import environ
 from math import log2, ceil
 from sys import argv, executable, stderr
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, cast
 
 from microkit.elf import ElfFile
 from microkit.util import kb, mb, lsb, msb, round_up, round_down, mask_bits, is_power_of_two, MemoryRegion, UserError
@@ -263,7 +263,7 @@ def invocation_to_str(inv: Sel4Invocation, cap_lookup: Dict[int, str]) -> str:
             else:
                 val_str = f"{val} ({object_type_name} - 0x{object_size:x})"
         elif nm == "regs":
-            regs = vars(inv.regs)
+            regs = vars(cast(Sel4TcbWriteRegisters, inv).regs)
             val_str = ""
             for i, reg in enumerate(regs.items()):
                 reg_value = 0 if reg[1] is None else reg[1]
@@ -594,7 +594,7 @@ class Region:
     addr: int
     data: bytearray
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Region name={self.name} addr=0x{self.addr:x} size={len(self.data)}>"
 
 
