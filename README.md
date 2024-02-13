@@ -9,7 +9,7 @@ The purpose of the seL4 Microkit is to enable system designers to create static 
 
 The seL4 Microkit consists of three parts:
 
-   * Microkit Library
+   * Microkit library
    * Microkit initial task
    * Microkit tool
 
