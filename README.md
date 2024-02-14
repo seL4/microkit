@@ -39,8 +39,30 @@ Please file an issue if additional packages are required.
 * python3.9
 * python3.9-venv
 * musl-1.2.2
-* ARM GCC compiler; 10.2-2020.11
+* cmake
+* ninja-build
+* ARM GCC compiler for none-elf; 10.2-2020.11
+* aarch64 Linux gcc compiler
+* device tree compiler
+* xmllint
 
+To build the documentation you also need
+* pandoc
+* pdflatex
+* texlive-latex-recommended
+* texlive-fonts-recommended
+* texlive-fonts-extra
+* texlive-latex-extra
+
+On a Debian-like system you can do:
+
+    $ sudo apt install build-essential git cmake ninja-build \
+	    gcc-aarch64-linux-gnu device-tree-compiler libxml2-utils \
+		pandoc texlive-latex-base telive-latex-recommended \
+		texlive-fonts-recommended texlive-fonts-extra \
+		python3 python3-venv \
+		musl-dev musl-tools
+		
 On Ubuntu 18.04 there are no packages available for musl-1.2.2; it must be compiled from source.
 On Ubuntu 18.04 Python 3.9 is available via the *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 To use this:
@@ -74,6 +96,11 @@ https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-t
 
 On macOS Intel/x86-64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=09b11f159fc24fdda01e05bb32695dd5&hash=6AAF4239F28AE17389AB3E611DFFE0A6
+
+Recent Linux systems may not be compatible with the desired version of
+`pyoxidiser`.  If the invocation of `pyoxidizer` fails, update it to
+the latest version with
+    ./pyenv/bin/pip install --upgrade pyoxidizer
 
 ## seL4 Version
 
