@@ -41,8 +41,7 @@ Please file an issue if additional packages are required.
 * musl-1.2.2
 * cmake
 * ninja-build
-* ARM GCC compiler for none-elf; 10.2-2020.11
-* aarch64 Linux gcc compiler
+* ARM GCC compiler for none-elf; version 12.2.1 20221205
 * device tree compiler
 * xmllint
 
@@ -57,8 +56,8 @@ To build the documentation you also need
 On a Debian-like system you can do:
 
     $ sudo apt install build-essential git cmake ninja-build \
-	    gcc-aarch64-linux-gnu device-tree-compiler libxml2-utils \
-		pandoc texlive-latex-base telive-latex-recommended \
+	    device-tree-compiler libxml2-utils \
+		pandoc texlive-latex-base texlive-latex-recommended \
 		texlive-fonts-recommended texlive-fonts-extra \
 		python3 python3-venv \
 		musl-dev musl-tools
@@ -97,10 +96,6 @@ https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-t
 On macOS Intel/x86-64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=09b11f159fc24fdda01e05bb32695dd5&hash=6AAF4239F28AE17389AB3E611DFFE0A6
 
-Recent Linux systems may not be compatible with the desired version of
-`pyoxidiser`.  If the invocation of `pyoxidizer` fails, update it to
-the latest version with
-    ./pyenv/bin/pip install --upgrade pyoxidizer
 
 ## seL4 Version
 
