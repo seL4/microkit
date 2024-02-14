@@ -62,7 +62,7 @@ On a Debian-like system you can do:
 		texlive-fonts-recommended texlive-fonts-extra \
 		python3 python3-venv \
 		musl-dev musl-tools
-		
+
 On Ubuntu 18.04 there are no packages available for musl-1.2.2; it must be compiled from source.
 On Ubuntu 18.04 Python 3.9 is available via the *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 To use this:
