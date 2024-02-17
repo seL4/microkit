@@ -96,7 +96,6 @@ https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-t
 On macOS Intel/x86-64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=09b11f159fc24fdda01e05bb32695dd5&hash=6AAF4239F28AE17389AB3E611DFFE0A6
 
-
 ## seL4 Version
 
 The SDK includes a binary of the seL4 kernel.
