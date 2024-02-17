@@ -28,7 +28,7 @@ The remainder of this README is for Microkit developers.
 
 ## Developer system requirements
 
-Development of Microkit has primarily been performed on Ubuntu 18.04 LTS (x86_64).
+Building the Microkit SDK is supported on Linux (x86_64) and macOS (Apple Silicon/Intel).
 
 This section attempts to list the packages or external development tools which are required during development.
 At this stage it may be incomplete.
@@ -38,7 +38,7 @@ Please file an issue if additional packages are required.
 * make
 * python3.9
 * python3.9-venv
-* musl-1.2.2
+* musl-1.2.2 (only when targeting Linux)
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
@@ -62,13 +62,17 @@ On a Debian-like system you can do:
 		python3 python3-venv \
 		musl-dev musl-tools
 
-On Ubuntu 18.04 there are no packages available for musl-1.2.2; it must be compiled from source.
-On Ubuntu 18.04 Python 3.9 is available via the *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
+If you do not have Python 3.9 available, you can get it via the
+*deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 To use this:
 
     $ sudo add-apt-repository ppa:deadsnakes/ppa
     $ sudo apt update
     $ sudo apt install python3.9 python3.9-venv
+
+On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
+
+    $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
 
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
