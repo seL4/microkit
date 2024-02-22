@@ -349,6 +349,8 @@ Additionally, if the protection domain provides a protected procedure it must al
     void microkit_irq_ack(microkit_channel ch);
     void microkit_mr_set(uint8_t mr, uint64_t value);
     uint64_t microkit_mr_get(uint8_t mr);
+    void microkit_arm_vspace_data_clean(uintptr_t start, uintptr_t end);
+    void microkit_arm_vspace_data_invalidate(uintptr_t start, uintptr_t end)
 
 
 ## `void init(void)`
@@ -421,6 +423,14 @@ Get a message register.
 ## `void microkit_mr_set(uint8_t mr, uint64_t)`
 
 Set a message register.
+
+## `void microkit_arm_vspace_data_clean(uintptr_t start, uintptr_t end)`
+
+Clean cached data given a range of virtual addresses.
+
+## `void microkit_arm_vspace_data_invalidate(uintptr_t start, uintptr_t end)`
+
+Invalidate cached data given a range of virtual addresses.
 
 
 # System Description Format {#sysdesc}
