@@ -121,6 +121,32 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/imx8mq_evk/hello")
         }
     ),
+    BoardInfo(
+        name="odroidc2",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x20000000,
+        kernel_options={
+            "KernelPlatform": "odroidc2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples={
+            "hello": Path("example/odroidc2/hello")
+        }
+    ),
+    BoardInfo(
+        name="odroidc4",
+        gcc_cpu="cortex-a55",
+        loader_link_address=0x20000000,
+        kernel_options={
+            "KernelPlatform": "odroidc4",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+        },
+        examples={
+            "timer": Path("example/odroidc4/timer")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (

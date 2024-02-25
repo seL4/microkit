@@ -157,6 +157,28 @@ static void putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
+#elif defined(BOARD_odroidc2)
+#define UART_BASE 0xc81004c0
+#define UART_WFIFO 0x0
+#define UART_STATUS 0xC
+#define UART_TX_FULL (1 << 21)
+
+static void putc(uint8_t ch)
+{
+    while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
+    *UART_REG(UART_WFIFO) = ch;
+}
+#elif defined(BOARD_odroidc4)
+#define UART_BASE 0xff803000
+#define UART_WFIFO 0x0
+#define UART_STATUS 0xC
+#define UART_TX_FULL (1 << 21)
+
+static void putc(uint8_t ch)
+{
+    while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
+    *UART_REG(UART_WFIFO) = ch;
+}
 #else
 #error Board not defined
 #endif
