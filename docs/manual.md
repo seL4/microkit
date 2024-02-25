@@ -535,6 +535,24 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x40480000
 
+## Odroid-C2
+
+The HardKernel Odroid-C2 is an ARM SBC based on the Amlogic Meson S905 system-on-chip. It
+should be noted that the Odroid-C2 is no longer available for purchase but its successor,
+the Odroid-C4, is readily available at the time of writing.
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x20000000
+
+## Odroid-C4
+
+The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-on-chip.
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x20000000
+
 ## TQMa8XQP 1GB
 
 The TQMa8XQP is a system-on-module designed by TQ-Systems GmbH.
