@@ -162,7 +162,7 @@ board/$board/$config/lib/libmicrokit.a
 board/$board/$config/lib/microkit.ld
 board/$board/$config/elf/
 board/$board/$config/elf/loader.elf
-board/$board/$config/elf/kernel.elf
+board/$board/$config/elf/sel4.elf
 board/$board/$config/elf/monitor.elf
 ```
 
