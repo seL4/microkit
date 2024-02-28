@@ -59,7 +59,7 @@ On a Debian-like system you can do:
 	    device-tree-compiler libxml2-utils \
 		pandoc texlive-latex-base texlive-latex-recommended \
 		texlive-fonts-recommended texlive-fonts-extra \
-		python3 python3-venv \
+		python3.9 python3.9-venv \
 		musl-dev musl-tools
 
 If you do not have Python 3.9 available, you can get it via the
