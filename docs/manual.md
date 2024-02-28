@@ -562,6 +562,9 @@ TQ-Systems provide the MBa8Xx carrier board for development purposes.
 The instructions provided assume the use of the MBa8Xx carrier board.
 If you are using a different carrier board please refer to the appropriate documentation.
 
+Note: There are different configured of the TQMa8Xx board which include different NXP SoCs
+and different memory configurations. Such modules are not supported.
+
 The MBa8Xx provides access to the TQMa8XQP UART via UART-USB bridge.
 To access the UART connect a USB micro cable to port **X13**.
 The UART-USB bridge supports 4 individual UARTs; the UART is connected to the 2nd port.
