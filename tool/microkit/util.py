@@ -208,3 +208,5 @@ class DisjointMemoryRegion:
 
         return region.base
 
+    def __repr__(self) -> str:
+        return " ".join(map(lambda x: "0x%x->0x%x" %(x.base, x.base + x.size), self._regions))
