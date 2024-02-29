@@ -170,6 +170,7 @@ The currently supported boards are:
 
 * imx8mm_evk
 * imx8mq_evk
+* maaxboard
 * odroidc2
 * odroidc4
 * tqma8xqp1gb
