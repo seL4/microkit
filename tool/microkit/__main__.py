@@ -1810,7 +1810,7 @@ def build_system(
 
     for pd in system.protection_domains:
         # Could use pd.elf_file.write_symbol here to update variables if required.
-        pd_elf_files[pd].write_symbol("microkit_name", pack("<16s", pd.name.encode("utf8")))
+        pd_elf_files[pd].write_symbol("microkit_name", pack("<64s", pd.name.encode("utf8")))
         pd_elf_files[pd].write_symbol("passive", pack("?", pd.passive))
 
     for pd in system.protection_domains:

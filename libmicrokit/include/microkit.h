@@ -38,7 +38,7 @@ void notified(microkit_channel ch);
 microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
 void fault(microkit_channel ch, microkit_msginfo msginfo);
 
-extern char microkit_name[16];
+extern char microkit_name[64];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
 extern bool have_signal;
 extern seL4_CPtr signal_cap;

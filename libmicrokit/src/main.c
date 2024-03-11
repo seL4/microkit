@@ -20,7 +20,7 @@
 char _stack[4096]  __attribute__((__aligned__(16)));
 
 bool passive;
-char microkit_name[16];
+char microkit_name[64];
 bool have_signal = false;
 seL4_CPtr signal_cap;
 seL4_MessageInfo_t signal_msg;
