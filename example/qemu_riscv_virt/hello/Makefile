@@ -32,7 +32,7 @@ HELLO_OBJS := hello.o
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
 IMAGES := hello.elf
-CFLAGS := -mcmodel=medany -mstrict-align -march=rv64imac -mabi=lp64 -nostdlib -ffreestanding -g3 -O3 -Wall -Wno-unused-function -Werror -I$(BOARD_DIR)/include
+CFLAGS := -mcmodel=medany -mstrict-align -march=rv64imac -mabi=lp64 -nostdlib -ffreestanding -g -O3 -Wall -Wno-unused-function -Werror -I$(BOARD_DIR)/include
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
@@ -45,7 +45,7 @@ $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o: %.s Makefile
-	$(AS) -g3 -mcpu=$(CPU) $< -o $@
+	$(AS) -g -mcpu=$(CPU) $< -o $@
 
 $(BUILD_DIR)/hello.elf: $(addprefix $(BUILD_DIR)/, $(HELLO_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@

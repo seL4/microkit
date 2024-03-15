@@ -62,16 +62,16 @@ else ifeq ($(ARCH),riscv32)
 	ASM_FLAGS_ARCH := -march=$(MARCH) -mabi=$(MABI)
 	LD_FLAGS_ARCH := -m elf32lriscv
 else ifeq ($(ARCH),x86_64)
-	C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -DBOARD_$(BOARD) -DARCH_x86_64 -Wall -Werror
-	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -DBOARD_$(BOARD)
-	ASM_FLAGS := -g3
+	C_FLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -DBOARD_$(BOARD) -DARCH_x86_64 -Wall -Werror
+	ASM_CPP_FLAGS := -x assembler-with-cpp -c -g -DBOARD_$(BOARD)
+	ASM_FLAGS := -g
 else
 	$(error ARCH must be aarch64 or riscv64 or riscv32)
 endif
 
-C_FLAGS := -std=gnu11 -g3 -nostdlib -ffreestanding -DBOARD_$(BOARD) -DNUM_CPUS=$(NUM_CPUS) -DARCH_$(ARCH) -Wall -Werror $(C_FLAGS_ARCH)
-ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 -DBOARD_$(BOARD) -DNUM_CPUS=$(NUM_CPUS) $(ASM_CPP_FLAGS_ARCH)
-ASM_FLAGS := -g3 $(ASM_FLAGS_ARCH)
+C_FLAGS := -std=gnu11 -g -nostdlib -ffreestanding -DBOARD_$(BOARD) -DNUM_CPUS=$(NUM_CPUS) -DARCH_$(ARCH) -Wall -Werror $(C_FLAGS_ARCH)
+ASM_CPP_FLAGS := -x assembler-with-cpp -c -g -DBOARD_$(BOARD) -DNUM_CPUS=$(NUM_CPUS) $(ASM_CPP_FLAGS_ARCH)
+ASM_FLAGS := -g $(ASM_FLAGS_ARCH)
 LD_FLAGS := $(LD_FLAGS_ARCH)
 
 PROGS := loader.elf

@@ -29,22 +29,22 @@ else ifeq ($(ARCH),riscv64)
 	MABI := lp64
 	C_FLAGS_ARCH := -mcmodel=medany -march=$(MARCH) -mabi=$(MABI)
 	ASM_CPP_FLAGS_ARCH := -march=$(MARCH) -mabi=$(MABI)
-	ASM_FLAGS_ARCH := -g3 -march=$(MARCH) -mabi=$(MABI)
+	ASM_FLAGS_ARCH := -g -march=$(MARCH) -mabi=$(MABI)
 	ARCH_DIR := riscv
 else ifeq ($(ARCH),riscv32)
 	MARCH := rv32imac
 	MABI := ilp32
 	C_FLAGS_ARCH := -mcmodel=medany -march=$(MARCH) -mabi=$(MABI)
 	ASM_CPP_FLAGS_ARCH := -march=$(MARCH) -mabi=$(MABI)
-	ASM_FLAGS_ARCH := -g3 -march=$(MARCH) -mabi=$(MABI)
+	ASM_FLAGS_ARCH := -g -march=$(MARCH) -mabi=$(MABI)
 	ARCH_DIR := riscv
 else
 	$(error ARCH must be aarch64 or riscv64 or riscv32)
 endif
 
-C_FLAGS := -std=gnu11 -g3 -O3 -nostdlib -ffreestanding -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include $(C_FLAGS_ARCH)
-ASM_CPP_FLAGS := -x assembler-with-cpp -c -g3 $(ASM_CPP_FLAGS_ARCH)
-ASM_FLAGS := -g3 $(ASM_FLAGS_ARCH)
+C_FLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -Wall -Wno-maybe-uninitialized -Wno-unused-function -Werror -Iinclude -I$(SEL4_SDK)/include $(C_FLAGS_ARCH)
+ASM_CPP_FLAGS := -x assembler-with-cpp -c -g $(ASM_CPP_FLAGS_ARCH)
+ASM_FLAGS := -g $(ASM_FLAGS_ARCH)
 
 ifeq ($(ARCH),x86_64)
 	GCC := gcc
