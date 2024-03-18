@@ -57,7 +57,7 @@ The SDK includes the tools, libraries and binaries required to build an Microkit
 The Microkit source is also available which allows you to customize or extend Microkit and produce your own SDK.
 
 To build an Microkit system you will write some programs that use `libmicrokit`.
-Microkit programs are a little different to a typical progress on a Linux-like operating system.
+Microkit programs are a little different to a typical process on a Linux-like operating system.
 Rather than a single `main` entry point, a program has three distinct entry points: `init`, `notified` and, optionally, `protected`.
 
 The individual programs are combined to produce a single bootable *system image*.
