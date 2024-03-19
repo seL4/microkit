@@ -54,15 +54,23 @@ void microkit_dbg_putc(int c);
  */
 void microkit_dbg_puts(const char *s);
 
+#ifndef __has_builtin(x)
+#  define __has_builtin(x) 0  // Compatibility with compilers without __has_builtin
+#endif
+
 // @ivanv: When building a non-optimised build of something that uses the library, doing something like seL4_UserContext ctx = {0} does not work...
 // Figure out why it doesn't
 static inline void
 memzero(void *s, unsigned long n)
 {
+#if __has_builtin(__builtin_bzero)
+	__builtin_bzero(s, n);
+#else
     uint8_t *p;
     for (p = (uint8_t *)s; n > 0; n--, p++) {
         *p = 0;
     }
+#endif
 }
 
 static inline void
