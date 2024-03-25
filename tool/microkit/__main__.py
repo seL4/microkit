@@ -2065,10 +2065,10 @@ def main() -> int:
     monitor_elf.write_symbol("tcbs", pack("<Q" + "Q" * len(tcb_caps), 0, *tcb_caps))
     monitor_elf.write_symbol("scheduling_contexts", pack("<Q" + "Q" * len(sched_caps), 0, *sched_caps))
     monitor_elf.write_symbol("notification_caps", pack("<Q" + "Q" * len(ntfn_caps), 0, *ntfn_caps))
-    names_array = bytearray([0] * (64 * 16))
+    names_array = bytearray([0] * (64 * 64))
     for idx, pd in enumerate(system_description.protection_domains, 1):
-        nm = pd.name.encode("utf8")[:15]
-        names_array[idx * 16:idx * 16+len(nm)] = nm
+        nm = pd.name.encode("utf8")[:63]
+        names_array[idx * 64:idx * 64+len(nm)] = nm
     monitor_elf.write_symbol("pd_names", names_array)
 
 
