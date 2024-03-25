@@ -44,6 +44,7 @@ Please file an issue if additional packages are required.
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
 * device tree compiler
 * xmllint
+* qemu-system-aarch64
 
 To build the documentation you also need
 * pandoc
@@ -60,7 +61,8 @@ On a Debian-like system you can do:
 		pandoc texlive-latex-base texlive-latex-recommended \
 		texlive-fonts-recommended texlive-fonts-extra \
 		python3.9 python3.9-venv \
-		musl-dev musl-tools
+		musl-dev musl-tools \
+        qemu-system-arm
 
 If you do not have Python 3.9 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
@@ -72,7 +74,7 @@ To use this:
 
 On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
 
-    $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
+    $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
 
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
