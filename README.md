@@ -173,6 +173,7 @@ The currently supported boards are:
 * maaxboard
 * odroidc2
 * odroidc4
+* qemu_virt_aarch64
 * tqma8xqp1gb
 * zcu102
 
