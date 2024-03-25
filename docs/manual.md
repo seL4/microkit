@@ -615,6 +615,27 @@ Rather than typing these each time you can create a U-Boot script:
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
+## QEMU virt (AArch64)
+
+Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
+on any specific SoC or hardware platform and is intended for simulating systems for
+development or testing.
+
+It should be noted that the platform support is configured with 2GB of main memory and a single
+Cortex-A53 CPU.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-aarch64 \
+        -machine virt \
+        -cpu cortex-a53 \
+        -nographic \
+        -serial mon:stdio \
+        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0 \
+        -m size=2G
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
 
 ## ZCU102
 

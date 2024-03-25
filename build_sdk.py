@@ -147,6 +147,20 @@ SUPPORTED_BOARDS = (
             "timer": Path("example/odroidc4/timer")
         }
     ),
+    BoardInfo(
+        name="qemu_virt_aarch64",
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x70000000,
+        kernel_options={
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "QEMU_MEMORY": "2048",
+        },
+        examples={
+            "hello": Path("example/qemu_virt_aarch64/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (

@@ -31,6 +31,9 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #if defined(BOARD_zcu102)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
+#elif defined(BOARD_qemu_virt_aarch64)
+#define GICD_BASE 0x8010000UL
+#define GICC_BASE 0x8020000UL
 #endif
 
 #define REGION_TYPE_DATA 1
@@ -178,6 +181,17 @@ static void putc(uint8_t ch)
 {
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
+}
+#elif defined(BOARD_qemu_virt_aarch64)
+#define UART_BASE                 0x9000000
+#define UARTDR                    0x000
+#define UARTFR                    0x018
+#define PL011_UARTFR_TXFF         (1 << 5)
+
+static void putc(uint8_t ch)
+{
+    while ((*UART_REG(UARTFR) & PL011_UARTFR_TXFF) != 0);
+    *UART_REG(UARTDR) = ch;
 }
 #else
 #error Board not defined
@@ -490,7 +504,7 @@ static void start_kernel(void)
     );
 }
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_virt_aarch64)
 static void configure_gicv2(void)
 {
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
@@ -554,7 +568,7 @@ int main(void)
      */
     copy_data();
 
-#if defined(BOARD_zcu102)
+#if defined(BOARD_zcu102) || defined(BOARD_qemu_virt_aarch64)
     configure_gicv2();
 #endif
 
