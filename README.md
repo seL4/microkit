@@ -57,11 +57,11 @@ To build the documentation you also need
 On a Debian-like system you can do:
 
     $ sudo apt install build-essential git cmake ninja-build \
-	    device-tree-compiler libxml2-utils \
-		pandoc texlive-latex-base texlive-latex-recommended \
-		texlive-fonts-recommended texlive-fonts-extra \
-		python3.9 python3.9-venv \
-		musl-dev musl-tools \
+        device-tree-compiler libxml2-utils \
+        pandoc texlive-latex-base texlive-latex-recommended \
+        texlive-fonts-recommended texlive-fonts-extra \
+        python3.9 python3.9-venv \
+        musl-dev musl-tools \
         qemu-system-arm
 
 If you do not have Python 3.9 available, you can get it via the
