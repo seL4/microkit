@@ -497,6 +497,22 @@ SUPPORTED_CONFIGS = (
             "KernelSignalFastpath": True,
         },
     ),
+    # Experimental 'profiler' configuration intended for use
+    # with the seL4 profiler being developed at Trustworthy Systems.
+    ConfigInfo(
+        name="profiler",
+        debug=False,
+        kernel_options = {
+            "KernelDebugBuild": True,
+            "KernelVerificationBuild": False,
+            "KernelPrinting": True,
+            "KernelBenchmarks": "track_utilisation",
+            "KernelArmExportPMUUser": True,
+            # Enable signal fastpath for sDDF benchmarking
+            "KernelSignalFastpath": True,
+            "ProfilerEnable": True,
+        },
+    ),
 )
 
 
