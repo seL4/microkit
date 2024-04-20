@@ -1,0 +1,11 @@
+[package]
+name = "microkit-tool"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "microkit"
+path = "src/main.rs"
+
+[dependencies]
+roxmltree = "0.19.0"
