@@ -223,22 +223,18 @@ def get_tool_target_triple() -> str:
 
 def test_tool() -> None:
     r = system(
-        f"{executable} -m unittest discover -s tool -v"
+        f"cd tool/microkit && cargo test"
     )
     assert r == 0
 
 
 def build_tool(tool_target: Path, target_triple: str) -> None:
-    pyoxidizer = ENV_BIN_DIR / "pyoxidizer"
-    if not pyoxidizer.exists():
-        raise Exception("pyoxidizer does not appear to be installed in your Python environment")
-
     r = system(
-        f"{pyoxidizer} build --release --path tool --target-triple {target_triple}"
+        f"cd tool/microkit && cargo build --release --target {target_triple}"
     )
     assert r == 0
 
-    tool_output = f"./tool/build/{target_triple}/release/install/microkit"
+    tool_output = f"./tool/microkit/target/{target_triple}/release/microkit"
 
     r = system(f"strip {tool_output}")
     assert r == 0
@@ -458,9 +454,8 @@ def main() -> None:
 
     tool_target = root_dir / "bin" / "microkit"
 
-    if not tool_target.exists():
-        test_tool()
-        build_tool(tool_target, args.tool_target_triple)
+    test_tool()
+    build_tool(tool_target, args.tool_target_triple)
 
     build_doc(root_dir)
 
