@@ -245,6 +245,8 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
     copy(tool_output, tool_target)
 
+    tool_target.chmod(0o777)
+
 
 def build_sel4(
     sel4_dir: Path,
