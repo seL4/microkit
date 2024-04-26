@@ -45,44 +45,37 @@ void microkit_dbg_putc(int c);
  */
 void microkit_dbg_puts(const char *s);
 
-static inline void
-microkit_notify(microkit_channel ch)
+static inline void microkit_notify(microkit_channel ch)
 {
     seL4_Signal(BASE_OUTPUT_NOTIFICATION_CAP + ch);
 }
 
-static inline void
-microkit_irq_ack(microkit_channel ch)
+static inline void microkit_irq_ack(microkit_channel ch)
 {
     seL4_IRQHandler_Ack(BASE_IRQ_CAP + ch);
 }
 
-static inline microkit_msginfo
-microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
+static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
 {
     return seL4_Call(BASE_ENDPOINT_CAP + ch, msginfo);
 }
 
-static inline microkit_msginfo
-microkit_msginfo_new(uint64_t label, uint16_t count)
+static inline microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)
 {
     return seL4_MessageInfo_new(label, 0, 0, count);
 }
 
-static inline uint64_t
-microkit_msginfo_get_label(microkit_msginfo msginfo)
+static inline uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_get_label(msginfo);
 }
 
-static void
-microkit_mr_set(uint8_t mr, uint64_t value)
+static void microkit_mr_set(uint8_t mr, uint64_t value)
 {
     seL4_SetMR(mr, value);
 }
 
-static uint64_t
-microkit_mr_get(uint8_t mr)
+static uint64_t microkit_mr_get(uint8_t mr)
 {
     return seL4_GetMR(mr);
 }
