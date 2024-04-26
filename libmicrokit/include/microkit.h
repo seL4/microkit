@@ -70,6 +70,11 @@ static inline uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)
     return seL4_MessageInfo_get_label(msginfo);
 }
 
+static inline uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo)
+{
+    return seL4_MessageInfo_get_length(msginfo);
+}
+
 static void microkit_mr_set(uint8_t mr, uint64_t value)
 {
     seL4_SetMR(mr, value);
