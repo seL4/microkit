@@ -353,6 +353,7 @@ Additionally, if the protection domain provides a protected procedure it must al
     void microkit_notify(microkit_channel ch);
     microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count);
     uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo);
+    uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
     void microkit_mr_set(uint8_t mr, uint64_t value);
     uint64_t microkit_mr_get(uint8_t mr);
@@ -420,6 +421,10 @@ The message can be passed to `microkit_ppcall` or returned from `protected`.
 ## `uint64_t microkit_msginfo_get_label(microkit_msginfo message)`
 
 Returns the label from a message.
+
+## `uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo)`
+
+Returns the count of message registers in the message.
 
 ## `uint64_t microkit_mr_get(uint8_t mr)`
 
