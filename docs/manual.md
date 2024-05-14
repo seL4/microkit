@@ -299,8 +299,11 @@ The ELF files provided as program images should be standard ELF files and have b
 
 ## System Requirements
 
-The Microkit tool requires Linux x86_64.
-The Microkit tool is statically linked and should run on any Linux distribution.
+The Microkit tool requires Linux x86_64, macOS x86_64 or macOS AArch64.
+
+On Linux, the Microkit tool is statically linked and should run on any distribution.
+On macOS, the Microkit tool should run on macOS 10.12 (Sierra) or higher.
+
 The Microkit tool does not depend on any additional system binaries.
 
 # Microkit tool {#tool}
