@@ -34,6 +34,7 @@ This section attempts to list the packages or external development tools which a
 At this stage it may be incomplete.
 Please file an issue if additional packages are required.
 
+* Rust and Cargo
 * git
 * make
 * python3.9
@@ -56,6 +57,7 @@ To build the documentation you also need
 
 On a Debian-like system you can do:
 
+    $ curl https://sh.rustup.rs -sSf | sh
     $ sudo apt install build-essential git cmake ninja-build \
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
@@ -74,6 +76,7 @@ To use this:
 
 On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
 
+    $ curl https://sh.rustup.rs -sSf | sh
     $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
 
 Additonally, a number of Python libraries are needed.
