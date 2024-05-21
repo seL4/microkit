@@ -51,12 +51,6 @@ def main():
         help="Build the example from the SDK build rather than directly from source directory",
     )
     parser.add_argument(
-        "--tool-from-sdk",
-        action="store_true",
-        default=False,
-        help="Build the using the tool from the SDK rather than directly from the Python source",
-    )
-    parser.add_argument(
         "--board",
         help="Target board",
         required=True
@@ -95,10 +89,6 @@ def main():
         if args.example_from_sdk
         else f"{CWD.absolute()}/example/{args.board}/{args.example}"
     )
-
-    if not args.tool_from_sdk:
-        make_env["PYTHONPATH"] = str(CWD / "tool")
-        make_env["MICROKIT_TOOL"] = f"{executable} -m microkit"
 
     cmd = ["make", "-C", makefile_directory]
 
