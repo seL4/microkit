@@ -21,7 +21,9 @@ char _stack[4096]  __attribute__((__aligned__(16)));
 
 bool passive;
 char microkit_name[16];
-bool have_signal = false;
+/* We use seL4 typedefs as this variable is exposed to the libmicrokit header
+ * and we do not want to rely on compiler built-in defines. */
+seL4_Bool have_signal = seL4_False;
 seL4_CPtr signal;
 seL4_MessageInfo_t signal_msg;
 
@@ -58,7 +60,7 @@ static void handler_loop(void)
             tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
         } else if (have_signal) {
             tag = seL4_NBSendRecv(signal, signal_msg, INPUT_CAP, &badge, REPLY_CAP);
-            have_signal = false;
+            have_signal = seL4_False;
         } else {
             tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
         }
@@ -94,7 +96,7 @@ void main(void)
      * We delay this signal so we are ready waiting on a recv() syscall
      */
     if (passive) {
-        have_signal = true;
+        have_signal = seL4_True;
         signal_msg = seL4_MessageInfo_new(0, 0, 0, 1);
         seL4_SetMR(0, 0);
         signal = (MONITOR_EP);
