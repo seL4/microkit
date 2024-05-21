@@ -38,6 +38,7 @@ Please file an issue if additional packages are required.
 * make
 * python3.9
 * python3.9-venv
+* musl-1.2.2 (only when targeting Linux)
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
