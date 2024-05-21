@@ -8,9 +8,6 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #define __thread
 #include <sel4/sel4.h>
 
@@ -31,7 +28,7 @@ microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
 
 extern char microkit_name[16];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
-extern bool have_signal;
+extern seL4_Bool have_signal;
 extern seL4_CPtr signal;
 extern seL4_MessageInfo_t signal_msg;
 
@@ -60,27 +57,27 @@ static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msg
     return seL4_Call(BASE_ENDPOINT_CAP + ch, msginfo);
 }
 
-static inline microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)
+static inline microkit_msginfo microkit_msginfo_new(seL4_Word label, seL4_Uint16 count)
 {
     return seL4_MessageInfo_new(label, 0, 0, count);
 }
 
-static inline uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)
+static inline seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_get_label(msginfo);
 }
 
-static inline uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo)
+static inline seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_get_length(msginfo);
 }
 
-static void microkit_mr_set(uint8_t mr, uint64_t value)
+static void microkit_mr_set(seL4_Uint8 mr, seL4_Word value)
 {
     seL4_SetMR(mr, value);
 }
 
-static uint64_t microkit_mr_get(uint8_t mr)
+static seL4_Word microkit_mr_get(seL4_Uint8 mr)
 {
     return seL4_GetMR(mr);
 }
