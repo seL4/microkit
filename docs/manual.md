@@ -354,12 +354,12 @@ Additionally, if the protection domain provides a protected procedure it must al
 
     microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo);
     void microkit_notify(microkit_channel ch);
-    microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count);
-    uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo);
-    uint64_t microkit_msginfo_get_count(microkit_msginfo msginfo);
+    microkit_msginfo microkit_msginfo_new(seL4_Word label, seL4_Uint16 count);
+    seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo);
+    seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
-    void microkit_mr_set(uint8_t mr, uint64_t value);
-    uint64_t microkit_mr_get(uint8_t mr);
+    void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
+    seL4_Word microkit_mr_get(seL4_Uint8 mr);
 
 
 ## `void init(void)`
