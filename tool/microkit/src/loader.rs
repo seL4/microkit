@@ -1,3 +1,9 @@
+//
+// Copyright 2024, UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
+//
+
 use crate::{MemoryRegion};
 use crate::util::{round_up, mb, kb, mask, struct_to_bytes};
 use crate::elf::{ElfFile};

@@ -1,3 +1,9 @@
+//
+// Copyright 2024, UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
+//
+
 use crate::sel4::Object;
 
 pub fn msb(x: u64) -> u64 {

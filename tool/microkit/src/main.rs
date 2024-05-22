@@ -1,3 +1,9 @@
+//
+// Copyright 2024, UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
+//
+
 use std::collections::{HashMap, HashSet};
 use std::iter::zip;
 use std::fs;
