@@ -13,6 +13,8 @@ const STB_GLOBAL: u8 = 1;
 
 #[repr(C, packed)]
 struct ElfHeader32 {
+    ident_magic: u32,
+    ident_class: u8,
     ident_data: u8,
     ident_version: u8,
     ident_osabi: u8,
@@ -72,6 +74,8 @@ struct ElfProgramHeader64 {
 
 #[repr(C, packed)]
 struct ElfHeader64 {
+    ident_magic: u32,
+    ident_class: u8,
     ident_data: u8,
     ident_version: u8,
     ident_osabi: u8,
@@ -165,8 +169,13 @@ impl ElfFile {
         };
 
         // Now need to read the header into a struct
-        let hdr_bytes = &bytes[5..5 + hdr_size];
+        let hdr_bytes = &bytes[..hdr_size];
         let hdr = unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
+
+        // We have checked this above but we should check again once we actually cast it to
+        // a struct.
+        assert!(hdr.ident_magic.to_le_bytes() == *magic);
+        assert!(hdr.ident_class == *class);
 
         if hdr.ident_data != 1 {
             return Err(format!("ELF '{}': incorrect endianness, only little endian architectures are supported", path.display()));
