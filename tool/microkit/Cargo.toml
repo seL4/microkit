@@ -1,3 +1,9 @@
+#
+# Copyright 2024, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+
 [package]
 name = "microkit-tool"
 version = "0.1.0"

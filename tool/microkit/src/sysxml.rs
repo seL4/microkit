@@ -1,3 +1,9 @@
+//
+// Copyright 2024, UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
+//
+
 use std::path::{Path, PathBuf};
 use crate::util::{str_to_bool};
 use crate::sel4::{PageSize, ArmIrqTrigger, Config, Arch};
