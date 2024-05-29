@@ -1586,10 +1586,10 @@ fn build_system(kernel_config: &Config,
 
         // Set up the endpoint caps
         if pd_b.pp {
-            let pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a;
+            let pd_a_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_a;
             let pd_a_badge = (1 << 63) | cc.id_b;
             let pd_b_endpoint_obj = pp_ep_endpoint_objs[pd_b];
-            assert!(pd_a_cap_idx < PD_CAP_BITS);
+            assert!(pd_a_cap_idx < PD_CAP_SIZE);
 
             system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
                 cnode: pd_a_cnode_obj.cap_addr,
