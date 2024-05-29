@@ -1801,7 +1801,9 @@ fn build_system(kernel_config: &Config,
 
     for (i, pd) in system.protection_domains.iter().enumerate() {
         let elf = &mut pd_elf_files[i];
-        elf.write_symbol("microkit_name", pd.name.as_bytes())?;
+        let name = pd.name.as_bytes();
+        let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
+        elf.write_symbol("microkit_name", &name[..name_length])?;
         elf.write_symbol("passive", &[pd.passive as u8])?;
     }
 
@@ -2299,7 +2301,7 @@ fn main() -> Result<(), String> {
         // and how large of a name we can encode
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         let end = start + name_length;
-        pd_names_bytes[start..end].copy_from_slice(&name);
+        pd_names_bytes[start..end].copy_from_slice(&name[..name_length]);
     }
     monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
 
