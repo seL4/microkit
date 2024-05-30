@@ -24,6 +24,9 @@ use util::{bytes_to_struct, struct_to_bytes, comma_sep_usize, comma_sep_u64};
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
 
+const FAULT_BADGE: u64 = 1 << 62;
+const PPC_BADGE: u64 = 1 << 63;
+
 const INPUT_CAP_IDX: u64 = 1;
 #[allow(dead_code)]
 const FAULT_EP_CAP_IDX: u64 = 2;
@@ -34,6 +37,7 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
+const BASE_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -1194,9 +1198,8 @@ fn build_system(kernel_config: &Config,
     let sched_context_objs = init_system.allocate_objects(ObjectType::SchedContext, sched_context_names, Some(PD_SCHEDCONTEXT_SIZE));
     let sched_context_caps: Vec<u64> = sched_context_objs.iter().map(|sc| sc.cap_addr).collect();
 
-    let pp_protection_domains: Vec<&ProtectionDomain> = system.protection_domains.iter().filter(|pd| pd.pp).collect();
-
-    let pd_endpoint_names: Vec<String> = pp_protection_domains.iter().map(|pd| format!("EP: PD={}", pd.name)).collect();
+    let pds_with_endpoints: Vec<&ProtectionDomain> = system.protection_domains.iter().filter(|pd| pd.needs_ep()).collect();
+    let pd_endpoint_names: Vec<String> = pds_with_endpoints.iter().map(|pd| format!("EP: PD={}", pd.name)).collect();
     let endpoint_names = [vec![format!("EP: Monitor Fault")], pd_endpoint_names].concat();
 
     let pd_reply_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("Reply: PD={}", pd.name)).collect();
@@ -1207,11 +1210,9 @@ fn build_system(kernel_config: &Config,
     let pd_reply_objs = &reply_objs[1..];
     let endpoint_objs = init_system.allocate_objects(ObjectType::Endpoint, endpoint_names, None);
     let fault_ep_endpoint_object = &endpoint_objs[0];
-    let mut pp_ep_endpoint_objs: HashMap<&ProtectionDomain, &Object> = HashMap::with_capacity(pp_protection_domains.len());
-    for (i, pd) in pp_protection_domains.iter().enumerate() {
-        // Because the first reply object is for the monitor, we map from index 1 of endpoint_objs
-        pp_ep_endpoint_objs.insert(pd, &endpoint_objs[1..][i]);
-    }
+
+    // Because the first reply object is for the monitor, we map from index 1 of endpoint_objs
+    let pd_endpoint_objs: Vec<&Object> = pds_with_endpoints.iter().enumerate().map(|(i, _)| &endpoint_objs[1..][i]).collect();
 
     let notification_names = system.protection_domains.iter().map(|pd| format!("Notification: PD={}", pd.name)).collect();
     let notification_objs = init_system.allocate_objects(ObjectType::Notification, notification_names, None);
@@ -1430,37 +1431,44 @@ fn build_system(kernel_config: &Config,
         }
     }
 
-    let mut invocation = Invocation::new(InvocationArgs::CnodeMint{
-        cnode: system_cnode_cap,
-        dest_index: cap_slot,
-        dest_depth: system_cnode_bits,
-        src_root: root_cnode_cap,
-        src_obj: fault_ep_endpoint_object.cap_addr,
-        src_depth: kernel_config.cap_address_bits,
-        rights: Rights::All as u64,
-        badge: 1,
-    });
-    invocation.repeat(system.protection_domains.len() as u32, InvocationArgs::CnodeMint{
-        cnode: 0,
-        dest_index: 1,
-        dest_depth: 0,
-        src_root: 0,
-        src_obj: 0,
-        src_depth: 0,
-        rights: 0,
-        badge: 1,
-    });
-    system_invocations.push(invocation);
-
+    // Create a fault endpoint cap for each protection domain.
+    // For root PDs, this shall be the system fault EP endpoint object.
+    // For non-root PDs, this shall be the parent endpoint.
     let badged_fault_ep = system_cap_address_mask | cap_slot;
-    cap_slot += system.protection_domains.len() as u64;
+    for (i, pd) in system.protection_domains.iter().enumerate() {
+        let is_root = pd.parent.is_none();
+        let fault_ep_cap;
+        let badge: u64;
+        if is_root {
+            fault_ep_cap = fault_ep_endpoint_object.cap_addr;
+            badge = i as u64 + 1;
+        } else {
+            assert!(pd.id.is_some());
+            assert!(pd.parent.is_some());
+            fault_ep_cap = pd_endpoint_objs[pd.parent.unwrap()].cap_addr;
+            badge = FAULT_BADGE | pd.id.unwrap();
+        }
+
+        let invocation = Invocation::new(InvocationArgs::CnodeMint{
+            cnode: system_cnode_cap,
+            dest_index: cap_slot,
+            dest_depth: system_cnode_bits,
+            src_root: root_cnode_cap,
+            src_obj: fault_ep_cap,
+            src_depth: kernel_config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge,
+        });
+        system_invocations.push(invocation);
+        cap_slot += 1;
+    }
 
     let final_cap_slot = cap_slot;
 
     // Minting in the address space
     for (idx, pd) in system.protection_domains.iter().enumerate() {
-        let obj = if pd.pp {
-            pp_ep_endpoint_objs[pd]
+        let obj = if pd.needs_ep() {
+            pd_endpoint_objs[idx]
         } else {
             &notification_objs[idx]
         };
@@ -1544,6 +1552,30 @@ fn build_system(kernel_config: &Config,
         }
     }
 
+    // Mint access to the child TCB in the CSpace of root PDs
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+            // Before doing anything, check if we are dealing with a child PD
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                // We are dealing with a child PD, now check if the index of its parent
+                // matches this iteration's PD.
+                if parent_idx == pd_idx {
+                    let cap_idx = BASE_TCB_CAP + maybe_child_pd.id.unwrap();
+                    system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
+                        cnode: cnode_objs[pd_idx].cap_addr,
+                        dest_index: cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: tcb_objs[maybe_child_idx].cap_addr,
+                        src_depth: kernel_config.cap_address_bits,
+                        rights: Rights::All as u64,
+                        badge: 0,
+                    }));
+                }
+            }
+        }
+    }
+
     for cc in &system.channels {
         let pd_a = &system.protection_domains[cc.pd_a];
         let pd_b = &system.protection_domains[cc.pd_b];
@@ -1584,8 +1616,8 @@ fn build_system(kernel_config: &Config,
         // Set up the endpoint caps
         if pd_b.pp {
             let pd_a_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_a;
-            let pd_a_badge = (1 << 63) | cc.id_b;
-            let pd_b_endpoint_obj = pp_ep_endpoint_objs[pd_b];
+            let pd_a_badge = PPC_BADGE | cc.id_b;
+            let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b];
             assert!(pd_a_cap_idx < PD_CAP_SIZE);
 
             system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
@@ -1602,8 +1634,8 @@ fn build_system(kernel_config: &Config,
 
         if pd_a.pp {
             let pd_b_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_b;
-            let pd_b_badge = (1 << 63) | cc.id_a;
-            let pd_a_endpoint_obj = pp_ep_endpoint_objs[pd_a];
+            let pd_b_badge = PPC_BADGE | cc.id_a;
+            let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a];
             assert!(pd_b_cap_idx < PD_CAP_SIZE);
 
             system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {

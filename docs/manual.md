@@ -97,10 +97,11 @@ This document attempts to clearly describe all of these terms, however as the co
 
 * [system](#system)
 * [protection domain (PD)](#pd)
-* [channel](#chan)
+* [channel](#channel)
 * [memory region](#mr)
 * [notification](#notification)
 * [protected procedure](#pp)
+* [faults](#faults)
 
 ## System {#system}
 
@@ -128,15 +129,21 @@ Microkit supports a maximum of 63 protection domains.
 Although a protection domain is somewhat analogous to a process, it has a considerably different program structure and life-cycle.
 A process on a typical operating system will have a `main` function which is invoked by the system when the process is created.
 When the `main` function returns the process is destroyed.
-By comparison a protection domain has three entry points: `init`, `notify` and, optionally, `protected`.
+
+By comparison a protection domain has up to four entry points:
+* `init`, `notify` which are required.
+* `protected`, `fault` which are optional.
 
 When an Microkit system is booted, all PDs in the system execute the `init` entry point.
 
 The `notified` entry point will be invoked whenever the protection domain receives a *notification* on a *channel*.
 The `protected` entry point is invoked when a PD's *protected procedure* is called by another PD.
 A PD does not have to provide a protected procedure, therefore the `protected` entry point is optional.
-These entry points are described in more detail in subsequent sections.
 
+The `fault` entry point is invoked when a PD that is a child of another PD causes a fault.
+A PD does not have to have child PDs, therefore the `fault` entry point is optional.
+
+These entry points are described in more detail in subsequent sections.
 
 **Note:** The processing of `init` entry points is **not** synchronised across protection domains.
 Specifically, it is possible for a high priority PD's `notified` or `protected` entry point to be called prior to the completion of a low priority PD's `init` entry point.
@@ -191,7 +198,7 @@ The mapping has a number of attributes, which include:
 **Note:** When a memory region is mapped into multiple protection
 domains, the attributes used for different mapping may vary.
 
-## Channels
+## Channels {#channel}
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
 Each connects exactly two PDs; there are no multi-party channels.
@@ -209,7 +216,7 @@ Similarly, **B** can refer to **A** via the channel identifier **42**.
 
 The system supports a maximum of 63 channels and interrupts per protection domain.
 
-### Protected procedure
+### Protected procedure {#pp}
 
 A protection domain may provide a *protected procedure* (PP) which can be invoked from another protection domain.
 Up to 64 words of data may be passed as arguments when calling a protected procedure.
@@ -239,7 +246,7 @@ A *message* structure is returned from this function.
 When a PD's protected procedure is invoked, the `protected` entry point is invoked with the channel identifier and message structure passed as arguments.
 The `protected` entry point must return a message structure.
 
-### Notification
+### Notification {#notification}
 
 A notification is a (binary) semaphore-like synchronisation mechanism.
 A PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
@@ -253,7 +260,7 @@ Unlike protected procedures, notifications can be sent in either direction on a 
 If a PD notifies another PD, that PD will become scheduled to run (if it is not already), but the current PD does **not** block.
 Of course, if the notified PD has a higher priority than the current PD, then the current PD will be preempted (but not blocked) by the other PD.
 
-## Interrupts
+## Interrupts {#irqs}
 
 Hardware interrupts can be used to notify a protection domain.
 The system description specifies if a protection domain receives notifications for any hardware interrupt sources.
@@ -267,6 +274,20 @@ Without interrupts a system would not do much after system initialisation.
 Microkit does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
+
+## Faults {#faults}
+
+Faults such as an invalid memory access or illegal instruction are delivered to the seL4 kernel which then forwards them to
+a designated 'fault handler'. By default, all faults caused by protection domains go to the Monitor which simply prints out
+details about the fault in a debug configuration.
+
+When a protection domain is a child of another protection domain, the designated fault handler for the child is the parent
+protection domain.
+
+This means that whenever a fault is caused by a child PD, it will be delivered to the parent PD instead of the monitor via the
+`fault` entry point. It is then up to the parent to decide how the fault is handled. The label of the given `msginfo` can be
+used to determine what kind of fault occurred. You can find more information about decoding the fault in the 'Faults' section
+of the seL4 manual.
 
 # SDK {#sdk}
 
@@ -414,6 +435,14 @@ Channel identifiers are specified in the system configuration.
 
 Acknowledge the interrupt identified by the specified channel.
 
+## `void microkit_pd_restart(microkit_pd id, uintptr_t entry_point)`
+
+Restart the execution of a child protection domain with ID `id` at the given `entry_point`.
+This will set the program counter of the child protection domain to `entry_point`.
+
+## `void microkit_pd_stop(microkit_pd id)`
+
+Stop the execution of the child protection domain with ID `id`.
 
 ## `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
 
@@ -472,6 +501,7 @@ Additionally, it supports the following child elements:
 * `map`: (zero or more) describes mapping of memory regions into the protection domain.
 * `irq`: (zero or more) describes hardware interrupt associations.
 * `setvar`: (zero or more) describes variable rewriting.
+* `protection_domain`: (zero or more) describes a child protection domain.
 
 The `program_image` element has a single `path` attribute describing the path to an ELF file.
 
@@ -493,6 +523,13 @@ The `setvar` element has the following attributes:
 
 * `symbol`: Name of a symbol in the ELF file.
 * `region_paddr`: Name of an MR. The symbol's value shall be updated to this MR's physical address.
+
+The `protection_domain` element the same attributes as any other protection domain as well as:
+* `id`: The ID of the child for the parent to refer to.
+
+Child protection domains have their faults handled by the parent protection domain itself instead of the Microkit monitor.
+The parent protection domain is able to control the child's thread allowing it to stop it or restart it using the
+Microkit API.
 
 ## `memory_region`
 

@@ -138,8 +138,8 @@ mod protection_domain {
     }
 
     #[test]
-    fn test_irq_greater_than_62() {
-        check_error("irq_id_greater_than_62.xml", "Error: id must be < 63 on element 'irq'")
+    fn test_irq_greater_than_max() {
+        check_error("irq_id_greater_than_max.xml", "Error: id must be < 62 on element 'irq'")
     }
 
     #[test]
@@ -174,7 +174,7 @@ mod channel {
 
     #[test]
     fn test_id_greater_than_max() {
-        check_error("ch_id_greater_than_62.xml", "Error: id must be < 63 on element 'end'")
+        check_error("ch_id_greater_than_max.xml", "Error: id must be < 62 on element 'end'")
     }
 
     #[test]

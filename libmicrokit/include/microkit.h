@@ -12,12 +12,14 @@
 #include <sel4/sel4.h>
 
 typedef unsigned int microkit_channel;
+typedef unsigned int microkit_pd;
 typedef seL4_MessageInfo_t microkit_msginfo;
 
 #define MONITOR_EP 5
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
+#define BASE_TCB_CAP 202
 
 #define MICROKIT_MAX_CHANNELS 63
 
@@ -25,6 +27,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 void init(void);
 void notified(microkit_channel ch);
 microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
+void fault(microkit_channel ch, microkit_msginfo msginfo);
 
 extern char microkit_name[16];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
@@ -42,6 +45,19 @@ void microkit_dbg_putc(int c);
  */
 void microkit_dbg_puts(const char *s);
 
+static inline void microkit_internal_crash(seL4_Error err)
+{
+    /*
+     * Currently crash be dereferencing NULL page
+     *
+     * Actually derference 'err' which means the crash reporting will have
+     * `err` as the fault address. A bit of a cute hack. Not a good long term
+     * solution but good for now.
+     */
+    int *x = (int *)(seL4_Word) err;
+    *x = 0;
+}
+
 static inline void microkit_notify(microkit_channel ch)
 {
     seL4_Signal(BASE_OUTPUT_NOTIFICATION_CAP + ch);
@@ -50,6 +66,35 @@ static inline void microkit_notify(microkit_channel ch)
 static inline void microkit_irq_ack(microkit_channel ch)
 {
     seL4_IRQHandler_Ack(BASE_IRQ_CAP + ch);
+}
+
+static inline void microkit_pd_restart(microkit_pd pd, seL4_Word entry_point)
+{
+    seL4_Error err;
+    seL4_UserContext ctxt = {0};
+    ctxt.pc = entry_point;
+    err = seL4_TCB_WriteRegisters(
+              BASE_TCB_CAP + pd,
+              seL4_True,
+              0, /* No flags */
+              1, /* writing 1 register */
+              &ctxt
+          );
+
+    if (err != seL4_NoError) {
+        microkit_dbg_puts("microkit_pd_restart: error writing TCB registers\n");
+        microkit_internal_crash(err);
+    }
+}
+
+static inline void microkit_pd_stop(microkit_pd pd)
+{
+    seL4_Error err;
+    err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
+    if (err != seL4_NoError) {
+        microkit_dbg_puts("microkit_pd_stop: error writing TCB registers\n");
+        microkit_internal_crash(err);
+    }
 }
 
 static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
