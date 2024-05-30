@@ -39,7 +39,6 @@ Please file an issue if additional packages are required.
 * make
 * python3.9
 * python3.9-venv
-* musl-1.2.2 (only when targeting Linux)
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
@@ -63,7 +62,6 @@ On a Debian-like system you can do:
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
         python3.9 python3.9-venv \
-        musl-dev musl-tools \
         qemu-system-arm
 
 If you do not have Python 3.9 available, you can get it via the

@@ -35,7 +35,7 @@ jobs:
           sudo apt install \
             cmake pandoc device-tree-compiler ninja-build \
             texlive-fonts-recommended texlive-formats-extra libxml2-utils \
-            python3.9 python3-pip python3.9-venv musl-tools \
+            python3.9 python3-pip python3.9-venv \
             qemu-system-arm \
       - name: Install AArch64 GCC toolchain
         run: |
