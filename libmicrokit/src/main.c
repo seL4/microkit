@@ -15,6 +15,9 @@
 #define INPUT_CAP 1
 #define REPLY_CAP 4
 
+#define PD_MASK 0xff
+#define CHANNEL_MASK 0x3f
+
 char _stack[4096]  __attribute__((__aligned__(16)));
 
 bool passive;
@@ -35,6 +38,10 @@ extern const void (*const __init_array_end [])(void);
 __attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     return seL4_MessageInfo_new(0, 0, 0, 0);
+}
+
+__attribute__((weak)) void fault(microkit_pd pd, microkit_msginfo msginfo)
+{
 }
 
 static void run_init_funcs(void)
@@ -64,13 +71,17 @@ static void handler_loop(void)
         }
 
         uint64_t is_endpoint = badge >> 63;
+        uint64_t is_fault = (badge >> 62) & 1;
 
-        if (is_endpoint) {
+        have_reply = false;
+
+        if (is_fault) {
+            fault(badge & PD_MASK, tag);
+        } else if (is_endpoint) {
             have_reply = true;
-            reply_tag = protected(badge & 0x3f, tag);
+            reply_tag = protected(badge & CHANNEL_MASK, tag);
         } else {
             unsigned int idx = 0;
-            have_reply = false;
             do  {
                 if (badge & 1) {
                     notified(idx);

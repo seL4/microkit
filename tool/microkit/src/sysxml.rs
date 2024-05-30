@@ -30,9 +30,10 @@ use crate::MAX_PDS;
 /// limited in how many IDs a Microkit protection domain has since each ID represents
 /// a unique bit.
 /// Currently the first bit is used to determine whether or not the event is a PPC
-/// or notification. This means we are left with 63 bits for the ID.
+/// or notification. The second bit is used to determine whether a fault occurred.
+/// This means we are left with 62 bits for the ID.
 /// IDs start at zero.
-const PD_MAX_ID: u64 = 62;
+const PD_MAX_ID: u64 = 61;
 
 const PD_MAX_PRIORITY: u8 = 254;
 
@@ -139,6 +140,8 @@ pub struct Channel {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ProtectionDomain {
+    /// Only populated for child protection domains
+    pub id: Option<u64>,
     pub name: String,
     pub priority: u8,
     pub budget: u64,
@@ -149,6 +152,13 @@ pub struct ProtectionDomain {
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub setvars: Vec<SysSetVar>,
+    /// Only used when parsing child PDs. All elements will be removed
+    /// once we flatten each PD and its children into one list.
+    pub child_pds: Vec<ProtectionDomain>,
+    pub has_children: bool,
+    /// Index into the total list of protection domains if a parent
+    /// protection domain exists
+    pub parent: Option<usize>,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos
 }
@@ -170,10 +180,24 @@ impl SysMapPerms {
 }
 
 impl ProtectionDomain {
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<ProtectionDomain, String> {
-        check_attributes(xml_sdf, node, &["name", "priority", "pp", "budget", "period", "passive"])?;
+    pub fn needs_ep(&self) -> bool {
+        self.pp || self.has_children
+    }
+
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, is_child: bool) -> Result<ProtectionDomain, String> {
+        let mut attrs = vec!["name", "priority", "pp", "budget", "period", "passive"];
+        if is_child {
+            attrs.push("id");
+        }
+        check_attributes(xml_sdf, node, &attrs)?;
 
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+
+        let id = if is_child {
+            Some(sdf_parse_number(checked_lookup(xml_sdf, node, "id")?, node)?)
+        } else {
+            None
+        };
 
         // Default to 1000 microseconds as the budget, with the period defaulting
         // to being the same as the budget as well.
@@ -206,6 +230,7 @@ impl ProtectionDomain {
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
         let mut setvars = Vec::new();
+        let mut child_pds = Vec::new();
 
         let mut program_image = None;
 
@@ -313,6 +338,7 @@ impl ProtectionDomain {
                         vaddr: None,
                     })
                 },
+                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?),
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!("Invalid XML element '{}': {}", child.tag_name().name(), loc_string(xml_sdf, pos)));
@@ -320,7 +346,10 @@ impl ProtectionDomain {
             }
         }
 
+        let has_children = !child_pds.is_empty();
+
         Ok(ProtectionDomain {
+            id,
             name,
             // This downcast is safe as we have checked that this is less than
             // the maximum PD priority, which fits in a u8.
@@ -333,6 +362,9 @@ impl ProtectionDomain {
             maps,
             irqs,
             setvars,
+            child_pds,
+            has_children,
+            parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
         })
     }
@@ -500,6 +532,48 @@ fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Resu
     Ok(())
 }
 
+fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain, parent: bool, idx: usize) -> Result<Vec<ProtectionDomain>, String> {
+    let mut child_ids = vec![];
+    for child_pd in &root_pd.child_pds {
+        let child_id = child_pd.id.unwrap();
+        if child_ids.contains(&child_id) {
+            return Err(format!("duplicate id: {} in protection domain: '{}' @ {}", child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+        }
+        child_ids.push(child_pd.id.unwrap());
+    }
+
+    if parent {
+        root_pd.parent = Some(idx);
+    } else {
+        root_pd.parent = None;
+    }
+    let mut new_child_pds = vec![];
+    let child_pds: Vec<_> = root_pd.child_pds.drain(0..).collect();
+    for child_pd in child_pds {
+        new_child_pds.extend(pd_tree_to_list(xml_sdf, child_pd, true, idx)?);
+    }
+
+    let mut all = vec![root_pd];
+    all.extend(new_child_pds);
+
+    Ok(all)
+}
+
+/// Given an iterable of protection domains flatten the tree representation
+/// into a flat tuple.
+///
+/// In doing so the representation is changed from "Node with list of children",
+/// to each node having a parent link instead.
+fn pd_flatten(xml_sdf: &XmlSystemDescription, pds: Vec<ProtectionDomain>) -> Result<Vec<ProtectionDomain>, String> {
+    let mut all_pds = vec![];
+
+    for pd in pds {
+        all_pds.extend(pd_tree_to_list(xml_sdf, pd, false, 0)?);
+    }
+
+    Ok(all_pds)
+}
+
 pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
@@ -511,7 +585,7 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
         doc: &doc,
     };
 
-    let mut pds = vec![];
+    let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
 
@@ -532,7 +606,7 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => pds.push(ProtectionDomain::from_xml(&xml_sdf, &child)?),
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
             _ => {
@@ -541,6 +615,8 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
             }
         }
     }
+
+    let pds = pd_flatten(&xml_sdf, root_pds)?;
 
     for node in channel_nodes {
         channels.push(Channel::from_xml(&xml_sdf, &node, &pds)?);
