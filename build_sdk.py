@@ -411,7 +411,33 @@ def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
     parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
+    parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
+    parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
+    parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
+    parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
+
     args = parser.parse_args()
+
+    if args.boards is not None:
+        supported_board_names = frozenset(board.name for board in SUPPORTED_BOARDS)
+        selected_board_names = frozenset(args.boards.split(","))
+        for board_name in selected_board_names:
+            if board_name not in supported_board_names:
+                raise Exception(f"Trying to build a board: {board} that does not exist in supported list.")
+        selected_boards = [board for board in SUPPORTED_BOARDS if board.name in selected_board_names]
+    else:
+        selected_boards = SUPPORTED_BOARDS
+
+    if args.configs is not None:
+        supported_config_names = frozenset(config.name for config in SUPPORTED_CONFIGS)
+        selected_config_names = frozenset(args.configs.split(","))
+        for config_name in selected_config_names:
+            if config_name not in supported_config_names:
+                raise Exception(f"Trying to build a configuration: {config} that does not exist in supported list.")
+        selected_configs = [config for config in SUPPORTED_CONFIGS if config.name in selected_config_names]
+    else:
+        selected_configs = SUPPORTED_CONFIGS
+
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
@@ -420,14 +446,15 @@ def main() -> None:
     tar_file = Path("release") / f"{NAME}-sdk-{VERSION}.tar.gz"
     source_tar_file = Path("release") / f"{NAME}-source-{VERSION}.tar.gz"
     dir_structure = [
-        root_dir / "doc",
         root_dir / "bin",
         root_dir / "board",
     ]
-    for board in SUPPORTED_BOARDS:
+    if not args.skip_docs:
+        dir_structure.append(root_dir / "doc")
+    for board in selected_boards:
         board_dir = root_dir / "board" / board.name
         dir_structure.append(board_dir)
-        for config in SUPPORTED_CONFIGS:
+        for config in selected_configs:
             config_dir = board_dir / config.name
             dir_structure.append(config_dir)
             dir_structure += [
@@ -457,11 +484,12 @@ def main() -> None:
     test_tool()
     build_tool(tool_target, args.tool_target_triple)
 
-    build_doc(root_dir)
+    if not args.skip_docs:
+        build_doc(root_dir)
 
     build_dir = Path("build")
-    for board in SUPPORTED_BOARDS:
-        for config in SUPPORTED_CONFIGS:
+    for board in selected_boards:
+        for config in selected_configs:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address))
@@ -483,18 +511,19 @@ def main() -> None:
                 copy(p, dest)
                 dest.chmod(0o444)
 
-    # At this point we create a tar.gz file
-    with tar_open(tar_file, "w:gz") as tar:
-        tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
+    if not args.skip_tar:
+        # At this point we create a tar.gz file
+        with tar_open(tar_file, "w:gz") as tar:
+            tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
 
-    # Build the source tar
-    process = popen("git ls-files")
-    filenames = [Path(fn.strip()) for fn in process.readlines()]
-    process.close()
-    source_prefix = Path(f"{NAME}-source-{VERSION}")
-    with tar_open(source_tar_file, "w:gz") as tar:
-        for filename in filenames:
-            tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+        # Build the source tar
+        process = popen("git ls-files")
+        filenames = [Path(fn.strip()) for fn in process.readlines()]
+        process.close()
+        source_prefix = Path(f"{NAME}-source-{VERSION}")
+        with tar_open(source_tar_file, "w:gz") as tar:
+            for filename in filenames:
+                tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
 
 
 if __name__ == "__main__":
