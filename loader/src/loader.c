@@ -133,14 +133,27 @@ static void putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 #elif defined(BOARD_zcu102)
-#define UART_BASE 0x5a070000
-#define STAT 0x14
-#define TRANSMIT 0x1c
-#define STAT_TDRE (1 << 23)
+#define UART_BASE 0xff000000
+#define UART_CHANNEL_STS_TXEMPTY 0x8
+#define UART_CHANNEL_STS         0x2C
+#define UART_TX_RX_FIFO          0x30
+
+#define UART_CR             0x00
+#define UART_CR_TX_EN       (1 << 4)
+#define UART_CR_TX_DIS      (1 << 5)
+
+static void uart_init(void)
+{
+    uint32_t ctrl = *UART_REG(UART_CR);
+    ctrl |= UART_CR_TX_EN;
+    ctrl &= ~UART_CR_TX_DIS;
+    *UART_REG(UART_CR) = ctrl;
+}
 
 static void putc(uint8_t ch)
 {
-    *((volatile uint32_t *)(0x00FF000030)) = ch;
+    while (!(*UART_REG(UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY));
+    *UART_REG(UART_TX_RX_FIFO) = ch;
 }
 #elif defined(BOARD_maaxboard) || defined(BOARD_imx8mq_evk)
 #define UART_BASE 0x30860000
@@ -553,6 +566,10 @@ static void configure_gicv2(void)
 int main(void)
 {
     int r;
+
+#if defined(BOARD_zcu102)
+    uart_init();
+#endif
 
     puts("LDR|INFO: altloader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
