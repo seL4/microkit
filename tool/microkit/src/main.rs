@@ -627,6 +627,7 @@ fn emulate_kernel_boot(kernel_config: &Config, kernel_elf: &ElfFile, initial_tas
         let start = util::round_down(region.end - initial_objects_size, 1 << initial_objects_align);
         if start >= region.base {
             region_to_remove = Some(start);
+            break;
         }
     }
     if let Some(start) = region_to_remove {
