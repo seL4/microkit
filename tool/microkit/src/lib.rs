@@ -146,7 +146,7 @@ impl DisjointMemoryRegion {
     pub fn insert_region(&mut self, base: u64, end: u64) {
         let mut insert_idx = self.regions.len();
         for (idx, region) in self.regions.iter().enumerate() {
-            if end < region.base {
+            if end <= region.base {
                 insert_idx = idx;
                 break;
             }
