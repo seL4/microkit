@@ -660,12 +660,10 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 For simulating the ZCU102 using QEMU, use the following command:
 
     $ qemu-system-aarch64 \
-       -m 4G  \
-       -M arm-generic-fdt \
+       -m size=4G  \
+       -machine xlnx-zcu102 \
        -nographic \
-       -hw-dtb [PATH TO zcu102-arm.dtb] \
        -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
-       -device loader,addr=0xfd1a0104,data=0x0000000e,data-len=4 \
        -serial mon:stdio
 
 ## Adding platform support
