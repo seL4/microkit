@@ -243,20 +243,20 @@ impl<'a> Loader<'a> {
         let mut loader_buf = BufWriter::new(loader_file);
 
         // First write out all the image data
-        loader_buf.write(self.image.as_slice()).expect("Failed to write image data to loader");
+        loader_buf.write_all(self.image.as_slice()).expect("Failed to write image data to loader");
 
         // Then we write out the loader metadata (known as the 'header')
         let header_bytes = unsafe { struct_to_bytes(&self.header) };
-        loader_buf.write(header_bytes).expect("Failed to write header data to loader");
+        loader_buf.write_all(header_bytes).expect("Failed to write header data to loader");
         // For each region, we need to write out the region metadata as well
         for region in &self.region_metadata {
             let region_metadata_bytes = unsafe { struct_to_bytes(region) };
-            loader_buf.write(region_metadata_bytes).expect("Failed to write region metadata to loader");
+            loader_buf.write_all(region_metadata_bytes).expect("Failed to write region metadata to loader");
         }
 
         // Now we can write out all the region data
         for (_, data) in &self.regions {
-            loader_buf.write(data).expect("Failed to write region data to loader");
+            loader_buf.write_all(data).expect("Failed to write region data to loader");
         }
 
         loader_buf.flush().unwrap();
