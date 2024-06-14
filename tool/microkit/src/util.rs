@@ -60,7 +60,7 @@ pub fn mask(n: u64) -> u64 {
 }
 
 /// Check that all objects in the list are adjacent
-pub fn objects_adjacent(objects: &Vec<Object>) -> bool {
+pub fn objects_adjacent(objects: &[Object]) -> bool {
     let mut prev_cap_addr = objects[0].cap_addr;
     for obj in &objects[1..] {
         if obj.cap_addr != prev_cap_addr + 1 {

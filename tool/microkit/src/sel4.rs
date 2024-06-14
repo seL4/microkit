@@ -150,6 +150,7 @@ pub enum ArmVmAttributes {
 }
 
 impl ArmVmAttributes {
+    #[allow(clippy::should_implement_trait)] // Default::default would return Self, not u64
     pub fn default() -> u64 {
         ArmVmAttributes::Cacheable as u64 | ArmVmAttributes::ParityEnabled as u64
     }
@@ -416,6 +417,7 @@ impl Aarch64Regs {
         ]
     }
 
+    #[allow(clippy::len_without_is_empty)] // this will never be *empty*, bad lint
     /// Just returns the count of registers
     pub const fn len(&self) -> u64 {
         36
@@ -773,7 +775,7 @@ impl InvocationArgs {
 }
 
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::large_enum_variant)]
 pub enum InvocationArgs {
     UntypedRetype {
         untyped: u64,

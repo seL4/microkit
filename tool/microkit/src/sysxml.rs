@@ -45,10 +45,9 @@ fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
     let mut to_parse = s.to_string();
     to_parse.retain(|c| c != '_');
 
-    let (final_str, base) = if to_parse.starts_with("0x") {
-        (&to_parse[2..], 16)
-    } else {
-        (&to_parse[0..], 10)
+    let (final_str, base) = match to_parse.strip_prefix("0x") {
+        Some(stripped) => (stripped, 16),
+        None => (to_parse.as_str(), 10),
     };
 
     match u64::from_str_radix(final_str, base) {
@@ -388,7 +387,7 @@ impl Channel {
     /// It should be noted that this function assumes that `pds` is populated
     /// with all the Protection Domains that could potentially be connected with
     /// the channel.
-    fn from_xml<'a>(xml_sdf: &'a XmlSystemDescription, node: &'a roxmltree::Node, pds: &Vec<ProtectionDomain>) -> Result<Channel, String> {
+    fn from_xml<'a>(xml_sdf: &'a XmlSystemDescription, node: &'a roxmltree::Node, pds: &[ProtectionDomain]) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 
         let mut ends: Vec<(usize, u64)> = Vec::new();

@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+// we want our asserts, even if the compiler figures out they hold true already during compile-time
+#![allow(clippy::assertions_on_constants)]
+
 use std::collections::{HashMap, HashSet};
 use std::iter::zip;
 use std::fs;
@@ -119,6 +122,7 @@ struct InitSystem<'a> {
 }
 
 impl<'a> InitSystem<'a> {
+    #[allow(clippy::too_many_arguments)] // just this one time, pinky-promise...
     pub fn new(kernel_config: &'a Config,
                cnode_cap: u64,
                cnode_mask: u64,
@@ -138,15 +142,7 @@ impl<'a> InitSystem<'a> {
                                 }
                             })
                             .collect();
-        device_untyped.sort_by(|a, b| {
-            if a.ut.base() < b.ut.base() {
-                std::cmp::Ordering::Less
-            } else if a.ut.base() == b.ut.base() {
-                std::cmp::Ordering::Equal
-            } else {
-                std::cmp::Ordering::Greater
-            }
-        });
+        device_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
 
         InitSystem {
             kernel_config,
@@ -1857,7 +1853,7 @@ fn build_system(kernel_config: &Config,
     })
 }
 
-fn write_report<W: std::io::Write>(buf: &mut BufWriter<W>, built_system: &BuiltSystem, bootstrap_invocation_data: &Vec<u8>) -> std::io::Result<()> {
+fn write_report<W: std::io::Write>(buf: &mut BufWriter<W>, built_system: &BuiltSystem, bootstrap_invocation_data: &[u8]) -> std::io::Result<()> {
     writeln!(buf, "# Kernel Boot Info\n")?;
 
     writeln!(buf, "    # of fixed caps     : {:>8}", comma_sep_u64(built_system.kernel_boot_info.fixed_cap_count))?;
@@ -1900,11 +1896,11 @@ fn write_report<W: std::io::Write>(buf: &mut BufWriter<W>, built_system: &BuiltS
     Ok(())
 }
 
-fn print_usage(available_boards: &Vec<String>) {
+fn print_usage(available_boards: &[String]) {
     println!("usage: microkit [-h] [-o OUTPUT] [-r REPORT] --board {{{}}} --config CONFIG [--search-path [SEARCH_PATH ...]] system", available_boards.join(","))
 }
 
-fn print_help(available_boards: &Vec<String>) {
+fn print_help(available_boards: &[String]) {
     print_usage(available_boards);
     println!("\npositional arguments:");
     println!("  system");
@@ -1927,7 +1923,7 @@ struct Args<'a> {
 }
 
 impl<'a> Args<'a> {
-    pub fn parse(args: &'a Vec<String>, available_boards: &Vec<String>) -> Args<'a> {
+    pub fn parse(args: &'a [String], available_boards: &[String]) -> Args<'a> {
         // Default arguments
         let mut output = "loader.img";
         let mut report = "report.txt";
@@ -2073,7 +2069,7 @@ fn main() -> Result<(), String> {
         }
     }
 
-    let env_args = std::env::args().collect();
+    let env_args: Vec<_> = std::env::args().collect();
     let args = Args::parse(&env_args, &available_boards);
 
     let board_path = boards_path.join(args.board);
