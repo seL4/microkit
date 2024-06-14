@@ -274,6 +274,7 @@ impl<'a> Loader<'a> {
 
         let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         for i in 0..512 {
+            #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
             let pt_entry: u64 =
                 ((i as u64) << AARCH64_1GB_BLOCK_BITS) |
                 (1 << 10) | // access flag
