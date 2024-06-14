@@ -288,14 +288,14 @@ impl<'a> Loader<'a> {
         let mut boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl1_upper_addr | 3).to_le_bytes();
-            let idx = Aarch64::lvl0_index(first_vaddr) as usize;
+            let idx = Aarch64::lvl0_index(first_vaddr);
             boot_lvl0_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
         }
 
         let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl2_upper_addr | 3).to_le_bytes();
-            let idx = Aarch64::lvl1_index(first_vaddr) as usize;
+            let idx = Aarch64::lvl1_index(first_vaddr);
             boot_lvl1_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
         }
 

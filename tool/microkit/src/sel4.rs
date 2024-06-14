@@ -285,6 +285,12 @@ pub struct Aarch64Regs {
     pub tpidrro_el0: u64,
 }
 
+impl Default for Aarch64Regs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Aarch64Regs {
     // Returns a zero-initialised instance
     pub fn new() -> Aarch64Regs {
@@ -505,7 +511,7 @@ impl Invocation {
     }
 
     fn fmt_field_bool(field_name: &'static str, value: bool) -> String {
-        format!("         {:<20} {}", field_name, value.to_string())
+        format!("         {:<20} {}", field_name, value)
     }
 
     fn fmt_field_cap(field_name: &'static str, cap: u64, cap_lookup: &HashMap<u64, String>) -> String {
@@ -749,11 +755,11 @@ impl InvocationArgs {
                                             vec![vaddr, attr],
                                             vec![vspace]
                                         ),
-            InvocationArgs::PageMap { page, vspace, vaddr, rights, attr } => (page, vec![vaddr, rights as u64, attr], vec![vspace]),
+            InvocationArgs::PageMap { page, vspace, vaddr, rights, attr } => (page, vec![vaddr, rights, attr], vec![vspace]),
             InvocationArgs::CnodeMint { cnode, dest_index, dest_depth, src_root, src_obj, src_depth, rights, badge } =>
                                         (
                                             cnode,
-                                            vec![dest_index, dest_depth, src_obj, src_depth, rights as u64, badge],
+                                            vec![dest_index, dest_depth, src_obj, src_depth, rights, badge],
                                             vec![src_root]
                                         ),
             InvocationArgs::SchedControlConfigureFlags { sched_control, sched_context, budget, period, extra_refills, badge, flags } =>
