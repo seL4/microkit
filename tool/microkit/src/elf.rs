@@ -231,7 +231,7 @@ impl ElfFile {
             return Err(format!("ELF '{}': unable to find string table section", path.display()));
         }
 
-        assert!(!symtab_shent.is_none());
+        assert!(symtab_shent.is_some());
         if symtab_shent.is_none() {
             return Err(format!("ELF '{}': unable to find symbol table section", path.display()));
         }
@@ -305,7 +305,7 @@ impl ElfFile {
             }
         }
 
-        return None;
+        None
     }
 
     fn get_string(strtab: &[u8], idx: usize) -> Result<&str, String> {

@@ -22,23 +22,6 @@ pub fn str_to_bool(s: &str) -> Result<bool, &'static str> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test_msb() {
-        assert_eq!(msb(37), 5);
-    }
-
-    #[test]
-    fn test_lsb() {
-        assert_eq!(lsb(36), 2);
-        assert_eq!(lsb(37), 0);
-    }
-}
-
 pub const fn kb(n: u64) -> u64 {
     n * 1024
 }
@@ -157,4 +140,21 @@ pub unsafe fn bytes_to_struct<T>(bytes: &[u8]) -> &T {
     assert!(suffix.is_empty());
 
     &body[0]
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_msb() {
+        assert_eq!(msb(37), 5);
+    }
+
+    #[test]
+    fn test_lsb() {
+        assert_eq!(lsb(36), 2);
+        assert_eq!(lsb(37), 0);
+    }
 }

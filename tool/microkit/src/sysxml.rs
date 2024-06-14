@@ -368,7 +368,7 @@ impl SysMemoryRegion {
             None
         };
 
-        if !phys_addr.is_none() && phys_addr.unwrap() % page_size != 0 {
+        if phys_addr.is_some() && phys_addr.unwrap() % page_size != 0 {
             return Err(value_error(xml_sdf, node, "phys_addr is not aligned to the page size".to_string()));
         }
 
@@ -409,7 +409,7 @@ impl Channel {
                     }
 
                     if end_id < 0 {
-                        return Err(value_error(xml_sdf, &child, format!("id must be >= 0")));
+                        return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
                     }
 
                     if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
@@ -535,7 +535,7 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
         match child_name {
             "protection_domain" => pds.push(ProtectionDomain::from_xml(&xml_sdf, &child)?),
             "channel" => channel_nodes.push(child),
-            "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, &plat_desc)?),
+            "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!("Invalid XML element '{}': {}", child_name, loc_string(&xml_sdf, pos)))
@@ -550,7 +550,7 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     // Now that we have parsed everything in the system description we can validate any
     // global properties (e.g no duplicate PD names etc).
 
-    if pds.len() == 0 {
+    if pds.is_empty() {
         return Err("Error: at least one protection domain must be defined".to_string());
     }
 

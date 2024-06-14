@@ -127,6 +127,12 @@ pub struct DisjointMemoryRegion {
     pub regions: Vec<MemoryRegion>,
 }
 
+impl Default for DisjointMemoryRegion {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DisjointMemoryRegion {
     pub fn new() -> DisjointMemoryRegion {
         DisjointMemoryRegion { regions: Vec::new() }
@@ -218,7 +224,7 @@ impl DisjointMemoryRegion {
         match region_to_remove {
             Some(region) => {
                 self.remove_region(region.base, region.base + size);
-                return region.base;
+                region.base
             },
             None => panic!("Unable to allocate {} bytes", size)
         }
@@ -287,7 +293,7 @@ impl ObjectAllocator {
             untyped.push(UntypedAllocator::new(*ut, 0, vec![]));
         }
 
-        ObjectAllocator { allocation_idx: 0, untyped: untyped }
+        ObjectAllocator { allocation_idx: 0, untyped }
     }
 
     pub fn alloc(&mut self, size: u64) -> KernelAllocation {
