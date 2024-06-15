@@ -123,21 +123,12 @@ impl MemoryRegion {
     }
 }
 
+#[derive(Default)]
 pub struct DisjointMemoryRegion {
     pub regions: Vec<MemoryRegion>,
 }
 
-impl Default for DisjointMemoryRegion {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DisjointMemoryRegion {
-    pub fn new() -> DisjointMemoryRegion {
-        DisjointMemoryRegion { regions: Vec::new() }
-    }
-
     fn check(&self) {
         // Ensure that regions are sorted and non-overlapping
         let mut last_end: Option<u64> = None;
