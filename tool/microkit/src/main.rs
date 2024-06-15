@@ -507,8 +507,8 @@ fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
 fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPartialBootInfo {
     // Determine the untyped caps of the system
     // This lets allocations happen correctly.
-    let mut device_memory = DisjointMemoryRegion::new();
-    let mut normal_memory = DisjointMemoryRegion::new();
+    let mut device_memory = DisjointMemoryRegion::default();
+    let mut normal_memory = DisjointMemoryRegion::default();
 
     // Start by allocating the entire physical address space
     // as device memory.
@@ -1752,8 +1752,10 @@ fn build_system(kernel_config: &Config,
 
     // Set TCB registers (we only set the entry point)
     for pd_idx in 0..system.protection_domains.len() {
-        let mut regs = Aarch64Regs::new();
-        regs.pc = pd_elf_files[pd_idx].entry;
+        let regs = Aarch64Regs {
+            pc: pd_elf_files[pd_idx].entry,
+            .. Default::default()
+        };
 
         system_invocations.push(Invocation::new(InvocationArgs::TcbWriteRegisters {
             tcb: tcb_objs[pd_idx].cap_addr,
