@@ -15,8 +15,6 @@
 #define INPUT_CAP 1
 #define REPLY_CAP 4
 
-#define NOTIFICATION_BITS 57
-
 char _stack[4096]  __attribute__((__aligned__(16)));
 
 bool passive;
