@@ -1763,7 +1763,7 @@ fn build_system(kernel_config: &Config,
             // There are no arch-dependent flags to set
             arch_flags: 0,
             // FIXME: we could optimise this since we are only setting the program counter
-            count: regs.len(),
+            count: Aarch64Regs::LEN as u64,
             regs,
         }));
     }

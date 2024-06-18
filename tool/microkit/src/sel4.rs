@@ -370,7 +370,7 @@ impl Aarch64Regs {
     }
 
     /// Number of registers
-    const LEN: u64 = 36;
+    pub const LEN: usize = 36;
 }
 
 pub struct Invocation {
