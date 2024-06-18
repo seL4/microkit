@@ -287,7 +287,7 @@ pub struct Aarch64Regs {
 }
 
 impl Aarch64Regs {
-    pub fn field_names(&self) -> [(&'static str, u64); 36] {
+    pub fn field_names(&self) -> [(&'static str, u64); Self::LEN] {
         [
             ("pc", self.pc),
             ("sp", self.sp),
@@ -328,7 +328,7 @@ impl Aarch64Regs {
         ]
     }
 
-    pub fn as_slice(&self) -> [u64; 36] {
+    pub fn as_slice(&self) -> [u64; Self::LEN] {
         [
             self.pc,
             self.sp,
@@ -369,11 +369,8 @@ impl Aarch64Regs {
         ]
     }
 
-    #[allow(clippy::len_without_is_empty)] // this will never be *empty*, bad lint
-    /// Just returns the count of registers
-    pub const fn len(&self) -> u64 {
-        36
-    }
+    /// Number of registers
+    const LEN: u64 = 36;
 }
 
 pub struct Invocation {
