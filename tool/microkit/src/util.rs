@@ -126,6 +126,7 @@ pub fn comma_sep_usize(n: usize) -> String {
 
 /// Convert a struct into raw bytes in order to be written to
 /// disk or some other format.
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn struct_to_bytes<T: Sized>(p: &T) -> &[u8] {
     ::core::slice::from_raw_parts(
         (p as *const T) as *const u8,
@@ -133,6 +134,7 @@ pub unsafe fn struct_to_bytes<T: Sized>(p: &T) -> &[u8] {
     )
 }
 
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn bytes_to_struct<T>(bytes: &[u8]) -> &T {
     let (prefix, body, suffix) = unsafe { bytes.align_to::<T>() };
     assert!(prefix.is_empty());
