@@ -21,7 +21,7 @@ use crate::MAX_PDS;
 /// There are various XML parsing/deserialising libraries within the Rust eco-system
 /// but few seem to be concerned with giving any introspection regarding the parsed
 /// XML. The roxmltree project allows us to work on a lower-level than something based
-/// on serde and so we can report propper user errors.
+/// on serde and so we can report proper user errors.
 ///
 
 /// Events that come through entry points (e.g notified or protected) are given an
