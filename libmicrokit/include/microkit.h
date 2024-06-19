@@ -21,7 +21,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_IRQ_CAP 138
 #define BASE_TCB_CAP 202
 
-#define MICROKIT_MAX_CHANNELS 63
+#define MICROKIT_MAX_CHANNELS 62
 
 /* User provided functions */
 void init(void);
