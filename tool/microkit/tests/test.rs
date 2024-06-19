@@ -19,13 +19,18 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
 
 const DEFAULT_PLAT_DESC: sysxml::PlatformDescription = sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
 
-fn check_error(test_name: &str, err: &str) {
+fn check_error(test_name: &str, expected_err: &str) {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/sdf/");
     path.push(test_name);
     let xml = std::fs::read_to_string(path).unwrap();
     let parse_err = sysxml::parse(test_name, &xml, &DEFAULT_PLAT_DESC).unwrap_err();
-    assert!(parse_err.starts_with(err));
+
+    if !parse_err.starts_with(expected_err) {
+        eprintln!("Expected error:\n{}\nGot error:\n{}\n", expected_err, parse_err);
+    }
+
+    assert!(parse_err.starts_with(expected_err));
 }
 
 fn check_missing(test_name: &str, attr: &str, element: &str) {
@@ -83,6 +88,11 @@ mod protection_domain {
     }
 
     #[test]
+    fn test_missing_program_image() {
+        check_error("pd_missing_program_image.xml", "Error: missing 'program_image' element on protection_domain: ")
+    }
+
+    #[test]
     fn test_missing_path() {
         check_missing("pd_missing_path.xml", "path", "program_image")
     }
@@ -119,7 +129,7 @@ mod protection_domain {
 
     #[test]
     fn test_duplicate_program_image() {
-        check_error("pd_duplicate_program_image.xml", "Error: program_image must only be specified once on element 'program_image': ")
+        check_error("pd_duplicate_program_image.xml", "Error: program_image must only be specified once on element 'protection_domain': ")
     }
 
     #[test]
@@ -155,6 +165,21 @@ mod protection_domain {
     #[test]
     fn test_irq_invalid_trigger() {
         check_error("irq_invalid_trigger.xml", "Error: trigger must be either 'level' or 'edge' on element 'irq'")
+    }
+
+    #[test]
+    fn test_parent_has_id() {
+        check_error("pd_parent_has_id.xml", "Error: invalid attribute 'id' on element 'protection_domain': ")
+    }
+
+    #[test]
+    fn test_child_missing_id() {
+        check_missing("pd_child_missing_id.xml", "id", "protection_domain")
+    }
+
+    #[test]
+    fn test_duplicate_child_id() {
+        check_error("pd_duplicate_child_id.xml", "Error: duplicate id: 0 in protection domain: 'parent' @")
     }
 }
 
