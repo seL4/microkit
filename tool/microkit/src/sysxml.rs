@@ -254,7 +254,7 @@ impl ProtectionDomain {
                 "program_image" => {
                     check_attributes(xml_sdf, &child, &["path"])?;
                     if program_image.is_some() {
-                        return Err(value_error(xml_sdf, &child, "program_image must only be specified once".to_string()));
+                        return Err(value_error(xml_sdf, node, "program_image must only be specified once".to_string()));
                     }
 
                     let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
@@ -344,6 +344,10 @@ impl ProtectionDomain {
                     return Err(format!("Invalid XML element '{}': {}", child.tag_name().name(), loc_string(xml_sdf, pos)));
                 },
             }
+        }
+
+        if program_image.is_none() {
+            return Err(format!("Error: missing 'program_image' element on protection_domain: '{}'", name));
         }
 
         let has_children = !child_pds.is_empty();
@@ -537,7 +541,7 @@ fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain
     for child_pd in &root_pd.child_pds {
         let child_id = child_pd.id.unwrap();
         if child_ids.contains(&child_id) {
-            return Err(format!("duplicate id: {} in protection domain: '{}' @ {}", child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+            return Err(format!("Error: duplicate id: {} in protection domain: '{}' @ {}", child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
         }
         child_ids.push(child_pd.id.unwrap());
     }
