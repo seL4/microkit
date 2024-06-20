@@ -95,10 +95,11 @@ This document attempts to clearly describe all of these terms, however as the co
 
 * [system](#system)
 * [protection domain (PD)](#pd)
-* [channel](#channel)
+* [virtual machine (VM)](#vm)
 * [memory region](#mr)
-* [notification](#notification)
+* [channel](#channel)
 * [protected procedure](#pp)
+* [notification](#notification)
 * [interrupt](#irq)
 * [fault](#fault)
 
@@ -171,6 +172,25 @@ The **priority** determines which of the runnable PDs to schedule. A PD is runna
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
 The **passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
+
+## Virtual Machine {#vm}
+
+A *virtual machine* (VM) is a runtime abstraction for running guest operating systems in Microkit. It is similar
+to a protection domain in that it provides a thread of control that executes within an isolated virtual address space.
+
+The main difference between a VM and a PD is that VMs have a higher privilege level such that they may function as a
+guest operations and have their own user-space programs at a separate exception level.
+
+The virtual machine is always a child of a PD. Exceptions caused by the virtual machine are delivered to the parent PD
+through the `fault` entry point. Each virtual machine has a 'virtual CPU' associated with it which is used to identify
+the fault. At the moment, all VMs only have a single virtual CPU but in the future multi-vCPU VMs will be allowed.
+
+The parent PD is responsible for starting and managing the virtual machine. Microkit provides the abstractions in
+order to manage the virtual machine through seL4 but there is typically a non-trivial amount
+of supporting code/infrastructure to properly start and manage a VM.
+
+To keep the (potentially untrusted) virtual machine isolated from the rest of the system, Microkit enforces that a
+protection domain can only ever manage a single virtual machine.
 
 ## Memory Regions {#mr}
 
@@ -283,12 +303,10 @@ a designated 'fault handler'. By default, all faults caused by protection domain
 details about the fault in a debug configuration.
 
 When a protection domain is a child of another protection domain, the designated fault handler for the child is the parent
-protection domain.
+protection domain. The same applies for a virtual machine.
 
-This means that whenever a fault is caused by a child PD, it will be delivered to the parent PD instead of the system fault
-handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled. The label of the given
-`msginfo` can be used to determine what kind of fault occurred. You can find more information about decoding the fault in the
-'Faults' section of the seL4 manual.
+This means that whenever a fault is caused by a child, it will be delivered to the parent PD instead of the system fault
+handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled.
 
 # SDK {#sdk}
 
@@ -321,9 +339,10 @@ The ELF files provided as program images should be standard ELF files and have b
 
 ## System Requirements
 
-The Microkit tool requires Linux x86_64, macOS x86_64 or macOS AArch64.
+The Microkit tool requires Linux (x86-64), macOS (x86-64 or AArch64).
 
 On Linux, the Microkit tool is statically linked and should run on any distribution.
+
 On macOS, the Microkit tool should run on macOS 10.12 (Sierra) or higher.
 
 The Microkit tool does not depend on any additional system binaries.
@@ -372,9 +391,10 @@ If the protection domain provides a protected procedure it must also implement:
 
     microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
 
-If the protection domain has child protection domains it must also implement:
+If the protection domain has children it must also implement:
 
-    void fault(microkit_pd pd, microkit_msginfo msginfo);
+    seL4_Bool fault(microkit_child child, microkit_msginfo msginfo,
+                    microkit_msginfo *reply_msginfo);
 
 `libmicrokit` provides the following functions:
 
@@ -384,10 +404,18 @@ If the protection domain has child protection domains it must also implement:
     seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo);
     seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
-    void microkit_pd_restart(microkit_pd pd, seL4_Word entry_point);
-    void microkit_pd_stop(microkit_pd pd);
+    void microkit_pd_restart(microkit_child pd, seL4_Word entry_point);
+    void microkit_pd_stop(microkit_child pd);
     void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
     seL4_Word microkit_mr_get(seL4_Uint8 mr);
+    void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point);
+    void microkit_vcpu_stop(microkit_child vcpu);
+    void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
+                                      seL4_Uint8 priority, seL4_Uint8 group,
+                                      seL4_Uint8 index);
+    void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq);
+    seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
+    void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
 
 
 ## `void init(void)`
@@ -405,7 +433,7 @@ The `notified` entry point is called by the system when a PD has received a noti
 
 Channel identifiers are specified in the system configuration.
 
-## `microkit_msginfo protected(microkit_channel ch, microkit_msginfo message)`
+## `microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)`
 
 The `protected` entry point is optional.
 This is invoked when another PD calls `microkit_ppcall` on a channel shared with the PD.
@@ -415,34 +443,44 @@ Indirectly this identifies the PD performing the call.
 Channel identifiers are specified in the system configuration.
 **Note:** The channel argument is passed by the system and is unforgeable.
 
-The `message` argument is the argument passed to the PP and is provided by the calling PD.
+The `msginfo` argument is the argument passed to the PP and is provided by the calling PD.
 The contents of the message is up to a pre-arranged protocol between the PDs.
 The message contents are opaque to the system.
 Note: The message is *copied* from the caller.
 
-The returned `message` is the return value of the protected procedure.
+The returned `microkit_msginfo` is the return value of the protected procedure.
 As with arguments, this is *copied* to the caller.
 
-## `void fault(microkit_pd pd, microkit_msginfo msginfo)`
+## `seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)`
 
-The `fault` entry point depends on whether the given PD has children.
-This is invoked when a child PD causes a fault.
+The `fault` entry point being invoked depends on whether the given PD has children.
+It is invoked when a child PD or VM causes a fault.
 
-The `pd` argument identifies the child PD that caused the fault.
+The `child` argument identifies the child that caused the fault.
 
 The `msginfo` argument is given by the seL4 kernel when a fault occurs and contains information
 as to what fault occurred.
 
-You can use `microkit_msginfo_get_label` to deduce what kind of fault happened (for example, whether
-it was a user exception or a virtual memory fault). The type `seL4_Fault_tag_t` defines the kinds of
-faults for a given architecture that could occur. You can find the list of fault labels in the 'Faults'
-section of the seL4 manual.
+The `reply_msginfo` argument is given by libmicrokit and can be used to reply to the fault.
 
-## `microkit_msginfo microkit_ppcall(microkit_channel channel, microkit_msginfo message)`
+The returned `seL4_Bool` is whether or not to reply to the fault with the message `reply_msginfo`.
+Returning `seL4_True` will reply to the fault. Returning `seL4_False` will not reply to the fault.
+
+You can use `microkit_msginfo_get_label` on `msginfo` to deduce what kind of fault happened
+(for example, whether it was a user exception or a virtual memory fault).
+
+Whether or not you reply to the fault depends on the type of fault that has occurred and how you want
+to handle it.
+
+To find the full list of possible faults that could occur and details regarding to replying to a particular
+kind of fault, please see the 'Faults' section of the
+[seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
+## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
 Performs a call to a protected procedure in a different PD.
 The `ch` argument identifies the protected procedure to be called.
-`message` is passed as argument to the protected procedure.
+`msginfo` is passed as argument to the protected procedure.
 Channel identifiers are specified in the system configuration.
 
 The protected procedure's return data is returned in the `microkit_msginfo`.
@@ -456,14 +494,14 @@ Channel identifiers are specified in the system configuration.
 
 Acknowledge the interrupt identified by the specified channel.
 
-## `void microkit_pd_restart(microkit_pd id, uintptr_t entry_point)`
+## `void microkit_pd_restart(microkit_child pd, uintptr_t entry_point)`
 
-Restart the execution of a child protection domain with ID `id` at the given `entry_point`.
+Restart the execution of a child protection domain with ID `pd` at the given `entry_point`.
 This will set the program counter of the child protection domain to `entry_point`.
 
-## `void microkit_pd_stop(microkit_pd id)`
+## `void microkit_pd_stop(microkit_child pd)`
 
-Stop the execution of the child protection domain with ID `id`.
+Stop the execution of the child protection domain with ID `pd`.
 
 ## `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
 
@@ -471,7 +509,7 @@ Creates a new message structure.
 
 The message can be passed to `microkit_ppcall` or returned from `protected`.
 
-## `uint64_t microkit_msginfo_get_label(microkit_msginfo message)`
+## `uint64_t microkit_msginfo_get_label(microkit_msginfo msginfo)`
 
 Returns the label from a message.
 
@@ -487,6 +525,41 @@ Get a message register.
 
 Set a message register.
 
+## `void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point)`
+
+Restart the execution of a VM's virtual CPU with ID `vcpu` at the given `entry point`.
+This will set the program counter of the vCPU to `entry_point`.
+
+## `void microkit_vcpu_stop(microkit_child vcpu)`
+
+Stop the execution of the VM's virtual CPU with ID `vcpu`.
+
+## `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
+                                      seL4_Uint8 priority, seL4_Uint8 group,
+                                      seL4_Uint8 index)`
+
+Inject a virtual ARM interrupt for a virtual CPU `vcpu` with IRQ number `irq`.
+The `priority` (0-31) determines what ARM GIC (generic interrupt controller)
+priority level the virtual IRQ will be injected as. The `group` determines whether
+the virtual IRQ will be injected into secure world (1) or non-secure world (0).
+The `index` is the index of the virtual GIC list register.
+
+## `void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq)`
+
+Acknowledge a ARM virtual Private Peripheral Interrupt (PPI) with IRQ number `irq`
+for a VM's vCPU with ID `vcpu`.
+
+## `seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg)`
+
+Read a register for a given virtual CPU with ID `vcpu`. The `reg` argument is the index of the
+register that is read. The list of registers is defined by the enum `seL4_VCPUReg`
+in the seL4 source code.
+
+## `void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value)`
+
+Write to a register for a given virtual CPU with ID `vcpu`. The `reg` argument is the index of the
+register that is written to. The `value` argument is what the register will be set to.
+The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source code.
 
 # System Description File {#sysdesc}
 
@@ -523,6 +596,7 @@ Additionally, it supports the following child elements:
 * `irq`: (zero or more) Describes hardware interrupt associations.
 * `setvar`: (zero or more) Describes variable rewriting.
 * `protection_domain`: (zero or more) Describes a child protection domain.
+* `virtual_machine`: (zero or one) Describes a child virtual machine.
 
 The `program_image` element has a single `path` attribute describing the path to an ELF file.
 
@@ -539,16 +613,32 @@ The `irq` element has the following attributes:
 * `irq`: The hardware interrupt number.
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
-\
 
 The `setvar` element has the following attributes:
 
 * `symbol`: Name of a symbol in the ELF file.
 * `region_paddr`: Name of an MR. The symbol's value shall be updated to this MR's physical address.
 
-The `protection_domain` element the same attributes as any other protection domain as well as:
+The `protection_domain` element has the same attributes as any other protection domain as well as:
 
 * `id`: The ID of the child for the parent to refer to.
+
+The `virtual_machine` element has the following attributes:
+
+* `name`: A unique name for the virtual machine
+* `priority`: The priority of the virtual machine (integer 0 to 254).
+* `budget`: (optional) The VM's budget in microseconds; defaults to 1,000.
+* `period`: (optional) The VM's period in microseconds; must not be smaller than the budget; defaults to the budget.
+
+Additionally, it supports the following child elements:
+
+* `vcpu`: (exactly one) Describes the virtual CPU that will be tied to the virtual machine. At the moment only one
+                        vCPU is supported and so only one of these elements can exist for a virtual machine.
+* `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
+
+The `vcpu` element has a single `id` attribute defining the identifier used for the virutal machine's vCPU.
+
+The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
 
 ## `memory_region`
 
@@ -700,7 +790,7 @@ Cortex-A53 CPU.
 You can use the following command to simulate a Microkit system:
 
     $ qemu-system-aarch64 \
-        -machine virt \
+        -machine virt,virtualization=on \
         -cpu cortex-a53 \
         -nographic \
         -serial mon:stdio \
@@ -726,7 +816,7 @@ For simulating the ZCU102 using QEMU, use the following command:
 
     $ qemu-system-aarch64 \
        -m size=4G  \
-       -machine xlnx-zcu102 \
+       -machine xlnx-zcu102,virtualization=on \
        -nographic \
        -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
        -serial mon:stdio

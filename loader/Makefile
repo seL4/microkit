@@ -19,6 +19,9 @@ ifeq ($(strip $(LINK_ADDRESS)),)
 $(error LINK_ADDRESS must be specified)
 endif
 
+ifeq ($(strip $(PHYSICAL_ADDRESS_BITS)),)
+$(error PHYSICAL_ADDRESS_BITS must be specified)
+endif
 
 TOOLCHAIN := aarch64-none-elf-
 CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror -mgeneral-regs-only
@@ -29,7 +32,7 @@ LINKSCRIPT_INPUT := loader.ld
 LINKSCRIPT := $(BUILD_DIR)/link.ld
 
 $(BUILD_DIR)/%.o : src/%.S
-	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g  -mcpu=$(GCC_CPU)  $< -o $@
+	$(TOOLCHAIN)gcc -x assembler-with-cpp -c -g -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU)  $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.s
 	$(TOOLCHAIN)as -g -mcpu=$(GCC_CPU) $< -o $@

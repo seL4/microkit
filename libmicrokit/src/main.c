@@ -42,8 +42,9 @@ __attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_m
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
 
-__attribute__((weak)) void fault(microkit_pd pd, microkit_msginfo msginfo)
+__attribute__((weak)) seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
+    return seL4_False;
 }
 
 static void run_init_funcs(void)
@@ -78,7 +79,10 @@ static void handler_loop(void)
         have_reply = false;
 
         if (is_fault) {
-            fault(badge & PD_MASK, tag);
+            seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, &reply_tag);
+            if (reply_to_fault) {
+                have_reply = true;
+            }
         } else if (is_endpoint) {
             have_reply = true;
             reply_tag = protected(badge & CHANNEL_MASK, tag);

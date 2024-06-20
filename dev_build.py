@@ -6,7 +6,7 @@
 This is designed to make it easy to build and run examples during development.
 """
 from argparse import ArgumentParser
-from os import environ
+from os import environ, system
 from pathlib import Path
 from shutil import rmtree
 from subprocess import run
@@ -76,6 +76,10 @@ def main():
 
     if not BUILD_DIR.exists():
         BUILD_DIR.mkdir()
+
+    tool_rebuild = f"cd tool/microkit && cargo build && cp target/debug/microkit {release}/bin/microkit"
+    r = system(tool_rebuild)
+    assert r == 0
 
     make_env = environ.copy()
     make_env["BUILD_DIR"] = str(BUILD_DIR.absolute())

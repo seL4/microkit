@@ -84,6 +84,7 @@ typedef void (*sel4_entry)(
 void switch_to_el1(void);
 void switch_to_el2(void);
 void el1_mmu_enable(void);
+void el2_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
 
@@ -479,6 +480,10 @@ static int ensure_correct_el(void)
     if (loader_data->flags & FLAG_SEL4_HYP) {
         if (el != EL2) {
             puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
+            return 1;
+        } else {
+            puts("LDR|INFO: Resetting CNTVOFF\n");
+            asm volatile("msr cntvoff_el2, xzr");
         }
     } else {
         if (el == EL2) {
@@ -566,6 +571,7 @@ static void configure_gicv2(void)
 int main(void)
 {
     int r;
+    enum el el;
 
 #if defined(BOARD_zcu102)
     uart_init();
@@ -595,7 +601,14 @@ int main(void)
     }
 
     puts("LDR|INFO: enabling MMU\n");
-    el1_mmu_enable();
+    el = current_el();
+    if (el == EL1) {
+        el1_mmu_enable();
+    } else if (el == EL2) {
+        el2_mmu_enable();
+    } else {
+        puts("LDR|ERROR: unknown EL level for MMU enable\n");
+    }
 
     puts("LDR|INFO: jumping to kernel\n");
     start_kernel();

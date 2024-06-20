@@ -15,6 +15,8 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     init_cnode_bits: 12,
     cap_address_bits: 64,
     fan_out_limit: 256,
+    hypervisor: true,
+    arm_pa_size_bits: 40,
 };
 
 const DEFAULT_PLAT_DESC: sysxml::PlatformDescription = sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);

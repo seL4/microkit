@@ -39,13 +39,15 @@ pub struct Object {
 
 pub struct Config {
     pub arch: Arch,
-    pub word_size: usize,
+    pub word_size: u64,
     pub minimum_page_size: u64,
     pub paddr_user_device_top: u64,
     pub kernel_frame_size: u64,
     pub init_cnode_bits: u64,
     pub cap_address_bits: u64,
     pub fan_out_limit: u64,
+    pub hypervisor: bool,
+    pub arm_pa_size_bits: usize,
 }
 
 pub enum Arch {
@@ -68,6 +70,7 @@ pub enum ObjectType {
     SmallPage = 9,
     LargePage = 10,
     PageTable = 11,
+    Vcpu = 12,
 }
 
 impl ObjectType {
@@ -79,8 +82,10 @@ impl ObjectType {
             ObjectType::Reply => Some(OBJECT_SIZE_REPLY),
             ObjectType::VSpace => Some(OBJECT_SIZE_VSPACE),
             ObjectType::PageTable => Some(OBJECT_SIZE_PAGE_TABLE),
+            ObjectType::HugePage => Some(OBJECT_SIZE_HUGE_PAGE),
             ObjectType::LargePage => Some(OBJECT_SIZE_LARGE_PAGE),
             ObjectType::SmallPage => Some(OBJECT_SIZE_SMALL_PAGE),
+            ObjectType::Vcpu => Some(OBJECT_SIZE_VCPU),
             _ => None
         }
     }
@@ -99,6 +104,7 @@ impl ObjectType {
             ObjectType::SmallPage => "SEL4_SMALL_PAGE_OBJECT",
             ObjectType::LargePage => "SEL4_LARGE_PAGE_OBJECT",
             ObjectType::PageTable => "SEL4_PAGE_TABLE_OBJECT",
+            ObjectType::Vcpu => "SEL4_VCPU_OBJECT",
         }
     }
 
@@ -134,9 +140,11 @@ pub const OBJECT_SIZE_ENDPOINT: u64 = 1 << 4;
 pub const OBJECT_SIZE_NOTIFICATION: u64 = 1 << 6;
 pub const OBJECT_SIZE_REPLY: u64 = 1 << 5;
 pub const OBJECT_SIZE_PAGE_TABLE: u64 = 1 << 12;
-pub const OBJECT_SIZE_LARGE_PAGE: u64 = 2 * 1024 * 1024;
-pub const OBJECT_SIZE_SMALL_PAGE: u64 = 4 * 1024;
-pub const OBJECT_SIZE_VSPACE: u64 = 4 * 1024;
+pub const OBJECT_SIZE_HUGE_PAGE: u64 = 1 << 30;
+pub const OBJECT_SIZE_LARGE_PAGE: u64 = 1 << 21;
+pub const OBJECT_SIZE_SMALL_PAGE: u64 = 1 << 12;
+pub const OBJECT_SIZE_VSPACE: u64 = 1 << 13;
+pub const OBJECT_SIZE_VCPU: u64 = 1 << 12;
 // pub const OBJECT_SIZE_ASID_POOL: u64 = 1 << 12;
 
 /// Virtual memory attributes for ARM
@@ -241,8 +249,14 @@ enum InvocationLabel {
     // ARM Asid
     ArmAsidControlMakePool = 50,
     ArmAsidPoolAssign = 51,
+    // ARM vCPU
+    ArmVcpuSetTcb = 52,
+    ArmVcpuInjectIrq = 53,
+    ArmVcpuReadReg = 54,
+    ArmVcpuWriteReg = 55,
+    ArmVcpuAckVppi = 56,
     // ARM IRQ
-    ArmIrqIssueIrqHandlerTrigger = 52,
+    ArmIrqIssueIrqHandlerTrigger = 57,
 }
 
 #[derive(Copy, Clone, Default)]
@@ -588,6 +602,10 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("badge", badge));
                 arg_strs.push(Invocation::fmt_field("flags", flags));
                 (sched_control, "None")
+            },
+            InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => {
+                arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
+                (vcpu, cap_lookup.get(&vcpu).unwrap().as_str())
             }
         };
         _ = writeln!(f, "{:<20} - {:<17} - 0x{:016x} ({})\n{}", self.object_type(), self.method_name(), service, service_str, arg_strs.join("\n"));
@@ -612,6 +630,7 @@ impl Invocation {
             InvocationLabel::ArmPageMap => "Page",
             InvocationLabel::CnodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
+            InvocationLabel::ArmVcpuSetTcb => "VCPU",
             _ => panic!("Internal error: unexpected label when getting object type '{:?}'", self.label)
         }
     }
@@ -632,6 +651,7 @@ impl Invocation {
             InvocationLabel::ArmPageMap => "Map",
             InvocationLabel::CnodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
+            InvocationLabel::ArmVcpuSetTcb => "VCPUSetTcb",
             _ => panic!("Internal error: unexpected label when getting method name '{:?}'", self.label)
         }
     }
@@ -654,6 +674,7 @@ impl InvocationArgs {
             InvocationArgs::PageMap { .. } => InvocationLabel::ArmPageMap,
             InvocationArgs::CnodeMint { .. } => InvocationLabel::CnodeMint,
             InvocationArgs::SchedControlConfigureFlags { .. } => InvocationLabel::SchedControlConfigureFlags,
+            InvocationArgs::ArmVcpuSetTcb { .. } => InvocationLabel::ArmVcpuSetTcb,
         }
     }
 
@@ -718,7 +739,8 @@ impl InvocationArgs {
                                             sched_control,
                                             vec![budget, period, extra_refills, badge, flags],
                                             vec![sched_context]
-                                        )
+                                        ),
+            InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => (vcpu, vec![], vec![tcb]),
         }
     }
 }
@@ -818,5 +840,9 @@ pub enum InvocationArgs {
         extra_refills: u64,
         badge: u64,
         flags: u64,
+    },
+    ArmVcpuSetTcb {
+        vcpu: u64,
+        tcb: u64,
     }
 }
