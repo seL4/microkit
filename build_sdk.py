@@ -63,6 +63,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "tqma8xqp1gb",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "ethernet": Path("example/tqma8xqp1gb/ethernet")
@@ -77,6 +78,7 @@ SUPPORTED_BOARDS = (
             "KernelARMPlatform": "zcu102",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "hello": Path("example/zcu102/hello")
@@ -90,6 +92,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "maaxboard",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "hello": Path("example/maaxboard/hello")
@@ -103,6 +106,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "imx8mm-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "passive_server": Path("example/imx8mm_evk/passive_server")
@@ -116,6 +120,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "imx8mq-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "hello": Path("example/imx8mq_evk/hello")
@@ -129,6 +134,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "odroidc2",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "hello": Path("example/odroidc2/hello")
@@ -142,6 +148,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "odroidc4",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "timer": Path("example/odroidc4/timer")
@@ -156,6 +163,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "QEMU_MEMORY": "2048",
+            "KernelArmHypervisorSupport": True,
         },
         examples={
             "hello": Path("example/qemu_virt_aarch64/hello"),
@@ -495,7 +503,8 @@ def main() -> None:
         for config in selected_configs:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
             loader_defines = [
-                ("LINK_ADDRESS", hex(board.loader_link_address))
+                ("LINK_ADDRESS", hex(board.loader_link_address)),
+                ("PHYSICAL_ADDRESS_BITS", 40)
             ]
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])

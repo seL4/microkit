@@ -17,9 +17,9 @@ use std::mem::size_of;
 use microkit_tool::{MAX_PDS, PD_MAX_NAME_LENGTH, sysxml, util, elf, sel4, loader, Region,UntypedObject,ObjectAllocator,MemoryRegion,DisjointMemoryRegion};
 use elf::ElfFile;
 use sel4::{ArmVmAttributes, BootInfo, Object, Invocation, InvocationArgs, ObjectType, Rights, PageSize, Aarch64Regs, Config, Arch};
-use sysxml::{parse, PlatformDescription, SystemDescription, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion};
+use sysxml::{parse, PlatformDescription, SystemDescription, ProtectionDomain, VirtualMachine, SysMap, SysMapPerms, SysMemoryRegion};
 use loader::Loader;
-use util::{bytes_to_struct, struct_to_bytes, comma_sep_usize, comma_sep_u64};
+use util::{json_str_as_u64, json_str_as_bool, bytes_to_struct, struct_to_bytes, comma_sep_usize, comma_sep_u64};
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
@@ -37,11 +37,13 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
-const BASE_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
+const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
+const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
+const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
-const PD_CAP_SIZE: u64 = 256;
+const PD_CAP_SIZE: u64 = 512;
 const PD_CAP_BITS: u64 = PD_CAP_SIZE.ilog2() as u64;
 const PD_SCHEDCONTEXT_SIZE: u64 = 1 << 8;
 
@@ -560,9 +562,9 @@ fn get_arch_n_paging(region: MemoryRegion) -> u64 {
     const PT_INDEX_OFFSET: u64 = 12;
     const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
     const PUD_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
-    const PGD_INDEX_OFFSET: u64 = PUD_INDEX_OFFSET + 9;
+    // const PGD_INDEX_OFFSET: u64 = PUD_INDEX_OFFSET + 9;
 
-    get_n_paging(region, PGD_INDEX_OFFSET) +
+    // get_n_paging(region, PGD_INDEX_OFFSET) +
     get_n_paging(region, PUD_INDEX_OFFSET) +
     get_n_paging(region, PD_INDEX_OFFSET)
 }
@@ -570,7 +572,7 @@ fn get_arch_n_paging(region: MemoryRegion) -> u64 {
 fn rootserver_max_size_bits() -> u64 {
     let slot_bits = 5; // seL4_SlotBits
     let root_cnode_bits = 12; // CONFIG_ROOT_CNODE_SIZE_BITS
-    let vspace_bits = 12; // seL4_VSpaceBits
+    let vspace_bits = 13; // seL4_VSpaceBits
 
     let cnode_size_bits = root_cnode_bits + slot_bits;
     max(cnode_size_bits, vspace_bits)
@@ -586,7 +588,7 @@ fn calculate_rootserver_size(initial_task_region: MemoryRegion) -> u64 {
     let tcb_bits = 11;  // seL4_TCBBits
     let page_bits = 12;  // seL4_PageBits
     let asid_pool_bits = 12;  // seL4_ASIDPoolBits
-    let vspace_bits = 12;  // seL4_VSpaceBits
+    let vspace_bits = 13;  // seL4_VSpaceBits
     let page_table_bits = 12;  // seL4_PageTableBits
     let min_sched_context_bits = 7;  // seL4_MinSchedContextBits
 
@@ -1190,14 +1192,39 @@ fn build_system(kernel_config: &Config,
         mr_pages.get_mut(mr).unwrap().push(page[0].clone());
     }
 
-    let tcb_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("TCB: PD={}", pd.name)).collect();
+    let virtual_machines: Vec<&VirtualMachine> = system
+        .protection_domains
+        .iter()
+        .filter_map(|pd| match &pd.virtual_machine {
+            Some(vm) => Some(vm),
+            None => None,
+        })
+        .collect();
+
+    // TCBs
+    let mut tcb_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("TCB: PD={}", pd.name)).collect();
+    let vm_tcb_names: Vec<String> = virtual_machines.iter().map(|vm| format!("TCB: VM={}", vm.name)).collect();
+    tcb_names.extend(vm_tcb_names);
     let tcb_objs = init_system.allocate_objects(ObjectType::Tcb, tcb_names, None);
     let tcb_caps: Vec<u64> = tcb_objs.iter().map(|tcb| tcb.cap_addr).collect();
 
-    let sched_context_names = system.protection_domains.iter().map(|pd| format!("SchedContext: PD={}", pd.name)).collect();
+    let pd_tcb_objs = &tcb_objs[..system.protection_domains.len()];
+    let vm_tcb_objs = &tcb_objs[system.protection_domains.len()..];
+    assert!(pd_tcb_objs.len() + vm_tcb_objs.len() == tcb_objs.len());
+    // VCPUs
+    let vcpu_names: Vec<String> = virtual_machines.iter().map(|vm| format!("VCPU: VM={}", vm.name)).collect();
+    let vcpu_objs = init_system.allocate_objects(ObjectType::Vcpu, vcpu_names, None);
+    // Scheduling Contexts
+    let mut sched_context_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("SchedContext: PD={}", pd.name)).collect();
+    let vm_sched_context_names: Vec<String> = virtual_machines.iter().map(|vm| format!("SchedContext: VM={}", vm.name)).collect();
+    sched_context_names.extend(vm_sched_context_names);
     let sched_context_objs = init_system.allocate_objects(ObjectType::SchedContext, sched_context_names, Some(PD_SCHEDCONTEXT_SIZE));
     let sched_context_caps: Vec<u64> = sched_context_objs.iter().map(|sc| sc.cap_addr).collect();
 
+    let pd_sched_context_objs = &sched_context_objs[..system.protection_domains.len()];
+    let vm_sched_context_objs = &sched_context_objs[system.protection_domains.len()..];
+
+    // Endpoints
     let pd_endpoint_names: Vec<String> = system
         .protection_domains
         .iter()
@@ -1205,7 +1232,7 @@ fn build_system(kernel_config: &Config,
         .map(|pd| format!("EP: PD={}", pd.name))
         .collect();
     let endpoint_names = [vec![format!("EP: Monitor Fault")], pd_endpoint_names].concat();
-
+    // Reply objects
     let pd_reply_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("Reply: PD={}", pd.name)).collect();
     let reply_names = [vec![format!("Reply: Monitor")], pd_reply_names].concat();
     let reply_objs = init_system.allocate_objects(ObjectType::Reply, reply_names, None);
@@ -1242,9 +1269,9 @@ fn build_system(kernel_config: &Config,
     // Page table (level 3 table) is based on how many 2 MiB parts of the
     // address space is covered (excluding any 2MiB regions covered by large
     // pages).
-    let mut uds: Vec<(usize, u64)> = Vec::new();
-    let mut ds: Vec<(usize, u64)> = Vec::new();
-    let mut pts: Vec<(usize, u64)> = Vec::new();
+    let mut all_pd_uds: Vec<(usize, u64)> = Vec::new();
+    let mut all_pd_ds: Vec<(usize, u64)> = Vec::new();
+    let mut all_pd_pts: Vec<(usize, u64)> = Vec::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER)
                                                     .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
@@ -1268,7 +1295,9 @@ fn build_system(kernel_config: &Config,
         }
 
         for (vaddr, page_size) in vaddrs {
-            upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+            if !kernel_config.hypervisor && kernel_config.arm_pa_size_bits != 40 {
+                upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+            }
             directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
             if page_size == PageSize::Small {
                 page_table_vaddrs.insert(util::mask_bits(vaddr, 12 + 9));
@@ -1277,37 +1306,100 @@ fn build_system(kernel_config: &Config,
 
         let mut pd_uds: Vec<(usize, u64)> = upper_directory_vaddrs.into_iter().map(|vaddr| (pd_idx, vaddr)).collect();
         pd_uds.sort_by_key(|ud| ud.1);
-        uds.extend(pd_uds);
+        all_pd_uds.extend(pd_uds);
 
         let mut pd_ds: Vec<(usize, u64)> = directory_vaddrs.into_iter().map(|vaddr| (pd_idx, vaddr)).collect();
         pd_ds.sort_by_key(|d| d.1);
-        ds.extend(pd_ds);
+        all_pd_ds.extend(pd_ds);
 
         let mut pd_pts: Vec<(usize, u64)> = page_table_vaddrs.into_iter().map(|vaddr| (pd_idx, vaddr)).collect();
         pd_pts.sort_by_key(|pt| pt.1);
-        pts.extend(pd_pts);
+        all_pd_pts.extend(pd_pts);
     }
+    all_pd_uds.sort_by_key(|ud| ud.0);
+    all_pd_ds.sort_by_key(|d| d.0);
+    all_pd_pts.sort_by_key(|pt| pt.0);
 
-    uds.sort_by_key(|ud| ud.0);
-    ds.sort_by_key(|d| d.0);
-    pts.sort_by_key(|pt| pt.0);
+    let mut all_vm_uds: Vec<(usize, u64)> = Vec::new();
+    let mut all_vm_ds: Vec<(usize, u64)> = Vec::new();
+    let mut all_vm_pts: Vec<(usize, u64)> = Vec::new();
+    for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+        let mut upper_directory_vaddrs = HashSet::new();
+        let mut directory_vaddrs = HashSet::new();
+        let mut page_table_vaddrs = HashSet::new();
+
+        let mut vaddrs = vec![];
+        for map in &vm.maps {
+            let mr = all_mr_by_name[map.mr.as_str()];
+            let mut vaddr = map.vaddr;
+            for _ in 0..mr.page_count {
+                vaddrs.push((vaddr, mr.page_size));
+                vaddr += mr.page_bytes();
+            }
+        }
+
+        for (vaddr, page_size) in vaddrs {
+            assert!(kernel_config.hypervisor);
+            if kernel_config.arm_pa_size_bits != 40 {
+                upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+            }
+            directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
+            if page_size == PageSize::Small {
+                page_table_vaddrs.insert(util::mask_bits(vaddr, 12 + 9));
+            }
+        }
+
+        let mut vm_uds: Vec<(usize, u64)> = upper_directory_vaddrs.into_iter().map(|vaddr| (vm_idx, vaddr)).collect();
+        vm_uds.sort_by_key(|ud| ud.1);
+        all_vm_uds.extend(vm_uds);
+
+        let mut vm_ds: Vec<(usize, u64)> = directory_vaddrs.into_iter().map(|vaddr| (vm_idx, vaddr)).collect();
+        vm_ds.sort_by_key(|d| d.1);
+        all_vm_ds.extend(vm_ds);
+
+        let mut vm_pts: Vec<(usize, u64)> = page_table_vaddrs.into_iter().map(|vaddr| (vm_idx, vaddr)).collect();
+        vm_pts.sort_by_key(|pt| pt.1);
+        all_vm_pts.extend(vm_pts);
+    }
+    all_vm_uds.sort_by_key(|ud| ud.0);
+    all_vm_ds.sort_by_key(|d| d.0);
+    all_vm_pts.sort_by_key(|pt| pt.0);
 
     let pd_names: Vec<&str> = system.protection_domains.iter().map(|pd| pd.name.as_str()).collect();
+    let vm_names: Vec<&str> = virtual_machines.iter().map(|vm| vm.name.as_str()).collect();
 
-    let vspace_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("VSpace: PD={}", pd.name)).collect();
+    let mut vspace_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("VSpace: PD={}", pd.name)).collect();
+    let vm_vspace_names: Vec<String> = virtual_machines.iter().map(|vm| format!("VSpace: VM={}", vm.name)).collect();
+    vspace_names.extend(vm_vspace_names);
     let vspace_objs = init_system.allocate_objects(ObjectType::VSpace, vspace_names, None);
+    let pd_vspace_objs = &vspace_objs[..system.protection_domains.len()];
+    let vm_vspace_objs = &vspace_objs[system.protection_domains.len()..];
 
-    let ud_names = uds.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
-    let ud_objs = init_system.allocate_objects(ObjectType::PageTable, ud_names, None);
+    let pd_ud_names: Vec<String> = all_pd_uds.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
+    let vm_ud_names: Vec<String> = all_vm_uds.iter().map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr)).collect();
 
-    let d_names = ds.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
-    let d_objs = init_system.allocate_objects(ObjectType::PageTable, d_names, None);
+    let pd_ud_objs = init_system.allocate_objects(ObjectType::PageTable, pd_ud_names, None);
+    let vm_ud_objs = init_system.allocate_objects(ObjectType::PageTable, vm_ud_names, None);
 
-    let pt_names = pts.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
-    let pt_objs = init_system.allocate_objects(ObjectType::PageTable, pt_names, None);
+    if kernel_config.hypervisor {
+        assert!(vm_ud_objs.is_empty());
+    }
+
+    let pd_d_names: Vec<String> = all_pd_ds.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
+    let vm_d_names: Vec<String> = all_vm_ds.iter().map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr)).collect();
+    let pd_d_objs = init_system.allocate_objects(ObjectType::PageTable, pd_d_names, None);
+    let vm_d_objs = init_system.allocate_objects(ObjectType::PageTable, vm_d_names, None);
+
+    let pd_pt_names: Vec<String> = all_pd_pts.iter().map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr)).collect();
+    let vm_pt_names: Vec<String> = all_vm_pts.iter().map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr)).collect();
+    let pd_pt_objs = init_system.allocate_objects(ObjectType::PageTable, pd_pt_names, None);
+    let vm_pt_objs = init_system.allocate_objects(ObjectType::PageTable, vm_pt_names, None);
 
     // Create CNodes - all CNode objects are the same size: 128 slots.
-    let cnode_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("CNode: PD={}", pd.name)).collect();
+    let mut cnode_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("CNode: PD={}", pd.name)).collect();
+    let vm_cnode_names: Vec<String> = virtual_machines.iter().map(|vm| format!("CNode: VM={}", vm.name)).collect();
+    cnode_names.extend(vm_cnode_names);
+
     let cnode_objs = init_system.allocate_objects(ObjectType::CNode, cnode_names, Some(PD_CAP_SIZE));
     let mut cnode_objs_by_pd: HashMap<&ProtectionDomain, &Object> = HashMap::with_capacity(system.protection_domains.len());
     for (i, pd) in system.protection_domains.iter().enumerate() {
@@ -1340,11 +1432,12 @@ fn build_system(kernel_config: &Config,
     }
 
     // This has to be done prior to minting!
+    let num_asid_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut asid_invocation = Invocation::new(InvocationArgs::AsidPoolAssign {
         asid_pool: INIT_ASID_POOL_CAP_ADDRESS,
         vspace: vspace_objs[0].cap_addr,
     });
-    asid_invocation.repeat(system.protection_domains.len() as u32, InvocationArgs::AsidPoolAssign{
+    asid_invocation.repeat(num_asid_invocations as u32, InvocationArgs::AsidPoolAssign{
         asid_pool: 0,
         vspace: 1,
     });
@@ -1354,7 +1447,7 @@ fn build_system(kernel_config: &Config,
 
     // Mint copies of required pages, while also determing what's required
     // for later mapping
-    let mut page_descriptors = Vec::new();
+    let mut pd_page_descriptors = Vec::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         for map_set in [&pd.maps, &pd_extra_maps[pd]] {
             for mp in map_set {
@@ -1399,7 +1492,7 @@ fn build_system(kernel_config: &Config,
                 });
                 system_invocations.push(invocation);
 
-                page_descriptors.push((
+                pd_page_descriptors.push((
                     system_cap_address_mask | cap_slot,
                     pd_idx,
                     mp.vaddr,
@@ -1418,6 +1511,71 @@ fn build_system(kernel_config: &Config,
 
                 cap_slot += mr_pages[mr].len() as u64;
             }
+        }
+    }
+
+    let mut vm_page_descriptors = Vec::new();
+    for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+        for mp in &vm.maps {
+            let mr = all_mr_by_name[mp.mr.as_str()];
+            let mut rights: u64 = Rights::None as u64;
+            let mut attrs = ArmVmAttributes::ParityEnabled as u64;
+            if mp.perms & SysMapPerms::Read as u8 != 0 {
+                rights |= Rights::Read as u64;
+            }
+            if mp.perms & SysMapPerms::Write as u8 != 0 {
+                rights |= Rights::Write as u64;
+            }
+            if mp.perms & SysMapPerms::Execute as u8 == 0 {
+                attrs |= ArmVmAttributes::ExecuteNever as u64;
+            }
+            if mp.cached {
+                attrs |= ArmVmAttributes::Cacheable as u64;
+            }
+
+            assert!(!mr_pages[mr].is_empty());
+            assert!(util::objects_adjacent(&mr_pages[mr]));
+
+            let mut invocation = Invocation::new(InvocationArgs::CnodeMint{
+                cnode: system_cnode_cap,
+                dest_index: cap_slot,
+                dest_depth: system_cnode_bits,
+                src_root: root_cnode_cap,
+                src_obj: mr_pages[mr][0].cap_addr,
+                src_depth: kernel_config.cap_address_bits,
+                rights,
+                badge: 0,
+            });
+            invocation.repeat(mr_pages[mr].len() as u32, InvocationArgs::CnodeMint{
+                cnode: 0,
+                dest_index: 1,
+                dest_depth: 0,
+                src_root: 0,
+                src_obj: 1,
+                src_depth: 0,
+                rights: 0,
+                badge: 0,
+            });
+            system_invocations.push(invocation);
+
+            vm_page_descriptors.push((
+                system_cap_address_mask | cap_slot,
+                vm_idx,
+                mp.vaddr,
+                rights,
+                attrs,
+                mr_pages[mr].len() as u64,
+                mr.page_bytes()
+            ));
+
+            for idx in 0..mr_pages[mr].len() {
+                cap_address_names.insert(
+                    system_cap_address_mask | (cap_slot + idx as u64),
+                    format!("{} (derived)", cap_address_names.get(&(mr_pages[mr][0].cap_addr + idx as u64)).unwrap())
+                );
+            }
+
+            cap_slot += mr_pages[mr].len() as u64;
         }
     }
 
@@ -1461,6 +1619,37 @@ fn build_system(kernel_config: &Config,
             fault_ep_cap = pd_endpoint_objs[pd.parent.unwrap()].unwrap().cap_addr;
             badge = FAULT_BADGE | pd.id.unwrap();
         }
+
+        let invocation = Invocation::new(InvocationArgs::CnodeMint{
+            cnode: system_cnode_cap,
+            dest_index: cap_slot,
+            dest_depth: system_cnode_bits,
+            src_root: root_cnode_cap,
+            src_obj: fault_ep_cap,
+            src_depth: kernel_config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge,
+        });
+        system_invocations.push(invocation);
+        cap_slot += 1;
+    }
+
+    // Create a fault endpoint cap for each virtual machine.
+    // This will be the endpoint for the parent protection domain of the virtual machine.
+    for vm in &virtual_machines {
+        let mut parent_pd = None;
+        for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+            if let Some(virtual_machine) = &pd.virtual_machine {
+                if virtual_machine == *vm {
+                    parent_pd = Some(pd_idx);
+                    break;
+                }
+            }
+        }
+        assert!(parent_pd.is_some());
+
+        let fault_ep_cap = pd_endpoint_objs[parent_pd.unwrap()].unwrap().cap_addr;
+        let badge = FAULT_BADGE | vm.vcpu.id;
 
         let invocation = Invocation::new(InvocationArgs::CnodeMint{
             cnode: system_cnode_cap,
@@ -1525,6 +1714,7 @@ fn build_system(kernel_config: &Config,
 
     // Mint access to the VSpace cap
     assert!(VSPACE_CAP_IDX < PD_CAP_SIZE);
+    let num_vspace_mint_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut vspace_mint_invocation = Invocation::new(InvocationArgs::CnodeMint {
         cnode: cnode_objs[0].cap_addr,
         dest_index: VSPACE_CAP_IDX,
@@ -1535,7 +1725,7 @@ fn build_system(kernel_config: &Config,
         rights: Rights::All as u64,
         badge: 0,
     });
-    vspace_mint_invocation.repeat(system.protection_domains.len() as u32, InvocationArgs::CnodeMint {
+    vspace_mint_invocation.repeat(num_vspace_mint_invocations as u32, InvocationArgs::CnodeMint {
         cnode: 1,
         dest_index: 0,
         dest_depth: 0,
@@ -1573,7 +1763,8 @@ fn build_system(kernel_config: &Config,
                 // We are dealing with a child PD, now check if the index of its parent
                 // matches this iteration's PD.
                 if parent_idx == pd_idx {
-                    let cap_idx = BASE_TCB_CAP + maybe_child_pd.id.unwrap();
+                    let cap_idx = BASE_PD_TCB_CAP + maybe_child_pd.id.unwrap();
+                    assert!(cap_idx < PD_CAP_SIZE);
                     system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
                         cnode: cnode_objs[pd_idx].cap_addr,
                         dest_index: cap_idx,
@@ -1586,6 +1777,48 @@ fn build_system(kernel_config: &Config,
                     }));
                 }
             }
+        }
+    }
+
+    // Mint access to virtual machine TCBs in the CSpace of parent PDs
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if let Some(vm) = &pd.virtual_machine {
+            // This PD that we are dealing with has a virtual machine, now we
+            // need to find the TCB that corresponds to it.
+            let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
+            let cap_idx = BASE_VM_TCB_CAP + vm.vcpu.id;
+            assert!(cap_idx < PD_CAP_SIZE);
+            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
+                cnode: cnode_objs[pd_idx].cap_addr,
+                dest_index: cap_idx,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: vm_tcb_objs[vm_idx].cap_addr,
+                src_depth: kernel_config.cap_address_bits,
+                rights: Rights::All as u64,
+                badge: 0,
+            }));
+        }
+    }
+
+    // Mint access to virtual machine vCPUs in the CSpace of the parent PDs
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if let Some(vm) = &pd.virtual_machine {
+            // This PD that we are dealing with has a virtual machine, now we
+            // need to find the vCPU that corresponds to it.
+            let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
+            let cap_idx = BASE_VCPU_CAP + vm.vcpu.id;
+            assert!(cap_idx < PD_CAP_SIZE);
+            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
+                cnode: cnode_objs[pd_idx].cap_addr,
+                dest_index: cap_idx,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: vcpu_objs[vm_idx].cap_addr,
+                src_depth: kernel_config.cap_address_bits,
+                rights: Rights::All as u64,
+                badge: 0,
+            }));
         }
     }
 
@@ -1696,11 +1929,31 @@ fn build_system(kernel_config: &Config,
     }
 
     // Initialise the VSpaces -- assign them all the the initial asid pool.
-    for (descriptors, objects) in [(uds, ud_objs), (ds, d_objs), (pts, pt_objs)] {
+    let pd_vspace_invocations = if kernel_config.hypervisor && kernel_config.arm_pa_size_bits == 40 {
+        vec![(all_pd_ds, pd_d_objs), (all_pd_pts, pd_pt_objs)]
+    } else {
+        vec![(all_pd_uds, pd_ud_objs), (all_pd_ds, pd_d_objs), (all_pd_pts, pd_pt_objs)]
+    };
+    for (descriptors, objects) in pd_vspace_invocations {
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects) {
             system_invocations.push(Invocation::new(InvocationArgs::PageTableMap{
                 page_table: obj.cap_addr,
-                vspace: vspace_objs[pd_idx].cap_addr,
+                vspace: pd_vspace_objs[pd_idx].cap_addr,
+                vaddr,
+                attr: ArmVmAttributes::default(),
+            }));
+        }
+    }
+    let vm_vspace_invocations = if kernel_config.hypervisor && kernel_config.arm_pa_size_bits == 40 {
+        vec![(all_vm_ds, vm_d_objs), (all_vm_pts, vm_pt_objs)]
+    } else {
+        vec![(all_vm_uds, vm_ud_objs), (all_vm_ds, vm_d_objs), (all_vm_pts, vm_pt_objs)]
+    };
+    for (descriptors, objects) in vm_vspace_invocations {
+        for ((vm_idx, vaddr), obj) in zip(descriptors, objects) {
+            system_invocations.push(Invocation::new(InvocationArgs::PageTableMap{
+                page_table: obj.cap_addr,
+                vspace: vm_vspace_objs[vm_idx].cap_addr,
                 vaddr,
                 attr: ArmVmAttributes::default(),
             }));
@@ -1708,10 +1961,27 @@ fn build_system(kernel_config: &Config,
     }
 
     // Now map all the pages
-    for (page_cap_address, pd_idx, vaddr, rights, attr, count, vaddr_incr) in page_descriptors {
+    for (page_cap_address, pd_idx, vaddr, rights, attr, count, vaddr_incr) in pd_page_descriptors {
         let mut invocation = Invocation::new(InvocationArgs::PageMap {
             page: page_cap_address,
-            vspace: vspace_objs[pd_idx].cap_addr,
+            vspace: pd_vspace_objs[pd_idx].cap_addr,
+            vaddr,
+            rights,
+            attr,
+        });
+        invocation.repeat(count as u32, InvocationArgs::PageMap {
+            page: 1,
+            vspace: 0,
+            vaddr: vaddr_incr,
+            rights: 0,
+            attr: 0,
+        });
+        system_invocations.push(invocation);
+    }
+    for (page_cap_address, vm_idx, vaddr, rights, attr, count, vaddr_incr) in vm_page_descriptors {
+        let mut invocation = Invocation::new(InvocationArgs::PageMap {
+            page: page_cap_address,
+            vspace: vm_vspace_objs[vm_idx].cap_addr,
             vaddr,
             rights,
             attr,
@@ -1732,7 +2002,7 @@ fn build_system(kernel_config: &Config,
                                          .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
         system_invocations.push(Invocation::new(InvocationArgs::PageMap {
             page: ipc_buffer_objs[pd_idx].cap_addr,
-            vspace: vspace_objs[pd_idx].cap_addr,
+            vspace: pd_vspace_objs[pd_idx].cap_addr,
             vaddr,
             rights: Rights::Read as u64 | Rights::Write as u64,
             attr: ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
@@ -1745,7 +2015,7 @@ fn build_system(kernel_config: &Config,
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         system_invocations.push(Invocation::new(InvocationArgs::SchedControlConfigureFlags {
             sched_control: kernel_boot_info.sched_control_cap,
-            sched_context: sched_context_objs[pd_idx].cap_addr,
+            sched_context: pd_sched_context_objs[pd_idx].cap_addr,
             budget: pd.budget,
             period: pd.period,
             extra_refills: 0,
@@ -1753,19 +2023,43 @@ fn build_system(kernel_config: &Config,
             flags: 0,
         }));
     }
+    for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+        system_invocations.push(Invocation::new(InvocationArgs::SchedControlConfigureFlags {
+            sched_control: kernel_boot_info.sched_control_cap,
+            sched_context: vm_sched_context_objs[vm_idx].cap_addr,
+            budget: vm.budget,
+            period: vm.period,
+            extra_refills: 0,
+            badge: 0x100 + vm_idx as u64,
+            flags: 0,
+        }));
+    }
 
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         system_invocations.push(Invocation::new(InvocationArgs::TcbSetSchedParams {
-            tcb: tcb_objs[pd_idx].cap_addr,
+            tcb: pd_tcb_objs[pd_idx].cap_addr,
             authority: INIT_TCB_CAP_ADDRESS,
             mcp: pd.priority as u64,
             priority: pd.priority as u64,
-            sched_context: sched_context_objs[pd_idx].cap_addr,
+            sched_context: pd_sched_context_objs[pd_idx].cap_addr,
+            // This gets over-written by the call to TCB_SetSpace
+            fault_ep: fault_ep_endpoint_object.cap_addr,
+        }));
+    }
+    for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+        system_invocations.push(Invocation::new(InvocationArgs::TcbSetSchedParams {
+            tcb: vm_tcb_objs[vm_idx].cap_addr,
+            authority: INIT_TCB_CAP_ADDRESS,
+            mcp: vm.priority as u64,
+            priority: vm.priority as u64,
+            sched_context: vm_sched_context_objs[vm_idx].cap_addr,
+            // This gets over-written by the call to TCB_SetSpace
             fault_ep: fault_ep_endpoint_object.cap_addr,
         }));
     }
 
     // Set VSpace and CSpace
+    let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut set_space_invocation = Invocation::new(InvocationArgs::TcbSetSpace {
         tcb: tcb_objs[0].cap_addr,
         fault_ep: badged_fault_ep,
@@ -1774,7 +2068,7 @@ fn build_system(kernel_config: &Config,
         vspace_root: vspace_objs[0].cap_addr,
         vspace_root_data: 0,
     });
-    set_space_invocation.repeat(system.protection_domains.len() as u32, InvocationArgs::TcbSetSpace {
+    set_space_invocation.repeat(num_set_space_invocations as u32, InvocationArgs::TcbSetSpace {
         tcb: 1,
         fault_ep: 1,
         cspace_root: 1,
@@ -1824,7 +2118,20 @@ fn build_system(kernel_config: &Config,
     });
     system_invocations.push(bind_ntfn_invocation);
 
-    // Resume (start) all the threads
+    // Bind virtual machine TCBs to vCPUs
+    if !virtual_machines.is_empty() {
+        let mut vcpu_bind_invocation = Invocation::new(InvocationArgs::ArmVcpuSetTcb{
+            vcpu: vcpu_objs[0].cap_addr,
+            tcb: vm_tcb_objs[0].cap_addr,
+        });
+        vcpu_bind_invocation.repeat(virtual_machines.len() as u32, InvocationArgs::ArmVcpuSetTcb{
+            vcpu: 1,
+            tcb: 1,
+        });
+        system_invocations.push(vcpu_bind_invocation);
+    }
+
+    // Resume (start) all the threads that belong to PDs (VMs are not started upon system init)
     let mut resume_invocation = Invocation::new(InvocationArgs::TcbResume{
         tcb: tcb_objs[0].cap_addr,
     });
@@ -1889,7 +2196,7 @@ fn build_system(kernel_config: &Config,
         fault_ep_cap_address: fault_ep_endpoint_object.cap_addr,
         reply_cap_address: reply_obj.cap_addr,
         cap_lookup: cap_address_names,
-        tcb_caps,
+        tcb_caps: tcb_caps[system.protection_domains.len()..].to_vec(),
         sched_caps: sched_context_caps,
         ntfn_caps: notification_caps,
         pd_elf_regions,
@@ -2148,6 +2455,8 @@ fn main() -> Result<(), String> {
     let kernel_elf_path = elf_path.join("sel4.elf");
     let monitor_elf_path = elf_path.join("monitor.elf");
 
+    let kernel_config_path = sdk_dir.join("board").join(args.board).join(args.config).join("include/kernel/gen_config.json");
+
     if !elf_path.exists() {
         eprintln!("Error: board ELF directory '{}' does not exist", elf_path.display());
         std::process::exit(1);
@@ -2164,6 +2473,10 @@ fn main() -> Result<(), String> {
         eprintln!("Error: monitor ELF '{}' does not exist", monitor_elf_path.display());
         std::process::exit(1);
     }
+    if !kernel_config_path.exists() {
+        eprintln!("Error: kernel configuration file '{}' does not exist", kernel_config_path.display());
+        std::process::exit(1);
+    }
 
     let system_path = Path::new(args.system);
     if !system_path.exists() {
@@ -2173,16 +2486,27 @@ fn main() -> Result<(), String> {
 
     let xml: String = fs::read_to_string(args.system).unwrap();
 
+    let kernel_config_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
     let kernel_config = Config {
         arch: Arch::Aarch64,
-        word_size: 64,
+        word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
         minimum_page_size: 4096,
-        paddr_user_device_top: 1 << 40,
+        paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
         kernel_frame_size: 1 << 12,
-        init_cnode_bits: 12,
+        init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
         cap_address_bits: 64,
-        fan_out_limit: 256,
+        fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
+        arm_pa_size_bits: 40,
+        hypervisor: json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
     };
+
+    match kernel_config.arch {
+        Arch::Aarch64 => assert!(kernel_config.hypervisor, "Microkit tool expects a kernel with hypervisor mode enabled on AArch64.")
+    }
+
+    assert!(kernel_config.word_size == 64, "Microkit tool has various assumptions about the word size being 64-bits.");
+    assert!(kernel_config.arm_pa_size_bits == 40, "Microkit tool has assumptions about the ARM physical address size bits");
 
     let plat_desc = PlatformDescription::new(&kernel_config);
     let system = match parse(args.system, &xml, &plat_desc) {
@@ -2370,6 +2694,7 @@ fn main() -> Result<(), String> {
     }
 
     let loader = Loader::new(
+        kernel_config,
         Path::new(&loader_elf_path),
         &kernel_elf,
         &monitor_elf,

@@ -34,8 +34,11 @@ use crate::MAX_PDS;
 /// This means we are left with 62 bits for the ID.
 /// IDs start at zero.
 const PD_MAX_ID: u64 = 61;
+const VCPU_MAX_ID: u64 = PD_MAX_ID;
 
 const PD_MAX_PRIORITY: u8 = 254;
+/// In microseconds
+const BUDGET_DEFAULT: u64 = 1000;
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
@@ -152,6 +155,7 @@ pub struct ProtectionDomain {
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub setvars: Vec<SysSetVar>,
+    pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
     pub child_pds: Vec<ProtectionDomain>,
@@ -163,15 +167,31 @@ pub struct ProtectionDomain {
     text_pos: roxmltree::TextPos
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct VirtualMachine {
+    // Right now virtual machines are limited to a single vCPU
+    pub vcpu: VirtualCpu,
+    pub name: String,
+    pub maps: Vec<SysMap>,
+    pub priority: u8,
+    pub budget: u64,
+    pub period: u64,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct VirtualCpu {
+    pub id: u64,
+}
+
 impl SysMapPerms {
-    fn from_str(s: &str) -> Result<u8, &'static str> {
+    fn from_str(s: &str) -> Result<u8, ()> {
         let mut perms = 0;
         for c in s.chars() {
             match c {
                 'r' => perms |= SysMapPerms::Read as u8,
                 'w' => perms |= SysMapPerms::Write as u8,
                 'x' => perms |= SysMapPerms::Execute as u8,
-                _ => return Err("invalid permissions")
+                _ => return Err(()),
             }
         }
 
@@ -179,9 +199,54 @@ impl SysMapPerms {
     }
 }
 
+impl SysMap {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, allow_setvar: bool) -> Result<SysMap, String> {
+        let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
+        if allow_setvar {
+            attrs.push("setvar_vaddr");
+        }
+        check_attributes(xml_sdf, node, &attrs)?;
+
+        let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
+        let vaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "vaddr")?, node)?;
+        let perms = if let Some(xml_perms) = node.attribute("perms") {
+            match SysMapPerms::from_str(xml_perms) {
+                Ok(parsed_perms) => parsed_perms,
+                Err(()) => return Err(value_error(xml_sdf, node, "perms must only be a combination of 'r', 'w', and 'x'".to_string())),
+            }
+        } else {
+            // Default to read-write
+            SysMapPerms::Read as u8 | SysMapPerms::Write as u8
+        };
+
+        // On all architectures, the kernel does not allow write-only mappings
+        if perms == SysMapPerms::Write as u8 {
+            return Err(value_error(xml_sdf, node, "perms must not be 'w', write-only mappings are not allowed".to_string()));
+        }
+
+        let cached = if let Some(xml_cached) = node.attribute("cached") {
+            match str_to_bool(xml_cached) {
+                Some(val) => val,
+                None => return Err(value_error(xml_sdf, node, "cached must be 'true' or 'false'".to_string()))
+            }
+        } else {
+            // Default to cached
+            true
+        };
+
+        Ok(SysMap {
+            mr,
+            vaddr,
+            perms,
+            cached,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+        })
+    }
+}
+
 impl ProtectionDomain {
     pub fn needs_ep(&self) -> bool {
-        self.pp || self.has_children
+        self.pp || self.has_children || self.virtual_machine.is_some()
     }
 
     fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, is_child: bool) -> Result<ProtectionDomain, String> {
@@ -199,12 +264,11 @@ impl ProtectionDomain {
             None
         };
 
-        // Default to 1000 microseconds as the budget, with the period defaulting
-        // to being the same as the budget as well.
+        // If we do not have an explicit budget the period is equal to the default budget.
         let budget = if let Some(xml_budget) = node.attribute("budget") {
             sdf_parse_number(xml_budget, node)?
         } else {
-            1000
+            BUDGET_DEFAULT
         };
         let period = if let Some(xml_period) = node.attribute("period") {
             sdf_parse_number(xml_period, node)?
@@ -216,13 +280,19 @@ impl ProtectionDomain {
         }
 
         let pp = if let Some(xml_pp) = node.attribute("pp") {
-            str_to_bool(xml_pp)?
+            match str_to_bool(xml_pp) {
+                Some(val) => val,
+                None => return Err(value_error(xml_sdf, node, "pp must be 'true' or 'false'".to_string()))
+            }
         } else {
             false
         };
 
         let passive = if let Some(xml_passive) = node.attribute("passive") {
-            str_to_bool(xml_passive)?
+            match str_to_bool(xml_passive) {
+                Some(val) => val,
+                None => return Err(value_error(xml_sdf, node, "passive must be 'true' or 'false'".to_string()))
+            }
         } else {
             false
         };
@@ -233,6 +303,7 @@ impl ProtectionDomain {
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
+        let mut virtual_machine = None;
 
         // Default to minimum priority
         let priority = if let Some(xml_priority) = node.attribute("priority") {
@@ -261,43 +332,17 @@ impl ProtectionDomain {
                     program_image = Some(Path::new(program_image_path).to_path_buf());
                 },
                 "map" => {
-                    check_attributes(xml_sdf, &child, &["mr", "vaddr", "perms", "cached", "setvar_vaddr"])?;
-                    let mr = checked_lookup(xml_sdf, &child, "mr")?.to_string();
-                    let vaddr = sdf_parse_number(checked_lookup(xml_sdf, &child, "vaddr")?, &child)?;
-                    let perms = if let Some(xml_perms) = child.attribute("perms") {
-                        SysMapPerms::from_str(xml_perms)?
-                    } else {
-                        // Default to read-write
-                        SysMapPerms::Read as u8 | SysMapPerms::Write as u8
-                    };
-
-                    // On all architectures, the kernel does not allow write-only mappings
-                    if perms == SysMapPerms::Write as u8 {
-                        return Err(value_error(xml_sdf, &child, "perms must not be 'w', write-only mappings are not allowed".to_string()));
-                    }
-
-                    let cached = if let Some(xml_cached) = child.attribute("cached") {
-                        str_to_bool(xml_cached)?
-                    } else {
-                        // Default to cached
-                        true
-                    };
-
-                    maps.push(SysMap {
-                        mr,
-                        vaddr,
-                        perms,
-                        cached,
-                        text_pos: Some(xml_sdf.doc.text_pos_at(child.range().start)),
-                    });
+                    let map = SysMap::from_xml(xml_sdf, &child, true)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             region_paddr: None,
-                            vaddr: Some(vaddr),
+                            vaddr: Some(map.vaddr),
                         });
                     }
+
+                    maps.push(map);
                 }
                 "irq" => {
                     check_attributes(xml_sdf, &child, &["irq", "id", "trigger"])?;
@@ -339,6 +384,13 @@ impl ProtectionDomain {
                     })
                 },
                 "protection_domain" => child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?),
+                "virtual_machine" => {
+                    if virtual_machine.is_some() {
+                        return Err(value_error(xml_sdf, node, "virtual_machine must only be specified once".to_string()));
+                    }
+
+                    virtual_machine = Some(VirtualMachine::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!("Invalid XML element '{}': {}", child.tag_name().name(), loc_string(xml_sdf, pos)));
@@ -367,9 +419,88 @@ impl ProtectionDomain {
             irqs,
             setvars,
             child_pds,
+            virtual_machine,
             has_children,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+        })
+    }
+}
+
+impl VirtualMachine {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<VirtualMachine, String> {
+        check_attributes(xml_sdf, node, &["name", "budget", "period", "priority"])?;
+
+        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+        // If we do not have an explicit budget the period is equal to the default budget.
+        let budget = if let Some(xml_budget) = node.attribute("budget") {
+            sdf_parse_number(xml_budget, node)?
+        } else {
+            BUDGET_DEFAULT
+        };
+        let period = if let Some(xml_period) = node.attribute("period") {
+            sdf_parse_number(xml_period, node)?
+        } else {
+            budget
+        };
+        if budget > period {
+            return Err(value_error(xml_sdf, node, format!("budget ({}) must be less than, or equal to, period ({})", budget, period)));
+        }
+
+        // Default to minimum priority
+        let priority = if let Some(xml_priority) = node.attribute("priority") {
+            sdf_parse_number(xml_priority, node)?
+        } else {
+            0
+        };
+
+        let mut vcpu = None;
+        let mut maps = Vec::new();
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+
+            let child_name = child.tag_name().name();
+            match child_name {
+                "vcpu" => {
+                    if vcpu.is_some() {
+                        return Err(value_error(xml_sdf, node, "vcpu must only be specified once".to_string()));
+                    }
+
+                    check_attributes(xml_sdf, &child, &["id"])?;
+                    let id = checked_lookup(xml_sdf, &child, "id")?.parse::<u64>().unwrap();
+                    if id > VCPU_MAX_ID {
+                        return Err(value_error(xml_sdf, &child, format!("id must be < {}", VCPU_MAX_ID + 1)));
+                    }
+                    vcpu = Some(VirtualCpu { id });
+                }
+                "map" => {
+                    // Virtual machines do not have program images and so we do not allow
+                    // setvar_vaddr on SysMap
+                    let map = SysMap::from_xml(xml_sdf, &child, false)?;
+                    maps.push(map);
+                },
+                _ => {
+                    let pos = xml_sdf.doc.text_pos_at(node.range().start);
+                    return Err(format!("Error: invalid XML element '{}': {}", child_name, loc_string(xml_sdf, pos)));
+                }
+            }
+        }
+
+        if vcpu.is_none() {
+            return Err(format!("Error: missing 'vcpu' element on virtual_machine: '{}'", name));
+        }
+
+        Ok(VirtualMachine {
+            vcpu: vcpu.unwrap(),
+            name,
+            maps,
+            // This downcast is safe as we have checked that this is less than
+            // the maximum VM priority, which fits in a u8.
+            priority: priority as u8,
+            budget,
+            period,
         })
     }
 }
@@ -543,7 +674,14 @@ fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain
         if child_ids.contains(&child_id) {
             return Err(format!("Error: duplicate id: {} in protection domain: '{}' @ {}", child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
         }
-        child_ids.push(child_pd.id.unwrap());
+        // Also check that the child ID does not clash with the virtual machine ID, if the PD has one
+        if let Some(vm) = &root_pd.virtual_machine {
+            if child_id == vm.vcpu.id {
+                return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
+                                    child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+            }
+        }
+        child_ids.push(child_id);
     }
 
     if parent {
@@ -646,6 +784,19 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     for mr in &mrs {
         if mrs.iter().filter(|x| mr.name == x.name).count() > 1 {
             return Err(format!("Error: duplicate memory region name '{}'.", mr.name));
+        }
+    }
+
+    let mut vms = vec![];
+    for pd in &pds {
+        match &pd.virtual_machine {
+            Some(vm) => {
+                if vms.contains(&vm) {
+                    return Err(format!("Error: duplicate virtual machine name '{}'.", vm.name));
+                }
+                vms.push(vm);
+            },
+            None => {}
         }
     }
 

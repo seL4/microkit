@@ -42,17 +42,20 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
     return microkit_msginfo_new(0, 0);
 }
 
-void fault(microkit_pd id, microkit_msginfo msginfo)
+seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
-    microkit_dbg_puts("restarter: received fault message for pd: ");
-    put8(id);
+    microkit_dbg_puts("restarter: received fault message for child pd: ");
+    put8(child);
     microkit_dbg_puts("\n");
     restart_count++;
     if (restart_count < 10) {
-        microkit_pd_restart(id, 0x200000);
+        microkit_pd_restart(child, 0x200000);
         microkit_dbg_puts("restarter: restarted\n");
     } else {
-        microkit_pd_stop(id);
+        microkit_pd_stop(child);
         microkit_dbg_puts("restarter: too many restarts - PD stopped\n");
     }
+
+    /* We explicitly restart the thread so we do not need to 'reply' to the fault. */
+    return seL4_False;
 }

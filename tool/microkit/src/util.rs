@@ -5,6 +5,7 @@
 //
 
 use crate::sel4::Object;
+use serde_json;
 
 pub fn msb(x: u64) -> u64 {
     64 - x.leading_zeros() as u64 - 1
@@ -14,11 +15,11 @@ pub fn lsb(x: u64) -> u64 {
     x.trailing_zeros() as u64
 }
 
-pub fn str_to_bool(s: &str) -> Result<bool, &'static str> {
+pub fn str_to_bool(s: &str) -> Option<bool> {
     match s {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        _ => Err("invalid boolean value")
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None
     }
 }
 
@@ -122,6 +123,30 @@ pub fn comma_sep_u64(n: u64) -> String {
 
 pub fn comma_sep_usize(n: usize) -> String {
     comma_sep_u64(n as u64)
+}
+
+pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<u64, String> {
+    match json.get(field) {
+        Some(value) => Ok(
+            value
+            .as_str()
+            .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))
+            .parse::<u64>()
+            .unwrap_or_else(|_| panic!("JSON field '{}' could not be converted to u64", field))
+        ),
+        None => Err(format!("JSON field '{}' does not exist", field))
+    }
+}
+
+pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result<bool, String> {
+    match json.get(field) {
+        Some(value) => Ok(
+            value
+            .as_bool()
+            .unwrap_or_else(|| panic!("JSON field '{}' could not be converted to bool", field))
+        ),
+        None => Err(format!("JSON field '{}' does not exist", field))
+    }
 }
 
 /// Convert a struct into raw bytes in order to be written to

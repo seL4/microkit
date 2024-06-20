@@ -7,6 +7,7 @@
 use crate::{MemoryRegion};
 use crate::util::{round_up, mb, kb, mask, struct_to_bytes};
 use crate::elf::{ElfFile};
+use crate::sel4::{Config};
 use std::path::Path;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -85,7 +86,8 @@ pub struct Loader<'a> {
 }
 
 impl<'a> Loader<'a> {
-    pub fn new(loader_elf_path: &Path,
+    pub fn new(kernel_config: Config,
+               loader_elf_path: &Path,
                kernel_elf: &'a ElfFile,
                initial_task_elf: &'a ElfFile,
                initial_task_phys_base: Option<u64>,
@@ -198,8 +200,10 @@ impl<'a> Loader<'a> {
 
         check_non_overlapping(&all_regions);
 
-        // FIXME: Should be a way to determine if seL4 needs hypervisor mode or not
-        let flags = 0;
+        let flags = match kernel_config.hypervisor {
+            true => 1,
+            false => 0,
+        };
 
         let header = LoaderHeader64 {
             magic,
@@ -285,11 +289,11 @@ impl<'a> Loader<'a> {
             boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
-        let mut boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+        let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl1_upper_addr | 3).to_le_bytes();
             let idx = Aarch64::lvl0_index(first_vaddr);
-            boot_lvl0_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
+            boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
         }
 
         let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
@@ -302,15 +306,14 @@ impl<'a> Loader<'a> {
         let mut boot_lvl2_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
         let lvl2_idx = Aarch64::lvl2_index(first_vaddr);
-        let mut paddr = first_paddr;
         for i in lvl2_idx..512 {
+            let entry_idx = (i - Aarch64::lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS;
             let pt_entry: u64 =
-                paddr |
+                (entry_idx as u64 + first_paddr) |
                 (1 << 10) | // Access flag
                 (3 << 8) | // Make sure the shareability is the same as the kernel's
                 (4 << 2) | // MT_NORMAL memory
                 (1 << 0); // 2MB block
-            paddr += 1 << AARCH64_2MB_BLOCK_BITS;
             let start = 8 * i;
             let end = 8 * (i + 1);
             boot_lvl2_upper[start..end].copy_from_slice(&pt_entry.to_le_bytes());
