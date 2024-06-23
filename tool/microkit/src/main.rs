@@ -1835,7 +1835,7 @@ fn build_system(kernel_config: &Config,
         let name = pd.name.as_bytes();
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         elf.write_symbol("microkit_name", &name[..name_length])?;
-        elf.write_symbol("passive", &[pd.passive as u8])?;
+        elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
     }
 
     for (i, pd) in system.protection_domains.iter().enumerate() {

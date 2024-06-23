@@ -31,9 +31,9 @@ void fault(microkit_channel ch, microkit_msginfo msginfo);
 
 extern char microkit_name[16];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
-extern seL4_Bool have_signal;
-extern seL4_CPtr signal;
-extern seL4_MessageInfo_t signal_msg;
+extern seL4_Bool microkit_have_signal;
+extern seL4_CPtr microkit_signal_cap;
+extern seL4_MessageInfo_t microkit_signal_msg;
 
 /*
  * Output a single character on the debug console.
