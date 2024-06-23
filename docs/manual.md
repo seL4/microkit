@@ -53,12 +53,12 @@ A Microkit system is built from a set of individual programs that are isolated f
 Protection domains can interact by calling *protected procedures* or sending *notifications*.
 
 Microkit is distributed as a software development kit (SDK).
-The SDK includes the tools, libraries and binaries required to build an Microkit system.
+The SDK includes the tools, libraries and binaries required to build a Microkit system.
 The Microkit source is also available which allows you to customize or extend Microkit and produce your own SDK.
 
-To build an Microkit system you will write some programs that use `libmicrokit`.
+To build a Microkit system you will write some programs that use `libmicrokit`.
 Microkit programs are a little different to a typical process on a Linux-like operating system.
-Rather than a single `main` entry point, a program has three distinct entry points: `init`, `notified` and, optionally, `protected`.
+Rather than a single `main` entry point, a program has four distinct entry points: `init`, `notified` and, potentially, `protected`, `fault`.
 
 The individual programs are combined to produce a single bootable *system image*.
 The format of the image is suitable for loading by the target board's bootloader.
@@ -78,7 +78,7 @@ It is recommended that you familiarise yourself with these concepts before tryin
 
 The [SDK](#sdk) chapter describes the software development kit, including its components and system requirements for use.
 
-The [Microkit tool](#tool) chapter describes the host system tool used for generating a firmware image from the system description.
+The [Microkit tool](#tool) chapter describes the host system tool used for generating a system image from the system description and user-programs.
 
 The [libmicrokit](#libmicrokit) chapter describes the interfaces to the Microkit library.
 
@@ -101,7 +101,8 @@ This document attempts to clearly describe all of these terms, however as the co
 * [memory region](#mr)
 * [notification](#notification)
 * [protected procedure](#pp)
-* [faults](#faults)
+* [interrupt](#irq)
+* [fault](#fault)
 
 ## System {#system}
 
@@ -131,17 +132,18 @@ A process on a typical operating system will have a `main` function which is inv
 When the `main` function returns the process is destroyed.
 
 By comparison a protection domain has up to four entry points:
-* `init`, `notify` which are required.
-* `protected`, `fault` which are optional.
+* `init`, `notified` which are required.
+* `protected` which is optional.
+*  `fault` which is required if the PD has children.
 
-When an Microkit system is booted, all PDs in the system execute the `init` entry point.
+When a Microkit system is booted, all PDs in the system execute the `init` entry point.
 
 The `notified` entry point will be invoked whenever the protection domain receives a *notification* on a *channel*.
 The `protected` entry point is invoked when a PD's *protected procedure* is called by another PD.
 A PD does not have to provide a protected procedure, therefore the `protected` entry point is optional.
 
 The `fault` entry point is invoked when a PD that is a child of another PD causes a fault.
-A PD does not have to have child PDs, therefore the `fault` entry point is optional.
+A PD does not have to have child PDs, therefore the `fault` entry point is only required for a parent PD.
 
 These entry points are described in more detail in subsequent sections.
 
@@ -165,12 +167,12 @@ Once the PD has consumed its budget, it is no longer runnable until the budget i
 This means that the maximum fraction of CPU time the PD can consume is budget/period.
 
 The budget cannot be larger than the period.
-A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. In other words, PDs with full budgets are scheduled round-robin with a time slice defined by the period.
+A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. In other words, PDs with equal priorities and full budgets are scheduled round-robin with a time slice defined by the period.
 
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points has been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
-The **passive** determines whether the PD is passive. A passive PD will have it's scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context, or when the PD receives a *protected procedure* by another PD, whereby the passive PD will run on the scheduling context of the callee.
+The **passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
 
 ## Memory Regions {#mr}
 
@@ -178,6 +180,8 @@ A *memory region* is a contiguous range of physical memory.
 A memory region may have a *fixed* physical address.
 For memory regions without a fixed physical address, the physical address is allocated as part of the build process.
 Typically, memory regions with a fixed physical address represent memory-mapped device registers.
+
+Memory regions that are within main memory are zero-initialised.
 
 The size of a memory region must be a multiple of a supported page size.
 The supported page sizes are architecture dependent.
@@ -196,7 +200,7 @@ The mapping has a number of attributes, which include:
 * permissions (read, write and execute)
 
 **Note:** When a memory region is mapped into multiple protection
-domains, the attributes used for different mapping may vary.
+domains, the attributes used for different mappings may vary.
 
 ## Channels {#channel}
 
@@ -226,7 +230,7 @@ When a protection domain calls a protected procedure, the procedure executes wit
 
 A protected call is only possible if the callee has strictly higher priority than the caller.
 Transitive calls are possible, and as such a PD may call a *protected procedure* in another PD from a `protected` entry point.
-However the overall call graph between PDs form a directed, acyclic graph.
+However the overall call graph between PDs must form a directed, acyclic graph.
 It follows that a PD can not call itself, even indirectly.
 For example, `A calls B calls C` is valid (subject to the priority constraint), while `A calls B calls A` is not valid.
 
@@ -260,34 +264,33 @@ Unlike protected procedures, notifications can be sent in either direction on a 
 If a PD notifies another PD, that PD will become scheduled to run (if it is not already), but the current PD does **not** block.
 Of course, if the notified PD has a higher priority than the current PD, then the current PD will be preempted (but not blocked) by the other PD.
 
-## Interrupts {#irqs}
+## Interrupt {#irq}
 
 Hardware interrupts can be used to notify a protection domain.
 The system description specifies if a protection domain receives notifications for any hardware interrupt sources.
 Each hardware interrupt is assigned a channel identifier.
 In this way the protection domain can distinguish the hardware interrupt from other notifications.
-A specific hardware interrupt can only be associated with at most one protection domain.
-
-Although interrupts are the final concept to be described here, they are in some ways the most important.
-Without interrupts a system would not do much after system initialisation.
+A specific hardware interrupt can only be associated with at most one protection domain. It should be noted that once a
+hardware interrupt has been received, it will not be received again until `microkit_irq_ack` is called. The seL4 kernel
+will mask the hardware interrupt until it has been acknowledged.
 
 Microkit does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
-## Faults {#faults}
+## Fault {#fault}
 
 Faults such as an invalid memory access or illegal instruction are delivered to the seL4 kernel which then forwards them to
-a designated 'fault handler'. By default, all faults caused by protection domains go to the Monitor which simply prints out
+a designated 'fault handler'. By default, all faults caused by protection domains go to the system fault handler which simply prints out
 details about the fault in a debug configuration.
 
 When a protection domain is a child of another protection domain, the designated fault handler for the child is the parent
 protection domain.
 
-This means that whenever a fault is caused by a child PD, it will be delivered to the parent PD instead of the monitor via the
-`fault` entry point. It is then up to the parent to decide how the fault is handled. The label of the given `msginfo` can be
-used to determine what kind of fault occurred. You can find more information about decoding the fault in the 'Faults' section
-of the seL4 manual.
+This means that whenever a fault is caused by a child PD, it will be delivered to the parent PD instead of the system fault
+handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled. The label of the given
+`msginfo` can be used to determine what kind of fault occurred. You can find more information about decoding the fault in the
+'Faults' section of the seL4 manual.
 
 # SDK {#sdk}
 
@@ -327,7 +330,7 @@ On macOS, the Microkit tool should run on macOS 10.12 (Sierra) or higher.
 
 The Microkit tool does not depend on any additional system binaries.
 
-# Microkit tool {#tool}
+# Microkit Tool {#tool}
 
 The Microkit tool is available in `bin/microkit`.
 
@@ -367,9 +370,13 @@ The component must provide the following functions:
     void init(void);
     void notified(microkit_channel ch);
 
-Additionally, if the protection domain provides a protected procedure it must also implement:
+If the protection domain provides a protected procedure it must also implement:
 
     microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
+
+If the protection domain has child protection domains it must also implement:
+
+    void fault(microkit_pd pd, microkit_msginfo msginfo);
 
 `libmicrokit` provides the following functions:
 
@@ -379,6 +386,8 @@ Additionally, if the protection domain provides a protected procedure it must al
     seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo);
     seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
+    void microkit_pd_restart(microkit_pd pd, seL4_Word entry_point);
+    void microkit_pd_stop(microkit_pd pd);
     void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
     seL4_Word microkit_mr_get(seL4_Uint8 mr);
 
@@ -388,12 +397,22 @@ Additionally, if the protection domain provides a protected procedure it must al
 Every PD must expose an `init` entry point.
 This is called by the system at boot time.
 
-## `microkit_msginfo protected(microkit_channel channel, microkit_msginfo message)`
+## `void notified(microkit_channel ch)`
+
+The `notified` entry point is called by the system when a PD has received a notification on a channel.
+
+`ch` identifies the channel which has been notified (and indirectly the PD that performed the notification).
+
+**Note:** `ch` could identify an interrupt.
+
+Channel identifiers are specified in the system configuration.
+
+## `microkit_msginfo protected(microkit_channel ch, microkit_msginfo message)`
 
 The `protected` entry point is optional.
 This is invoked when another PD calls `microkit_ppcall` on a channel shared with the PD.
 
-The `channel` argument identifies the channel on which the PP was invoked.
+The `ch` argument identifies the channel on which the PP was invoked.
 Indirectly this identifies the PD performing the call.
 Channel identifiers are specified in the system configuration.
 **Note:** The channel argument is passed by the system and is unforgeable.
@@ -406,29 +425,33 @@ Note: The message is *copied* from the caller.
 The returned `message` is the return value of the protected procedure.
 As with arguments, this is *copied* to the caller.
 
-## `void notified(microkit_channel channel)`
+## `void fault(microkit_pd pd, microkit_msginfo msginfo)`
 
-The `notified` entry point is called by the system when a PD has received a notification on a channel.
+The `fault` entry point depends on whether the given PD has children.
+This is invoked when a child PD causes a fault.
 
-`channel` identifies the channel which has been notified (and indirectly the PD that performed the notification).
+The `pd` argument identifies the child PD that caused the fault.
 
-**Note:** `channel` could identify an interrupt.
+The `msginfo` argument is given by the seL4 kernel when a fault occurs and contains information
+as to what fault occurred.
 
-Channel identifiers are specified in the system configuration.
-
+You can use `microkit_msginfo_get_label` to deduce what kind of fault happened (for example, whether
+it was a user exception or a virtual memory fault). The type `seL4_Fault_tag_t` defines the kinds of
+faults for a given architecture that could occur. You can find the list of fault labels in the 'Faults'
+section of the seL4 manual.
 
 ## `microkit_msginfo microkit_ppcall(microkit_channel channel, microkit_msginfo message)`
 
 Performs a call to a protected procedure in a different PD.
-The `channel` argument identifies the protected procedure to be called.
+The `ch` argument identifies the protected procedure to be called.
 `message` is passed as argument to the protected procedure.
 Channel identifiers are specified in the system configuration.
 
 The protected procedure's return data is returned in the `microkit_msginfo`.
 
-## `void microkit_notify(microkit_channel channel)`
+## `void microkit_notify(microkit_channel ch)`
 
-Notify the `channel`.
+Notify the channel `ch`.
 Channel identifiers are specified in the system configuration.
 
 ## `void microkit_irq_ack(microkit_channel ch)`
@@ -488,20 +511,20 @@ The `protection_domain` element describes a protection domain.
 
 It supports the following attributes:
 
-* `name`: a unique name for the protection domain
-* `pp`: (optional) indicates that the protection domain has a protected procedure; defaults to false.
-* `priority`: the priority of the protection domain (integer 0 to 254).
-* `budget`: (optional) the PD's budget in microseconds; defaults to 1,000.
-* `period`: (optional) the PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
-* `passive`: (optional) indicates that the protection domain will be passive and thus have it's scheduling context removed after initialisation; defaults to false.
+* `name`: A unique name for the protection domain
+* `pp`: (optional) Indicates that the protection domain has a protected procedure; defaults to false.
+* `priority`: The priority of the protection domain (integer 0 to 254).
+* `budget`: (optional) The PD's budget in microseconds; defaults to 1,000.
+* `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
+* `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 
 Additionally, it supports the following child elements:
 
-* `program_image`: (exactly one) describes the program image for the protection domain.
-* `map`: (zero or more) describes mapping of memory regions into the protection domain.
-* `irq`: (zero or more) describes hardware interrupt associations.
-* `setvar`: (zero or more) describes variable rewriting.
-* `protection_domain`: (zero or more) describes a child protection domain.
+* `program_image`: (exactly one) Describes the program image for the protection domain.
+* `map`: (zero or more) Describes mapping of memory regions into the protection domain.
+* `irq`: (zero or more) Describes hardware interrupt associations.
+* `setvar`: (zero or more) Describes variable rewriting.
+* `protection_domain`: (zero or more) Describes a child protection domain.
 
 The `program_image` element has a single `path` attribute describing the path to an ELF file.
 
@@ -527,22 +550,27 @@ The `setvar` element has the following attributes:
 The `protection_domain` element the same attributes as any other protection domain as well as:
 * `id`: The ID of the child for the parent to refer to.
 
-Child protection domains have their faults handled by the parent protection domain itself instead of the Microkit monitor.
-The parent protection domain is able to control the child's thread allowing it to stop it or restart it using the
-Microkit API.
-
 ## `memory_region`
 
 The `memory_region` element describes a memory region.
 
 It supports the following attributes:
 
-* `name`: a unique name for the memory region
-* `size`: size of the memory region in bytes (must be a multiple of the page size)
-* `page_size`: (optional) size of the pages used in the memory region; must be a supported page size if provided.
-* `phys_addr`: (optional) the physical address for the start of the memory region (must be a multiple of the page size).
+* `name`: A unique name for the memory region
+* `size`: Size of the memory region in bytes (must be a multiple of the page size)
+* `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the smallest page size for the target architecture.
+* `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
 
 The `memory_region` element does not support any child elements.
+
+### Page sizes by architecture
+
+Below are the available page sizes for each architecture that Microkit supports.
+
+#### AArch64
+
+* 0x1000 (4KiB)
+* 0x20000 (2MiB)
 
 ## `channel`
 
@@ -703,7 +731,7 @@ For simulating the ZCU102 using QEMU, use the following command:
        -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
        -serial mon:stdio
 
-## Adding platform support
+## Adding Platform Support
 
 The following section is a guide for adding support for a new platform to Microkit. Currently only AArch64
 is supported in Microkit, so this guide assumes you are trying to add support for an AArch64 platform.
@@ -713,7 +741,7 @@ is supported in Microkit, so this guide assumes you are trying to add support fo
 Before you can start with adding platform support to Microkit, the platform must be supported by the seL4 kernel.
 You can find information on how to do so [here](https://docs.sel4.systems/projects/sel4/porting.html).
 
-### Getting Microkit components working
+### Getting Microkit Components Working
 
 The first step to adding Microkit support is to modify the `build_sdk.py` script in order to build the required
 artefacts for the new platform. This involves adding to the `SUPPORTED_BOARDS` list with the `BoardInfo` options
@@ -734,7 +762,7 @@ platform port. It is a good idea at this point to boot a hello world system to c
 
 If there are issues with porting the platform, please [open an issue on GitHub](https://github.com/sel4/microkit).
 
-### Contributing platform support
+### Contributing Platform Support
 
 Once you believe that the port works, you can [open a pull request](https://github.com/seL4/microkit/pulls) with required
 changes as well as documentation in the manual about the platform and how to run Microkit images on it.
