@@ -1198,8 +1198,12 @@ fn build_system(kernel_config: &Config,
     let sched_context_objs = init_system.allocate_objects(ObjectType::SchedContext, sched_context_names, Some(PD_SCHEDCONTEXT_SIZE));
     let sched_context_caps: Vec<u64> = sched_context_objs.iter().map(|sc| sc.cap_addr).collect();
 
-    let pds_with_endpoints: Vec<&ProtectionDomain> = system.protection_domains.iter().filter(|pd| pd.needs_ep()).collect();
-    let pd_endpoint_names: Vec<String> = pds_with_endpoints.iter().map(|pd| format!("EP: PD={}", pd.name)).collect();
+    let pd_endpoint_names: Vec<String> = system
+        .protection_domains
+        .iter()
+        .filter(|pd| pd.needs_ep())
+        .map(|pd| format!("EP: PD={}", pd.name))
+        .collect();
     let endpoint_names = [vec![format!("EP: Monitor Fault")], pd_endpoint_names].concat();
 
     let pd_reply_names: Vec<String> = system.protection_domains.iter().map(|pd| format!("Reply: PD={}", pd.name)).collect();
@@ -1212,7 +1216,16 @@ fn build_system(kernel_config: &Config,
     let fault_ep_endpoint_object = &endpoint_objs[0];
 
     // Because the first reply object is for the monitor, we map from index 1 of endpoint_objs
-    let pd_endpoint_objs: Vec<&Object> = pds_with_endpoints.iter().enumerate().map(|(i, _)| &endpoint_objs[1..][i]).collect();
+    let pd_endpoint_objs: Vec<Option<&Object>> = {
+        let mut i = 0;
+        system.protection_domains.iter().map(|pd| if pd.needs_ep() {
+            let obj = &endpoint_objs[1..][i];
+            i += 1;
+            Some(obj)
+        } else {
+            None
+        }).collect()
+    };
 
     let notification_names = system.protection_domains.iter().map(|pd| format!("Notification: PD={}", pd.name)).collect();
     let notification_objs = init_system.allocate_objects(ObjectType::Notification, notification_names, None);
@@ -1445,7 +1458,7 @@ fn build_system(kernel_config: &Config,
         } else {
             assert!(pd.id.is_some());
             assert!(pd.parent.is_some());
-            fault_ep_cap = pd_endpoint_objs[pd.parent.unwrap()].cap_addr;
+            fault_ep_cap = pd_endpoint_objs[pd.parent.unwrap()].unwrap().cap_addr;
             badge = FAULT_BADGE | pd.id.unwrap();
         }
 
@@ -1468,7 +1481,7 @@ fn build_system(kernel_config: &Config,
     // Minting in the address space
     for (idx, pd) in system.protection_domains.iter().enumerate() {
         let obj = if pd.needs_ep() {
-            pd_endpoint_objs[idx]
+            pd_endpoint_objs[idx].unwrap()
         } else {
             &notification_objs[idx]
         };
@@ -1617,7 +1630,7 @@ fn build_system(kernel_config: &Config,
         if pd_b.pp {
             let pd_a_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_a;
             let pd_a_badge = PPC_BADGE | cc.id_b;
-            let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b];
+            let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b].unwrap();
             assert!(pd_a_cap_idx < PD_CAP_SIZE);
 
             system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
@@ -1635,7 +1648,7 @@ fn build_system(kernel_config: &Config,
         if pd_a.pp {
             let pd_b_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_b;
             let pd_b_badge = PPC_BADGE | cc.id_a;
-            let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a];
+            let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a].unwrap();
             assert!(pd_b_cap_idx < PD_CAP_SIZE);
 
             system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
