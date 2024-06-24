@@ -27,7 +27,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 void init(void);
 void notified(microkit_channel ch);
 microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
-void fault(microkit_channel ch, microkit_msginfo msginfo);
+void fault(microkit_pd pd, microkit_msginfo msginfo);
 
 extern char microkit_name[16];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
