@@ -158,7 +158,8 @@ SUPPORTED_BOARDS = (
             "QEMU_MEMORY": "2048",
         },
         examples={
-            "hello": Path("example/qemu_virt_aarch64/hello")
+            "hello": Path("example/qemu_virt_aarch64/hello"),
+            "hierarchy": Path("example/qemu_virt_aarch64/hierarchy")
         }
     ),
 )
