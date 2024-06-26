@@ -9,8 +9,6 @@ use std::path::Path;
 use std::collections::HashMap;
 use crate::util::bytes_to_struct;
 
-const STB_GLOBAL: u8 = 1;
-
 #[repr(C, packed)]
 struct ElfHeader32 {
     ident_magic: u32,
@@ -137,7 +135,7 @@ pub struct ElfFile {
     pub word_size: usize,
     pub entry: u64,
     pub segments: Vec<ElfSegment>,
-    symbols: HashMap<String, ElfSymbol64>,
+    symbols: HashMap<String, (ElfSymbol64, bool)>,
 }
 
 impl ElfFile {
@@ -247,7 +245,7 @@ impl ElfFile {
         let symtab_str = &bytes[symtab_str_start..symtab_str_end];
 
         // Read all the symbols
-        let mut symbols: HashMap<String, ElfSymbol64> = HashMap::new();
+        let mut symbols: HashMap<String, (ElfSymbol64, bool)> = HashMap::new();
         let mut offset = 0;
         let symbol_size = std::mem::size_of::<ElfSymbol64>();
         while offset < symtab.len() {
@@ -259,15 +257,19 @@ impl ElfFile {
 
             let sym = sym_body[0];
 
-            let bind = sym.info >> 4;
             let name = Self::get_string(symtab_str, sym.name as usize)?;
-            // Here we are doing something that could end up being fairly expensive, we are copying
-            // the string for each symbol name. It should be possible to turn this into a reference
-            // although it might be awkward in order to please the borrow checker.
-            let insert = symbols.insert(name.to_string(), sym);
-            // We only care about duplicate symbols if it is a global symbol
-            if insert.is_some() && bind == STB_GLOBAL {
-                return Err(format!("ELF '{}: multiple symbols with name '{}'", path.display(), name));
+            // It is possible for a valid ELF to contain multiple global symbols with the same name.
+            // Because we are making the hash map of symbols now, what we do is keep track of how many
+            // times we encounter the symbol name. Only when we go to find a particular symbol, do
+            // we complain that it occurs multiple times.
+            if let Some(symbol) = symbols.get_mut(name) {
+                symbol.1 = true;
+            } else {
+                // Here we are doing something that could end up being fairly expensive, we are copying
+                // the string for each symbol name. It should be possible to turn this into a reference
+                // although it might be awkward in order to please the borrow checker.
+                let insert = symbols.insert(name.to_string(), (sym, false));
+                assert!(insert.is_none());
             }
             offset += symbol_size;
         }
@@ -276,8 +278,12 @@ impl ElfFile {
     }
 
     pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), String> {
-        if let Some(sym) = self.symbols.get(variable_name) {
-            Ok((sym.value, sym.size))
+        if let Some((sym, duplicate)) = self.symbols.get(variable_name) {
+            if *duplicate {
+                Err(format!("Found multiple symbols with name '{variable_name}'"))
+            } else {
+                Ok((sym.value, sym.size))
+            }
         } else {
             Err(format!("No symbol named '{variable_name}' not found"))
         }
