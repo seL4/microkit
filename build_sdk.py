@@ -13,7 +13,7 @@ than in make.
 
 """
 from argparse import ArgumentParser
-from os import popen, system
+from os import popen, system, environ
 from shutil import copy
 from pathlib import Path
 from dataclasses import dataclass
@@ -355,6 +355,7 @@ def build_elf_component(
 def build_doc(root_dir):
     output = root_dir / "doc" / "microkit_user_manual.pdf"
 
+    environ["TEXINPUTS"] = "docs/style:"
     r = system(f'pandoc docs/manual.md -o {output}')
     assert r == 0
 

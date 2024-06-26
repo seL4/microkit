@@ -7,3 +7,14 @@ Files:
   tool/microkit/Cargo.lock
 Copyright: 2024, UNSW
 License: BSD-2-Clause
+
+Files:
+  docs/style/logos/blacktriangle.pdf
+  docs/style/logos/seL4-key.pdf
+Copyright: 2020, Data61, CSIRO (ABN 41 687 119 230)
+License: CC-BY-SA-4.0
+
+Files:
+  docs/style/logos/seL4-Foundation-logo.pdf
+Copyright: seL4 Project a Series of LF Projects, LLC
+License: LicenseRef-Trademark

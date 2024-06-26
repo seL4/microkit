@@ -5,15 +5,13 @@
 
 ---
 title: Microkit User Manual (v1.2-pre)
-papersize:
-- a4
-fontsize:
+documentclass: article
+classoption:
+- english
 - 11pt
-geometry:
-- margin=2cm
-fontfamily:
-- charter
+- a4paper
 header-includes:
+- \usepackage[makeTitle,copyright]{sel4}
 - \usepackage{titlesec}
 - \newcommand{\sectionbreak}{\clearpage}
 subparagraph: yes
@@ -541,6 +539,7 @@ The `irq` element has the following attributes:
 * `irq`: The hardware interrupt number.
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
+\
 
 The `setvar` element has the following attributes:
 
@@ -548,6 +547,7 @@ The `setvar` element has the following attributes:
 * `region_paddr`: Name of an MR. The symbol's value shall be updated to this MR's physical address.
 
 The `protection_domain` element the same attributes as any other protection domain as well as:
+
 * `id`: The ID of the child for the parent to refer to.
 
 ## `memory_region`
@@ -801,6 +801,9 @@ For the kinds of systems targeted by the Microkit, this reduction of the usable 
 
 The limitation on the size of by-value arguments is forced by the (architecture-dependent) limits on the payload size of the underlying seL4 operations, as well as by efficiency considerations.
 The protected procedure payload should be considered as analogous to function arguments in the C language; similar limitations exist in the C ABIs (Application Binary Interfaces) of various platforms.
+
+\
+\
 
 ## Limits
 
