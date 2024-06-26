@@ -275,11 +275,11 @@ impl ElfFile {
         Ok(ElfFile { word_size, entry, segments, symbols })
     }
 
-    pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), &'static str> {
+    pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), String> {
         if let Some(sym) = self.symbols.get(variable_name) {
             Ok((sym.value, sym.size))
         } else {
-            Err("variable not found")
+            Err(format!("No symbol named '{variable_name}' not found"))
         }
     }
 
