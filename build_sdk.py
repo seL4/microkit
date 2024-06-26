@@ -414,6 +414,7 @@ def main() -> None:
     parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
     parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
     parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
+    parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
 
@@ -480,10 +481,10 @@ def main() -> None:
         copy(p, dest)
         dest.chmod(0o444)
 
-    tool_target = root_dir / "bin" / "microkit"
-
-    test_tool()
-    build_tool(tool_target, args.tool_target_triple)
+    if not args.skip_tool:
+        tool_target = root_dir / "bin" / "microkit"
+        test_tool()
+        build_tool(tool_target, args.tool_target_triple)
 
     if not args.skip_docs:
         build_doc(root_dir)
