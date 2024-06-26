@@ -570,7 +570,7 @@ Below are the available page sizes for each architecture that Microkit supports.
 #### AArch64
 
 * 0x1000 (4KiB)
-* 0x20000 (2MiB)
+* 0x200000 (2MiB)
 
 ## `channel`
 
