@@ -116,7 +116,7 @@ Please clone seL4 from:
 
 The correct branch to use is `microkit`.
 
-Testing has been performed using commit `57975d485397ce1744f7163644dd530560d0b7ec`.
+Testing has been performed using commit `0cdbffec9cf6b4c7c9c57971cbee5a24a70c8fd0`.
 
 ## Building the SDK
 
