@@ -4,7 +4,7 @@
 -->
 
 ---
-title: Microkit User Manual (v1.2.6)
+title: Microkit User Manual (v1.3.0)
 documentclass: article
 classoption:
 - english
