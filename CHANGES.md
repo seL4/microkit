@@ -1,5 +1,7 @@
 # Revision History for Microkit
 
+## Release 1.3.0-dev
+
 ## Release 1.3.0
 
 This release represents the first release since the seL4 Microkit was adopted by the
