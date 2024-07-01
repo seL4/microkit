@@ -535,8 +535,8 @@ This will set the program counter of the vCPU to `entry_point`.
 Stop the execution of the VM's virtual CPU with ID `vcpu`.
 
 ## `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
-                                      seL4_Uint8 priority, seL4_Uint8 group,
-                                      seL4_Uint8 index)`
+seL4_Uint8 priority, seL4_Uint8 group,
+seL4_Uint8 index)`
 
 Inject a virtual ARM interrupt for a virtual CPU `vcpu` with IRQ number `irq`.
 The `priority` (0-31) determines what ARM GIC (generic interrupt controller)
