@@ -5,6 +5,8 @@ Source: http://sel4.systems
 
 Files:
   tool/microkit/Cargo.lock
+  CHANGES.md
+  VERSION.md
 Copyright: 2024, UNSW
 License: BSD-2-Clause
 
