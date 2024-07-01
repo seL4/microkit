@@ -24,7 +24,7 @@ import platform as host_platform
 from typing import Dict, Union, List, Tuple
 
 NAME = "microkit"
-VERSION = "1.2.6"
+VERSION = "1.3.0"
 
 ENV_BIN_DIR = Path(executable).parent
 
