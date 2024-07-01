@@ -821,6 +821,19 @@ For simulating the ZCU102 using QEMU, use the following command:
        -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
        -serial mon:stdio
 
+It should be noted that when using U-Boot to load and run a Microkit system image,
+that there may be additional setup needed.
+
+For the ZynqMP class of platforms, which the ZCU102 is apart of, U-Boot does not start
+the Microkit system Exception Level 2 (EL2) which is necessary for Microkit to start
+(this is because seL4 is configured as a hypervisor).
+
+You can see that when using the `go` command, U-Boot is
+[unconditionally always dropping down to EL1](https://github.com/u-boot/u-boot/blob/8937bb265a7f2251c1bd999784a4ef10e9c6080d/board/xilinx/zynqmp/zynqmp.c#L234).
+
+To avoid this behaviour, the call to `armv8_switch_to_el1` should be replaced with
+`armv8_switch_to_el2` in this `do_go_exec` function.
+
 ## Adding Platform Support
 
 The following section is a guide for adding support for a new platform to Microkit. Currently only AArch64
