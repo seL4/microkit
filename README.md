@@ -21,7 +21,8 @@ The development of Microkit is on-going, more information can be found on the [r
 
 If you are *developing* Microkit itself this is the repo you want!
 
-If you are a system designer and want to *use* the Microkit SDK please download a pre-built SDK.
+If you are a system designer and want to *use* the Microkit SDK please download a pre-built SDK from
+[the latest release](https://github.com/seL4/microkit/releases).
 Please see the manual in the SDK for instructions on using the SDK itself.
 
 The remainder of this README is for Microkit developers.
