@@ -218,6 +218,14 @@ impl ElfFile {
             }
         };
 
+        if word_size != 64 {
+            return Err(format!(
+                "ELF '{}': unsupported word size: '{}'",
+                path.display(),
+                word_size
+            ));
+        }
+
         // Now need to read the header into a struct
         let hdr_bytes = &bytes[..hdr_size];
         let hdr = unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
