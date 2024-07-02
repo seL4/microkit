@@ -1,0 +1,10 @@
+#
+# Copyright 2024, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+
+[toolchain]
+channel = "1.79.0"
+components = [ "rustfmt" ]
+targets = [ "x86_64-unknown-linux-musl", "x86_64-apple-darwin", "aarch64-apple-darwin" ]
