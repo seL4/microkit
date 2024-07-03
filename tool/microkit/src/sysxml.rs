@@ -692,7 +692,7 @@ fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain
     let mut new_child_pds = vec![];
     let child_pds: Vec<_> = root_pd.child_pds.drain(0..).collect();
     for child_pd in child_pds {
-        new_child_pds.extend(pd_tree_to_list(xml_sdf, child_pd, true, idx)?);
+        new_child_pds.extend(pd_tree_to_list(xml_sdf, child_pd, true, idx + new_child_pds.len())?);
     }
 
     let mut all = vec![root_pd];
@@ -710,7 +710,7 @@ fn pd_flatten(xml_sdf: &XmlSystemDescription, pds: Vec<ProtectionDomain>) -> Res
     let mut all_pds = vec![];
 
     for pd in pds {
-        all_pds.extend(pd_tree_to_list(xml_sdf, pd, false, 0)?);
+        all_pds.extend(pd_tree_to_list(xml_sdf, pd, false, all_pds.len())?);
     }
 
     Ok(all_pds)
