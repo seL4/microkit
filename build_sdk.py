@@ -164,6 +164,8 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "QEMU_MEMORY": "2048",
             "KernelArmHypervisorSupport": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmExportPTMRUser": True,
         },
         examples={
             "hello": Path("example/qemu_virt_aarch64/hello"),
