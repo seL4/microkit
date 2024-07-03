@@ -313,8 +313,8 @@ handler via the `fault` entry point. It is then up to the parent to decide how t
 Microkit is distributed as a software development kit (SDK).
 
 The SDK includes support for one or more *boards*.
-Two *configurations* are supported for each board: *debug* and *release*.
-The *debug* configuration includes a debug build of the seL4 kernel to allow console debug output using the kernel's UART driver.
+Three *configurations* are supported for each board: *debug*, *release*, and *benchmark*.
+See [the Configurations section](#config) for more details.
 
 The SDK contains:
 
@@ -336,6 +336,23 @@ The user is free to build their system using whatever build system is deemed mos
 The Microkit tool should be invoked by the system build process to transform a system description (and any referenced program images) into an image file which can be loaded by the target board's bootloader.
 
 The ELF files provided as program images should be standard ELF files and have been linked against the provided libmicrokit.
+
+## Configurations {#config}
+
+## Debug
+
+The *debug* configuration includes a debug build of the seL4 kernel to allow console debug output using the kernel's UART driver.
+
+## Release
+
+The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, and
+kernel do *not* perform any serial output.
+
+## Benchmark
+
+The *benchmark* configuration uses a build of the seL4 kernel that exports the hardware's performance monitoring unit (PMU) to PDs.
+The kernel also tracks information about CPU utilisation. This benchmark configuration exists due a limitation of the seL4 kernel
+and is intended to be removed once [RFC-16 is implemented](https://github.com/seL4/rfcs/pull/22).
 
 ## System Requirements
 

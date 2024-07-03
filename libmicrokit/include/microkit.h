@@ -16,6 +16,8 @@ typedef unsigned int microkit_child;
 typedef seL4_MessageInfo_t microkit_msginfo;
 
 #define MONITOR_EP 5
+/* Only valid in the 'benchmark' configuration */
+#define TCB_CAP 6
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138

@@ -48,6 +48,7 @@ pub struct Config {
     pub fan_out_limit: u64,
     pub hypervisor: bool,
     pub arm_pa_size_bits: usize,
+    pub benchmark: bool,
 }
 
 pub enum Arch {
@@ -686,6 +687,23 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("attr", attr));
                 (page, cap_lookup.get(&page).unwrap().as_str())
             }
+            InvocationArgs::CnodeCopy {
+                cnode,
+                dest_index,
+                dest_depth,
+                src_root,
+                src_obj,
+                src_depth,
+                rights,
+            } => {
+                arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
+                arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
+                arg_strs.push(Invocation::fmt_field_cap("src_root", src_root, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap("src_obj", src_obj, cap_lookup));
+                arg_strs.push(Invocation::fmt_field("src_depth", src_depth));
+                arg_strs.push(Invocation::fmt_field("rights", rights));
+                (cnode, cap_lookup.get(&cnode).unwrap().as_str())
+            }
             InvocationArgs::CnodeMint {
                 cnode,
                 dest_index,
@@ -759,7 +777,7 @@ impl Invocation {
             InvocationLabel::IrqSetIrqHandler => "IRQ Handler",
             InvocationLabel::ArmPageTableMap => "Page Table",
             InvocationLabel::ArmPageMap => "Page",
-            InvocationLabel::CnodeMint => "CNode",
+            InvocationLabel::CnodeCopy | InvocationLabel::CnodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
             InvocationLabel::ArmVcpuSetTcb => "VCPU",
             _ => panic!(
@@ -782,6 +800,7 @@ impl Invocation {
             InvocationLabel::ArmIrqIssueIrqHandlerTrigger => "Get",
             InvocationLabel::IrqSetIrqHandler => "SetNotification",
             InvocationLabel::ArmPageTableMap | InvocationLabel::ArmPageMap => "Map",
+            InvocationLabel::CnodeCopy => "Copy",
             InvocationLabel::CnodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
             InvocationLabel::ArmVcpuSetTcb => "VCPUSetTcb",
@@ -810,6 +829,7 @@ impl InvocationArgs {
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IrqSetIrqHandler,
             InvocationArgs::PageTableMap { .. } => InvocationLabel::ArmPageTableMap,
             InvocationArgs::PageMap { .. } => InvocationLabel::ArmPageMap,
+            InvocationArgs::CnodeCopy { .. } => InvocationLabel::CnodeCopy,
             InvocationArgs::CnodeMint { .. } => InvocationLabel::CnodeMint,
             InvocationArgs::SchedControlConfigureFlags { .. } => {
                 InvocationLabel::SchedControlConfigureFlags
@@ -924,6 +944,19 @@ impl InvocationArgs {
                 rights,
                 attr,
             } => (page, vec![vaddr, rights, attr], vec![vspace]),
+            InvocationArgs::CnodeCopy {
+                cnode,
+                dest_index,
+                dest_depth,
+                src_root,
+                src_obj,
+                src_depth,
+                rights,
+            } => (
+                cnode,
+                vec![dest_index, dest_depth, src_obj, src_depth, rights],
+                vec![src_root],
+            ),
             InvocationArgs::CnodeMint {
                 cnode,
                 dest_index,
@@ -1032,6 +1065,15 @@ pub enum InvocationArgs {
         vaddr: u64,
         rights: u64,
         attr: u64,
+    },
+    CnodeCopy {
+        cnode: u64,
+        dest_index: u64,
+        dest_depth: u64,
+        src_root: u64,
+        src_obj: u64,
+        src_depth: u64,
+        rights: u64,
     },
     CnodeMint {
         cnode: u64,
