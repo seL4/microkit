@@ -189,6 +189,15 @@ SUPPORTED_CONFIGS = (
             "KernelVerificationBuild": False
         }
     ),
+    ConfigInfo(
+        name="benchmark",
+        debug=False,
+        kernel_options={
+            "KernelArmExportPMUUser": True,
+            "KernelDebugBuild": False,
+            "KernelBenchmarks": "track_utilisation"
+        },
+    ),
 )
 
 

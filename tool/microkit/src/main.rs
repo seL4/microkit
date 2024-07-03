@@ -45,6 +45,7 @@ const FAULT_EP_CAP_IDX: u64 = 2;
 const VSPACE_CAP_IDX: u64 = 3;
 const REPLY_CAP_IDX: u64 = 4;
 const MONITOR_EP_CAP_IDX: u64 = 5;
+const TCB_CAP_IDX: u64 = 6;
 
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
@@ -2337,6 +2338,33 @@ fn build_system(
         }));
     }
 
+    // In the benchmark configuration, we allow PDs to access their own TCB.
+    // This is necessary for accessing kernel's benchmark API.
+    if kernel_config.benchmark {
+        let mut tcb_cap_copy_invocation = Invocation::new(InvocationArgs::CnodeCopy {
+            cnode: cnode_objs[0].cap_addr,
+            dest_index: TCB_CAP_IDX,
+            dest_depth: PD_CAP_BITS,
+            src_root: root_cnode_cap,
+            src_obj: pd_tcb_objs[0].cap_addr,
+            src_depth: kernel_config.cap_address_bits,
+            rights: Rights::All as u64,
+        });
+        tcb_cap_copy_invocation.repeat(
+            system.protection_domains.len() as u32,
+            InvocationArgs::CnodeCopy {
+                cnode: 1,
+                dest_index: 0,
+                dest_depth: 0,
+                src_root: 0,
+                src_obj: 1,
+                src_depth: 0,
+                rights: 0,
+            },
+        );
+        system_invocations.push(tcb_cap_copy_invocation);
+    }
+
     // Set VSpace and CSpace
     let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut set_space_invocation = Invocation::new(InvocationArgs::TcbSetSpace {
@@ -2894,6 +2922,7 @@ fn main() -> Result<(), String> {
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
         arm_pa_size_bits: 40,
         hypervisor: json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+        benchmark: args.config == "benchmark",
     };
 
     match kernel_config.arch {
