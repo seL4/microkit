@@ -434,7 +434,7 @@ def main() -> None:
         selected_board_names = frozenset(args.boards.split(","))
         for board_name in selected_board_names:
             if board_name not in supported_board_names:
-                raise Exception(f"Trying to build a board: {board} that does not exist in supported list.")
+                raise Exception(f"Trying to build a board: {board_name} that does not exist in supported list.")
         selected_boards = [board for board in SUPPORTED_BOARDS if board.name in selected_board_names]
     else:
         selected_boards = SUPPORTED_BOARDS
@@ -444,7 +444,7 @@ def main() -> None:
         selected_config_names = frozenset(args.configs.split(","))
         for config_name in selected_config_names:
             if config_name not in supported_config_names:
-                raise Exception(f"Trying to build a configuration: {config} that does not exist in supported list.")
+                raise Exception(f"Trying to build a configuration: {config_name} that does not exist in supported list.")
         selected_configs = [config for config in SUPPORTED_CONFIGS if config.name in selected_config_names]
     else:
         selected_configs = SUPPORTED_CONFIGS
