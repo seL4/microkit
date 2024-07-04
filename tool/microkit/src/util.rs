@@ -19,7 +19,7 @@ pub fn str_to_bool(s: &str) -> Option<bool> {
     match s {
         "true" => Some(true),
         "false" => Some(false),
-        _ => None
+        _ => None,
     }
 }
 
@@ -37,12 +37,20 @@ pub const fn divmod(x: u64, y: u64) -> (u64, u64) {
 
 pub const fn round_up(n: u64, x: u64) -> u64 {
     let (_, m) = divmod(n, x);
-    if m == 0 { n } else { n + x - m}
+    if m == 0 {
+        n
+    } else {
+        n + x - m
+    }
 }
 
 pub const fn round_down(n: u64, x: u64) -> u64 {
     let (_, m) = divmod(n, x);
-    if m == 0 { n } else { n - m }
+    if m == 0 {
+        n
+    } else {
+        n - m
+    }
 }
 
 pub fn is_power_of_two(n: u64) -> bool {
@@ -95,7 +103,10 @@ pub fn human_size_strict(size: u64) -> String {
                 let (d_count, extra) = divmod(size, base);
                 count = d_count;
                 if extra != 0 {
-                    panic!("size 0x{:x} is not a multiple of standard power-of-two", size);
+                    panic!(
+                        "size 0x{:x} is not a multiple of standard power-of-two",
+                        size
+                    );
                 }
             } else {
                 count = size;
@@ -127,25 +138,21 @@ pub fn comma_sep_usize(n: usize) -> String {
 
 pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<u64, String> {
     match json.get(field) {
-        Some(value) => Ok(
-            value
+        Some(value) => Ok(value
             .as_str()
             .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))
             .parse::<u64>()
-            .unwrap_or_else(|_| panic!("JSON field '{}' could not be converted to u64", field))
-        ),
-        None => Err(format!("JSON field '{}' does not exist", field))
+            .unwrap_or_else(|_| panic!("JSON field '{}' could not be converted to u64", field))),
+        None => Err(format!("JSON field '{}' does not exist", field)),
     }
 }
 
 pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result<bool, String> {
     match json.get(field) {
-        Some(value) => Ok(
-            value
+        Some(value) => Ok(value
             .as_bool()
-            .unwrap_or_else(|| panic!("JSON field '{}' could not be converted to bool", field))
-        ),
-        None => Err(format!("JSON field '{}' does not exist", field))
+            .unwrap_or_else(|| panic!("JSON field '{}' could not be converted to bool", field))),
+        None => Err(format!("JSON field '{}' does not exist", field)),
     }
 }
 
@@ -153,10 +160,7 @@ pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result
 /// disk or some other format.
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn struct_to_bytes<T: Sized>(p: &T) -> &[u8] {
-    ::core::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::core::mem::size_of::<T>(),
-    )
+    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
 }
 
 #[allow(clippy::missing_safety_doc)]

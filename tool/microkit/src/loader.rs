@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::{MemoryRegion};
-use crate::util::{round_up, mb, kb, mask, struct_to_bytes};
-use crate::elf::{ElfFile};
-use crate::sel4::{Config};
-use std::path::Path;
+use crate::elf::ElfFile;
+use crate::sel4::Config;
+use crate::util::{kb, mask, mb, round_up, struct_to_bytes};
+use crate::MemoryRegion;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::Path;
 
 const PAGE_TABLE_SIZE: usize = 4096;
 
@@ -24,7 +24,8 @@ const AARCH64_LVL2_BITS: u64 = 9;
 struct Aarch64;
 impl Aarch64 {
     pub fn lvl0_index(addr: u64) -> usize {
-        let idx = (addr >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS)) & mask(AARCH64_LVL0_BITS);
+        let idx = (addr >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS))
+            & mask(AARCH64_LVL0_BITS);
         idx as usize
     }
 
@@ -48,7 +49,10 @@ fn check_non_overlapping(regions: &Vec<(u64, &[u8])>) {
         // Check that this does not overlap with any checked regions
         for (b, e) in &checked {
             if !(end <= *b || *base >= *e) {
-                panic!("Overlapping regions: [{:x}..{:x}) overlaps [{:x}..{:x})", base, end, b, e);
+                panic!(
+                    "Overlapping regions: [{:x}..{:x}) overlaps [{:x}..{:x})",
+                    base, end, b, e
+                );
             }
         }
 
@@ -86,13 +90,15 @@ pub struct Loader<'a> {
 }
 
 impl<'a> Loader<'a> {
-    pub fn new(kernel_config: Config,
-               loader_elf_path: &Path,
-               kernel_elf: &'a ElfFile,
-               initial_task_elf: &'a ElfFile,
-               initial_task_phys_base: Option<u64>,
-               reserved_region: MemoryRegion,
-               system_regions: Vec<(u64, &'a [u8])>) -> Loader<'a> {
+    pub fn new(
+        kernel_config: Config,
+        loader_elf_path: &Path,
+        kernel_elf: &'a ElfFile,
+        initial_task_elf: &'a ElfFile,
+        initial_task_phys_base: Option<u64>,
+        reserved_region: MemoryRegion,
+        system_regions: Vec<(u64, &'a [u8])>,
+    ) -> Loader<'a> {
         // Note: If initial_task_phys_base is not None, then it just this address
         // as the base physical address of the initial task, rather than the address
         // that comes from the initial_task_elf file.
@@ -101,7 +107,11 @@ impl<'a> Loader<'a> {
         let magic = match sz {
             32 => 0x5e14dead,
             64 => 0x5e14dead14de5ead,
-            _ => panic!("Internal error: unexpected ELF word size: {} from '{}'", sz, loader_elf_path.display())
+            _ => panic!(
+                "Internal error: unexpected ELF word size: {} from '{}'",
+                sz,
+                loader_elf_path.display()
+            ),
         };
 
         let mut regions = Vec::new();
@@ -117,8 +127,11 @@ impl<'a> Loader<'a> {
                     kernel_first_vaddr = Some(segment.virt_addr);
                 }
 
-                if kernel_last_vaddr.is_none() || segment.virt_addr + segment.mem_size() > kernel_last_vaddr.unwrap() {
-                    kernel_last_vaddr = Some(round_up(segment.virt_addr + segment.mem_size(), mb(2)));
+                if kernel_last_vaddr.is_none()
+                    || segment.virt_addr + segment.mem_size() > kernel_last_vaddr.unwrap()
+                {
+                    kernel_last_vaddr =
+                        Some(round_up(segment.virt_addr + segment.mem_size(), mb(2)));
                 }
 
                 if kernel_first_paddr.is_none() || segment.phys_addr < kernel_first_paddr.unwrap() {
@@ -160,9 +173,17 @@ impl<'a> Loader<'a> {
         // Determine the pagetable variables
         assert!(kernel_first_vaddr.is_some());
         assert!(kernel_first_vaddr.is_some());
-        let pagetable_vars = Loader::setup_pagetables(&elf, kernel_first_vaddr.unwrap(), kernel_first_paddr.unwrap());
+        let pagetable_vars = Loader::setup_pagetables(
+            &elf,
+            kernel_first_vaddr.unwrap(),
+            kernel_first_paddr.unwrap(),
+        );
 
-        let image_segment = elf.segments.into_iter().find(|segment| segment.loadable).expect("Did not find loadable segment");
+        let image_segment = elf
+            .segments
+            .into_iter()
+            .find(|segment| segment.loadable)
+            .expect("Did not find loadable segment");
         let image_vaddr = image_segment.virt_addr;
         let mut image = image_segment.data;
 
@@ -247,31 +268,53 @@ impl<'a> Loader<'a> {
         let mut loader_buf = BufWriter::new(loader_file);
 
         // First write out all the image data
-        loader_buf.write_all(self.image.as_slice()).expect("Failed to write image data to loader");
+        loader_buf
+            .write_all(self.image.as_slice())
+            .expect("Failed to write image data to loader");
 
         // Then we write out the loader metadata (known as the 'header')
         let header_bytes = unsafe { struct_to_bytes(&self.header) };
-        loader_buf.write_all(header_bytes).expect("Failed to write header data to loader");
+        loader_buf
+            .write_all(header_bytes)
+            .expect("Failed to write header data to loader");
         // For each region, we need to write out the region metadata as well
         for region in &self.region_metadata {
             let region_metadata_bytes = unsafe { struct_to_bytes(region) };
-            loader_buf.write_all(region_metadata_bytes).expect("Failed to write region metadata to loader");
+            loader_buf
+                .write_all(region_metadata_bytes)
+                .expect("Failed to write region metadata to loader");
         }
 
         // Now we can write out all the region data
         for (_, data) in &self.regions {
-            loader_buf.write_all(data).expect("Failed to write region data to loader");
+            loader_buf
+                .write_all(data)
+                .expect("Failed to write region data to loader");
         }
 
         loader_buf.flush().unwrap();
     }
 
-    fn setup_pagetables(elf: &ElfFile, first_vaddr: u64, first_paddr: u64) -> [(u64, u64, [u8; PAGE_TABLE_SIZE]); 5] {
-        let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = elf.find_symbol("boot_lvl1_lower").expect("Could not find 'boot_lvl1_lower' symbol");
-        let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = elf.find_symbol("boot_lvl1_upper").expect("Could not find 'boot_lvl1_upper' symbol");
-        let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = elf.find_symbol("boot_lvl2_upper").expect("Could not find 'boot_lvl2_upper' symbol");
-        let (boot_lvl0_lower_addr, boot_lvl0_lower_size) = elf.find_symbol("boot_lvl0_lower").expect("Could not find 'boot_lvl0_lower' symbol");
-        let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = elf.find_symbol("boot_lvl0_upper").expect("Could not find 'boot_lvl0_upper' symbol");
+    fn setup_pagetables(
+        elf: &ElfFile,
+        first_vaddr: u64,
+        first_paddr: u64,
+    ) -> [(u64, u64, [u8; PAGE_TABLE_SIZE]); 5] {
+        let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = elf
+            .find_symbol("boot_lvl1_lower")
+            .expect("Could not find 'boot_lvl1_lower' symbol");
+        let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = elf
+            .find_symbol("boot_lvl1_upper")
+            .expect("Could not find 'boot_lvl1_upper' symbol");
+        let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = elf
+            .find_symbol("boot_lvl2_upper")
+            .expect("Could not find 'boot_lvl2_upper' symbol");
+        let (boot_lvl0_lower_addr, boot_lvl0_lower_size) = elf
+            .find_symbol("boot_lvl0_lower")
+            .expect("Could not find 'boot_lvl0_lower' symbol");
+        let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = elf
+            .find_symbol("boot_lvl0_upper")
+            .expect("Could not find 'boot_lvl0_upper' symbol");
 
         let mut boot_lvl0_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         boot_lvl0_lower[..8].copy_from_slice(&(boot_lvl1_lower_addr | 3).to_le_bytes());
@@ -279,8 +322,7 @@ impl<'a> Loader<'a> {
         let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         for i in 0..512 {
             #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 =
-                ((i as u64) << AARCH64_1GB_BLOCK_BITS) |
+            let pt_entry: u64 = ((i as u64) << AARCH64_1GB_BLOCK_BITS) |
                 (1 << 10) | // access flag
                 (0 << 2) | // strongly ordered memory
                 (1); // 1G block
@@ -308,8 +350,7 @@ impl<'a> Loader<'a> {
         let lvl2_idx = Aarch64::lvl2_index(first_vaddr);
         for i in lvl2_idx..512 {
             let entry_idx = (i - Aarch64::lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS;
-            let pt_entry: u64 =
-                (entry_idx as u64 + first_paddr) |
+            let pt_entry: u64 = (entry_idx as u64 + first_paddr) |
                 (1 << 10) | // Access flag
                 (3 << 8) | // Make sure the shareability is the same as the kernel's
                 (4 << 2) | // MT_NORMAL memory

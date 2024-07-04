@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::path::{Path, PathBuf};
-use crate::util::{str_to_bool};
-use crate::sel4::{PageSize, ArmIrqTrigger, Config, Arch};
+use crate::sel4::{Arch, ArmIrqTrigger, Config, PageSize};
+use crate::util::str_to_bool;
 use crate::MAX_PDS;
+use std::path::{Path, PathBuf};
 
 ///
 /// This module is responsible for parsing the System Description Format (SDF)
@@ -56,7 +56,12 @@ fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
 
     match u64::from_str_radix(final_str, base) {
         Ok(value) => Ok(value),
-        Err(err) => Err(format!("Error: failed to parse integer '{}' on element '{}': {}", s, node.tag_name().name(), err))
+        Err(err) => Err(format!(
+            "Error: failed to parse integer '{}' on element '{}': {}",
+            s,
+            node.tag_name().name(),
+            err
+        )),
     }
 }
 
@@ -77,9 +82,7 @@ impl PlatformDescription {
             Arch::Aarch64 => [0x1000, 0x200_000],
         };
 
-        PlatformDescription {
-            page_sizes,
-        }
+        PlatformDescription { page_sizes }
     }
 }
 
@@ -164,7 +167,7 @@ pub struct ProtectionDomain {
     /// protection domain exists
     pub parent: Option<usize>,
     /// Location in the parsed SDF file
-    text_pos: roxmltree::TextPos
+    text_pos: roxmltree::TextPos,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -200,7 +203,11 @@ impl SysMapPerms {
 }
 
 impl SysMap {
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, allow_setvar: bool) -> Result<SysMap, String> {
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        allow_setvar: bool,
+    ) -> Result<SysMap, String> {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
         if allow_setvar {
             attrs.push("setvar_vaddr");
@@ -212,7 +219,13 @@ impl SysMap {
         let perms = if let Some(xml_perms) = node.attribute("perms") {
             match SysMapPerms::from_str(xml_perms) {
                 Ok(parsed_perms) => parsed_perms,
-                Err(()) => return Err(value_error(xml_sdf, node, "perms must only be a combination of 'r', 'w', and 'x'".to_string())),
+                Err(()) => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "perms must only be a combination of 'r', 'w', and 'x'".to_string(),
+                    ))
+                }
             }
         } else {
             // Default to read-write
@@ -221,13 +234,23 @@ impl SysMap {
 
         // On all architectures, the kernel does not allow write-only mappings
         if perms == SysMapPerms::Write as u8 {
-            return Err(value_error(xml_sdf, node, "perms must not be 'w', write-only mappings are not allowed".to_string()));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "perms must not be 'w', write-only mappings are not allowed".to_string(),
+            ));
         }
 
         let cached = if let Some(xml_cached) = node.attribute("cached") {
             match str_to_bool(xml_cached) {
                 Some(val) => val,
-                None => return Err(value_error(xml_sdf, node, "cached must be 'true' or 'false'".to_string()))
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "cached must be 'true' or 'false'".to_string(),
+                    ))
+                }
             }
         } else {
             // Default to cached
@@ -249,7 +272,11 @@ impl ProtectionDomain {
         self.pp || self.has_children || self.virtual_machine.is_some()
     }
 
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, is_child: bool) -> Result<ProtectionDomain, String> {
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        is_child: bool,
+    ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec!["name", "priority", "pp", "budget", "period", "passive"];
         if is_child {
             attrs.push("id");
@@ -259,7 +286,10 @@ impl ProtectionDomain {
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
 
         let id = if is_child {
-            Some(sdf_parse_number(checked_lookup(xml_sdf, node, "id")?, node)?)
+            Some(sdf_parse_number(
+                checked_lookup(xml_sdf, node, "id")?,
+                node,
+            )?)
         } else {
             None
         };
@@ -276,13 +306,26 @@ impl ProtectionDomain {
             budget
         };
         if budget > period {
-            return Err(value_error(xml_sdf, node, format!("budget ({}) must be less than, or equal to, period ({})", budget, period)));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "budget ({}) must be less than, or equal to, period ({})",
+                    budget, period
+                ),
+            ));
         }
 
         let pp = if let Some(xml_pp) = node.attribute("pp") {
             match str_to_bool(xml_pp) {
                 Some(val) => val,
-                None => return Err(value_error(xml_sdf, node, "pp must be 'true' or 'false'".to_string()))
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "pp must be 'true' or 'false'".to_string(),
+                    ))
+                }
             }
         } else {
             false
@@ -291,7 +334,13 @@ impl ProtectionDomain {
         let passive = if let Some(xml_passive) = node.attribute("passive") {
             match str_to_bool(xml_passive) {
                 Some(val) => val,
-                None => return Err(value_error(xml_sdf, node, "passive must be 'true' or 'false'".to_string()))
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "passive must be 'true' or 'false'".to_string(),
+                    ))
+                }
             }
         } else {
             false
@@ -313,7 +362,11 @@ impl ProtectionDomain {
         };
 
         if priority > PD_MAX_PRIORITY as u64 {
-            return Err(value_error(xml_sdf, node, format!("priority must be between 0 and {}", PD_MAX_PRIORITY)));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("priority must be between 0 and {}", PD_MAX_PRIORITY),
+            ));
         }
 
         for child in node.children() {
@@ -325,12 +378,16 @@ impl ProtectionDomain {
                 "program_image" => {
                     check_attributes(xml_sdf, &child, &["path"])?;
                     if program_image.is_some() {
-                        return Err(value_error(xml_sdf, node, "program_image must only be specified once".to_string()));
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "program_image must only be specified once".to_string(),
+                        ));
                     }
 
                     let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
                     program_image = Some(Path::new(program_image_path).to_path_buf());
-                },
+                }
                 "map" => {
                     let map = SysMap::from_xml(xml_sdf, &child, true)?;
 
@@ -346,10 +403,18 @@ impl ProtectionDomain {
                 }
                 "irq" => {
                     check_attributes(xml_sdf, &child, &["irq", "id", "trigger"])?;
-                    let irq = checked_lookup(xml_sdf, &child, "irq")?.parse::<u64>().unwrap();
-                    let id = checked_lookup(xml_sdf, &child, "id")?.parse::<i64>().unwrap();
+                    let irq = checked_lookup(xml_sdf, &child, "irq")?
+                        .parse::<u64>()
+                        .unwrap();
+                    let id = checked_lookup(xml_sdf, &child, "id")?
+                        .parse::<i64>()
+                        .unwrap();
                     if id > PD_MAX_ID as i64 {
-                        return Err(value_error(xml_sdf, &child, format!("id must be < {}", PD_MAX_ID + 1)));
+                        return Err(value_error(
+                            xml_sdf,
+                            &child,
+                            format!("id must be < {}", PD_MAX_ID + 1),
+                        ));
                     }
                     if id < 0 {
                         return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
@@ -359,7 +424,13 @@ impl ProtectionDomain {
                         match trigger_str {
                             "level" => ArmIrqTrigger::Level,
                             "edge" => ArmIrqTrigger::Edge,
-                            _ => return Err(value_error(xml_sdf, &child, "trigger must be either 'level' or 'edge'".to_string()))
+                            _ => {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    "trigger must be either 'level' or 'edge'".to_string(),
+                                ))
+                            }
                         }
                     } else {
                         // Default the level triggered
@@ -369,37 +440,51 @@ impl ProtectionDomain {
                     let irq = SysIrq {
                         irq,
                         id: id as u64,
-                        trigger
+                        trigger,
                     };
                     irqs.push(irq);
-                },
+                }
                 "setvar" => {
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
-                    let region_paddr = Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
+                    let region_paddr =
+                        Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
                     setvars.push(SysSetVar {
                         symbol,
                         region_paddr,
                         vaddr: None,
                     })
-                },
-                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?),
+                }
+                "protection_domain" => {
+                    child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?)
+                }
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
-                        return Err(value_error(xml_sdf, node, "virtual_machine must only be specified once".to_string()));
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "virtual_machine must only be specified once".to_string(),
+                        ));
                     }
 
                     virtual_machine = Some(VirtualMachine::from_xml(xml_sdf, &child)?);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
-                    return Err(format!("Invalid XML element '{}': {}", child.tag_name().name(), loc_string(xml_sdf, pos)));
-                },
+                    return Err(format!(
+                        "Invalid XML element '{}': {}",
+                        child.tag_name().name(),
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
             }
         }
 
         if program_image.is_none() {
-            return Err(format!("Error: missing 'program_image' element on protection_domain: '{}'", name));
+            return Err(format!(
+                "Error: missing 'program_image' element on protection_domain: '{}'",
+                name
+            ));
         }
 
         let has_children = !child_pds.is_empty();
@@ -428,7 +513,10 @@ impl ProtectionDomain {
 }
 
 impl VirtualMachine {
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<VirtualMachine, String> {
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+    ) -> Result<VirtualMachine, String> {
         check_attributes(xml_sdf, node, &["name", "budget", "period", "priority"])?;
 
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
@@ -444,7 +532,14 @@ impl VirtualMachine {
             budget
         };
         if budget > period {
-            return Err(value_error(xml_sdf, node, format!("budget ({}) must be less than, or equal to, period ({})", budget, period)));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "budget ({}) must be less than, or equal to, period ({})",
+                    budget, period
+                ),
+            ));
         }
 
         // Default to minimum priority
@@ -465,13 +560,23 @@ impl VirtualMachine {
             match child_name {
                 "vcpu" => {
                     if vcpu.is_some() {
-                        return Err(value_error(xml_sdf, node, "vcpu must only be specified once".to_string()));
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "vcpu must only be specified once".to_string(),
+                        ));
                     }
 
                     check_attributes(xml_sdf, &child, &["id"])?;
-                    let id = checked_lookup(xml_sdf, &child, "id")?.parse::<u64>().unwrap();
+                    let id = checked_lookup(xml_sdf, &child, "id")?
+                        .parse::<u64>()
+                        .unwrap();
                     if id > VCPU_MAX_ID {
-                        return Err(value_error(xml_sdf, &child, format!("id must be < {}", VCPU_MAX_ID + 1)));
+                        return Err(value_error(
+                            xml_sdf,
+                            &child,
+                            format!("id must be < {}", VCPU_MAX_ID + 1),
+                        ));
                     }
                     vcpu = Some(VirtualCpu { id });
                 }
@@ -480,16 +585,23 @@ impl VirtualMachine {
                     // setvar_vaddr on SysMap
                     let map = SysMap::from_xml(xml_sdf, &child, false)?;
                     maps.push(map);
-                },
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(node.range().start);
-                    return Err(format!("Error: invalid XML element '{}': {}", child_name, loc_string(xml_sdf, pos)));
+                    return Err(format!(
+                        "Error: invalid XML element '{}': {}",
+                        child_name,
+                        loc_string(xml_sdf, pos)
+                    ));
                 }
             }
         }
 
         if vcpu.is_none() {
-            return Err(format!("Error: missing 'vcpu' element on virtual_machine: '{}'", name));
+            return Err(format!(
+                "Error: missing 'vcpu' element on virtual_machine: '{}'",
+                name
+            ));
         }
 
         Ok(VirtualMachine {
@@ -506,7 +618,11 @@ impl VirtualMachine {
 }
 
 impl SysMemoryRegion {
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, plat_desc: &PlatformDescription) -> Result<SysMemoryRegion, String> {
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        plat_desc: &PlatformDescription,
+    ) -> Result<SysMemoryRegion, String> {
         check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
 
         let name = checked_lookup(xml_sdf, node, "name")?;
@@ -521,11 +637,19 @@ impl SysMemoryRegion {
 
         let page_size_valid = plat_desc.page_sizes.contains(&page_size);
         if !page_size_valid {
-            return Err(value_error(xml_sdf, node, format!("page size 0x{:x} not supported", page_size)));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("page size 0x{:x} not supported", page_size),
+            ));
         }
 
         if size % page_size != 0 {
-            return Err(value_error(xml_sdf, node, "size is not a multiple of the page size".to_string()));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "size is not a multiple of the page size".to_string(),
+            ));
         }
 
         let phys_addr = if let Some(xml_phys_addr) = node.attribute("phys_addr") {
@@ -535,7 +659,11 @@ impl SysMemoryRegion {
         };
 
         if phys_addr.is_some() && phys_addr.unwrap() % page_size != 0 {
-            return Err(value_error(xml_sdf, node, "phys_addr is not aligned to the page size".to_string()));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "phys_addr is not aligned to the page size".to_string(),
+            ));
         }
 
         let page_count = size / page_size;
@@ -554,7 +682,11 @@ impl Channel {
     /// It should be noted that this function assumes that `pds` is populated
     /// with all the Protection Domains that could potentially be connected with
     /// the channel.
-    fn from_xml<'a>(xml_sdf: &'a XmlSystemDescription, node: &'a roxmltree::Node, pds: &[ProtectionDomain]) -> Result<Channel, String> {
+    fn from_xml<'a>(
+        xml_sdf: &'a XmlSystemDescription,
+        node: &'a roxmltree::Node,
+        pds: &[ProtectionDomain],
+    ) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 
         let mut ends: Vec<(usize, u64)> = Vec::new();
@@ -568,10 +700,16 @@ impl Channel {
                 "end" => {
                     check_attributes(xml_sdf, &child, &["pd", "id"])?;
                     let end_pd = checked_lookup(xml_sdf, &child, "pd")?;
-                    let end_id = checked_lookup(xml_sdf, &child, "id")?.parse::<i64>().unwrap();
+                    let end_id = checked_lookup(xml_sdf, &child, "id")?
+                        .parse::<i64>()
+                        .unwrap();
 
                     if end_id > PD_MAX_ID as i64 {
-                        return Err(value_error(xml_sdf, &child, format!("id must be < {}", PD_MAX_ID + 1)));
+                        return Err(value_error(
+                            xml_sdf,
+                            &child,
+                            format!("id must be < {}", PD_MAX_ID + 1),
+                        ));
                     }
 
                     if end_id < 0 {
@@ -581,18 +719,30 @@ impl Channel {
                     if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
                         ends.push((pd_idx, end_id as u64))
                     } else {
-                        return Err(value_error(xml_sdf, &child, format!("invalid PD name '{end_pd}'")));
+                        return Err(value_error(
+                            xml_sdf,
+                            &child,
+                            format!("invalid PD name '{end_pd}'"),
+                        ));
                     }
-                },
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(node.range().start);
-                    return Err(format!("Error: invalid XML element '{}': {}", child_name, loc_string(xml_sdf, pos)));
+                    return Err(format!(
+                        "Error: invalid XML element '{}': {}",
+                        child_name,
+                        loc_string(xml_sdf, pos)
+                    ));
                 }
             }
         }
 
         if ends.len() != 2 {
-            return Err(value_error(xml_sdf, node, "exactly two end elements must be specified".to_string()));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "exactly two end elements must be specified".to_string(),
+            ));
         }
 
         let (pd_a, id_a) = ends[0];
@@ -619,28 +769,54 @@ pub struct SystemDescription {
     pub channels: Vec<Channel>,
 }
 
-fn check_attributes(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, attributes: &[&'static str]) -> Result<(), String> {
+fn check_attributes(
+    xml_sdf: &XmlSystemDescription,
+    node: &roxmltree::Node,
+    attributes: &[&'static str],
+) -> Result<(), String> {
     for attribute in node.attributes() {
         if !attributes.contains(&attribute.name()) {
-            return Err(value_error(xml_sdf, node, format!("invalid attribute '{}'", attribute.name())));
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("invalid attribute '{}'", attribute.name()),
+            ));
         }
     }
 
     Ok(())
 }
 
-fn checked_lookup<'a>(xml_sdf: &XmlSystemDescription, node: &'a roxmltree::Node, attribute: &'static str) -> Result<&'a str, String> {
+fn checked_lookup<'a>(
+    xml_sdf: &XmlSystemDescription,
+    node: &'a roxmltree::Node,
+    attribute: &'static str,
+) -> Result<&'a str, String> {
     if let Some(value) = node.attribute(attribute) {
         Ok(value)
     } else {
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
-        Err(format!("Error: Missing required attribute '{}' on element '{}': {}:{}:{}", attribute, node.tag_name().name(),xml_sdf.filename, pos.row, pos.col))
+        Err(format!(
+            "Error: Missing required attribute '{}' on element '{}': {}:{}:{}",
+            attribute,
+            node.tag_name().name(),
+            xml_sdf.filename,
+            pos.row,
+            pos.col
+        ))
     }
 }
 
 fn value_error(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, err: String) -> String {
     let pos = xml_sdf.doc.text_pos_at(node.range().start);
-    format!("Error: {} on element '{}': {}:{}:{}", err, node.tag_name().name(), xml_sdf.filename, pos.row, pos.col)
+    format!(
+        "Error: {} on element '{}': {}:{}:{}",
+        err,
+        node.tag_name().name(),
+        xml_sdf.filename,
+        pos.row,
+        pos.col
+    )
 }
 
 fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<(), String> {
@@ -650,12 +826,20 @@ fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Resu
     if let Some(text) = node.text() {
         // If the text is just whitespace then it is okay
         if !text.trim().is_empty() {
-            return Err(format!("Error: unexpected text found in element '{}' @ {}", name, loc_string(xml_sdf, pos)));
+            return Err(format!(
+                "Error: unexpected text found in element '{}' @ {}",
+                name,
+                loc_string(xml_sdf, pos)
+            ));
         }
     }
 
     if node.tail().is_some() {
-        return Err(format!("Error: unexpected text found after element '{}' @ {}", name, loc_string(xml_sdf, pos)));
+        return Err(format!(
+            "Error: unexpected text found after element '{}' @ {}",
+            name,
+            loc_string(xml_sdf, pos)
+        ));
     }
 
     for child in node.children() {
@@ -667,12 +851,22 @@ fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Resu
     Ok(())
 }
 
-fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain, parent: bool, idx: usize) -> Result<Vec<ProtectionDomain>, String> {
+fn pd_tree_to_list(
+    xml_sdf: &XmlSystemDescription,
+    mut root_pd: ProtectionDomain,
+    parent: bool,
+    idx: usize,
+) -> Result<Vec<ProtectionDomain>, String> {
     let mut child_ids = vec![];
     for child_pd in &root_pd.child_pds {
         let child_id = child_pd.id.unwrap();
         if child_ids.contains(&child_id) {
-            return Err(format!("Error: duplicate id: {} in protection domain: '{}' @ {}", child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+            return Err(format!(
+                "Error: duplicate id: {} in protection domain: '{}' @ {}",
+                child_id,
+                root_pd.name,
+                loc_string(xml_sdf, child_pd.text_pos)
+            ));
         }
         // Also check that the child ID does not clash with the virtual machine ID, if the PD has one
         if let Some(vm) = &root_pd.virtual_machine {
@@ -692,7 +886,12 @@ fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain
     let mut new_child_pds = vec![];
     let child_pds: Vec<_> = root_pd.child_pds.drain(0..).collect();
     for child_pd in child_pds {
-        new_child_pds.extend(pd_tree_to_list(xml_sdf, child_pd, true, idx + new_child_pds.len())?);
+        new_child_pds.extend(pd_tree_to_list(
+            xml_sdf,
+            child_pd,
+            true,
+            idx + new_child_pds.len(),
+        )?);
     }
 
     let mut all = vec![root_pd];
@@ -706,7 +905,10 @@ fn pd_tree_to_list(xml_sdf: &XmlSystemDescription, mut root_pd: ProtectionDomain
 ///
 /// In doing so the representation is changed from "Node with list of children",
 /// to each node having a parent link instead.
-fn pd_flatten(xml_sdf: &XmlSystemDescription, pds: Vec<ProtectionDomain>) -> Result<Vec<ProtectionDomain>, String> {
+fn pd_flatten(
+    xml_sdf: &XmlSystemDescription,
+    pds: Vec<ProtectionDomain>,
+) -> Result<Vec<ProtectionDomain>, String> {
     let mut all_pds = vec![];
 
     for pd in pds {
@@ -716,10 +918,14 @@ fn pd_flatten(xml_sdf: &XmlSystemDescription, pds: Vec<ProtectionDomain>) -> Res
     Ok(all_pds)
 }
 
-pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Result<SystemDescription, String> {
+pub fn parse(
+    filename: &str,
+    xml: &str,
+    plat_desc: &PlatformDescription,
+) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
-        Err(err) => return Err(format!("Could not parse '{}': {}", filename, err))
+        Err(err) => return Err(format!("Could not parse '{}': {}", filename, err)),
     };
 
     let xml_sdf = XmlSystemDescription {
@@ -731,7 +937,11 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     let mut mrs = vec![];
     let mut channels = vec![];
 
-    let system = doc.root().children().find(|child| child.tag_name().name() == "system").unwrap();
+    let system = doc
+        .root()
+        .children()
+        .find(|child| child.tag_name().name() == "system")
+        .unwrap();
 
     // Ensure there is no non-whitespace/comment text
     check_no_text(&xml_sdf, &system)?;
@@ -748,12 +958,18 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?),
+            "protection_domain" => {
+                root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?)
+            }
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
-                return Err(format!("Invalid XML element '{}': {}", child_name, loc_string(&xml_sdf, pos)))
+                return Err(format!(
+                    "Invalid XML element '{}': {}",
+                    child_name,
+                    loc_string(&xml_sdf, pos)
+                ));
             }
         }
     }
@@ -772,18 +988,28 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     }
 
     if pds.len() > MAX_PDS {
-        return Err(format!("Error: too many protection domains ({}) defined. Maximum is {}.", pds.len(), MAX_PDS));
+        return Err(format!(
+            "Error: too many protection domains ({}) defined. Maximum is {}.",
+            pds.len(),
+            MAX_PDS
+        ));
     }
 
     for pd in &pds {
         if pds.iter().filter(|x| pd.name == x.name).count() > 1 {
-            return Err(format!("Error: duplicate protection domain name '{}'.", pd.name));
+            return Err(format!(
+                "Error: duplicate protection domain name '{}'.",
+                pd.name
+            ));
         }
     }
 
     for mr in &mrs {
         if mrs.iter().filter(|x| mr.name == x.name).count() > 1 {
-            return Err(format!("Error: duplicate memory region name '{}'.", mr.name));
+            return Err(format!(
+                "Error: duplicate memory region name '{}'.",
+                mr.name
+            ));
         }
     }
 
@@ -792,10 +1018,13 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
         match &pd.virtual_machine {
             Some(vm) => {
                 if vms.contains(&vm) {
-                    return Err(format!("Error: duplicate virtual machine name '{}'.", vm.name));
+                    return Err(format!(
+                        "Error: duplicate virtual machine name '{}'.",
+                        vm.name
+                    ));
                 }
                 vms.push(vm);
-            },
+            }
             None => {}
         }
     }
@@ -805,7 +1034,10 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     for pd in &pds {
         for sysirq in &pd.irqs {
             if all_irqs.contains(&sysirq.irq) {
-                return Err(format!("Error: duplicate irq: {} in protection domain: '{}' @ {}:{}:{}", sysirq.irq, pd.name, filename, pd.text_pos.row, pd.text_pos.col));
+                return Err(format!(
+                    "Error: duplicate irq: {} in protection domain: '{}' @ {}:{}:{}",
+                    sysirq.irq, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+                ));
             }
             all_irqs.push(sysirq.irq);
         }
@@ -817,7 +1049,10 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     for (pd_idx, pd) in pds.iter().enumerate() {
         for sysirq in &pd.irqs {
             if ch_ids[pd_idx].contains(&sysirq.id) {
-                return Err(format!("Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}", sysirq.id, pd.name, filename, pd.text_pos.row, pd.text_pos.col));
+                return Err(format!(
+                    "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
+                    sysirq.id, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+                ));
             }
             ch_ids[pd_idx].push(sysirq.id);
         }
@@ -826,12 +1061,18 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
     for ch in &channels {
         if ch_ids[ch.pd_a].contains(&ch.id_a) {
             let pd = &pds[ch.pd_a];
-            return Err(format!("Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}", ch.id_a, pd.name, filename, pd.text_pos.row, pd.text_pos.col));
+            return Err(format!(
+                "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
+                ch.id_a, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+            ));
         }
 
         if ch_ids[ch.pd_b].contains(&ch.id_b) {
             let pd = &pds[ch.pd_b];
-            return Err(format!("Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}", ch.id_b, pd.name, filename, pd.text_pos.row, pd.text_pos.col));
+            return Err(format!(
+                "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
+                ch.id_b, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+            ));
         }
 
         ch_ids[ch.pd_a].push(ch.id_a);
@@ -846,10 +1087,19 @@ pub fn parse(filename: &str, xml: &str, plat_desc: &PlatformDescription) -> Resu
             match maybe_mr {
                 Some(mr) => {
                     if map.vaddr % mr.page_size as u64 != 0 {
-                        return Err(format!("Error: invalid vaddr alignment on 'map' @ {}", loc_string(&xml_sdf, pos)))
+                        return Err(format!(
+                            "Error: invalid vaddr alignment on 'map' @ {}",
+                            loc_string(&xml_sdf, pos)
+                        ));
                     }
-                },
-                None => return Err(format!("Error: invalid memory region name '{}' on 'map' @ {}", map.mr, loc_string(&xml_sdf, pos)))
+                }
+                None => {
+                    return Err(format!(
+                        "Error: invalid memory region name '{}' on 'map' @ {}",
+                        map.mr,
+                        loc_string(&xml_sdf, pos)
+                    ))
+                }
             };
         }
     }

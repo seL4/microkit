@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use microkit_tool::{sysxml, sel4};
+use microkit_tool::{sel4, sysxml};
 
 const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -19,7 +19,8 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: 40,
 };
 
-const DEFAULT_PLAT_DESC: sysxml::PlatformDescription = sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
+const DEFAULT_PLAT_DESC: sysxml::PlatformDescription =
+    sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
 
 fn check_error(test_name: &str, expected_err: &str) {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -29,14 +30,20 @@ fn check_error(test_name: &str, expected_err: &str) {
     let parse_err = sysxml::parse(test_name, &xml, &DEFAULT_PLAT_DESC).unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
-        eprintln!("Expected error:\n{}\nGot error:\n{}\n", expected_err, parse_err);
+        eprintln!(
+            "Expected error:\n{}\nGot error:\n{}\n",
+            expected_err, parse_err
+        );
     }
 
     assert!(parse_err.starts_with(expected_err));
 }
 
 fn check_missing(test_name: &str, attr: &str, element: &str) {
-    let expected_error = format!("Error: Missing required attribute '{}' on element '{}'", attr, element);
+    let expected_error = format!(
+        "Error: Missing required attribute '{}' on element '{}'",
+        attr, element
+    );
     check_error(test_name, expected_error.as_str());
 }
 
@@ -51,17 +58,26 @@ mod memory_region {
 
     #[test]
     fn test_unsupported_page_size() {
-        check_error("mr_unsupported_page_size.xml", "Error: page size 0x200001 not supported on element 'memory_region'")
+        check_error(
+            "mr_unsupported_page_size.xml",
+            "Error: page size 0x200001 not supported on element 'memory_region'",
+        )
     }
 
     #[test]
     fn test_size_not_multiple_of_page_size() {
-        check_error("mr_size_not_multiple_of_page_size.xml", "Error: size is not a multiple of the page size on element 'memory_region'")
+        check_error(
+            "mr_size_not_multiple_of_page_size.xml",
+            "Error: size is not a multiple of the page size on element 'memory_region'",
+        )
     }
 
     #[test]
     fn test_addr_not_aligned_to_page_size() {
-        check_error("mr_addr_not_aligned_to_page_size.xml", "Error: phys_addr is not aligned to the page size on element 'memory_region'")
+        check_error(
+            "mr_addr_not_aligned_to_page_size.xml",
+            "Error: phys_addr is not aligned to the page size on element 'memory_region'",
+        )
     }
 
     #[test]
@@ -76,7 +92,10 @@ mod memory_region {
 
     #[test]
     fn test_invalid_attrs() {
-        check_error("mr_invalid_attrs.xml", "Error: invalid attribute 'page_count' on element 'memory_region': ")
+        check_error(
+            "mr_invalid_attrs.xml",
+            "Error: invalid attribute 'page_count' on element 'memory_region': ",
+        )
     }
 }
 
@@ -91,7 +110,10 @@ mod protection_domain {
 
     #[test]
     fn test_missing_program_image() {
-        check_error("pd_missing_program_image.xml", "Error: missing 'program_image' element on protection_domain: ")
+        check_error(
+            "pd_missing_program_image.xml",
+            "Error: missing 'program_image' element on protection_domain: ",
+        )
     }
 
     #[test]
@@ -131,17 +153,26 @@ mod protection_domain {
 
     #[test]
     fn test_duplicate_program_image() {
-        check_error("pd_duplicate_program_image.xml", "Error: program_image must only be specified once on element 'protection_domain': ")
+        check_error(
+            "pd_duplicate_program_image.xml",
+            "Error: program_image must only be specified once on element 'protection_domain': ",
+        )
     }
 
     #[test]
     fn test_invalid_attrs() {
-        check_error("pd_invalid_attrs.xml", "Error: invalid attribute 'foo' on element 'protection_domain': ")
+        check_error(
+            "pd_invalid_attrs.xml",
+            "Error: invalid attribute 'foo' on element 'protection_domain': ",
+        )
     }
 
     #[test]
     fn test_program_image_invalid_attrs() {
-        check_error("pd_program_image_invalid_attrs.xml", "Error: invalid attribute 'foo' on element 'program_image': ")
+        check_error(
+            "pd_program_image_invalid_attrs.xml",
+            "Error: invalid attribute 'foo' on element 'program_image': ",
+        )
     }
 
     #[test]
@@ -151,27 +182,42 @@ mod protection_domain {
 
     #[test]
     fn test_irq_greater_than_max() {
-        check_error("irq_id_greater_than_max.xml", "Error: id must be < 62 on element 'irq'")
+        check_error(
+            "irq_id_greater_than_max.xml",
+            "Error: id must be < 62 on element 'irq'",
+        )
     }
 
     #[test]
     fn test_irq_less_than_0() {
-        check_error("irq_id_less_than_0.xml", "Error: id must be >= 0 on element 'irq'")
+        check_error(
+            "irq_id_less_than_0.xml",
+            "Error: id must be >= 0 on element 'irq'",
+        )
     }
 
     #[test]
     fn test_write_only_mr() {
-        check_error("pd_write_only_mr.xml", "Error: perms must not be 'w', write-only mappings are not allowed on element 'map':")
+        check_error(
+            "pd_write_only_mr.xml",
+            "Error: perms must not be 'w', write-only mappings are not allowed on element 'map':",
+        )
     }
 
     #[test]
     fn test_irq_invalid_trigger() {
-        check_error("irq_invalid_trigger.xml", "Error: trigger must be either 'level' or 'edge' on element 'irq'")
+        check_error(
+            "irq_invalid_trigger.xml",
+            "Error: trigger must be either 'level' or 'edge' on element 'irq'",
+        )
     }
 
     #[test]
     fn test_parent_has_id() {
-        check_error("pd_parent_has_id.xml", "Error: invalid attribute 'id' on element 'protection_domain': ")
+        check_error(
+            "pd_parent_has_id.xml",
+            "Error: invalid attribute 'id' on element 'protection_domain': ",
+        )
     }
 
     #[test]
@@ -181,7 +227,10 @@ mod protection_domain {
 
     #[test]
     fn test_duplicate_child_id() {
-        check_error("pd_duplicate_child_id.xml", "Error: duplicate id: 0 in protection domain: 'parent' @")
+        check_error(
+            "pd_duplicate_child_id.xml",
+            "Error: duplicate id: 0 in protection domain: 'parent' @",
+        )
     }
 }
 
@@ -201,22 +250,34 @@ mod channel {
 
     #[test]
     fn test_id_greater_than_max() {
-        check_error("ch_id_greater_than_max.xml", "Error: id must be < 62 on element 'end'")
+        check_error(
+            "ch_id_greater_than_max.xml",
+            "Error: id must be < 62 on element 'end'",
+        )
     }
 
     #[test]
     fn test_id_less_than_0() {
-        check_error("ch_id_less_than_0.xml", "Error: id must be >= 0 on element 'end'")
+        check_error(
+            "ch_id_less_than_0.xml",
+            "Error: id must be >= 0 on element 'end'",
+        )
     }
 
     #[test]
     fn test_invalid_attrs() {
-        check_error("ch_invalid_attrs.xml", "Error: invalid attribute 'foo' on element 'channel': ")
+        check_error(
+            "ch_invalid_attrs.xml",
+            "Error: invalid attribute 'foo' on element 'channel': ",
+        )
     }
 
     #[test]
     fn test_channel_invalid_pd() {
-        check_error("ch_invalid_pd.xml", "Error: invalid PD name 'invalidpd' on element 'end': ")
+        check_error(
+            "ch_invalid_pd.xml",
+            "Error: invalid PD name 'invalidpd' on element 'end': ",
+        )
     }
 }
 
@@ -226,56 +287,89 @@ mod system {
 
     #[test]
     fn test_duplicate_pd_names() {
-        check_error("sys_duplicate_pd_name.xml", "Error: duplicate protection domain name 'test'.")
+        check_error(
+            "sys_duplicate_pd_name.xml",
+            "Error: duplicate protection domain name 'test'.",
+        )
     }
 
     #[test]
     fn test_duplicate_mr_names() {
-        check_error("sys_duplicate_mr_name.xml", "Error: duplicate memory region name 'test'.")
+        check_error(
+            "sys_duplicate_mr_name.xml",
+            "Error: duplicate memory region name 'test'.",
+        )
     }
 
     #[test]
     fn test_duplicate_irq_number() {
-        check_error("sys_duplicate_irq_number.xml", "Error: duplicate irq: 112 in protection domain: 'test2' @ ")
+        check_error(
+            "sys_duplicate_irq_number.xml",
+            "Error: duplicate irq: 112 in protection domain: 'test2' @ ",
+        )
     }
 
     #[test]
     fn test_duplicate_irq_id() {
-        check_error("sys_duplicate_irq_id.xml", "Error: duplicate channel id: 3 in protection domain: 'test1' @")
+        check_error(
+            "sys_duplicate_irq_id.xml",
+            "Error: duplicate channel id: 3 in protection domain: 'test1' @",
+        )
     }
 
     #[test]
     fn test_channel_duplicate_a_id() {
-        check_error("sys_channel_duplicate_a_id.xml", "Error: duplicate channel id: 5 in protection domain: 'test1' @")
+        check_error(
+            "sys_channel_duplicate_a_id.xml",
+            "Error: duplicate channel id: 5 in protection domain: 'test1' @",
+        )
     }
 
     #[test]
     fn test_channel_duplicate_b_id() {
-        check_error("sys_channel_duplicate_b_id.xml", "Error: duplicate channel id: 5 in protection domain: 'test2' @")
+        check_error(
+            "sys_channel_duplicate_b_id.xml",
+            "Error: duplicate channel id: 5 in protection domain: 'test2' @",
+        )
     }
 
     #[test]
     fn test_no_protection_domains() {
-        check_error("sys_no_protection_domains.xml", "Error: at least one protection domain must be defined")
+        check_error(
+            "sys_no_protection_domains.xml",
+            "Error: at least one protection domain must be defined",
+        )
     }
 
     #[test]
     fn test_text_elements() {
-        check_error("sys_text_elements.xml", "Error: unexpected text found in element 'system' @")
+        check_error(
+            "sys_text_elements.xml",
+            "Error: unexpected text found in element 'system' @",
+        )
     }
 
     #[test]
     fn test_map_invalid_mr() {
-        check_error("sys_map_invalid_mr.xml", "Error: invalid memory region name 'foos' on 'map' @ ")
+        check_error(
+            "sys_map_invalid_mr.xml",
+            "Error: invalid memory region name 'foos' on 'map' @ ",
+        )
     }
 
     #[test]
     fn test_map_not_aligned() {
-        check_error("sys_map_not_aligned.xml", "Error: invalid vaddr alignment on 'map' @ ")
+        check_error(
+            "sys_map_not_aligned.xml",
+            "Error: invalid vaddr alignment on 'map' @ ",
+        )
     }
 
     #[test]
     fn test_too_many_pds() {
-        check_error("sys_too_many_pds.xml", "Error: too many protection domains (64) defined. Maximum is 63.")
+        check_error(
+            "sys_too_many_pds.xml",
+            "Error: too many protection domains (64) defined. Maximum is 63.",
+        )
     }
 }

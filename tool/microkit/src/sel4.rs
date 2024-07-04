@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::io::{Write, BufWriter};
-use std::collections::HashMap;
 use crate::UntypedObject;
+use std::collections::HashMap;
+use std::io::{BufWriter, Write};
 
 #[derive(Clone)]
 pub struct BootInfo {
@@ -86,7 +86,7 @@ impl ObjectType {
             ObjectType::LargePage => Some(OBJECT_SIZE_LARGE_PAGE),
             ObjectType::SmallPage => Some(OBJECT_SIZE_SMALL_PAGE),
             ObjectType::Vcpu => Some(OBJECT_SIZE_VCPU),
-            _ => None
+            _ => None,
         }
     }
 
@@ -114,7 +114,12 @@ impl ObjectType {
         } else {
             "variable size".to_string()
         };
-        format!("         object_type          {} ({} - {})", *self as u64, self.to_str(), object_size)
+        format!(
+            "         object_type          {} ({} - {})",
+            *self as u64,
+            self.to_str(),
+            object_size
+        )
     }
 }
 
@@ -412,7 +417,12 @@ impl Invocation {
         // To potentionally save some allocation, we reserve enough space for all the invocation args
         data.reserve(2 + args.len() * 8 + extra_caps.len() * 8);
 
-        let mut tag = Invocation::message_info_new(self.label as u64, 0, extra_caps.len() as u64, args.len() as u64);
+        let mut tag = Invocation::message_info_new(
+            self.label as u64,
+            0,
+            extra_caps.len() as u64,
+            args.len() as u64,
+        );
         if let Some((count, _)) = self.repeat {
             tag |= ((count - 1) as u64) << 32;
         }
@@ -479,7 +489,11 @@ impl Invocation {
         format!("         {:<20} {}", field_name, value)
     }
 
-    fn fmt_field_cap(field_name: &'static str, cap: u64, cap_lookup: &HashMap<u64, String>) -> String {
+    fn fmt_field_cap(
+        field_name: &'static str,
+        cap: u64,
+        cap_lookup: &HashMap<u64, String>,
+    ) -> String {
         let s = if let Some(name) = cap_lookup.get(&cap) {
             name
         } else {
@@ -497,14 +511,26 @@ impl Invocation {
     pub fn report_fmt<W: Write>(&self, f: &mut BufWriter<W>, cap_lookup: &HashMap<u64, String>) {
         let mut arg_strs = Vec::new();
         let (service, service_str) = match self.args {
-            InvocationArgs::UntypedRetype { untyped, object_type, size_bits, root, node_index, node_depth, node_offset, num_objects } => {
+            InvocationArgs::UntypedRetype {
+                untyped,
+                object_type,
+                size_bits,
+                root,
+                node_index,
+                node_depth,
+                node_offset,
+                num_objects,
+            } => {
                 arg_strs.push(object_type.format());
                 let sz_fmt = if size_bits == 0 {
                     String::from("N/A")
                 } else {
                     format!("0x{:x}", 1 << size_bits)
                 };
-                arg_strs.push(Invocation::fmt_field_str("size_bits", format!("{} ({})", size_bits, sz_fmt)));
+                arg_strs.push(Invocation::fmt_field_str(
+                    "size_bits",
+                    format!("{} ({})", size_bits, sz_fmt),
+                ));
                 arg_strs.push(Invocation::fmt_field_cap("root", root, cap_lookup));
                 arg_strs.push(Invocation::fmt_field("node_index", node_index));
                 arg_strs.push(Invocation::fmt_field("node_depth", node_depth));
@@ -512,38 +538,81 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("num_objects", num_objects));
                 (untyped, cap_lookup.get(&untyped).unwrap().as_str())
             }
-            InvocationArgs::TcbSetSchedParams { tcb, authority, mcp, priority, sched_context, fault_ep } => {
-                arg_strs.push(Invocation::fmt_field_cap("authority", authority, cap_lookup));
+            InvocationArgs::TcbSetSchedParams {
+                tcb,
+                authority,
+                mcp,
+                priority,
+                sched_context,
+                fault_ep,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "authority",
+                    authority,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field("mcp", mcp));
                 arg_strs.push(Invocation::fmt_field("priority", priority));
-                arg_strs.push(Invocation::fmt_field_cap("sched_context", sched_context, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "sched_context",
+                    sched_context,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field_cap("fault_ep", fault_ep, cap_lookup));
                 (tcb, cap_lookup.get(&tcb).unwrap().as_str())
             }
-            InvocationArgs::TcbSetSpace { tcb, fault_ep, cspace_root, cspace_root_data, vspace_root, vspace_root_data } => {
+            InvocationArgs::TcbSetSpace {
+                tcb,
+                fault_ep,
+                cspace_root,
+                cspace_root_data,
+                vspace_root,
+                vspace_root_data,
+            } => {
                 arg_strs.push(Invocation::fmt_field_cap("fault_ep", fault_ep, cap_lookup));
-                arg_strs.push(Invocation::fmt_field_cap("cspace_root", cspace_root, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "cspace_root",
+                    cspace_root,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field("cspace_root_data", cspace_root_data));
-                arg_strs.push(Invocation::fmt_field_cap("vspace_root", vspace_root, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "vspace_root",
+                    vspace_root,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field("vspace_root_data", vspace_root_data));
                 (tcb, cap_lookup.get(&tcb).unwrap().as_str())
             }
-            InvocationArgs::TcbSetIpcBuffer { tcb, buffer, buffer_frame } => {
+            InvocationArgs::TcbSetIpcBuffer {
+                tcb,
+                buffer,
+                buffer_frame,
+            } => {
                 arg_strs.push(Invocation::fmt_field_hex("buffer", buffer));
-                arg_strs.push(Invocation::fmt_field_cap("buffer_frame", buffer_frame, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "buffer_frame",
+                    buffer_frame,
+                    cap_lookup,
+                ));
                 (tcb, cap_lookup.get(&tcb).unwrap().as_str())
             }
-            InvocationArgs::TcbResume { tcb } => {
-                (tcb, cap_lookup.get(&tcb).unwrap().as_str())
-            }
-            InvocationArgs::TcbWriteRegisters { tcb, resume, arch_flags, regs, .. } => {
+            InvocationArgs::TcbResume { tcb } => (tcb, cap_lookup.get(&tcb).unwrap().as_str()),
+            InvocationArgs::TcbWriteRegisters {
+                tcb,
+                resume,
+                arch_flags,
+                regs,
+                ..
+            } => {
                 arg_strs.push(Invocation::fmt_field_bool("resume", resume));
                 arg_strs.push(Invocation::fmt_field("arch_flags", arch_flags as u64));
 
-                let reg_strs = regs.field_names()
-                                   .into_iter()
-                                   .map(|(field, val)| Invocation::fmt_field_reg(field, val))
-                                   .collect::<Vec<_>>();
+                let reg_strs = regs
+                    .field_names()
+                    .into_iter()
+                    .map(|(field, val)| Invocation::fmt_field_reg(field, val))
+                    .collect::<Vec<_>>();
                 arg_strs.push(Invocation::fmt_field_str("regs", reg_strs[0].clone()));
                 for s in &reg_strs[1..] {
                     arg_strs.push(format!("                              {}", s));
@@ -552,39 +621,81 @@ impl Invocation {
                 (tcb, cap_lookup.get(&tcb).unwrap().as_str())
             }
             InvocationArgs::TcbBindNotification { tcb, notification } => {
-                arg_strs.push(Invocation::fmt_field_cap("notification", notification, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "notification",
+                    notification,
+                    cap_lookup,
+                ));
                 (tcb, cap_lookup.get(&tcb).unwrap().as_str())
             }
             InvocationArgs::AsidPoolAssign { asid_pool, vspace } => {
                 arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
                 (asid_pool, cap_lookup.get(&asid_pool).unwrap().as_str())
             }
-            InvocationArgs::IrqControlGetTrigger { irq_control, irq, trigger, dest_root, dest_index, dest_depth } => {
+            InvocationArgs::IrqControlGetTrigger {
+                irq_control,
+                irq,
+                trigger,
+                dest_root,
+                dest_index,
+                dest_depth,
+            } => {
                 arg_strs.push(Invocation::fmt_field("irq", irq));
                 arg_strs.push(Invocation::fmt_field("trigger", trigger as u64));
-                arg_strs.push(Invocation::fmt_field_cap("dest_root", dest_root, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "dest_root",
+                    dest_root,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
                 arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
                 (irq_control, cap_lookup.get(&irq_control).unwrap().as_str())
             }
-            InvocationArgs::IrqHandlerSetNotification { irq_handler, notification } => {
-                arg_strs.push(Invocation::fmt_field_cap("notification", notification, cap_lookup));
+            InvocationArgs::IrqHandlerSetNotification {
+                irq_handler,
+                notification,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "notification",
+                    notification,
+                    cap_lookup,
+                ));
                 (irq_handler, cap_lookup.get(&irq_handler).unwrap().as_str())
             }
-            InvocationArgs::PageTableMap { page_table, vspace, vaddr, attr } => {
+            InvocationArgs::PageTableMap {
+                page_table,
+                vspace,
+                vaddr,
+                attr,
+            } => {
                 arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
                 arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
                 arg_strs.push(Invocation::fmt_field("attr", attr));
                 (page_table, cap_lookup.get(&page_table).unwrap().as_str())
             }
-            InvocationArgs::PageMap { page, vspace, vaddr, rights, attr } => {
+            InvocationArgs::PageMap {
+                page,
+                vspace,
+                vaddr,
+                rights,
+                attr,
+            } => {
                 arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
                 arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
                 arg_strs.push(Invocation::fmt_field("rights", rights));
                 arg_strs.push(Invocation::fmt_field("attr", attr));
                 (page, cap_lookup.get(&page).unwrap().as_str())
             }
-            InvocationArgs::CnodeMint { cnode, dest_index, dest_depth, src_root, src_obj, src_depth, rights, badge } => {
+            InvocationArgs::CnodeMint {
+                cnode,
+                dest_index,
+                dest_depth,
+                src_root,
+                src_obj,
+                src_depth,
+                rights,
+                badge,
+            } => {
                 arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
                 arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
                 arg_strs.push(Invocation::fmt_field_cap("src_root", src_root, cap_lookup));
@@ -594,21 +705,41 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("badge", badge));
                 (cnode, cap_lookup.get(&cnode).unwrap().as_str())
             }
-            InvocationArgs::SchedControlConfigureFlags { sched_control, sched_context, budget, period, extra_refills, badge, flags } => {
-                arg_strs.push(Invocation::fmt_field_cap("schedcontext", sched_context, cap_lookup));
+            InvocationArgs::SchedControlConfigureFlags {
+                sched_control,
+                sched_context,
+                budget,
+                period,
+                extra_refills,
+                badge,
+                flags,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "schedcontext",
+                    sched_context,
+                    cap_lookup,
+                ));
                 arg_strs.push(Invocation::fmt_field("budget", budget));
                 arg_strs.push(Invocation::fmt_field("period", period));
                 arg_strs.push(Invocation::fmt_field("extra_refills", extra_refills));
                 arg_strs.push(Invocation::fmt_field("badge", badge));
                 arg_strs.push(Invocation::fmt_field("flags", flags));
                 (sched_control, "None")
-            },
+            }
             InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => {
                 arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
                 (vcpu, cap_lookup.get(&vcpu).unwrap().as_str())
             }
         };
-        _ = writeln!(f, "{:<20} - {:<17} - 0x{:016x} ({})\n{}", self.object_type(), self.method_name(), service, service_str, arg_strs.join("\n"));
+        _ = writeln!(
+            f,
+            "{:<20} - {:<17} - 0x{:016x} ({})\n{}",
+            self.object_type(),
+            self.method_name(),
+            service,
+            service_str,
+            arg_strs.join("\n")
+        );
         if let Some((count, _)) = self.repeat {
             _ = writeln!(f, "      REPEAT: count={}", count);
         }
@@ -617,12 +748,12 @@ impl Invocation {
     fn object_type(&self) -> &'static str {
         match self.label {
             InvocationLabel::UntypedRetype => "Untyped",
-            InvocationLabel::TcbSetSchedParams |
-            InvocationLabel::TcbSetSpace |
-            InvocationLabel::TcbSetIpcBuffer |
-            InvocationLabel::TcbResume |
-            InvocationLabel::TcbWriteRegisters |
-            InvocationLabel::TcbBindNotification => "TCB",
+            InvocationLabel::TcbSetSchedParams
+            | InvocationLabel::TcbSetSpace
+            | InvocationLabel::TcbSetIpcBuffer
+            | InvocationLabel::TcbResume
+            | InvocationLabel::TcbWriteRegisters
+            | InvocationLabel::TcbBindNotification => "TCB",
             InvocationLabel::ArmAsidPoolAssign => "ASID Pool",
             InvocationLabel::ArmIrqIssueIrqHandlerTrigger => "IRQ Control",
             InvocationLabel::IrqSetIrqHandler => "IRQ Handler",
@@ -631,7 +762,10 @@ impl Invocation {
             InvocationLabel::CnodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
             InvocationLabel::ArmVcpuSetTcb => "VCPU",
-            _ => panic!("Internal error: unexpected label when getting object type '{:?}'", self.label)
+            _ => panic!(
+                "Internal error: unexpected label when getting object type '{:?}'",
+                self.label
+            ),
         }
     }
 
@@ -647,12 +781,14 @@ impl Invocation {
             InvocationLabel::ArmAsidPoolAssign => "Assign",
             InvocationLabel::ArmIrqIssueIrqHandlerTrigger => "Get",
             InvocationLabel::IrqSetIrqHandler => "SetNotification",
-            InvocationLabel::ArmPageTableMap |
-            InvocationLabel::ArmPageMap => "Map",
+            InvocationLabel::ArmPageTableMap | InvocationLabel::ArmPageMap => "Map",
             InvocationLabel::CnodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
             InvocationLabel::ArmVcpuSetTcb => "VCPUSetTcb",
-            _ => panic!("Internal error: unexpected label when getting method name '{:?}'", self.label)
+            _ => panic!(
+                "Internal error: unexpected label when getting method name '{:?}'",
+                self.label
+            ),
         }
     }
 }
@@ -668,39 +804,80 @@ impl InvocationArgs {
             InvocationArgs::TcbWriteRegisters { .. } => InvocationLabel::TcbWriteRegisters,
             InvocationArgs::TcbBindNotification { .. } => InvocationLabel::TcbBindNotification,
             InvocationArgs::AsidPoolAssign { .. } => InvocationLabel::ArmAsidPoolAssign,
-            InvocationArgs::IrqControlGetTrigger { .. } => InvocationLabel::ArmIrqIssueIrqHandlerTrigger,
+            InvocationArgs::IrqControlGetTrigger { .. } => {
+                InvocationLabel::ArmIrqIssueIrqHandlerTrigger
+            }
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IrqSetIrqHandler,
             InvocationArgs::PageTableMap { .. } => InvocationLabel::ArmPageTableMap,
             InvocationArgs::PageMap { .. } => InvocationLabel::ArmPageMap,
             InvocationArgs::CnodeMint { .. } => InvocationLabel::CnodeMint,
-            InvocationArgs::SchedControlConfigureFlags { .. } => InvocationLabel::SchedControlConfigureFlags,
+            InvocationArgs::SchedControlConfigureFlags { .. } => {
+                InvocationLabel::SchedControlConfigureFlags
+            }
             InvocationArgs::ArmVcpuSetTcb { .. } => InvocationLabel::ArmVcpuSetTcb,
         }
     }
 
     fn get_args(self) -> (u64, Vec<u64>, Vec<u64>) {
         match self {
-            InvocationArgs::UntypedRetype { untyped, object_type, size_bits, root, node_index, node_depth, node_offset, num_objects } =>
-                                        (
-                                           untyped,
-                                           vec![object_type as u64, size_bits, node_index, node_depth, node_offset, num_objects],
-                                           vec![root]
-                                        ),
-            InvocationArgs::TcbSetSchedParams { tcb, authority, mcp, priority, sched_context, fault_ep } =>
-                                        (
-                                            tcb,
-                                            vec![mcp, priority],
-                                            vec![authority, sched_context, fault_ep]
-                                        ),
-            InvocationArgs::TcbSetSpace { tcb, fault_ep, cspace_root, cspace_root_data, vspace_root, vspace_root_data } =>
-                                        (
-                                            tcb,
-                                            vec![cspace_root_data, vspace_root_data],
-                                            vec![fault_ep, cspace_root, vspace_root]
-                                        ),
-            InvocationArgs::TcbSetIpcBuffer { tcb, buffer, buffer_frame } => (tcb, vec![buffer], vec![buffer_frame]),
+            InvocationArgs::UntypedRetype {
+                untyped,
+                object_type,
+                size_bits,
+                root,
+                node_index,
+                node_depth,
+                node_offset,
+                num_objects,
+            } => (
+                untyped,
+                vec![
+                    object_type as u64,
+                    size_bits,
+                    node_index,
+                    node_depth,
+                    node_offset,
+                    num_objects,
+                ],
+                vec![root],
+            ),
+            InvocationArgs::TcbSetSchedParams {
+                tcb,
+                authority,
+                mcp,
+                priority,
+                sched_context,
+                fault_ep,
+            } => (
+                tcb,
+                vec![mcp, priority],
+                vec![authority, sched_context, fault_ep],
+            ),
+            InvocationArgs::TcbSetSpace {
+                tcb,
+                fault_ep,
+                cspace_root,
+                cspace_root_data,
+                vspace_root,
+                vspace_root_data,
+            } => (
+                tcb,
+                vec![cspace_root_data, vspace_root_data],
+                vec![fault_ep, cspace_root, vspace_root],
+            ),
+            InvocationArgs::TcbSetIpcBuffer {
+                tcb,
+                buffer,
+                buffer_frame,
+            } => (tcb, vec![buffer], vec![buffer_frame]),
             InvocationArgs::TcbResume { tcb } => (tcb, vec![], vec![]),
-            InvocationArgs::TcbWriteRegisters { tcb, resume, arch_flags, regs, count } => {
+            InvocationArgs::TcbWriteRegisters {
+                tcb,
+                resume,
+                arch_flags,
+                regs,
+                count,
+            } => {
                 // Here there are a couple of things going on.
                 // The invocation arguments to do not correspond one-to-one to word size,
                 // so we have to do some packing first.
@@ -712,34 +889,68 @@ impl InvocationArgs {
                 args.extend(regs.as_slice());
                 (tcb, args, vec![])
             }
-            InvocationArgs::TcbBindNotification { tcb, notification } => (tcb, vec![], vec![notification]),
-            InvocationArgs::AsidPoolAssign { asid_pool, vspace } => (asid_pool, vec![], vec![vspace]),
-            InvocationArgs::IrqControlGetTrigger { irq_control, irq, trigger, dest_root, dest_index, dest_depth } =>
-                                        (
-                                            irq_control,
-                                            vec![irq, trigger as u64, dest_index, dest_depth],
-                                            vec![dest_root],
-                                        ),
-            InvocationArgs::IrqHandlerSetNotification { irq_handler, notification } => (irq_handler, vec![], vec![notification]),
-            InvocationArgs::PageTableMap { page_table, vspace, vaddr, attr } =>
-                                        (
-                                            page_table,
-                                            vec![vaddr, attr],
-                                            vec![vspace]
-                                        ),
-            InvocationArgs::PageMap { page, vspace, vaddr, rights, attr } => (page, vec![vaddr, rights, attr], vec![vspace]),
-            InvocationArgs::CnodeMint { cnode, dest_index, dest_depth, src_root, src_obj, src_depth, rights, badge } =>
-                                        (
-                                            cnode,
-                                            vec![dest_index, dest_depth, src_obj, src_depth, rights, badge],
-                                            vec![src_root]
-                                        ),
-            InvocationArgs::SchedControlConfigureFlags { sched_control, sched_context, budget, period, extra_refills, badge, flags } =>
-                                        (
-                                            sched_control,
-                                            vec![budget, period, extra_refills, badge, flags],
-                                            vec![sched_context]
-                                        ),
+            InvocationArgs::TcbBindNotification { tcb, notification } => {
+                (tcb, vec![], vec![notification])
+            }
+            InvocationArgs::AsidPoolAssign { asid_pool, vspace } => {
+                (asid_pool, vec![], vec![vspace])
+            }
+            InvocationArgs::IrqControlGetTrigger {
+                irq_control,
+                irq,
+                trigger,
+                dest_root,
+                dest_index,
+                dest_depth,
+            } => (
+                irq_control,
+                vec![irq, trigger as u64, dest_index, dest_depth],
+                vec![dest_root],
+            ),
+            InvocationArgs::IrqHandlerSetNotification {
+                irq_handler,
+                notification,
+            } => (irq_handler, vec![], vec![notification]),
+            InvocationArgs::PageTableMap {
+                page_table,
+                vspace,
+                vaddr,
+                attr,
+            } => (page_table, vec![vaddr, attr], vec![vspace]),
+            InvocationArgs::PageMap {
+                page,
+                vspace,
+                vaddr,
+                rights,
+                attr,
+            } => (page, vec![vaddr, rights, attr], vec![vspace]),
+            InvocationArgs::CnodeMint {
+                cnode,
+                dest_index,
+                dest_depth,
+                src_root,
+                src_obj,
+                src_depth,
+                rights,
+                badge,
+            } => (
+                cnode,
+                vec![dest_index, dest_depth, src_obj, src_depth, rights, badge],
+                vec![src_root],
+            ),
+            InvocationArgs::SchedControlConfigureFlags {
+                sched_control,
+                sched_context,
+                budget,
+                period,
+                extra_refills,
+                badge,
+                flags,
+            } => (
+                sched_control,
+                vec![budget, period, extra_refills, badge, flags],
+                vec![sched_context],
+            ),
             InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => (vcpu, vec![], vec![tcb]),
         }
     }
@@ -756,7 +967,7 @@ pub enum InvocationArgs {
         node_index: u64,
         node_depth: u64,
         node_offset: u64,
-        num_objects: u64
+        num_objects: u64,
     },
     TcbSetSchedParams {
         tcb: u64,
@@ -844,5 +1055,5 @@ pub enum InvocationArgs {
     ArmVcpuSetTcb {
         vcpu: u64,
         tcb: u64,
-    }
+    },
 }
