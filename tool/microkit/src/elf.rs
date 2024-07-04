@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use crate::util::bytes_to_struct;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::collections::HashMap;
-use crate::util::bytes_to_struct;
 
 #[repr(C, packed)]
 struct ElfHeader32 {
@@ -142,7 +142,7 @@ impl ElfFile {
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
-            Err(err) => return Err(format!("Failed to read ELF '{}': {}", path.display(), err))
+            Err(err) => return Err(format!("Failed to read ELF '{}': {}", path.display(), err)),
         };
 
         let magic = &bytes[0..4];
@@ -158,12 +158,18 @@ impl ElfFile {
             1 => {
                 hdr_size = std::mem::size_of::<ElfHeader32>();
                 word_size = 32;
-            },
+            }
             2 => {
                 hdr_size = std::mem::size_of::<ElfHeader64>();
                 word_size = 64;
-            },
-            _ => return Err(format!("ELF '{}': invalid class '{}'", path.display(), class))
+            }
+            _ => {
+                return Err(format!(
+                    "ELF '{}': invalid class '{}'",
+                    path.display(),
+                    class
+                ))
+            }
         };
 
         // Now need to read the header into a struct
@@ -176,7 +182,10 @@ impl ElfFile {
         assert!(hdr.ident_class == *class);
 
         if hdr.ident_data != 1 {
-            return Err(format!("ELF '{}': incorrect endianness, only little endian architectures are supported", path.display()));
+            return Err(format!(
+                "ELF '{}': incorrect endianness, only little endian architectures are supported",
+                path.display()
+            ));
         }
 
         let entry = hdr.entry;
@@ -201,7 +210,7 @@ impl ElfFile {
                 phys_addr: phent.paddr,
                 virt_addr: phent.vaddr,
                 loadable: phent.type_ == 1,
-                attrs: phent.flags
+                attrs: phent.flags,
             };
 
             segments.push(segment)
@@ -226,12 +235,18 @@ impl ElfFile {
         }
 
         if shstrtab_shent.is_none() {
-            return Err(format!("ELF '{}': unable to find string table section", path.display()));
+            return Err(format!(
+                "ELF '{}': unable to find string table section",
+                path.display()
+            ));
         }
 
         assert!(symtab_shent.is_some());
         if symtab_shent.is_none() {
-            return Err(format!("ELF '{}': unable to find symbol table section", path.display()));
+            return Err(format!(
+                "ELF '{}': unable to find symbol table section",
+                path.display()
+            ));
         }
 
         // Reading the symbol table
@@ -274,13 +289,20 @@ impl ElfFile {
             offset += symbol_size;
         }
 
-        Ok(ElfFile { word_size, entry, segments, symbols })
+        Ok(ElfFile {
+            word_size,
+            entry,
+            segments,
+            symbols,
+        })
     }
 
     pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), String> {
         if let Some((sym, duplicate)) = self.symbols.get(variable_name) {
             if *duplicate {
-                Err(format!("Found multiple symbols with name '{variable_name}'"))
+                Err(format!(
+                    "Found multiple symbols with name '{variable_name}'"
+                ))
             } else {
                 Ok((sym.value, sym.size))
             }
@@ -320,10 +342,16 @@ impl ElfFile {
                 let end_idx = idx + null_byte_pos;
                 match std::str::from_utf8(&strtab[idx..end_idx]) {
                     Ok(string) => Ok(string),
-                    Err(err) => Err(format!("Failed to convert strtab bytes to UTF-8 string: {}", err))
+                    Err(err) => Err(format!(
+                        "Failed to convert strtab bytes to UTF-8 string: {}",
+                        err
+                    )),
                 }
-            },
-            None => Err(format!("Could not find null byte in strtab from index {}", idx)),
+            }
+            None => Err(format!(
+                "Could not find null byte in strtab from index {}",
+                idx
+            )),
         }
     }
 }

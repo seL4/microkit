@@ -10,9 +10,9 @@ pub mod sel4;
 pub mod sysxml;
 pub mod util;
 
-use std::fmt;
-use std::cmp::min;
 use sel4::BootInfo;
+use std::cmp::min;
+use std::fmt;
 
 // Note that this value is used in the monitor so should also be changed there
 // if this was to change.
@@ -31,7 +31,11 @@ pub struct UntypedObject {
 
 impl UntypedObject {
     pub fn new(cap: u64, region: MemoryRegion, is_device: bool) -> UntypedObject {
-        UntypedObject { cap, region, is_device }
+        UntypedObject {
+            cap,
+            region,
+            is_device,
+        }
     }
 
     pub fn base(&self) -> u64 {
@@ -59,7 +63,12 @@ pub struct Region {
 
 impl Region {
     pub fn new(name: String, addr: u64, size: u64, segment_idx: usize) -> Region {
-        Region { name, addr, size, segment_idx }
+        Region {
+            name,
+            addr,
+            size,
+            segment_idx,
+        }
     }
 
     pub fn data<'a>(&self, elf: &'a elf::ElfFile) -> &'a Vec<u8> {
@@ -69,7 +78,11 @@ impl Region {
 
 impl fmt::Display for Region {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<Region name={} addr=0x{:x} size={}>", self.name, self.addr, self.size)
+        write!(
+            f,
+            "<Region name={} addr=0x{:x} size={}>",
+            self.name, self.addr, self.size
+        )
     }
 }
 
@@ -84,7 +97,11 @@ pub struct MemoryRegion {
 
 impl fmt::Display for MemoryRegion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MemoryRegion(base=0x{:x}, end=0x{:x})", self.base, self.end)
+        write!(
+            f,
+            "MemoryRegion(base=0x{:x}, end=0x{:x})",
+            self.base, self.end
+        )
     }
 }
 
@@ -150,7 +167,8 @@ impl DisjointMemoryRegion {
         }
         // FIXME: Should extend here if adjacent rather than
         // inserting now
-        self.regions.insert(insert_idx, MemoryRegion::new(base, end));
+        self.regions
+            .insert(insert_idx, MemoryRegion::new(base, end));
         self.check();
     }
 
@@ -182,7 +200,8 @@ impl DisjointMemoryRegion {
         } else {
             // Splitting
             self.regions[idx] = MemoryRegion::new(region.base, base);
-            self.regions.insert(idx + 1, MemoryRegion::new(end, region.end));
+            self.regions
+                .insert(idx + 1, MemoryRegion::new(end, region.end));
         }
 
         self.check();
@@ -216,8 +235,8 @@ impl DisjointMemoryRegion {
             Some(region) => {
                 self.remove_region(region.base, region.base + size);
                 region.base
-            },
-            None => panic!("Unable to allocate {} bytes", size)
+            }
+            None => panic!("Unable to allocate {} bytes", size),
         }
     }
 }
@@ -235,8 +254,16 @@ pub struct UntypedAllocator {
 }
 
 impl UntypedAllocator {
-    pub fn new(untyped_object: UntypedObject, allocation_point: u64, allocations: Vec<KernelAllocation>) -> UntypedAllocator {
-        UntypedAllocator { untyped_object, allocation_point, allocations }
+    pub fn new(
+        untyped_object: UntypedObject,
+        allocation_point: u64,
+        allocations: Vec<KernelAllocation>,
+    ) -> UntypedAllocator {
+        UntypedAllocator {
+            untyped_object,
+            allocation_point,
+            allocations,
+        }
     }
 
     pub fn base(&self) -> u64 {
@@ -284,7 +311,10 @@ impl ObjectAllocator {
             untyped.push(UntypedAllocator::new(*ut, 0, vec![]));
         }
 
-        ObjectAllocator { allocation_idx: 0, untyped }
+        ObjectAllocator {
+            allocation_idx: 0,
+            untyped,
+        }
     }
 
     pub fn alloc(&mut self, size: u64) -> KernelAllocation {
@@ -300,7 +330,10 @@ impl ObjectAllocator {
             if start + (count * size) <= ut.end() {
                 ut.allocation_point = (start - ut.base()) + (count * size);
                 self.allocation_idx += 1;
-                let allocation = KernelAllocation { untyped_cap_address: ut.untyped_object.cap, phys_addr: start };
+                let allocation = KernelAllocation {
+                    untyped_cap_address: ut.untyped_object.cap,
+                    phys_addr: start,
+                };
                 ut.allocations.push(allocation);
                 return allocation;
             }
