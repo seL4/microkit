@@ -917,50 +917,54 @@ fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Resu
     Ok(())
 }
 
+/// Take a PD and return a vector with the given PD at the start and all of the children PDs following.
+///
+/// For example if PD A had children B, C then we would have [A, B, C].
+/// If we had the same example but child B also had a child D, we would have [A, B, D, C].
 fn pd_tree_to_list(
     xml_sdf: &XmlSystemDescription,
-    mut root_pd: ProtectionDomain,
-    parent: bool,
+    mut pd: ProtectionDomain,
     idx: usize,
 ) -> Result<Vec<ProtectionDomain>, String> {
     let mut child_ids = vec![];
-    for child_pd in &root_pd.child_pds {
+    for child_pd in &pd.child_pds {
         let child_id = child_pd.id.unwrap();
         if child_ids.contains(&child_id) {
             return Err(format!(
                 "Error: duplicate id: {} in protection domain: '{}' @ {}",
                 child_id,
-                root_pd.name,
+                pd.name,
                 loc_string(xml_sdf, child_pd.text_pos)
             ));
         }
         // Also check that the child ID does not clash with the virtual machine ID, if the PD has one
-        if let Some(vm) = &root_pd.virtual_machine {
+        if let Some(vm) = &pd.virtual_machine {
             if child_id == vm.vcpu.id {
                 return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
-                                    child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+                                    child_id, pd.name, loc_string(xml_sdf, child_pd.text_pos)));
             }
         }
         child_ids.push(child_id);
     }
 
-    if parent {
-        root_pd.parent = Some(idx);
-    } else {
-        root_pd.parent = None;
-    }
     let mut new_child_pds = vec![];
-    let child_pds: Vec<_> = root_pd.child_pds.drain(0..).collect();
-    for child_pd in child_pds {
+    let child_pds: Vec<_> = pd.child_pds.drain(0..).collect();
+    for mut child_pd in child_pds {
+        // The parent PD's index is set for each child. We then pass the index relative to the *total*
+        // list to any nested children so their parent index can be set to the position of this child.
+        child_pd.parent = Some(idx);
         new_child_pds.extend(pd_tree_to_list(
             xml_sdf,
             child_pd,
-            true,
-            idx + new_child_pds.len(),
+            // We need to pass the position of this current child PD in the global list.
+            // `idx` is this child's parent index in the global list, so we need to add
+            // the position of this child to `idx` which will be the number of extra child
+            // PDs we've just processed, plus one for the actual entry of this child.
+            idx + new_child_pds.len() + 1,
         )?);
     }
 
-    let mut all = vec![root_pd];
+    let mut all = vec![pd];
     all.extend(new_child_pds);
 
     Ok(all)
@@ -978,7 +982,10 @@ fn pd_flatten(
     let mut all_pds = vec![];
 
     for pd in pds {
-        all_pds.extend(pd_tree_to_list(xml_sdf, pd, false, all_pds.len())?);
+        // These are all root PDs, so should not have parents.
+        assert!(pd.parent.is_none());
+        // We provide the index of the PD in the entire PD list
+        all_pds.extend(pd_tree_to_list(xml_sdf, pd, all_pds.len())?);
     }
 
     Ok(all_pds)
