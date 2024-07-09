@@ -204,7 +204,7 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
     assert tarinfo.isfile() or tarinfo.isdir()
     # Set the permissions properly
     if tarinfo.isdir():
-        tarinfo.mode = tarinfo.mode & ~0o777 | 0o557
+        tarinfo.mode = tarinfo.mode & ~0o777 | 0o744
     if tarinfo.isfile():
         if "/bin/" in tarinfo.name:
             # Assume everything in bin should be executable.
@@ -250,7 +250,7 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
     copy(tool_output, tool_target)
 
-    tool_target.chmod(0o777)
+    tool_target.chmod(0o755)
 
 
 def build_sel4(
@@ -311,7 +311,7 @@ def build_sel4(
     dest.unlink(missing_ok=True)
     copy(elf, dest)
     # Make output read-only
-    dest.chmod(0o444)
+    dest.chmod(0o744)
 
     include_dir = root_dir / "board" / board.name / config.name / "include"
     for source in ("kernel_Config", "libsel4", "libsel4/sel4_Config", "libsel4/autoconf"):
@@ -324,7 +324,7 @@ def build_sel4(
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.unlink(missing_ok=True)
             copy(p, dest)
-            dest.chmod(0o444)
+            dest.chmod(0o744)
 
 
 def build_elf_component(
@@ -357,7 +357,7 @@ def build_elf_component(
     dest.unlink(missing_ok=True)
     copy(elf, dest)
     # Make output read-only
-    dest.chmod(0o444)
+    dest.chmod(0o744)
 
 
 def build_doc(root_dir):
@@ -395,14 +395,14 @@ def build_lib_component(
     dest.unlink(missing_ok=True)
     copy(lib, dest)
     # Make output read-only
-    dest.chmod(0o444)
+    dest.chmod(0o744)
 
     link_script = Path(component_name) / "microkit.ld"
     dest = lib_dir / "microkit.ld"
     dest.unlink(missing_ok=True)
     copy(link_script, dest)
     # Make output read-only
-    dest.chmod(0o444)
+    dest.chmod(0o744)
 
     include_dir = root_dir / "board" / board.name / config.name / "include"
     source_dir = Path(component_name) / "include"
@@ -414,7 +414,7 @@ def build_lib_component(
         dest.parent.mkdir(exist_ok=True, parents=True)
         dest.unlink(missing_ok=True)
         copy(p, dest)
-        dest.chmod(0o444)
+        dest.chmod(0o744)
 
 
 def main() -> None:
@@ -488,7 +488,7 @@ def main() -> None:
         dest.parent.mkdir(exist_ok=True, parents=True)
         dest.unlink(missing_ok=True)
         copy(p, dest)
-        dest.chmod(0o444)
+        dest.chmod(0o744)
 
     if not args.skip_tool:
         tool_target = root_dir / "bin" / "microkit"
@@ -521,7 +521,7 @@ def main() -> None:
                 dest.parent.mkdir(exist_ok=True, parents=True)
                 dest.unlink(missing_ok=True)
                 copy(p, dest)
-                dest.chmod(0o444)
+                dest.chmod(0o744)
 
     if not args.skip_tar:
         # At this point we create a tar.gz file
