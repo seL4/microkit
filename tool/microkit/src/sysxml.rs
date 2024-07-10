@@ -152,6 +152,7 @@ pub struct ProtectionDomain {
     pub pp: bool,
     pub passive: bool,
     pub program_image: PathBuf,
+    pub program_image_for_symbols: Option<PathBuf>,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub setvars: Vec<SysSetVar>,
@@ -303,6 +304,7 @@ impl ProtectionDomain {
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
+        let mut program_image_for_symbols = None;
         let mut virtual_machine = None;
 
         // Default to minimum priority
@@ -323,13 +325,15 @@ impl ProtectionDomain {
 
             match child.tag_name().name() {
                 "program_image" => {
-                    check_attributes(xml_sdf, &child, &["path"])?;
+                    check_attributes(xml_sdf, &child, &["path", "path_for_symbols"])?;
                     if program_image.is_some() {
                         return Err(value_error(xml_sdf, node, "program_image must only be specified once".to_string()));
                     }
 
                     let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
                     program_image = Some(Path::new(program_image_path).to_path_buf());
+
+                    program_image_for_symbols = child.attribute("path_for_symbols").map(PathBuf::from);
                 },
                 "map" => {
                     let map = SysMap::from_xml(xml_sdf, &child, true)?;
@@ -415,6 +419,7 @@ impl ProtectionDomain {
             pp,
             passive,
             program_image: program_image.unwrap(),
+            program_image_for_symbols,
             maps,
             irqs,
             setvars,

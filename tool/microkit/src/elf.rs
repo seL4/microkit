@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::collections::HashMap;
 use crate::util::bytes_to_struct;
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 struct ElfHeader32 {
     ident_magic: u32,
     ident_class: u8,
@@ -45,6 +47,7 @@ struct ElfSymbol64 {
 }
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 struct ElfSectionHeader64 {
     name: u32,
     type_: u32,
@@ -59,6 +62,7 @@ struct ElfSectionHeader64 {
 }
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 struct ElfProgramHeader64 {
     type_: u32,
     flags: u32,
@@ -71,6 +75,7 @@ struct ElfProgramHeader64 {
 }
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 struct ElfHeader64 {
     ident_magic: u32,
     ident_class: u8,
@@ -140,141 +145,27 @@ pub struct ElfFile {
 
 impl ElfFile {
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
-        let bytes = match fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(err) => return Err(format!("Failed to read ELF '{}': {}", path.display(), err))
-        };
+        Self::from_split_paths(path, None)
+    }
 
-        let magic = &bytes[0..4];
-        if magic != ELF_MAGIC {
-            return Err(format!("ELF '{}': magic check failed", path.display()));
-        }
-
-        let word_size;
-        let hdr_size;
-
-        let class = &bytes[4..5][0];
-        match class {
-            1 => {
-                hdr_size = std::mem::size_of::<ElfHeader32>();
-                word_size = 32;
-            },
-            2 => {
-                hdr_size = std::mem::size_of::<ElfHeader64>();
-                word_size = 64;
-            },
-            _ => return Err(format!("ELF '{}': invalid class '{}'", path.display(), class))
-        };
-
-        // Now need to read the header into a struct
-        let hdr_bytes = &bytes[..hdr_size];
-        let hdr = unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
-
-        // We have checked this above but we should check again once we actually cast it to
-        // a struct.
-        assert!(hdr.ident_magic.to_le_bytes() == *magic);
-        assert!(hdr.ident_class == *class);
-
-        if hdr.ident_data != 1 {
-            return Err(format!("ELF '{}': incorrect endianness, only little endian architectures are supported", path.display()));
-        }
-
-        let entry = hdr.entry;
-
-        // Read all the segments
-        let mut segments = Vec::with_capacity(hdr.phnum as usize);
-        for i in 0..hdr.phnum {
-            let phent_start = hdr.phoff + (i * hdr.phentsize) as u64;
-            let phent_end = phent_start + (hdr.phentsize as u64);
-            let phent_bytes = &bytes[phent_start as usize..phent_end as usize];
-
-            let phent = unsafe { bytes_to_struct::<ElfProgramHeader64>(phent_bytes) };
-
-            let segment_start = phent.offset as usize;
-            let segment_end = phent.offset as usize + phent.filesz as usize;
-            let mut segment_data = Vec::from(&bytes[segment_start..segment_end]);
-            let num_zeroes = (phent.memsz - phent.filesz) as usize;
-            segment_data.resize(segment_data.len() + num_zeroes, 0);
-
-            let segment = ElfSegment {
-                data: segment_data,
-                phys_addr: phent.paddr,
-                virt_addr: phent.vaddr,
-                loadable: phent.type_ == 1,
-                attrs: phent.flags
-            };
-
-            segments.push(segment)
-        }
-
-        // Read all the section headers
-        let mut shents = Vec::with_capacity(hdr.shnum as usize);
-        let mut symtab_shent: Option<&ElfSectionHeader64> = None;
-        let mut shstrtab_shent: Option<&ElfSectionHeader64> = None;
-        for i in 0..hdr.shnum {
-            let shent_start = hdr.shoff + (i * hdr.shentsize) as u64;
-            let shent_end = shent_start + hdr.shentsize as u64;
-            let shent_bytes = &bytes[shent_start as usize..shent_end as usize];
-
-            let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
-            match shent.type_ {
-                2 => symtab_shent = Some(shent),
-                3 => shstrtab_shent = Some(shent),
-                _ => {}
+    pub fn from_split_paths(path: &Path, path_for_symbols: Option<&Path>) -> Result<ElfFile, String> {
+        let reader = ElfFileReader::from_path(path)?;
+        let reader_for_symbols = match path_for_symbols {
+            Some(path_for_symbols) => {
+                Cow::Owned(ElfFileReader::from_path(path_for_symbols)?)
             }
-            shents.push(shent);
-        }
-
-        if shstrtab_shent.is_none() {
-            return Err(format!("ELF '{}': unable to find string table section", path.display()));
-        }
-
-        assert!(symtab_shent.is_some());
-        if symtab_shent.is_none() {
-            return Err(format!("ELF '{}': unable to find symbol table section", path.display()));
-        }
-
-        // Reading the symbol table
-        let symtab_start = symtab_shent.unwrap().offset as usize;
-        let symtab_end = symtab_start + symtab_shent.unwrap().size as usize;
-        let symtab = &bytes[symtab_start..symtab_end];
-
-        let symtab_str_shent = shents[symtab_shent.unwrap().link as usize];
-        let symtab_str_start = symtab_str_shent.offset as usize;
-        let symtab_str_end = symtab_str_start + symtab_str_shent.size as usize;
-        let symtab_str = &bytes[symtab_str_start..symtab_str_end];
-
-        // Read all the symbols
-        let mut symbols: HashMap<String, (ElfSymbol64, bool)> = HashMap::new();
-        let mut offset = 0;
-        let symbol_size = std::mem::size_of::<ElfSymbol64>();
-        while offset < symtab.len() {
-            let sym_bytes = &symtab[offset..offset + symbol_size];
-            let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol64>() };
-            assert!(sym_head.is_empty());
-            assert!(sym_body.len() == 1);
-            assert!(sym_tail.is_empty());
-
-            let sym = sym_body[0];
-
-            let name = Self::get_string(symtab_str, sym.name as usize)?;
-            // It is possible for a valid ELF to contain multiple global symbols with the same name.
-            // Because we are making the hash map of symbols now, what we do is keep track of how many
-            // times we encounter the symbol name. Only when we go to find a particular symbol, do
-            // we complain that it occurs multiple times.
-            if let Some(symbol) = symbols.get_mut(name) {
-                symbol.1 = true;
-            } else {
-                // Here we are doing something that could end up being fairly expensive, we are copying
-                // the string for each symbol name. It should be possible to turn this into a reference
-                // although it might be awkward in order to please the borrow checker.
-                let insert = symbols.insert(name.to_string(), (sym, false));
-                assert!(insert.is_none());
+            None => {
+                Cow::Borrowed(&reader)
             }
-            offset += symbol_size;
-        }
-
-        Ok(ElfFile { word_size, entry, segments, symbols })
+        };
+        let segments = reader.segments();
+        let symbols = reader_for_symbols.symbols()?;
+        Ok(ElfFile {
+            word_size: reader.word_size,
+            entry: reader.hdr.entry,
+            segments,
+            symbols,
+        })
     }
 
     pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), String> {
@@ -312,6 +203,172 @@ impl ElfFile {
         }
 
         None
+    }
+}
+
+#[derive(Clone)]
+struct ElfFileReader<'a> {
+    path: &'a Path,
+    bytes: Vec<u8>,
+    word_size: usize,
+    hdr: ElfHeader64
+}
+
+impl<'a> ElfFileReader<'a> {
+    fn from_path(path: &'a Path) -> Result<Self, String> {
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(err) => return Err(format!("Failed to read ELF '{}': {}", path.display(), err))
+        };
+
+        let magic = &bytes[0..4];
+        if magic != ELF_MAGIC {
+            return Err(format!("ELF '{}': magic check failed", path.display()));
+        }
+
+        let word_size;
+        let hdr_size;
+
+        let class = &bytes[4..5][0];
+        match class {
+            1 => {
+                hdr_size = std::mem::size_of::<ElfHeader32>();
+                word_size = 32;
+            },
+            2 => {
+                hdr_size = std::mem::size_of::<ElfHeader64>();
+                word_size = 64;
+            },
+            _ => return Err(format!("ELF '{}': invalid class '{}'", path.display(), class))
+        };
+
+        if word_size != 64 {
+            return Err(format!("ELF '{}': unsupported word size: '{}'", path.display(), word_size));
+        }
+
+        // Now need to read the header into a struct
+        let hdr_bytes = &bytes[..hdr_size];
+        let hdr = *unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
+
+        // We have checked this above but we should check again once we actually cast it to
+        // a struct.
+        assert!(hdr.ident_magic.to_le_bytes() == *magic);
+        assert!(hdr.ident_class == *class);
+
+        if hdr.ident_data != 1 {
+            return Err(format!("ELF '{}': incorrect endianness, only little endian architectures are supported", path.display()));
+        }
+
+        Ok(Self {
+            path,
+            bytes,
+            word_size,
+            hdr,
+        })
+    }
+
+    fn segments(&self) -> Vec<ElfSegment> {
+        let hdr = &self.hdr;
+
+        let mut segments = Vec::with_capacity(hdr.phnum as usize);
+        for i in 0..hdr.phnum {
+            let phent_start = hdr.phoff + (i * hdr.phentsize) as u64;
+            let phent_end = phent_start + (hdr.phentsize as u64);
+            let phent_bytes = &self.bytes[phent_start as usize..phent_end as usize];
+
+            let phent = unsafe { bytes_to_struct::<ElfProgramHeader64>(phent_bytes) };
+
+            let segment_start = phent.offset as usize;
+            let segment_end = phent.offset as usize + phent.filesz as usize;
+            let mut segment_data = Vec::from(&self.bytes[segment_start..segment_end]);
+            let num_zeroes = (phent.memsz - phent.filesz) as usize;
+            segment_data.resize(segment_data.len() + num_zeroes, 0);
+
+            let segment = ElfSegment {
+                data: segment_data,
+                phys_addr: phent.paddr,
+                virt_addr: phent.vaddr,
+                loadable: phent.type_ == 1,
+                attrs: phent.flags
+            };
+
+            segments.push(segment)
+        }
+
+        segments
+    }
+
+    fn symbols(&self) -> Result<HashMap<String, (ElfSymbol64, bool)>, String> {
+        let hdr = &self.hdr;
+
+        // Read all the section headers
+        let mut shents = Vec::with_capacity(hdr.shnum as usize);
+        let mut symtab_shent: Option<&ElfSectionHeader64> = None;
+        let mut shstrtab_shent: Option<&ElfSectionHeader64> = None;
+        for i in 0..hdr.shnum {
+            let shent_start = hdr.shoff + (i * hdr.shentsize) as u64;
+            let shent_end = shent_start + hdr.shentsize as u64;
+            let shent_bytes = &self.bytes[shent_start as usize..shent_end as usize];
+
+            let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
+            match shent.type_ {
+                2 => symtab_shent = Some(shent),
+                3 => shstrtab_shent = Some(shent),
+                _ => {}
+            }
+            shents.push(shent);
+        }
+
+        if shstrtab_shent.is_none() {
+            return Err(format!("ELF '{}': unable to find string table section", self.path.display()));
+        }
+
+        assert!(symtab_shent.is_some());
+        if symtab_shent.is_none() {
+            return Err(format!("ELF '{}': unable to find symbol table section", self.path.display()));
+        }
+
+        // Reading the symbol table
+        let symtab_start = symtab_shent.unwrap().offset as usize;
+        let symtab_end = symtab_start + symtab_shent.unwrap().size as usize;
+        let symtab = &self.bytes[symtab_start..symtab_end];
+
+        let symtab_str_shent = shents[symtab_shent.unwrap().link as usize];
+        let symtab_str_start = symtab_str_shent.offset as usize;
+        let symtab_str_end = symtab_str_start + symtab_str_shent.size as usize;
+        let symtab_str = &self.bytes[symtab_str_start..symtab_str_end];
+
+        // Read all the symbols
+        let mut symbols: HashMap<String, (ElfSymbol64, bool)> = HashMap::new();
+        let mut offset = 0;
+        let symbol_size = std::mem::size_of::<ElfSymbol64>();
+        while offset < symtab.len() {
+            let sym_bytes = &symtab[offset..offset + symbol_size];
+            let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol64>() };
+            assert!(sym_head.is_empty());
+            assert!(sym_body.len() == 1);
+            assert!(sym_tail.is_empty());
+
+            let sym = sym_body[0];
+
+            let name = Self::get_string(symtab_str, sym.name as usize)?;
+            // It is possible for a valid ELF to contain multiple global symbols with the same name.
+            // Because we are making the hash map of symbols now, what we do is keep track of how many
+            // times we encounter the symbol name. Only when we go to find a particular symbol, do
+            // we complain that it occurs multiple times.
+            if let Some(symbol) = symbols.get_mut(name) {
+                symbol.1 = true;
+            } else {
+                // Here we are doing something that could end up being fairly expensive, we are copying
+                // the string for each symbol name. It should be possible to turn this into a reference
+                // although it might be awkward in order to please the borrow checker.
+                let insert = symbols.insert(name.to_string(), (sym, false));
+                assert!(insert.is_none());
+            }
+            offset += symbol_size;
+        }
+
+        Ok(symbols)
     }
 
     fn get_string(strtab: &[u8], idx: usize) -> Result<&str, String> {
