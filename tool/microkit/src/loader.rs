@@ -6,11 +6,14 @@
 
 use crate::elf::ElfFile;
 use crate::sel4::Config;
-use crate::util::{kb, mask, mb, round_up, struct_to_bytes};
+use crate::util::{kb, mask, mb, round_up};
+
 use crate::MemoryRegion;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+
+use zerocopy::AsBytes;
 
 const PAGE_TABLE_SIZE: usize = 4096;
 
@@ -61,6 +64,7 @@ fn check_non_overlapping(regions: &Vec<(u64, &[u8])>) {
 }
 
 #[repr(C)]
+#[derive(AsBytes)]
 struct LoaderRegion64 {
     load_addr: u64,
     size: u64,
@@ -69,6 +73,7 @@ struct LoaderRegion64 {
 }
 
 #[repr(C)]
+#[derive(AsBytes)]
 struct LoaderHeader64 {
     magic: u64,
     flags: u64,
@@ -273,13 +278,13 @@ impl<'a> Loader<'a> {
             .expect("Failed to write image data to loader");
 
         // Then we write out the loader metadata (known as the 'header')
-        let header_bytes = unsafe { struct_to_bytes(&self.header) };
+        let header_bytes = self.header.as_bytes();
         loader_buf
             .write_all(header_bytes)
             .expect("Failed to write header data to loader");
         // For each region, we need to write out the region metadata as well
         for region in &self.region_metadata {
-            let region_metadata_bytes = unsafe { struct_to_bytes(region) };
+            let region_metadata_bytes = region.as_bytes();
             loader_buf
                 .write_all(region_metadata_bytes)
                 .expect("Failed to write region metadata to loader");

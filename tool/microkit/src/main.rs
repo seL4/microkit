@@ -28,10 +28,8 @@ use sysxml::{
     parse, PlatformDescription, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion,
     SystemDescription, VirtualMachine,
 };
-use util::{
-    bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str_as_bool, json_str_as_u64,
-    struct_to_bytes,
-};
+use util::{comma_sep_u64, comma_sep_usize, json_str_as_bool, json_str_as_u64};
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
@@ -84,6 +82,7 @@ const INIT_ASID_POOL_CAP_ADDRESS: u64 = 6;
 /// it omits the 'regions' field.
 /// This struct assumes a 64-bit target
 #[repr(C)]
+#[derive(AsBytes)]
 struct MonitorUntypedInfoHeader64 {
     cap_start: u64,
     cap_end: u64,
@@ -92,6 +91,7 @@ struct MonitorUntypedInfoHeader64 {
 /// Corresponds to 'struct region' in the monitor
 /// This struct assumes a 64-bit target
 #[repr(C)]
+#[derive(AsBytes)]
 struct MonitorRegion64 {
     paddr: u64,
     size_bits: u64,
@@ -488,6 +488,7 @@ struct KernelPartialBootInfo {
 
 // Corresponds to kernel_frame_t in the kernel
 #[repr(C)]
+#[derive(AsBytes, FromBytes, FromZeroes)]
 struct KernelFrame64 {
     pub paddr: u64,
     pub pptr: u64,
@@ -506,11 +507,9 @@ fn kernel_device_addrs(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<u64>
     let kernel_frame_size = size_of::<KernelFrame64>();
     let mut offset: usize = 0;
     while offset < size as usize {
-        let kernel_frame = unsafe {
-            bytes_to_struct::<KernelFrame64>(
-                &kernel_frame_bytes[offset..offset + kernel_frame_size],
-            )
-        };
+        let kernel_frame =
+            KernelFrame64::ref_from(&kernel_frame_bytes[offset..offset + kernel_frame_size])
+                .expect("wrong size for KernelFrame64");
         if kernel_frame.user_accessible == 0 {
             kernel_devices.push(kernel_frame.paddr);
         }
@@ -522,6 +521,7 @@ fn kernel_device_addrs(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<u64>
 
 // Corresponds to p_region_t in the kernel
 #[repr(C)]
+#[derive(FromBytes, FromZeroes)]
 struct KernelRegion64 {
     start: u64,
     end: u64,
@@ -537,9 +537,8 @@ fn kernel_phys_mem(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<(u64, u6
     let p_region_size = size_of::<KernelRegion64>();
     let mut offset: usize = 0;
     while offset < size as usize {
-        let p_region = unsafe {
-            bytes_to_struct::<KernelRegion64>(&p_region_bytes[offset..offset + p_region_size])
-        };
+        let p_region = KernelRegion64::ref_from(&p_region_bytes[offset..offset + p_region_size])
+            .expect("wrong size for KernelRegion64");
         phys_mem.push((p_region.start, p_region.end));
         offset += p_region_size;
     }
@@ -3032,10 +3031,9 @@ fn main() -> Result<(), String> {
             is_device: ut.is_device as u64,
         })
         .collect();
-    let mut untyped_info_data: Vec<u8> =
-        Vec::from(unsafe { struct_to_bytes(&untyped_info_header) });
+    let mut untyped_info_data: Vec<u8> = Vec::from(untyped_info_header.as_bytes());
     for o in &untyped_info_object_data {
-        untyped_info_data.extend(unsafe { struct_to_bytes(o) });
+        untyped_info_data.extend(o.as_bytes());
     }
     monitor_elf.write_symbol(monitor_config.untyped_info_symbol_name, &untyped_info_data)?;
 

@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::util::bytes_to_struct;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+
+use zerocopy::{FromBytes, FromZeroes};
 
 #[repr(C, packed)]
 struct ElfHeader32 {
@@ -34,7 +35,7 @@ struct ElfHeader32 {
 }
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, FromBytes, FromZeroes)]
 struct ElfSymbol64 {
     name: u32,
     info: u8,
@@ -45,6 +46,7 @@ struct ElfSymbol64 {
 }
 
 #[repr(C, packed)]
+#[derive(FromBytes, FromZeroes)]
 struct ElfSectionHeader64 {
     name: u32,
     type_: u32,
@@ -59,6 +61,7 @@ struct ElfSectionHeader64 {
 }
 
 #[repr(C, packed)]
+#[derive(FromBytes, FromZeroes)]
 struct ElfProgramHeader64 {
     type_: u32,
     flags: u32,
@@ -71,6 +74,7 @@ struct ElfProgramHeader64 {
 }
 
 #[repr(C, packed)]
+#[derive(FromBytes, FromZeroes)]
 struct ElfHeader64 {
     ident_magic: u32,
     ident_class: u8,
@@ -174,7 +178,7 @@ impl ElfFile {
 
         // Now need to read the header into a struct
         let hdr_bytes = &bytes[..hdr_size];
-        let hdr = unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
+        let hdr = ElfHeader64::ref_from(hdr_bytes).expect("wrong size for ElfHeader64");
 
         // We have checked this above but we should check again once we actually cast it to
         // a struct.
@@ -197,7 +201,8 @@ impl ElfFile {
             let phent_end = phent_start + (hdr.phentsize as u64);
             let phent_bytes = &bytes[phent_start as usize..phent_end as usize];
 
-            let phent = unsafe { bytes_to_struct::<ElfProgramHeader64>(phent_bytes) };
+            let phent = ElfProgramHeader64::ref_from(phent_bytes)
+                .expect("wrong size for ElfProgramHeader64");
 
             let segment_start = phent.offset as usize;
             let segment_end = phent.offset as usize + phent.filesz as usize;
@@ -225,7 +230,8 @@ impl ElfFile {
             let shent_end = shent_start + hdr.shentsize as u64;
             let shent_bytes = &bytes[shent_start as usize..shent_end as usize];
 
-            let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
+            let shent = ElfSectionHeader64::ref_from(shent_bytes)
+                .expect("wrong size for ElfSectionHeader64");
             match shent.type_ {
                 2 => symtab_shent = Some(shent),
                 3 => shstrtab_shent = Some(shent),
@@ -265,12 +271,8 @@ impl ElfFile {
         let symbol_size = std::mem::size_of::<ElfSymbol64>();
         while offset < symtab.len() {
             let sym_bytes = &symtab[offset..offset + symbol_size];
-            let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol64>() };
-            assert!(sym_head.is_empty());
-            assert!(sym_body.len() == 1);
-            assert!(sym_tail.is_empty());
-
-            let sym = sym_body[0];
+            assert_eq!(std::mem::align_of::<ElfSymbol64>(), 1);
+            let sym = ElfSymbol64::read_from(sym_bytes).expect("wrong size for ElfSymbol64");
 
             let name = Self::get_string(symtab_str, sym.name as usize)?;
             // It is possible for a valid ELF to contain multiple global symbols with the same name.

@@ -17,3 +17,4 @@ path = "src/main.rs"
 roxmltree = "0.19.0"
 serde = "1.0.203"
 serde_json = "1.0.117"
+zerocopy = { version = "0.7.35", features = ["derive"] }

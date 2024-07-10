@@ -156,23 +156,6 @@ pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result
     }
 }
 
-/// Convert a struct into raw bytes in order to be written to
-/// disk or some other format.
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn struct_to_bytes<T: Sized>(p: &T) -> &[u8] {
-    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
-}
-
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn bytes_to_struct<T>(bytes: &[u8]) -> &T {
-    let (prefix, body, suffix) = unsafe { bytes.align_to::<T>() };
-    assert!(prefix.is_empty());
-    assert!(body.len() == 1);
-    assert!(suffix.is_empty());
-
-    &body[0]
-}
-
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
