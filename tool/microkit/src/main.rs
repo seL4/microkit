@@ -633,9 +633,7 @@ fn get_arch_n_paging(region: MemoryRegion) -> u64 {
     const PT_INDEX_OFFSET: u64 = 12;
     const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
     const PUD_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
-    // const PGD_INDEX_OFFSET: u64 = PUD_INDEX_OFFSET + 9;
 
-    // get_n_paging(region, PGD_INDEX_OFFSET) +
     get_n_paging(region, PUD_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
 }
 
