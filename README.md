@@ -58,6 +58,7 @@ To build the documentation you also need
 On a Debian-like system you can do:
 
     $ curl https://sh.rustup.rs -sSf | sh
+    $ rustup target add x86_64-unknown-linux-musl
     $ sudo apt install build-essential git cmake ninja-build \
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
