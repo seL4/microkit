@@ -57,6 +57,7 @@ const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
 const BASE_PD_VSPACE_CAP: u64 = BASE_PD_TCB_CAP + 64;
 const BASE_VM_TCB_CAP: u64 = BASE_PD_VSPACE_CAP + 64;
 const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
+const BASE_FRAME_CAP: u64 = BASE_VCPU_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -1969,6 +1970,54 @@ fn build_system(
             }
 
             cap_slot += mr_pages[mr].len() as u64;
+        }
+    }
+
+    // mint frame caps of child into parent
+    let mut base_frame_cap = BASE_FRAME_CAP;
+    let mut all_mr_by_name_sorted: Vec<&&str> = all_mr_by_name.keys().collect();
+    all_mr_by_name_sorted.sort();
+
+    for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
+        for maybe_child_pd in system.protection_domains.iter() {
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                if parent_idx == pd_idx {
+                    for child_mr_name  in &all_mr_by_name_sorted {
+                        if child_mr_name.contains(&maybe_child_pd.name) {
+                            println!("parent: {} wants to map this child memory regions: {}", parent.name, child_mr_name);
+
+                            let child_mr = all_mr_by_name[*child_mr_name];
+                            let mut invocation = Invocation::new(InvocationArgs::CnodeMint{
+                                cnode: cnode_objs[pd_idx].cap_addr,
+                                dest_index: base_frame_cap,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: mr_pages[child_mr][0].cap_addr, // the memory region has multiple
+                                // pages, we're taking the first one at 0x20300
+                                src_depth: kernel_config.cap_address_bits,
+                                rights: (Rights::Read as u64 | Rights::Write as u64),
+                                badge: 0,
+                            });
+
+                            invocation.repeat(mr_pages[child_mr].len() as u32, InvocationArgs::CnodeMint{
+                                cnode: 0,
+                                dest_index: 1,
+                                dest_depth: 0,
+                                src_root: 0,
+                                src_obj: 1,
+                                src_depth: 0,
+                                rights: 0,
+                                badge: 0,
+                            });
+
+                            base_frame_cap += mr_pages[child_mr].len() as u64;
+
+                            system_invocations.push(invocation);
+                        }
+                    }
+                    
+                }
+            }
         }
     }
 
