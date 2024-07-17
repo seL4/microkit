@@ -68,6 +68,7 @@ const INIT_CNODE_CAP_ADDRESS: u64 = 2;
 const INIT_VSPACE_CAP_ADDRESS: u64 = 3;
 const IRQ_CONTROL_CAP_ADDRESS: u64 = 4; // Singleton
 const INIT_ASID_POOL_CAP_ADDRESS: u64 = 6;
+const DOMAIN_CAP_ADDRESS: u64 = 11;
 
 // const ASID_CONTROL_CAP_ADDRESS: u64 = 5; // Singleton
 // const IO_PORT_CONTROL_CAP_ADDRESS: u64 = 7; // Null on this platform
@@ -776,6 +777,7 @@ fn build_system(
     cap_address_names.insert(INIT_VSPACE_CAP_ADDRESS, "VSpace: init".to_string());
     cap_address_names.insert(INIT_ASID_POOL_CAP_ADDRESS, "ASID Pool: init".to_string());
     cap_address_names.insert(IRQ_CONTROL_CAP_ADDRESS, "IRQ Control".to_string());
+    cap_address_names.insert(DOMAIN_CAP_ADDRESS, "Domain Cap".to_string());
 
     let system_cnode_bits = system_cnode_size.ilog2() as u64;
 
