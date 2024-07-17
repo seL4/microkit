@@ -168,6 +168,7 @@ pub struct ProtectionDomain {
     pub parent: Option<usize>,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
+    pub domain: u64,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -277,7 +278,9 @@ impl ProtectionDomain {
         node: &roxmltree::Node,
         is_child: bool,
     ) -> Result<ProtectionDomain, String> {
-        let mut attrs = vec!["name", "priority", "pp", "budget", "period", "passive"];
+        let mut attrs = vec![
+            "name", "priority", "pp", "budget", "period", "passive", "domain",
+        ];
         if is_child {
             attrs.push("id");
         }
@@ -344,6 +347,12 @@ impl ProtectionDomain {
             }
         } else {
             false
+        };
+
+        let domain = if let Some(xml_domain) = node.attribute("domain") {
+            sdf_parse_number(xml_domain, node)?
+        } else {
+            0
         };
 
         let mut maps = Vec::new();
@@ -508,6 +517,7 @@ impl ProtectionDomain {
             has_children,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+            domain,
         })
     }
 }

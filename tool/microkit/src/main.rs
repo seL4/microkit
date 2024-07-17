@@ -2339,6 +2339,14 @@ fn build_system(
         }));
     }
 
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
+            domain_set: DOMAIN_CAP_ADDRESS,
+            domain: pd.domain as u8,
+            tcb: pd_tcb_objs[pd_idx].cap_addr,
+        }));
+    }
+
     // Set VSpace and CSpace
     let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut set_space_invocation = Invocation::new(InvocationArgs::TcbSetSpace {
