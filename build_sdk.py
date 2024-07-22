@@ -355,7 +355,7 @@ def build_elf_component(
     build_dir.mkdir(exist_ok=True, parents=True)
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
     r = system(
-        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make  -C {component_name}"
+        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make -C {component_name}"
     )
     if r != 0:
         raise Exception(
