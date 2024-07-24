@@ -2943,7 +2943,7 @@ fn main() -> Result<(), String> {
     let mut kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
     let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
 
-    if let Some(ref domain_schedule) = system.domain_schedule {
+    if let Some(domain_schedule) = &system.domain_schedule {
         let domains = &domain_schedule.domains;
         kernel_elf.write_symbol("ksDomScheduleLength", &(domains.len() as u64).to_le_bytes())?;
 
