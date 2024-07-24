@@ -2339,13 +2339,11 @@ fn build_system(
         }));
     }
 
-    if let Some(domain_schedule) = &system.domain_schedule {
-        for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-            // the correctness of the PD's domain has already been checked
-            assert!(pd.domain_idx != None);
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if let Some(domain_idx) = pd.domain_idx {
             system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
                 domain_set: DOMAIN_CAP_ADDRESS,
-                domain: pd.domain_idx.unwrap() as u8,
+                domain: domain_idx as u8,
                 tcb: pd_tcb_objs[pd_idx].cap_addr,
             }));
         }
