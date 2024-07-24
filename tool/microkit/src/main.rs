@@ -2341,6 +2341,7 @@ fn build_system(
 
     if let Some(domain_schedule) = &system.domain_schedule {
         for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+            // the correctness of the PD's domain has already been checked
             assert!(pd.domain_idx != None);
             system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
                 domain_set: DOMAIN_CAP_ADDRESS,
