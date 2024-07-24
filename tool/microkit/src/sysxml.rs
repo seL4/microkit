@@ -7,6 +7,7 @@
 use crate::sel4::{Arch, ArmIrqTrigger, Config, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 ///
@@ -185,6 +186,17 @@ pub struct VirtualMachine {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct VirtualCpu {
     pub id: u64,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct DomainTime {
+    pub name: String,
+    pub length: u64,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct DomainSchedule {
+    pub domain_times: Vec<DomainTime>,
 }
 
 impl SysMapPerms {
@@ -767,6 +779,66 @@ impl Channel {
     }
 }
 
+impl DomainSchedule {
+    fn from_xml<'a>(
+        xml_sdf: &'a XmlSystemDescription,
+        node: &'a roxmltree::Node,
+    ) -> Result<DomainSchedule, String> {
+        let pos = xml_sdf.doc.text_pos_at(node.range().start);
+
+        check_attributes(xml_sdf, node, &[])?;
+
+        let mut domain_times = Vec::new();
+        let mut domain_names = HashSet::new();
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+
+            let child_name = child.tag_name().name();
+            if child_name != "domain_time" {
+                return Err(format!(
+                    "Error: invalid XML element '{}': {}",
+                    child_name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+
+            check_attributes(xml_sdf, &child, &["name", "length"])?;
+
+            let name = checked_lookup(xml_sdf, &child, "name")?;
+            if domain_names.contains(&name.to_string()) {
+                return Err(format!(
+                    "Error: duplicate domain name '{}': {}",
+                    name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+            domain_names.insert(name.to_string());
+
+            let time = checked_lookup(xml_sdf, &child, "length")?
+                .parse::<i64>()
+                .unwrap();
+            if time <= 0 {
+                return Err(format!(
+                    "Error: invalid domain time '{}': {}",
+                    name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+
+            println!("Read domain time {} {}", name, time);
+
+            domain_times.push(DomainTime {
+                name: name.to_string(),
+                length: time as u64,
+            });
+        }
+
+        Ok(DomainSchedule { domain_times })
+    }
+}
+
 struct XmlSystemDescription<'a> {
     filename: &'a str,
     doc: &'a roxmltree::Document<'a>,
@@ -774,6 +846,7 @@ struct XmlSystemDescription<'a> {
 
 #[derive(Debug)]
 pub struct SystemDescription {
+    pub domain_schedule: Option<DomainSchedule>,
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub channels: Vec<Channel>,
@@ -943,6 +1016,7 @@ pub fn parse(
         doc: &doc,
     };
 
+    let mut domain_schedule = None;
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
@@ -973,6 +1047,9 @@ pub fn parse(
             }
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
+            "domain_schedule" => {
+                domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &child)?)
+            }
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -1115,6 +1192,7 @@ pub fn parse(
     }
 
     Ok(SystemDescription {
+        domain_schedule: domain_schedule,
         protection_domains: pds,
         memory_regions: mrs,
         channels,
