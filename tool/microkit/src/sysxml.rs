@@ -169,7 +169,8 @@ pub struct ProtectionDomain {
     pub parent: Option<usize>,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
-    pub domain: Option<String>,
+    /// Index into the domain schedule vector if the system is using domain scheduling
+    pub domain_idx: Option<usize>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -362,13 +363,13 @@ impl ProtectionDomain {
             false
         };
 
-        let mut domain = None;
+        let mut domain_idx = None;
         match (domain_schedule, checked_lookup(xml_sdf, node, "domain")) {
             (Some(domain_schedule), Ok(domain_name)) => {
-                if domain_schedule.domains.iter().find(|dt| dt.name == domain_name) == None {
+                domain_idx = domain_schedule.domains.iter().position(|d| d.name == domain_name);
+                if domain_idx == None {
                     return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule", name, domain_name));
                 }
-                domain = Some(domain_name.to_string());
             }
             (Some(_), _) => {
                 return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
@@ -544,7 +545,7 @@ impl ProtectionDomain {
             has_children,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
-            domain,
+            domain_idx,
         })
     }
 }

@@ -2341,15 +2341,10 @@ fn build_system(
 
     if let Some(domain_schedule) = &system.domain_schedule {
         for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-            assert!(pd.domain != None);
-            let domain_idx = domain_schedule
-                .domains
-                .iter()
-                .position(|dt| dt.name == *pd.domain.as_ref().unwrap());
-            assert!(domain_idx != None);
+            assert!(pd.domain_idx != None);
             system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
                 domain_set: DOMAIN_CAP_ADDRESS,
-                domain: domain_idx.unwrap() as u8,
+                domain: pd.domain_idx.unwrap() as u8,
                 tcb: pd_tcb_objs[pd_idx].cap_addr,
             }));
         }
