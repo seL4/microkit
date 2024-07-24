@@ -2339,12 +2339,20 @@ fn build_system(
         }));
     }
 
-    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
-            domain_set: DOMAIN_CAP_ADDRESS,
-            domain: pd.domain as u8,
-            tcb: pd_tcb_objs[pd_idx].cap_addr,
-        }));
+    if let Some(domain_schedule) = &system.domain_schedule {
+        for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+            assert!(pd.domain != None);
+            let domain_idx = domain_schedule
+                .domains
+                .iter()
+                .position(|dt| dt.name == *pd.domain.as_ref().unwrap());
+            assert!(domain_idx != None);
+            system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
+                domain_set: DOMAIN_CAP_ADDRESS,
+                domain: domain_idx.unwrap() as u8,
+                tcb: pd_tcb_objs[pd_idx].cap_addr,
+            }));
+        }
     }
 
     // Set VSpace and CSpace
@@ -2938,8 +2946,23 @@ fn main() -> Result<(), String> {
         system_invocation_count_symbol_name: "system_invocation_count",
     };
 
-    let kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
+    let mut kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
     let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
+
+    if let Some(ref domain_schedule) = system.domain_schedule {
+        let domains = &domain_schedule.domains;
+        kernel_elf.write_symbol("ksDomScheduleLength", &(domains.len() as u64).to_le_bytes())?;
+
+        let mut domain_schedule = Vec::new();
+        domain_schedule.reserve_exact(domains.len() * 16);
+
+        for (i, domain) in domains.iter().enumerate() {
+            domain_schedule.extend(i.to_le_bytes());
+            domain_schedule.extend(domain.length.to_le_bytes());
+        }
+
+        kernel_elf.write_symbol("ksDomSchedule", &domain_schedule)?;
+    }
 
     if monitor_elf.segments.len() > 1 {
         eprintln!(

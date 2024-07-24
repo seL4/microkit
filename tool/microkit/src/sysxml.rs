@@ -169,7 +169,7 @@ pub struct ProtectionDomain {
     pub parent: Option<usize>,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
-    pub domain: u64,
+    pub domain: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -189,14 +189,14 @@ pub struct VirtualCpu {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct DomainTime {
+pub struct Domain {
     pub name: String,
     pub length: u64,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct DomainSchedule {
-    pub domain_times: Vec<DomainTime>,
+    pub domains: Vec<Domain>,
 }
 
 impl SysMapPerms {
@@ -289,6 +289,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
+        domain_schedule: &Option<DomainSchedule>,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name", "priority", "pp", "budget", "period", "passive", "domain",
@@ -361,11 +362,22 @@ impl ProtectionDomain {
             false
         };
 
-        let domain = if let Some(xml_domain) = node.attribute("domain") {
-            sdf_parse_number(xml_domain, node)?
-        } else {
-            0
-        };
+        let mut domain = None;
+        match (domain_schedule, checked_lookup(xml_sdf, node, "domain")) {
+            (Some(domain_schedule), Ok(domain_name)) => {
+                if domain_schedule.domains.iter().find(|dt| dt.name == domain_name) == None {
+                    return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule", name, domain_name));
+                }
+                domain = Some(domain_name.to_string());
+            }
+            (Some(_), _) => {
+                return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
+            }
+            (_, Ok(domain)) => {
+                return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
+            }
+            (_, _) => {}
+        }
 
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
@@ -476,9 +488,12 @@ impl ProtectionDomain {
                         vaddr: None,
                     })
                 }
-                "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?)
-                }
+                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(
+                    xml_sdf,
+                    &child,
+                    true,
+                    &domain_schedule,
+                )?),
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
                         return Err(value_error(
@@ -788,7 +803,7 @@ impl DomainSchedule {
 
         check_attributes(xml_sdf, node, &[])?;
 
-        let mut domain_times = Vec::new();
+        let mut domains = Vec::new();
         let mut domain_names = HashSet::new();
         for child in node.children() {
             if !child.is_element() {
@@ -796,7 +811,7 @@ impl DomainSchedule {
             }
 
             let child_name = child.tag_name().name();
-            if child_name != "domain_time" {
+            if child_name != "domain" {
                 return Err(format!(
                     "Error: invalid XML element '{}': {}",
                     child_name,
@@ -829,13 +844,13 @@ impl DomainSchedule {
 
             println!("Read domain time {} {}", name, time);
 
-            domain_times.push(DomainTime {
+            domains.push(Domain {
                 name: name.to_string(),
                 length: time as u64,
             });
         }
 
-        Ok(DomainSchedule { domain_times })
+        Ok(DomainSchedule { domains })
     }
 }
 
@@ -1035,6 +1050,14 @@ pub fn parse(
     // then parse the channels.
     let mut channel_nodes = Vec::new();
 
+    if let Some(domain_schedule_node) = system
+        .children()
+        .filter(|&child| child.is_element())
+        .find(|&child| child.tag_name().name() == "domain_schedule")
+    {
+        domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &domain_schedule_node)?);
+    }
+
     for child in system.children() {
         if !child.is_element() {
             continue;
@@ -1042,14 +1065,15 @@ pub fn parse(
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                &xml_sdf,
+                &child,
+                false,
+                &domain_schedule,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
-            "domain_schedule" => {
-                domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &child)?)
-            }
+            "domain_schedule" => {}
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
