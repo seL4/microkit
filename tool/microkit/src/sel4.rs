@@ -730,6 +730,15 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
                 (vcpu, cap_lookup.get(&vcpu).unwrap().as_str())
             }
+            InvocationArgs::DomainSetSet {
+                domain_set,
+                domain,
+                tcb,
+            } => {
+                arg_strs.push(Invocation::fmt_field("domain", domain as u64));
+                arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
+                (domain_set, cap_lookup.get(&domain_set).unwrap().as_str())
+            }
         };
         _ = writeln!(
             f,
@@ -762,6 +771,7 @@ impl Invocation {
             InvocationLabel::CnodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
             InvocationLabel::ArmVcpuSetTcb => "VCPU",
+            InvocationLabel::DomainSetSet => "DomainSet",
             _ => panic!(
                 "Internal error: unexpected label when getting object type '{:?}'",
                 self.label
@@ -785,6 +795,7 @@ impl Invocation {
             InvocationLabel::CnodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
             InvocationLabel::ArmVcpuSetTcb => "VCPUSetTcb",
+            InvocationLabel::DomainSetSet => "Set",
             _ => panic!(
                 "Internal error: unexpected label when getting method name '{:?}'",
                 self.label
@@ -815,6 +826,7 @@ impl InvocationArgs {
                 InvocationLabel::SchedControlConfigureFlags
             }
             InvocationArgs::ArmVcpuSetTcb { .. } => InvocationLabel::ArmVcpuSetTcb,
+            InvocationArgs::DomainSetSet { .. } => InvocationLabel::DomainSetSet,
         }
     }
 
@@ -952,6 +964,11 @@ impl InvocationArgs {
                 vec![sched_context],
             ),
             InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => (vcpu, vec![], vec![tcb]),
+            InvocationArgs::DomainSetSet {
+                domain_set,
+                domain,
+                tcb,
+            } => (domain_set, vec![domain as u64], vec![tcb]),
         }
     }
 }
@@ -1054,6 +1071,11 @@ pub enum InvocationArgs {
     },
     ArmVcpuSetTcb {
         vcpu: u64,
+        tcb: u64,
+    },
+    DomainSetSet {
+        domain_set: u64,
+        domain: u8,
         tcb: u64,
     },
 }

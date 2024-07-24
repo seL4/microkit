@@ -68,6 +68,7 @@ const INIT_CNODE_CAP_ADDRESS: u64 = 2;
 const INIT_VSPACE_CAP_ADDRESS: u64 = 3;
 const IRQ_CONTROL_CAP_ADDRESS: u64 = 4; // Singleton
 const INIT_ASID_POOL_CAP_ADDRESS: u64 = 6;
+const DOMAIN_CAP_ADDRESS: u64 = 11;
 
 // const ASID_CONTROL_CAP_ADDRESS: u64 = 5; // Singleton
 // const IO_PORT_CONTROL_CAP_ADDRESS: u64 = 7; // Null on this platform
@@ -776,6 +777,7 @@ fn build_system(
     cap_address_names.insert(INIT_VSPACE_CAP_ADDRESS, "VSpace: init".to_string());
     cap_address_names.insert(INIT_ASID_POOL_CAP_ADDRESS, "ASID Pool: init".to_string());
     cap_address_names.insert(IRQ_CONTROL_CAP_ADDRESS, "IRQ Control".to_string());
+    cap_address_names.insert(DOMAIN_CAP_ADDRESS, "Domain Cap".to_string());
 
     let system_cnode_bits = system_cnode_size.ilog2() as u64;
 
@@ -2337,6 +2339,16 @@ fn build_system(
         }));
     }
 
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if let Some(domain_idx) = pd.domain_idx {
+            system_invocations.push(Invocation::new(InvocationArgs::DomainSetSet {
+                domain_set: DOMAIN_CAP_ADDRESS,
+                domain: domain_idx as u8,
+                tcb: pd_tcb_objs[pd_idx].cap_addr,
+            }));
+        }
+    }
+
     // Set VSpace and CSpace
     let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut set_space_invocation = Invocation::new(InvocationArgs::TcbSetSpace {
@@ -2928,8 +2940,23 @@ fn main() -> Result<(), String> {
         system_invocation_count_symbol_name: "system_invocation_count",
     };
 
-    let kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
+    let mut kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
     let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
+
+    if let Some(domain_schedule) = &system.domain_schedule {
+        let domains = &domain_schedule.domains;
+        kernel_elf.write_symbol("ksDomScheduleLength", &(domains.len() as u64).to_le_bytes())?;
+
+        let mut domain_schedule = Vec::new();
+        domain_schedule.reserve_exact(domains.len() * 16);
+
+        for (i, domain) in domains.iter().enumerate() {
+            domain_schedule.extend(i.to_le_bytes());
+            domain_schedule.extend(domain.length.to_le_bytes());
+        }
+
+        kernel_elf.write_symbol("ksDomSchedule", &domain_schedule)?;
+    }
 
     if monitor_elf.segments.len() > 1 {
         eprintln!(
