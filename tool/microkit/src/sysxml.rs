@@ -843,8 +843,6 @@ impl DomainSchedule {
                 ));
             }
 
-            println!("Read domain time {} {}", name, time);
-
             domains.push(Domain {
                 name: name.to_string(),
                 length: time as u64,
