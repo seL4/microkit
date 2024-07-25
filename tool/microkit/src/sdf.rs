@@ -348,7 +348,7 @@ impl ProtectionDomain {
 
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
-        let mut setvars = Vec::new();
+        let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
@@ -392,6 +392,17 @@ impl ProtectionDomain {
                     let map = SysMap::from_xml(xml_sdf, &child, true)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_vaddr == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_vaddr),
+                                ));
+                            }
+                        }
+
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             region_paddr: None,
@@ -449,6 +460,16 @@ impl ProtectionDomain {
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
                     let region_paddr =
                         Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
+                    // Check that the symbol does not already exist
+                    for setvar in &setvars {
+                        if symbol == setvar.symbol {
+                            return Err(value_error(
+                                xml_sdf,
+                                &child,
+                                format!("setvar on symbol '{}' already exists", symbol),
+                            ));
+                        }
+                    }
                     setvars.push(SysSetVar {
                         symbol,
                         region_paddr,
