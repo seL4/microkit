@@ -10,8 +10,12 @@
 use elf::ElfFile;
 use loader::Loader;
 use microkit_tool::{
-    elf, loader, sel4, sysxml, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
+    elf, loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
     UntypedObject, MAX_PDS, PD_MAX_NAME_LENGTH,
+};
+use sdf::{
+    parse, PlatformDescription, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion,
+    SystemDescription, VirtualMachine,
 };
 use sel4::{
     Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation, InvocationArgs, Object,
@@ -24,10 +28,6 @@ use std::io::{BufWriter, Write};
 use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
-use sysxml::{
-    parse, PlatformDescription, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion,
-    SystemDescription, VirtualMachine,
-};
 use util::{
     bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str_as_bool, json_str_as_u64,
     struct_to_bytes,

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use microkit_tool::{sel4, sysxml};
+use microkit_tool::{sdf, sel4};
 
 const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -19,15 +19,15 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: 40,
 };
 
-const DEFAULT_PLAT_DESC: sysxml::PlatformDescription =
-    sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
+const DEFAULT_PLAT_DESC: sdf::PlatformDescription =
+    sdf::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
 
 fn check_error(test_name: &str, expected_err: &str) {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/sdf/");
     path.push(test_name);
     let xml = std::fs::read_to_string(path).unwrap();
-    let parse_err = sysxml::parse(test_name, &xml, &DEFAULT_PLAT_DESC).unwrap_err();
+    let parse_err = sdf::parse(test_name, &xml, &DEFAULT_PLAT_DESC).unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
         eprintln!(
