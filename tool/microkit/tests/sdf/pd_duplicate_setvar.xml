@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2024, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="test_mr" size="0x1000" />
+    <protection_domain name="test">
+        <program_image path="test.elf" />
+
+        <map mr="test_mr" vaddr="0x1_000_000" perms="rw" setvar_vaddr="test" />
+        <setvar region_paddr="test_mr" symbol="test" />
+    </protection_domain>
+</system>

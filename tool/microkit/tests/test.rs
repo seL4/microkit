@@ -152,6 +152,14 @@ mod protection_domain {
     }
 
     #[test]
+    fn test_duplicate_setvar() {
+        check_error(
+            "pd_duplicate_setvar.xml",
+            "Error: setvar on symbol 'test' already exists on element 'setvar': ",
+        )
+    }
+
+    #[test]
     fn test_duplicate_program_image() {
         check_error(
             "pd_duplicate_program_image.xml",
