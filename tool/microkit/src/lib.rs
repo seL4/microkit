@@ -6,8 +6,8 @@
 
 pub mod elf;
 pub mod loader;
+pub mod sdf;
 pub mod sel4;
-pub mod sysxml;
 pub mod util;
 
 use sel4::BootInfo;
