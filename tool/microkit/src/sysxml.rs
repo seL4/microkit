@@ -835,10 +835,8 @@ impl DomainSchedule {
                 ));
             }
 
-            let time = checked_lookup(xml_sdf, &child, "length")?
-                .parse::<i64>()
-                .unwrap();
-            if time <= 0 {
+            let time = checked_lookup(xml_sdf, &child, "length")?.parse::<u64>();
+            if let Err(_) = time {
                 return Err(format!(
                     "Error: invalid domain time '{}': {}",
                     name,
@@ -848,7 +846,7 @@ impl DomainSchedule {
 
             domains.push(Domain {
                 name: name.to_string(),
-                length: time as u64,
+                length: time.unwrap(),
             });
         }
 
