@@ -827,14 +827,13 @@ impl DomainSchedule {
             check_attributes(xml_sdf, &child, &["name", "length"])?;
 
             let name = checked_lookup(xml_sdf, &child, "name")?;
-            if domain_names.contains(&name.to_string()) {
+            if !domain_names.insert(name.to_string()) {
                 return Err(format!(
                     "Error: duplicate domain name '{}': {}",
                     name,
                     loc_string(xml_sdf, pos)
                 ));
             }
-            domain_names.insert(name.to_string());
 
             let time = checked_lookup(xml_sdf, &child, "length")?
                 .parse::<i64>()
