@@ -233,7 +233,7 @@ impl<'a> InitSystem<'a> {
         phys_address: u64,
         object_type: ObjectType,
         count: u64,
-        name: &String,
+        name: String,
     ) -> Object {
         assert!(phys_address >= self.last_fixed_address);
         assert!(object_type.fixed_size(self.config).is_some());
@@ -342,7 +342,7 @@ impl<'a> InitSystem<'a> {
             phys_addr: phys_address,
         };
         self.objects.push(kernel_object.clone());
-        self.cap_address_names.insert(cap_addr, name.clone());
+        self.cap_address_names.insert(cap_addr, name);
 
         kernel_object
     }
@@ -1403,8 +1403,6 @@ fn build_system(
         }
     }
 
-    let mut page_objects: HashMap<PageSize, &Vec<Object>> = HashMap::new();
-
     let large_page_objs =
         init_system.allocate_objects(ObjectType::LargePage, large_page_names, None);
     let small_page_objs =
@@ -1413,27 +1411,32 @@ fn build_system(
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
 
-    page_objects.insert(PageSize::Large, &large_page_objs);
-    page_objects.insert(PageSize::Small, &small_page_objs);
-
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
-    let mut pg_idx: HashMap<PageSize, u64> = HashMap::new();
 
-    pg_idx.insert(PageSize::Small, ipc_buffer_objs.len() as u64);
-    pg_idx.insert(PageSize::Large, 0);
+    let mut page_small_idx = ipc_buffer_objs.len();
+    let mut page_large_idx = 0;
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
             mr_pages.insert(mr, vec![]);
             continue;
         }
-        let idx = *pg_idx.get(&mr.page_size).unwrap() as usize;
+        let idx = match mr.page_size {
+            PageSize::Small => page_small_idx,
+            PageSize::Large => page_large_idx,
+        };
+        let objs = match mr.page_size {
+            PageSize::Small => small_page_objs[idx..idx + mr.page_count as usize].to_vec(),
+            PageSize::Large => large_page_objs[idx..idx + mr.page_count as usize].to_vec(),
+        };
         mr_pages.insert(
             mr,
-            page_objects[&mr.page_size][idx..idx + mr.page_count as usize].to_vec(),
+            objs
         );
-        // We assume that the entry for all possible page sizes already exists
-        *pg_idx.get_mut(&mr.page_size).unwrap() += mr.page_count;
+        match mr.page_size {
+            PageSize::Small => page_small_idx += mr.page_count as usize,
+            PageSize::Large => page_large_idx += mr.page_count as usize,
+        }
     }
 
     // 3.2 Now allocate all the fixed mRs
@@ -1460,10 +1463,9 @@ fn build_system(
             PageSize::Large => ObjectType::LargePage,
         };
 
-        let obj_type_name = format!("Page({})", util::human_size_strict(mr.page_size as u64));
-        let name = format!("{}: MR={} @ {:x}", obj_type_name, mr.name, phys_addr);
-        let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, &name);
-        mr_pages.get_mut(mr).unwrap().push(page.clone());
+        let name = format!("Page({}): MR={} @ {:x}", util::human_size_strict(mr.page_size as u64), mr.name, phys_addr);
+        let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, name);
+        mr_pages.get_mut(mr).unwrap().push(page);
     }
 
     let virtual_machines: Vec<&VirtualMachine> = system
