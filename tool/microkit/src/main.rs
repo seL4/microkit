@@ -1439,7 +1439,7 @@ fn build_system(
         }
     }
 
-    // 3.2 Now allocate all the fixed mRs
+    // 3.2 Now allocate all the fixed MRs
 
     // First we need to find all the requested pages and sorted them
     let mut fixed_pages = Vec::new();
