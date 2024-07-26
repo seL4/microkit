@@ -687,7 +687,7 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 ## `domain_schedule` (experimental)
 
-The `domain_schedule` element has has a list of `domain` child elements. Each child specifies information about a particular domain, and the order of the child elements specifies the order in which the domains will be scheduled.
+The `domain_schedule` element has has a list of up to 256 `domain` child elements. Each child specifies information about a particular domain, and the order of the child elements specifies the order in which the domains will be scheduled.
 
 The `domain` element has the following attributes:
 
