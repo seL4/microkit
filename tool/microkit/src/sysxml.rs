@@ -41,6 +41,9 @@ const PD_MAX_PRIORITY: u8 = 254;
 /// In microseconds
 const BUDGET_DEFAULT: u64 = 1000;
 
+/// The maximum number of domains supported by the kernel
+const DOMAIN_COUNT_MAX: u64 = 256;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -837,6 +840,12 @@ impl DomainSchedule {
                 return Err(format!(
                     "Error: duplicate domain name '{}': {}",
                     name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+            if domain_names.len() as u64 > DOMAIN_COUNT_MAX {
+                return Err(format!(
+                    "Error: number of domains in domain schedule exceeds maximum of 256: {}",
                     loc_string(xml_sdf, pos)
                 ));
             }
