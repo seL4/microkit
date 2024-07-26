@@ -375,7 +375,11 @@ impl ProtectionDomain {
                 return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
             }
             (_, Ok(domain)) => {
-                return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
+                if cfg!(feature = "experimental-domain-support") {
+                    return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
+                } else {
+                    return Err(format!("Assigning PDs to domains is only supported if SDK is built with --experimental-domain-support"));
+                }
             }
             (_, _) => {}
         }
@@ -1049,12 +1053,14 @@ pub fn parse(
     // then parse the channels.
     let mut channel_nodes = Vec::new();
 
-    if let Some(domain_schedule_node) = system
-        .children()
-        .filter(|&child| child.is_element())
-        .find(|&child| child.tag_name().name() == "domain_schedule")
-    {
-        domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &domain_schedule_node)?);
+    if cfg!(feature = "experimental-domain-support") {
+        if let Some(domain_schedule_node) = system
+            .children()
+            .filter(|&child| child.is_element())
+            .find(|&child| child.tag_name().name() == "domain_schedule")
+        {
+            domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &domain_schedule_node)?);
+        }
     }
 
     for child in system.children() {
@@ -1072,7 +1078,12 @@ pub fn parse(
             )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
-            "domain_schedule" => {}
+            "domain_schedule" => {
+                if !cfg!(feature = "experimental-domain-support") {
+                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    return Err(format!("Domain schedule is only supported if SDK is built with --experimental-domain-support: {}", loc_string(&xml_sdf, pos)));
+                }
+            }
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(

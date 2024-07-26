@@ -239,10 +239,11 @@ def test_tool() -> None:
     assert r == 0
 
 
-def build_tool(tool_target: Path, target_triple: str) -> None:
-    r = system(
-        f"cd tool/microkit && cargo build --release --target {target_triple}"
-    )
+def build_tool(tool_target: Path, target_triple: str, experimental_domain_support: bool = False) -> None:
+    build_cmd = f"cd tool/microkit && cargo build --release --target {target_triple}"
+    if experimental_domain_support:
+        build_cmd = f"{build_cmd} --features experimental-domain-support"
+    r = system(build_cmd)
     assert r == 0
 
     tool_output = f"./tool/microkit/target/{target_triple}/release/microkit"
@@ -501,7 +502,7 @@ def main() -> None:
     if not args.skip_tool:
         tool_target = root_dir / "bin" / "microkit"
         test_tool()
-        build_tool(tool_target, args.tool_target_triple)
+        build_tool(tool_target, args.tool_target_triple, args.experimental_domain_support)
 
     if not args.skip_docs:
         build_doc(root_dir)
