@@ -800,9 +800,9 @@ impl Channel {
 }
 
 impl DomainSchedule {
-    fn from_xml<'a>(
-        xml_sdf: &'a XmlSystemDescription,
-        node: &'a roxmltree::Node,
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
     ) -> Result<DomainSchedule, String> {
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
 
