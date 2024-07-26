@@ -48,6 +48,7 @@ pub struct Config {
     pub fan_out_limit: u64,
     pub hypervisor: bool,
     pub arm_pa_size_bits: usize,
+    pub domain_scheduler: bool,
 }
 
 pub enum Arch {

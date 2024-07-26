@@ -2906,6 +2906,7 @@ fn main() -> Result<(), String> {
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
         arm_pa_size_bits: 40,
         hypervisor: json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+        domain_scheduler: json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")? != 1,
     };
 
     match kernel_config.arch {

@@ -75,6 +75,7 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
 pub struct PlatformDescription {
     /// Note that we have the invariant that page sizes are be ordered by size
     page_sizes: [u64; 2],
+    domain_scheduler: bool,
 }
 
 impl PlatformDescription {
@@ -83,7 +84,10 @@ impl PlatformDescription {
             Arch::Aarch64 => [0x1000, 0x200_000],
         };
 
-        PlatformDescription { page_sizes }
+        PlatformDescription {
+            page_sizes,
+            domain_scheduler: kernel_config.domain_scheduler,
+        }
     }
 }
 
@@ -291,6 +295,7 @@ impl ProtectionDomain {
         node: &roxmltree::Node,
         is_child: bool,
         domain_schedule: &Option<DomainSchedule>,
+        plat_desc: &PlatformDescription,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name", "priority", "pp", "budget", "period", "passive", "domain",
@@ -375,7 +380,7 @@ impl ProtectionDomain {
                 return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
             }
             (_, Ok(domain)) => {
-                if cfg!(feature = "experimental-domain-support") {
+                if plat_desc.domain_scheduler {
                     return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
                 } else {
                     return Err(format!("Assigning PDs to domains is only supported if SDK is built with --experimental-domain-support"));
@@ -498,6 +503,7 @@ impl ProtectionDomain {
                     &child,
                     true,
                     &domain_schedule,
+                    &plat_desc,
                 )?),
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
@@ -1050,7 +1056,7 @@ pub fn parse(
     // then parse the channels.
     let mut channel_nodes = Vec::new();
 
-    if cfg!(feature = "experimental-domain-support") {
+    if plat_desc.domain_scheduler {
         if let Some(domain_schedule_node) = system
             .children()
             .filter(|&child| child.is_element())
@@ -1072,11 +1078,12 @@ pub fn parse(
                 &child,
                 false,
                 &domain_schedule,
+                &plat_desc,
             )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
             "domain_schedule" => {
-                if !cfg!(feature = "experimental-domain-support") {
+                if !plat_desc.domain_scheduler {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!("Domain schedule is only supported if SDK is built with --experimental-domain-support: {}", loc_string(&xml_sdf, pos)));
                 }

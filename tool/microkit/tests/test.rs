@@ -17,6 +17,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     fan_out_limit: 256,
     hypervisor: true,
     arm_pa_size_bits: 40,
+    domain_scheduler: false,
 };
 
 const DEFAULT_PLAT_DESC: sysxml::PlatformDescription =
