@@ -201,14 +201,13 @@ impl ElfFile {
 
             let segment_start = phent.offset as usize;
             let segment_end = phent.offset as usize + phent.filesz as usize;
-            let mut segment_data = Vec::from(&bytes[segment_start..segment_end]);
-            // If it is not loadable, we do not have any zeroes to represent
-            let num_zeroes = if phent.type_ != 1 {
-                0
-            } else {
-                (phent.memsz - phent.filesz) as usize
-            };
-            segment_data.resize(segment_data.len() + num_zeroes, 0);
+
+            if phent.type_ != 1 {
+                continue;
+            }
+
+            let mut segment_data = vec![0; phent.memsz as usize];
+            segment_data[..phent.filesz as usize].copy_from_slice(&bytes[segment_start..segment_end]);
 
             let segment = ElfSegment {
                 data: segment_data,
