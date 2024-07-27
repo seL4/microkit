@@ -1380,9 +1380,10 @@ fn build_system(
     let mut large_page_names = Vec::new();
 
     for pd in &system.protection_domains {
+        let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Small as u64);
         let ipc_buffer_str = format!(
-            "Page({}): IPC Buffer PD={}",
-            util::human_size_strict(PageSize::Small as u64),
+            "Page({} {}): IPC Buffer PD={}",
+            page_size_human, page_size_label,
             pd.name
         );
         small_page_names.push(ipc_buffer_str);
@@ -1393,9 +1394,9 @@ fn build_system(
             continue;
         }
 
-        let page_size_human = util::human_size_strict(mr.page_size as u64);
+        let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
         for idx in 0..mr.page_count {
-            let page_str = format!("Page({}): MR={} #{}", page_size_human, mr.name, idx);
+            let page_str = format!("Page({} {}): MR={} #{}", page_size_human, page_size_label, mr.name, idx);
             match mr.page_size as PageSize {
                 PageSize::Small => small_page_names.push(page_str),
                 PageSize::Large => large_page_names.push(page_str),
@@ -1463,7 +1464,8 @@ fn build_system(
             PageSize::Large => ObjectType::LargePage,
         };
 
-        let name = format!("Page({}): MR={} @ {:x}", util::human_size_strict(mr.page_size as u64), mr.name, phys_addr);
+        let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
+        let name = format!("Page({} {}): MR={} @ {:x}", page_size_human, page_size_label, mr.name, phys_addr);
         let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, name);
         mr_pages.get_mut(mr).unwrap().push(page);
     }

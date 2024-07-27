@@ -86,7 +86,7 @@ pub fn objects_adjacent(objects: &[Object]) -> bool {
 /// 'strict' means that it must be simply represented.
 ///  Specifically, it must be a multiple of standard power-of-two.
 ///  (e.g. KiB, MiB, GiB, TiB, PiB, EiB)
-pub fn human_size_strict(size: u64) -> String {
+pub fn human_size_strict(size: u64) -> (String, &'static str) {
     for (bits, label) in [
         (60, "EiB"),
         (50, "PiB"),
@@ -111,7 +111,7 @@ pub fn human_size_strict(size: u64) -> String {
             } else {
                 count = size;
             }
-            return format!("{} {}", comma_sep_u64(count), label);
+            return (comma_sep_u64(count), label);
         }
     }
 
