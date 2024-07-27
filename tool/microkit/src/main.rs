@@ -402,17 +402,16 @@ impl<'a> InitSystem<'a> {
 
         let mut kernel_objects = Vec::new();
         let mut phys_addr = allocation.phys_addr;
-        for idx in 0..count {
-            let cap_slot = base_cap_slot + idx;
+        for (idx, name) in names.into_iter().enumerate() {
+            let cap_slot = base_cap_slot + idx as u64;
             let cap_addr = self.cnode_mask | cap_slot;
-            let name = &names[idx as usize];
             let kernel_object = Object {
                 object_type,
                 cap_addr,
                 phys_addr,
             };
             kernel_objects.push(kernel_object.clone());
-            self.cap_address_names.insert(cap_addr, name.clone());
+            self.cap_address_names.insert(cap_addr, name);
 
             phys_addr += alloc_size;
 
