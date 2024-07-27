@@ -336,7 +336,6 @@ impl<'a> InitSystem<'a> {
         self.last_fixed_address = phys_address + alloc_size;
         let cap_addr = self.cnode_mask | object_cap;
         let kernel_object = Object {
-            name: name.clone(),
             object_type,
             cap_addr,
             phys_addr: phys_address,
@@ -407,18 +406,18 @@ impl<'a> InitSystem<'a> {
             let cap_slot = base_cap_slot + idx;
             let cap_addr = self.cnode_mask | cap_slot;
             let name = &names[idx as usize];
-            kernel_objects.push(Object {
-                name: name.clone(),
+            let kernel_object = Object {
                 object_type,
                 cap_addr,
                 phys_addr,
-            });
+            };
+            kernel_objects.push(kernel_object.clone());
             self.cap_address_names.insert(cap_addr, name.clone());
 
             phys_addr += alloc_size;
-        }
 
-        self.objects.extend(kernel_objects.clone());
+            self.objects.push(kernel_object);
+        }
 
         kernel_objects
     }
@@ -2891,10 +2890,11 @@ fn write_report<W: std::io::Write>(
     writeln!(buf, "\n# Allocated Kernel Objects Detail\n")?;
     for ko in &built_system.kernel_objects {
         // FIXME: would be good to print both the number for the object type and the string
+        let name = built_system.cap_lookup.get(&ko.cap_addr).unwrap();
         writeln!(
             buf,
             "    {:<50} {} cap_addr={:x} phys_addr={:x}",
-            ko.name,
+            name,
             ko.object_type.value(config),
             ko.cap_addr,
             ko.phys_addr

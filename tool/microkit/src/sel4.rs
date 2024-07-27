@@ -29,7 +29,6 @@ pub struct BootInfo {
 /// initial task.
 #[derive(Clone)]
 pub struct Object {
-    pub name: String,
     /// Type of kernel object
     pub object_type: ObjectType,
     pub cap_addr: u64,
