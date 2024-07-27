@@ -437,10 +437,27 @@ struct BuiltSystem {
     sched_caps: Vec<u64>,
     ntfn_caps: Vec<u64>,
     pd_elf_regions: Vec<Vec<Region>>,
-    pd_elf_files: Vec<ElfFile>,
+    pd_setvar_values: Vec<Vec<u64>>,
     kernel_objects: Vec<Object>,
     initial_task_virt_region: MemoryRegion,
     initial_task_phys_region: MemoryRegion,
+}
+
+pub fn pd_write_symbols(pds: &Vec<ProtectionDomain>, pd_elf_files: &mut Vec<ElfFile>, pd_setvar_values: &Vec<Vec<u64>>) -> Result<(), String> {
+    for (i, pd) in pds.iter().enumerate() {
+        let elf = &mut pd_elf_files[i];
+        let name = pd.name.as_bytes();
+        let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
+        elf.write_symbol("microkit_name", &name[..name_length])?;
+        elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
+
+        for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
+            let value = pd_setvar_values[i][setvar_idx];
+            elf.write_symbol(&setvar.symbol, &value.to_le_bytes())?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Determine the physical memory regions for an ELF file with a given
@@ -832,12 +849,12 @@ fn emulate_kernel_boot(
 
 fn build_system(
     config: &Config,
+    pd_elf_files: &Vec<ElfFile>,
     kernel_elf: &ElfFile,
     monitor_elf: &ElfFile,
     system: &SystemDescription,
     invocation_table_size: u64,
     system_cnode_size: u64,
-    search_paths: &Vec<PathBuf>,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
     assert!(invocation_table_size % config.minimum_page_size == 0);
@@ -858,23 +875,6 @@ fn build_system(
     // Determine physical memory region used by the monitor
     let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
 
-    // Get the elf files for each pd:
-    let mut pd_elf_files = Vec::with_capacity(system.protection_domains.len());
-    for pd in &system.protection_domains {
-        match get_full_path(&pd.program_image, search_paths) {
-            Some(path) => {
-                let elf = ElfFile::from_path(&path).unwrap();
-                pd_elf_files.push(elf);
-            }
-            None => {
-                return Err(format!(
-                    "unable to find program image: '{}'",
-                    pd.program_image.display()
-                ))
-            }
-        }
-    }
-
     // Determine physical memory region for 'reserved' memory.
     //
     // The 'reserved' memory region will not be touched by seL4 during boot
@@ -882,7 +882,7 @@ fn build_system(
     // from this area, which can then be made available to the appropriate
     // protection domains
     let mut pd_elf_size = 0;
-    for pd_elf in &pd_elf_files {
+    for pd_elf in pd_elf_files {
         for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
             pd_elf_size += r.size();
         }
@@ -2751,14 +2751,7 @@ fn build_system(
         system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
-    for (i, pd) in system.protection_domains.iter().enumerate() {
-        let elf = &mut pd_elf_files[i];
-        let name = pd.name.as_bytes();
-        let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
-        elf.write_symbol("microkit_name", &name[..name_length])?;
-        elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
-    }
-
+    let mut pd_setvar_values: Vec<Vec<u64>> = vec![vec![]; system.protection_domains.len()];
     for (i, pd) in system.protection_domains.iter().enumerate() {
         for setvar in &pd.setvars {
             assert!(setvar.region_paddr.is_some() || setvar.vaddr.is_some());
@@ -2778,16 +2771,7 @@ fn build_system(
                 panic!("Internal error: expected setvar to either have region paddr or vaddr");
             }
 
-            let symbol_res = pd_elf_files[i].write_symbol(&setvar.symbol, &value.to_le_bytes());
-            if let Err(err) = symbol_res {
-                eprintln!(
-                    "Unable to patch variable '{}' in protection domain '{}': {}.",
-                    setvar.symbol, pd.name, err
-                );
-                std::process::exit(1);
-            }
-
-            pd_elf_files[i].write_symbol(&setvar.symbol, &value.to_le_bytes())?;
+            pd_setvar_values[i].push(value);
         }
     }
 
@@ -2806,7 +2790,7 @@ fn build_system(
         sched_caps: sched_context_caps,
         ntfn_caps: notification_caps,
         pd_elf_regions,
-        pd_elf_files,
+        pd_setvar_values,
         kernel_objects,
         initial_task_phys_region,
         initial_task_virt_region,
@@ -3297,6 +3281,23 @@ fn main() -> Result<(), String> {
         search_paths.push(PathBuf::from(path));
     }
 
+    // Get the elf files for each pd:
+    let mut pd_elf_files = Vec::with_capacity(system.protection_domains.len());
+    for pd in &system.protection_domains {
+        match get_full_path(&pd.program_image, &search_paths) {
+            Some(path) => {
+                let elf = ElfFile::from_path(&path).unwrap();
+                pd_elf_files.push(elf);
+            }
+            None => {
+                return Err(format!(
+                    "unable to find program image: '{}'",
+                    pd.program_image.display()
+                ))
+            }
+        }
+    }
+
     let mut invocation_table_size = kernel_config.minimum_page_size;
     let mut system_cnode_size = 2;
 
@@ -3304,12 +3305,12 @@ fn main() -> Result<(), String> {
     loop {
         built_system = build_system(
             &kernel_config,
+            &pd_elf_files,
             &kernel_elf,
             &monitor_elf,
             &system,
             invocation_table_size,
             system_cnode_size,
-            &search_paths,
         )?;
         println!("BUILT: system_cnode_size={} built_system.number_of_system_caps={} invocation_table_size={} built_system.invocation_data_size={}",
                  system_cnode_size, built_system.number_of_system_caps, invocation_table_size, built_system.invocation_data_size);
@@ -3468,6 +3469,9 @@ fn main() -> Result<(), String> {
     }
     monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
 
+    // Write out all the symbols for each PD
+    pd_write_symbols(&system.protection_domains, &mut pd_elf_files, &built_system.pd_setvar_values)?;
+
     // Generate the report
     let report = match std::fs::File::create(args.report) {
         Ok(file) => file,
@@ -3502,7 +3506,7 @@ fn main() -> Result<(), String> {
     )];
     for (i, regions) in built_system.pd_elf_regions.iter().enumerate() {
         for r in regions {
-            loader_regions.push((r.addr, r.data(&built_system.pd_elf_files[i])));
+            loader_regions.push((r.addr, r.data(&pd_elf_files[i])));
         }
     }
 
