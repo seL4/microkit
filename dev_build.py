@@ -77,7 +77,7 @@ def main():
     if not BUILD_DIR.exists():
         BUILD_DIR.mkdir()
 
-    tool_rebuild = f"cd tool/microkit && cargo build && cp target/debug/microkit {release}/bin/microkit"
+    tool_rebuild = f"cd tool/microkit && cargo build --release"
     r = system(tool_rebuild)
     assert r == 0
 
@@ -86,6 +86,7 @@ def main():
     make_env["MICROKIT_BOARD"] = args.board
     make_env["MICROKIT_CONFIG"] = args.config
     make_env["MICROKIT_SDK"] = str(release)
+    make_env["MICROKIT_TOOL"] = Path("tool/microkit/target/release/microkit").absolute()
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
