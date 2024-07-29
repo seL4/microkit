@@ -870,6 +870,25 @@ QEMU will start the system image using its packaged version of OpenSBI.
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
 
+## Pine64 Star64
+
+Support is available for the Pine64 Star64 platform which is based on the
+StarFive JH7110 SoC.
+
+The platform has a 4GB and 8GB model, we assume the 4GB model.
+
+The default boot flow of the Star64 is:
+1. OpenSBI
+2. U-Boot
+3. Operating System
+
+This means that the system image that Microkit produces does not need to be explicitly
+packaged with an SBI implementation such as OpenSBI.
+
+To execute the system image produced by Microkit, execute the following command in U-Boot:
+
+    => go 0x60000000
+
 ## ZCU102
 
 Initial support is available for the Xilinx ZCU102.
