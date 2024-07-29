@@ -215,6 +215,19 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/qemu_virt_riscv64/hello"),
         }
     ),
+    BoardInfo(
+        name="star64",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x60000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "star64",
+        },
+        examples={
+            "hello": Path("example/star64/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
