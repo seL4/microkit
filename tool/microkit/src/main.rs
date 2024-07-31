@@ -2940,7 +2940,7 @@ fn print_help(available_boards: &[String]) {
     println!("  -h, --help, show this help message and exit");
     println!("  -o, --output OUTPUT");
     println!("  -r, --report REPORT");
-    println!("  --board, {{{}}}", available_boards.join(","));
+    println!("  --board {{{}}}", available_boards.join(","));
     println!("  --config CONFIG");
     println!("  --search-path [SEARCH_PATH ...]");
 }
