@@ -848,6 +848,28 @@ You can use the following command to simulate a Microkit system:
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
 
+## QEMU virt (RISC-V 64-bit)
+
+Support is available for the virtual RISC-V (64-bit) QEMU platform.
+This is a platform that is not based on any specific SoC or hardware platform
+and is intended for simulating systems for development or testing.
+
+It should be noted that the platform support is configured with 2GB of main memory.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-riscv64 \
+        -machine virt \
+        -nographic \
+        -serial mon:stdio \
+        -kernel [SYSTEM IMAGE] \
+        -m size=2G
+
+QEMU will start the system image using its packaged version of OpenSBI.
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
+
 ## ZCU102
 
 Initial support is available for the Xilinx ZCU102.

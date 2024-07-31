@@ -201,6 +201,20 @@ SUPPORTED_BOARDS = (
             "hierarchy": Path("example/qemu_virt_aarch64/hierarchy")
         }
     ),
+    BoardInfo(
+        name="qemu_virt_riscv64",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x80200000,
+        kernel_options={
+            "KernelPlatform": "qemu-riscv-virt",
+            "KernelIsMCS": True,
+            "QEMU_MEMORY": "2048",
+        },
+        examples={
+            "hello": Path("example/qemu_virt_riscv64/hello"),
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
