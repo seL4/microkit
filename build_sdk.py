@@ -520,6 +520,7 @@ def main() -> None:
     parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
     parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
     parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
+    parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
 
@@ -597,7 +598,8 @@ def main() -> None:
     build_dir = Path("build")
     for board in selected_boards:
         for config in selected_configs:
-            sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config)
+            if not args.skip_sel4:
+                sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config)
             loader_printing = 1 if config.name == "debug" else 0
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
