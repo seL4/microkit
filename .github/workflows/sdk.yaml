@@ -55,7 +55,7 @@ jobs:
           ./pyenv/bin/python build_sdk.py --sel4=seL4
   build_macos_x64:
     name: Build SDK (macOS x86-64)
-    runs-on: macos-12
+    runs-on: macos-14
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
@@ -83,7 +83,7 @@ jobs:
           ./pyenv/bin/python build_sdk.py --sel4=seL4
   build_macos_arm64:
     name: Build SDK (macOS ARM64)
-    runs-on: macos-12
+    runs-on: macos-14
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
