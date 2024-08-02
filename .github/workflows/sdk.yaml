@@ -35,12 +35,13 @@ jobs:
           sudo apt install software-properties-common
           sudo add-apt-repository ppa:deadsnakes/ppa
           sudo apt install \
+            gcc-riscv64-unknown-elf \
             cmake pandoc device-tree-compiler ninja-build \
             texlive-latex-base texlive-latex-recommended \
             texlive-fonts-recommended texlive-fonts-extra \
             libxml2-utils \
             python3.9 python3-pip python3.9-venv \
-            qemu-system-arm \
+            qemu-system-arm qemu-system-misc \
       - name: Install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz%3Frev%3D28d5199f6db34e5980aae1062e5a6703%26hash%3DF6F5604BC1A2BBAAEAC4F6E98D8DC35B
@@ -65,7 +66,10 @@ jobs:
             ref: microkit
             path: seL4
       - name: Install SDK dependencies
-        run: brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
+        run: |
+          brew tap riscv-software-src/riscv
+          brew install riscv-tools
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
       - name: Install AArch64 GCC toolchain
         run: |
           wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
@@ -92,6 +96,8 @@ jobs:
       - name: Install SDK dependencies
         run: |
           rustup target add aarch64-apple-darwin
+          brew tap riscv-software-src/riscv
+          brew install riscv-tools
           brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive
       - name: Install AArch64 GCC toolchain
         run: |
