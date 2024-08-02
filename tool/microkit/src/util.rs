@@ -136,6 +136,15 @@ pub fn comma_sep_usize(n: usize) -> String {
     comma_sep_u64(n as u64)
 }
 
+pub fn json_str<'a>(json: &'a serde_json::Value, field: &'static str) -> Result<&'a str, String> {
+    match json.get(field) {
+        Some(value) => Ok(value
+            .as_str()
+            .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))),
+        None => Err(format!("JSON field '{}' does not exist", field)),
+    }
+}
+
 pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<u64, String> {
     match json.get(field) {
         Some(value) => Ok(value

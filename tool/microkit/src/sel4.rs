@@ -47,66 +47,113 @@ pub struct Config {
     pub cap_address_bits: u64,
     pub fan_out_limit: u64,
     pub hypervisor: bool,
-    pub arm_pa_size_bits: usize,
     pub benchmark: bool,
+    pub fpu: bool,
+    /// ARM-specific, number of physical address bits
+    pub arm_pa_size_bits: Option<usize>,
+    /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
+    pub riscv_pt_levels: Option<RiscvVirtualMemory>,
 }
 
 impl Config {
     pub fn user_top(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {
-                true => match self.arm_pa_size_bits {
+                true => match self.arm_pa_size_bits.unwrap() {
                     40 => 0x10000000000,
                     44 => 0x100000000000,
                     _ => panic!("Unknown ARM physical address size bits"),
                 },
                 false => 0x800000000000,
             },
+            Arch::Riscv64 => 0x0000003ffffff000,
         }
     }
 }
 
 pub enum Arch {
     Aarch64,
+    Riscv64,
 }
 
-#[repr(u64)]
+/// RISC-V supports multiple virtual memory systems and so we use this enum
+/// to make it easier to support more virtual memory systems in the future.
+#[derive(Debug, Copy, Clone)]
+pub enum RiscvVirtualMemory {
+    Sv39,
+}
+
+impl RiscvVirtualMemory {
+    /// Returns number of page-table levels for a particular virtual memory system.
+    pub fn levels(self) -> usize {
+        match self {
+            RiscvVirtualMemory::Sv39 => 3,
+        }
+    }
+}
+
 #[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
-#[allow(dead_code)]
 pub enum ObjectType {
-    Untyped = 0,
-    Tcb = 1,
-    Endpoint = 2,
-    Notification = 3,
-    CNode = 4,
-    SchedContext = 5,
-    Reply = 6,
-    HugePage = 7,
-    VSpace = 8,
-    SmallPage = 9,
-    LargePage = 10,
-    PageTable = 11,
-    Vcpu = 12,
+    Untyped,
+    Tcb,
+    Endpoint,
+    Notification,
+    CNode,
+    SchedContext,
+    Reply,
+    HugePage,
+    VSpace,
+    SmallPage,
+    LargePage,
+    PageTable,
+    Vcpu,
 }
 
 impl ObjectType {
-    pub fn fixed_size(&self) -> Option<u64> {
+    /// Gets the number of bits to represent the size of a object. The
+    /// size depends on architecture as well as kernel configuration.
+    pub fn fixed_size_bits(self, config: &Config) -> Option<u64> {
         match self {
-            ObjectType::Tcb => Some(OBJECT_SIZE_TCB),
-            ObjectType::Endpoint => Some(OBJECT_SIZE_ENDPOINT),
-            ObjectType::Notification => Some(OBJECT_SIZE_NOTIFICATION),
-            ObjectType::Reply => Some(OBJECT_SIZE_REPLY),
-            ObjectType::VSpace => Some(OBJECT_SIZE_VSPACE),
-            ObjectType::PageTable => Some(OBJECT_SIZE_PAGE_TABLE),
-            ObjectType::HugePage => Some(OBJECT_SIZE_HUGE_PAGE),
-            ObjectType::LargePage => Some(OBJECT_SIZE_LARGE_PAGE),
-            ObjectType::SmallPage => Some(OBJECT_SIZE_SMALL_PAGE),
-            ObjectType::Vcpu => Some(OBJECT_SIZE_VCPU),
+            ObjectType::Tcb => match config.arch {
+                Arch::Aarch64 => Some(11),
+                Arch::Riscv64 => match config.fpu {
+                    true => Some(11),
+                    false => Some(10),
+                },
+            },
+            ObjectType::Endpoint => Some(4),
+            ObjectType::Notification => Some(6),
+            ObjectType::Reply => Some(5),
+            ObjectType::VSpace => match config.arch {
+                Arch::Aarch64 => match config.hypervisor {
+                    true => match config.arm_pa_size_bits.unwrap() {
+                        40 => Some(13),
+                        44 => Some(12),
+                        _ => {
+                            panic!("Unexpected ARM PA size bits when determining VSpace size bits")
+                        }
+                    },
+                    false => Some(12),
+                },
+                Arch::Riscv64 => Some(12),
+            },
+            ObjectType::PageTable => Some(12),
+            ObjectType::HugePage => Some(30),
+            ObjectType::LargePage => Some(21),
+            ObjectType::SmallPage => Some(12),
+            ObjectType::Vcpu => match config.arch {
+                Arch::Aarch64 => Some(12),
+                _ => panic!("Unexpected architecture asking for vCPU size bits"),
+            },
             _ => None,
         }
     }
 
-    pub fn to_str(&self) -> &'static str {
+    pub fn fixed_size(self, config: &Config) -> Option<u64> {
+        self.fixed_size_bits(config).map(|bits| 1 << bits)
+    }
+
+    pub fn to_str(self) -> &'static str {
         match self {
             ObjectType::Untyped => "SEL4_UNTYPED_OBJECT",
             ObjectType::Tcb => "SEL4_TCB_OBJECT",
@@ -124,15 +171,52 @@ impl ObjectType {
         }
     }
 
-    pub fn format(&self) -> String {
-        let object_size = if let Some(fixed_size) = self.fixed_size() {
+    /// The kernel associates each kernel object with an identifier, which
+    /// also depends on the configuration of the kernel.
+    /// When generating the raw invocation to be given to the initial task,
+    /// this method must be called for any UntypedRetype invocations.
+    pub fn value(self, config: &Config) -> u64 {
+        match self {
+            ObjectType::Untyped => 0,
+            ObjectType::Tcb => 1,
+            ObjectType::Endpoint => 2,
+            ObjectType::Notification => 3,
+            ObjectType::CNode => 4,
+            ObjectType::SchedContext => 5,
+            ObjectType::Reply => 6,
+            ObjectType::HugePage => 7,
+            ObjectType::VSpace => match config.arch {
+                Arch::Aarch64 => 8,
+                Arch::Riscv64 => 10,
+            },
+            ObjectType::SmallPage => match config.arch {
+                Arch::Aarch64 => 9,
+                Arch::Riscv64 => 8,
+            },
+            ObjectType::LargePage => match config.arch {
+                Arch::Aarch64 => 10,
+                Arch::Riscv64 => 9,
+            },
+            ObjectType::PageTable => match config.arch {
+                Arch::Aarch64 => 11,
+                Arch::Riscv64 => 10,
+            },
+            ObjectType::Vcpu => match config.arch {
+                Arch::Aarch64 => 12,
+                _ => panic!("Unknown vCPU object type value for given kernel config"),
+            },
+        }
+    }
+
+    pub fn format(&self, config: &Config) -> String {
+        let object_size = if let Some(fixed_size) = self.fixed_size(config) {
             format!("0x{:x}", fixed_size)
         } else {
             "variable size".to_string()
         };
         format!(
             "         object_type          {} ({} - {})",
-            *self as u64,
+            self.value(config),
             self.to_str(),
             object_size
         )
@@ -156,18 +240,6 @@ impl From<u64> for PageSize {
     }
 }
 
-pub const OBJECT_SIZE_TCB: u64 = 1 << 11;
-pub const OBJECT_SIZE_ENDPOINT: u64 = 1 << 4;
-pub const OBJECT_SIZE_NOTIFICATION: u64 = 1 << 6;
-pub const OBJECT_SIZE_REPLY: u64 = 1 << 5;
-pub const OBJECT_SIZE_PAGE_TABLE: u64 = 1 << 12;
-pub const OBJECT_SIZE_HUGE_PAGE: u64 = 1 << 30;
-pub const OBJECT_SIZE_LARGE_PAGE: u64 = 1 << 21;
-pub const OBJECT_SIZE_SMALL_PAGE: u64 = 1 << 12;
-pub const OBJECT_SIZE_VSPACE: u64 = 1 << 13;
-pub const OBJECT_SIZE_VCPU: u64 = 1 << 12;
-// pub const OBJECT_SIZE_ASID_POOL: u64 = 1 << 12;
-
 /// Virtual memory attributes for ARM
 /// The values for each enum variant corresponds to what seL4
 /// expects when doing a virtual memory invocation.
@@ -178,10 +250,32 @@ pub enum ArmVmAttributes {
     ExecuteNever = 4,
 }
 
+/// Virtual memory attributes for RISC-V
+/// The values for each enum variant corresponds to what seL4
+/// expects when doing a virtual memory invocation.
+#[repr(u64)]
+pub enum RiscvVmAttributes {
+    ExecuteNever = 1,
+}
+
 impl ArmVmAttributes {
     #[allow(clippy::should_implement_trait)] // Default::default would return Self, not u64
     pub fn default() -> u64 {
         ArmVmAttributes::Cacheable as u64 | ArmVmAttributes::ParityEnabled as u64
+    }
+}
+
+impl RiscvVmAttributes {
+    #[allow(clippy::should_implement_trait)] // Default::default would return Self, not u64
+    pub fn default() -> u64 {
+        0
+    }
+}
+
+pub fn default_vm_attr(config: &Config) -> u64 {
+    match config.arch {
+        Arch::Aarch64 => ArmVmAttributes::default(),
+        Arch::Riscv64 => RiscvVmAttributes::default(),
     }
 }
 
@@ -199,7 +293,8 @@ pub enum Rights {
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum ArmIrqTrigger {
+/// The same values apply to all kernel architectures
+pub enum IrqTrigger {
     Level = 0,
     Edge = 1,
 }
@@ -209,75 +304,263 @@ pub enum ArmIrqTrigger {
 #[allow(dead_code)]
 enum InvocationLabel {
     // Untyped
-    UntypedRetype = 1,
+    UntypedRetype,
     // TCB
-    TcbReadRegisters = 2,
-    TcbWriteRegisters = 3,
-    TcbCopyRegisters = 4,
-    TcbConfigure = 5,
-    TcbSetPriority = 6,
-    TcbSetMCPriority = 7,
-    TcbSetSchedParams = 8,
-    TcbSetTimeoutEndpoint = 9,
-    TcbSetIpcBuffer = 10,
-    TcbSetSpace = 11,
-    TcbSuspend = 12,
-    TcbResume = 13,
-    TcbBindNotification = 14,
-    TcbUnbindNotification = 15,
-    TcbSetTLSBase = 16,
+    TcbReadRegisters,
+    TcbWriteRegisters,
+    TcbCopyRegisters,
+    TcbConfigure,
+    TcbSetPriority,
+    TcbSetMCPriority,
+    TcbSetSchedParams,
+    TcbSetTimeoutEndpoint,
+    TcbSetIpcBuffer,
+    TcbSetSpace,
+    TcbSuspend,
+    TcbResume,
+    TcbBindNotification,
+    TcbUnbindNotification,
+    TcbSetTLSBase,
     // CNode
-    CnodeRevoke = 17,
-    CnodeDelete = 18,
-    CnodeCancelBadgedSends = 19,
-    CnodeCopy = 20,
-    CnodeMint = 21,
-    CnodeMove = 22,
-    CnodeMutate = 23,
-    CnodeRotate = 24,
+    CnodeRevoke,
+    CnodeDelete,
+    CnodeCancelBadgedSends,
+    CnodeCopy,
+    CnodeMint,
+    CnodeMove,
+    CnodeMutate,
+    CnodeRotate,
     // IRQ
-    IrqIssueIrqHandler = 25,
-    IrqAckIrq = 26,
-    IrqSetIrqHandler = 27,
-    IrqClearIrqHandler = 28,
+    IrqIssueIrqHandler,
+    IrqAckIrq,
+    IrqSetIrqHandler,
+    IrqClearIrqHandler,
     // Domain
-    DomainSetSet = 29,
+    DomainSetSet,
     // Scheduling
-    SchedControlConfigureFlags = 30,
-    SchedContextBind = 31,
-    SchedContextUnbind = 32,
-    SchedContextUnbindObject = 33,
-    SchedContextConsume = 34,
-    SchedContextYieldTo = 35,
+    SchedControlConfigureFlags,
+    SchedContextBind,
+    SchedContextUnbind,
+    SchedContextUnbindObject,
+    SchedContextConsume,
+    SchedContextYieldTo,
     // ARM VSpace
-    ArmVspaceCleanData = 36,
-    ArmVspaceInvalidateData = 37,
-    ArmVspaceCleanInvalidateData = 38,
-    ArmVspaceUnifyInstruction = 39,
+    ArmVspaceCleanData,
+    ArmVspaceInvalidateData,
+    ArmVspaceCleanInvalidateData,
+    ArmVspaceUnifyInstruction,
     // ARM SMC
-    ArmSmcCall = 40,
+    ArmSmcCall,
     // ARM Page table
-    ArmPageTableMap = 41,
-    ArmPageTableUnmap = 42,
+    ArmPageTableMap,
+    ArmPageTableUnmap,
     // ARM Page
-    ArmPageMap = 43,
-    ArmPageUnmap = 44,
-    ArmPageCleanData = 45,
-    ArmPageInvalidateData = 46,
-    ArmPageCleanInvalidateData = 47,
-    ArmPageUnifyInstruction = 48,
-    ArmPageGetAddress = 49,
+    ArmPageMap,
+    ArmPageUnmap,
+    ArmPageCleanData,
+    ArmPageInvalidateData,
+    ArmPageCleanInvalidateData,
+    ArmPageUnifyInstruction,
+    ArmPageGetAddress,
     // ARM Asid
-    ArmAsidControlMakePool = 50,
-    ArmAsidPoolAssign = 51,
+    ArmAsidControlMakePool,
+    ArmAsidPoolAssign,
     // ARM vCPU
-    ArmVcpuSetTcb = 52,
-    ArmVcpuInjectIrq = 53,
-    ArmVcpuReadReg = 54,
-    ArmVcpuWriteReg = 55,
-    ArmVcpuAckVppi = 56,
+    ArmVcpuSetTcb,
+    ArmVcpuInjectIrq,
+    ArmVcpuReadReg,
+    ArmVcpuWriteReg,
+    ArmVcpuAckVppi,
     // ARM IRQ
-    ArmIrqIssueIrqHandlerTrigger = 57,
+    ArmIrqIssueIrqHandlerTrigger,
+    // RISC-V Page Table
+    RiscvPageTableMap,
+    RiscvPageTableUnmap,
+    // RISC-V Page
+    RiscvPageMap,
+    RiscvPageUnmap,
+    RiscvPageGetAddress,
+    // RISC-V ASID
+    RiscvAsidControlMakePool,
+    RiscvAsidPoolAssign,
+    // RISC-V IRQ
+    RiscvIrqIssueIrqHandlerTrigger,
+}
+
+impl InvocationLabel {
+    /// Convert an invocation's named label to the value seL4 expects when
+    /// you make the invocation.
+    pub fn to_value(self) -> u32 {
+        match self {
+            InvocationLabel::UntypedRetype => 1,
+            InvocationLabel::TcbReadRegisters => 2,
+            InvocationLabel::TcbWriteRegisters => 3,
+            InvocationLabel::TcbCopyRegisters => 4,
+            InvocationLabel::TcbConfigure => 5,
+            InvocationLabel::TcbSetPriority => 6,
+            InvocationLabel::TcbSetMCPriority => 7,
+            InvocationLabel::TcbSetSchedParams => 8,
+            InvocationLabel::TcbSetTimeoutEndpoint => 9,
+            InvocationLabel::TcbSetIpcBuffer => 10,
+            InvocationLabel::TcbSetSpace => 11,
+            InvocationLabel::TcbSuspend => 12,
+            InvocationLabel::TcbResume => 13,
+            InvocationLabel::TcbBindNotification => 14,
+            InvocationLabel::TcbUnbindNotification => 15,
+            InvocationLabel::TcbSetTLSBase => 16,
+            // CNode
+            InvocationLabel::CnodeRevoke => 17,
+            InvocationLabel::CnodeDelete => 18,
+            InvocationLabel::CnodeCancelBadgedSends => 19,
+            InvocationLabel::CnodeCopy => 20,
+            InvocationLabel::CnodeMint => 21,
+            InvocationLabel::CnodeMove => 22,
+            InvocationLabel::CnodeMutate => 23,
+            InvocationLabel::CnodeRotate => 24,
+            // IRQ
+            InvocationLabel::IrqIssueIrqHandler => 25,
+            InvocationLabel::IrqAckIrq => 26,
+            InvocationLabel::IrqSetIrqHandler => 27,
+            InvocationLabel::IrqClearIrqHandler => 28,
+            // Domain
+            InvocationLabel::DomainSetSet => 29,
+            // Scheduling
+            InvocationLabel::SchedControlConfigureFlags => 30,
+            InvocationLabel::SchedContextBind => 31,
+            InvocationLabel::SchedContextUnbind => 32,
+            InvocationLabel::SchedContextUnbindObject => 33,
+            InvocationLabel::SchedContextConsume => 34,
+            InvocationLabel::SchedContextYieldTo => 35,
+            // ARM VSpace
+            InvocationLabel::ArmVspaceCleanData => 36,
+            InvocationLabel::ArmVspaceInvalidateData => 37,
+            InvocationLabel::ArmVspaceCleanInvalidateData => 38,
+            InvocationLabel::ArmVspaceUnifyInstruction => 39,
+            // ARM SMC
+            InvocationLabel::ArmSmcCall => 40,
+            // ARM Page table
+            InvocationLabel::ArmPageTableMap => 41,
+            InvocationLabel::ArmPageTableUnmap => 42,
+            // ARM Page
+            InvocationLabel::ArmPageMap => 43,
+            InvocationLabel::ArmPageUnmap => 44,
+            InvocationLabel::ArmPageCleanData => 45,
+            InvocationLabel::ArmPageInvalidateData => 46,
+            InvocationLabel::ArmPageCleanInvalidateData => 47,
+            InvocationLabel::ArmPageUnifyInstruction => 48,
+            InvocationLabel::ArmPageGetAddress => 49,
+            // ARM ASID
+            InvocationLabel::ArmAsidControlMakePool => 50,
+            InvocationLabel::ArmAsidPoolAssign => 51,
+            // ARM vCPU
+            InvocationLabel::ArmVcpuSetTcb => 52,
+            InvocationLabel::ArmVcpuInjectIrq => 53,
+            InvocationLabel::ArmVcpuReadReg => 54,
+            InvocationLabel::ArmVcpuWriteReg => 55,
+            InvocationLabel::ArmVcpuAckVppi => 56,
+            // ARM IRQ
+            InvocationLabel::ArmIrqIssueIrqHandlerTrigger => 57,
+            // RISC-V Page
+            InvocationLabel::RiscvPageTableMap => 36,
+            InvocationLabel::RiscvPageTableUnmap => 37,
+            InvocationLabel::RiscvPageMap => 38,
+            InvocationLabel::RiscvPageUnmap => 39,
+            InvocationLabel::RiscvPageGetAddress => 40,
+            // RISC-V ASID
+            InvocationLabel::RiscvAsidControlMakePool => 41,
+            InvocationLabel::RiscvAsidPoolAssign => 42,
+            // RISC-V IRQ
+            InvocationLabel::RiscvIrqIssueIrqHandlerTrigger => 43,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Default)]
+#[allow(dead_code)]
+pub struct Riscv64Regs {
+    pub pc: u64,
+    pub ra: u64,
+    pub sp: u64,
+    pub gp: u64,
+    pub s0: u64,
+    pub s1: u64,
+    pub s2: u64,
+    pub s3: u64,
+    pub s4: u64,
+    pub s5: u64,
+    pub s6: u64,
+    pub s7: u64,
+    pub s8: u64,
+    pub s9: u64,
+    pub s10: u64,
+    pub s11: u64,
+    pub a0: u64,
+    pub a1: u64,
+    pub a2: u64,
+    pub a3: u64,
+    pub a4: u64,
+    pub a5: u64,
+    pub a6: u64,
+    pub a7: u64,
+    pub t0: u64,
+    pub t1: u64,
+    pub t2: u64,
+    pub t3: u64,
+    pub t4: u64,
+    pub t5: u64,
+    pub t6: u64,
+    pub tp: u64,
+}
+
+impl Riscv64Regs {
+    pub fn field_names(&self) -> Vec<(&'static str, u64)> {
+        vec![
+            ("pc", self.pc),
+            ("ra", self.ra),
+            ("sp", self.sp),
+            ("gp", self.gp),
+            ("s0", self.s0),
+            ("s1", self.s1),
+            ("s2", self.s2),
+            ("s3", self.s3),
+            ("s4", self.s4),
+            ("s5", self.s5),
+            ("s6", self.s6),
+            ("s7", self.s7),
+            ("s8", self.s8),
+            ("s9", self.s9),
+            ("s10", self.s10),
+            ("s11", self.s11),
+            ("a0", self.a0),
+            ("a1", self.a1),
+            ("a2", self.a2),
+            ("a3", self.a3),
+            ("a4", self.a4),
+            ("a5", self.a5),
+            ("a6", self.a6),
+            ("a7", self.a7),
+            ("t0", self.t0),
+            ("t1", self.t1),
+            ("t2", self.t2),
+            ("t3", self.t3),
+            ("t4", self.t4),
+            ("t5", self.t5),
+            ("t6", self.t6),
+            ("tp", self.tp),
+        ]
+    }
+
+    pub fn as_slice(&self) -> Vec<u64> {
+        vec![
+            self.pc, self.ra, self.sp, self.gp, self.s0, self.s1, self.s2, self.s3, self.s4,
+            self.s5, self.s6, self.s7, self.s8, self.s9, self.s10, self.s11, self.a0, self.a1,
+            self.a2, self.a3, self.a4, self.a5, self.a6, self.a7, self.t0, self.t1, self.t2,
+            self.t3, self.t4, self.t5, self.t6, self.tp,
+        ]
+    }
+
+    /// Number of registers
+    pub const LEN: usize = 32;
 }
 
 #[derive(Copy, Clone, Default)]
@@ -322,8 +605,8 @@ pub struct Aarch64Regs {
 }
 
 impl Aarch64Regs {
-    pub fn field_names(&self) -> [(&'static str, u64); Self::LEN] {
-        [
+    pub fn field_names(&self) -> Vec<(&'static str, u64)> {
+        vec![
             ("pc", self.pc),
             ("sp", self.sp),
             ("spsr", self.spsr),
@@ -363,8 +646,8 @@ impl Aarch64Regs {
         ]
     }
 
-    pub fn as_slice(&self) -> [u64; Self::LEN] {
-        [
+    pub fn as_slice(&self) -> Vec<u64> {
+        vec![
             self.pc,
             self.sp,
             self.spsr,
@@ -409,15 +692,23 @@ impl Aarch64Regs {
 }
 
 pub struct Invocation {
+    /// There is some careful context to be aware of when using this field.
+    /// The 'InvocationLabel' is abstract and does not represent the actual
+    /// value that seL4 system calls use as it is dependent on the kernel
+    /// configuration. When we convert this invocation to a list of bytes, we
+    /// need to use 'label_raw' instead.
     label: InvocationLabel,
+    label_raw: u32,
     args: InvocationArgs,
     repeat: Option<(u32, InvocationArgs)>,
 }
 
 impl Invocation {
-    pub fn new(args: InvocationArgs) -> Invocation {
+    pub fn new(config: &Config, args: InvocationArgs) -> Invocation {
+        let label = args.to_label(config);
         Invocation {
-            label: args.to_label(),
+            label,
+            label_raw: label.to_value(),
             args,
             repeat: None,
         }
@@ -427,14 +718,15 @@ impl Invocation {
     /// into raw bytes that will be given to the monitor to interpret
     /// at runtime.
     /// Appends to the given data
-    pub fn add_raw_invocation(&self, data: &mut Vec<u8>) {
-        let (service, args, extra_caps): (u64, Vec<u64>, Vec<u64>) = self.args.get_args();
+    pub fn add_raw_invocation(&self, config: &Config, data: &mut Vec<u8>) {
+        let (service, args, extra_caps): (u64, Vec<u64>, Vec<u64>) =
+            self.args.clone().get_args(config);
 
         // To potentionally save some allocation, we reserve enough space for all the invocation args
         data.reserve(2 + args.len() * 8 + extra_caps.len() * 8);
 
         let mut tag = Invocation::message_info_new(
-            self.label as u64,
+            self.label_raw as u64,
             0,
             extra_caps.len() as u64,
             args.len() as u64,
@@ -452,12 +744,12 @@ impl Invocation {
             data.extend(arg.to_le_bytes());
         }
 
-        if let Some((_, repeat)) = self.repeat {
+        if let Some((_, repeat)) = self.repeat.clone() {
             // Assert that the variant of the invocation arguments is the
             // same as the repeat invocation argument variant.
             assert!(std::mem::discriminant(&self.args) == std::mem::discriminant(&repeat));
 
-            let (repeat_service, repeat_args, repeat_extra_caps) = repeat.get_args();
+            let (repeat_service, repeat_args, repeat_extra_caps) = repeat.get_args(config);
             data.extend(repeat_service.to_le_bytes());
             for cap in repeat_extra_caps {
                 data.extend(cap.to_le_bytes());
@@ -524,7 +816,12 @@ impl Invocation {
     // We do this in an explicit way due to there only being a dozen or so invocations rather
     // than involving some complicated macros, although maybe there is a better way I am not
     // aware of.
-    pub fn report_fmt<W: Write>(&self, f: &mut BufWriter<W>, cap_lookup: &HashMap<u64, String>) {
+    pub fn report_fmt<W: Write>(
+        &self,
+        f: &mut BufWriter<W>,
+        config: &Config,
+        cap_lookup: &HashMap<u64, String>,
+    ) {
         let mut arg_strs = Vec::new();
         let (service, service_str) = match self.args {
             InvocationArgs::UntypedRetype {
@@ -537,7 +834,7 @@ impl Invocation {
                 node_offset,
                 num_objects,
             } => {
-                arg_strs.push(object_type.format());
+                arg_strs.push(object_type.format(config));
                 let sz_fmt = if size_bits == 0 {
                     String::from("N/A")
                 } else {
@@ -618,16 +915,15 @@ impl Invocation {
                 tcb,
                 resume,
                 arch_flags,
-                regs,
+                ref regs,
                 ..
             } => {
                 arg_strs.push(Invocation::fmt_field_bool("resume", resume));
                 arg_strs.push(Invocation::fmt_field("arch_flags", arch_flags as u64));
 
                 let reg_strs = regs
-                    .field_names()
-                    .into_iter()
-                    .map(|(field, val)| Invocation::fmt_field_reg(field, val))
+                    .iter()
+                    .map(|(field, val)| Invocation::fmt_field_reg(field, *val))
                     .collect::<Vec<_>>();
                 arg_strs.push(Invocation::fmt_field_str("regs", reg_strs[0].clone()));
                 for s in &reg_strs[1..] {
@@ -787,11 +1083,14 @@ impl Invocation {
             | InvocationLabel::TcbResume
             | InvocationLabel::TcbWriteRegisters
             | InvocationLabel::TcbBindNotification => "TCB",
-            InvocationLabel::ArmAsidPoolAssign => "ASID Pool",
-            InvocationLabel::ArmIrqIssueIrqHandlerTrigger => "IRQ Control",
+            InvocationLabel::ArmAsidPoolAssign | InvocationLabel::RiscvAsidPoolAssign => {
+                "ASID Pool"
+            }
+            InvocationLabel::ArmIrqIssueIrqHandlerTrigger
+            | InvocationLabel::RiscvIrqIssueIrqHandlerTrigger => "IRQ Control",
             InvocationLabel::IrqSetIrqHandler => "IRQ Handler",
-            InvocationLabel::ArmPageTableMap => "Page Table",
-            InvocationLabel::ArmPageMap => "Page",
+            InvocationLabel::ArmPageTableMap | InvocationLabel::RiscvPageTableMap => "Page Table",
+            InvocationLabel::ArmPageMap | InvocationLabel::RiscvPageMap => "Page",
             InvocationLabel::CnodeCopy | InvocationLabel::CnodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
             InvocationLabel::ArmVcpuSetTcb => "VCPU",
@@ -811,10 +1110,14 @@ impl Invocation {
             InvocationLabel::TcbResume => "Resume",
             InvocationLabel::TcbWriteRegisters => "WriteRegisters",
             InvocationLabel::TcbBindNotification => "BindNotification",
-            InvocationLabel::ArmAsidPoolAssign => "Assign",
-            InvocationLabel::ArmIrqIssueIrqHandlerTrigger => "Get",
+            InvocationLabel::ArmAsidPoolAssign | InvocationLabel::RiscvAsidPoolAssign => "Assign",
+            InvocationLabel::ArmIrqIssueIrqHandlerTrigger
+            | InvocationLabel::RiscvIrqIssueIrqHandlerTrigger => "Get",
             InvocationLabel::IrqSetIrqHandler => "SetNotification",
-            InvocationLabel::ArmPageTableMap | InvocationLabel::ArmPageMap => "Map",
+            InvocationLabel::ArmPageTableMap
+            | InvocationLabel::ArmPageMap
+            | InvocationLabel::RiscvPageTableMap
+            | InvocationLabel::RiscvPageMap => "Map",
             InvocationLabel::CnodeCopy => "Copy",
             InvocationLabel::CnodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
@@ -828,7 +1131,7 @@ impl Invocation {
 }
 
 impl InvocationArgs {
-    fn to_label(self) -> InvocationLabel {
+    fn to_label(&self, config: &Config) -> InvocationLabel {
         match self {
             InvocationArgs::UntypedRetype { .. } => InvocationLabel::UntypedRetype,
             InvocationArgs::TcbSetSchedParams { .. } => InvocationLabel::TcbSetSchedParams,
@@ -837,13 +1140,23 @@ impl InvocationArgs {
             InvocationArgs::TcbResume { .. } => InvocationLabel::TcbResume,
             InvocationArgs::TcbWriteRegisters { .. } => InvocationLabel::TcbWriteRegisters,
             InvocationArgs::TcbBindNotification { .. } => InvocationLabel::TcbBindNotification,
-            InvocationArgs::AsidPoolAssign { .. } => InvocationLabel::ArmAsidPoolAssign,
-            InvocationArgs::IrqControlGetTrigger { .. } => {
-                InvocationLabel::ArmIrqIssueIrqHandlerTrigger
-            }
+            InvocationArgs::AsidPoolAssign { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ArmAsidPoolAssign,
+                Arch::Riscv64 => InvocationLabel::RiscvAsidPoolAssign,
+            },
+            InvocationArgs::IrqControlGetTrigger { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ArmIrqIssueIrqHandlerTrigger,
+                Arch::Riscv64 => InvocationLabel::RiscvIrqIssueIrqHandlerTrigger,
+            },
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IrqSetIrqHandler,
-            InvocationArgs::PageTableMap { .. } => InvocationLabel::ArmPageTableMap,
-            InvocationArgs::PageMap { .. } => InvocationLabel::ArmPageMap,
+            InvocationArgs::PageTableMap { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ArmPageTableMap,
+                Arch::Riscv64 => InvocationLabel::RiscvPageTableMap,
+            },
+            InvocationArgs::PageMap { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ArmPageMap,
+                Arch::Riscv64 => InvocationLabel::RiscvPageMap,
+            },
             InvocationArgs::CnodeCopy { .. } => InvocationLabel::CnodeCopy,
             InvocationArgs::CnodeMint { .. } => InvocationLabel::CnodeMint,
             InvocationArgs::SchedControlConfigureFlags { .. } => {
@@ -853,7 +1166,7 @@ impl InvocationArgs {
         }
     }
 
-    fn get_args(self) -> (u64, Vec<u64>, Vec<u64>) {
+    fn get_args(self, config: &Config) -> (u64, Vec<u64>, Vec<u64>) {
         match self {
             InvocationArgs::UntypedRetype {
                 untyped,
@@ -867,7 +1180,7 @@ impl InvocationArgs {
             } => (
                 untyped,
                 vec![
-                    object_type as u64,
+                    object_type.value(config),
                     size_bits,
                     node_index,
                     node_depth,
@@ -921,7 +1234,8 @@ impl InvocationArgs {
                 let resume_byte = if resume { 1 } else { 0 };
                 let flags: u64 = ((arch_flags as u64) << 8) | resume_byte;
                 let mut args = vec![flags, count];
-                args.extend(regs.as_slice());
+                let regs_values = regs.into_iter().map(|(_, value)| value);
+                args.extend(regs_values);
                 (tcb, args, vec![])
             }
             InvocationArgs::TcbBindNotification { tcb, notification } => {
@@ -1004,7 +1318,7 @@ impl InvocationArgs {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[allow(dead_code, clippy::large_enum_variant)]
 pub enum InvocationArgs {
     UntypedRetype {
@@ -1046,7 +1360,7 @@ pub enum InvocationArgs {
         resume: bool,
         arch_flags: u8,
         count: u64,
-        regs: Aarch64Regs,
+        regs: Vec<(&'static str, u64)>,
     },
     TcbBindNotification {
         tcb: u64,
@@ -1059,7 +1373,7 @@ pub enum InvocationArgs {
     IrqControlGetTrigger {
         irq_control: u64,
         irq: u64,
-        trigger: ArmIrqTrigger,
+        trigger: IrqTrigger,
         dest_root: u64,
         dest_index: u64,
         dest_depth: u64,

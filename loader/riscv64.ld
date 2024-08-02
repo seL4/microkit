@@ -5,12 +5,12 @@
  */
 PHDRS
 {
-    all PT_LOAD AT (0x08a000000);
+    all PT_LOAD AT (LINK_ADDRESS);
 }
 
 SECTIONS
 {
-    . = 0x08a000000;
+    . = LINK_ADDRESS;
 
     .text :
     {
@@ -26,15 +26,15 @@ SECTIONS
         _data = .;
         *(.data)
         __global_pointer$ = . + 0x800;
-        *(.srodata)
-        *(.sdata)
-        _data_end = .;
+    *(.srodata)
+    *(.sdata)
+       _data_end = .;
     } :all
 
     .bss :
     {
         _bss = .;
-        *(.sbss)
+    *(.sbss)
         *(.bss)
         *(COMMON)
         . = ALIGN(4);

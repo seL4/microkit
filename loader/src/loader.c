@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <stdint.h>
-#include <strings.h>
+#include <stddef.h>
 
 _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr_t to be 32-bit or 64-bit");
 
@@ -88,6 +88,7 @@ void el2_mmu_enable(void);
 
 char _stack[STACK_SIZE] ALIGN(16);
 
+#ifdef ARCH_aarch64
 /* Paging structures for kernel mapping */
 uint64_t boot_lvl0_upper[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl1_upper[1 << 9] ALIGN(1 << 12);
@@ -98,7 +99,15 @@ uint64_t boot_lvl0_lower[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl1_lower[1 << 9] ALIGN(1 << 12);
 
 uintptr_t exception_register_state[32];
+#elif defined(ARCH_riscv64)
+/* Paging structures for kernel mapping */
+uint64_t boot_lvl1_pt[1 << 9] ALIGN(1 << 12);
+uint64_t boot_lvl2_pt[1 << 9] ALIGN(1 << 12);
+/* Paging structures for identity mapping */
+uint64_t boot_lvl2_pt_elf[1 << 9] ALIGN(1 << 12);
+#endif
 
+extern char _text;
 extern char _bss_end;
 const struct loader_data *loader_data = (void *) &_bss_end;
 
@@ -207,6 +216,29 @@ static void putc(uint8_t ch)
     while ((*UART_REG(UARTFR) & PL011_UARTFR_TXFF) != 0);
     *UART_REG(UARTDR) = ch;
 }
+
+#elif defined(ARCH_riscv64)
+#define SBI_CONSOLE_PUTCHAR 1
+
+// TODO: remove, just do straight ASM
+#define SBI_CALL(which, arg0, arg1, arg2) ({            \
+    register uintptr_t a0 asm ("a0") = (uintptr_t)(arg0);   \
+    register uintptr_t a1 asm ("a1") = (uintptr_t)(arg1);   \
+    register uintptr_t a2 asm ("a2") = (uintptr_t)(arg2);   \
+    register uintptr_t a7 asm ("a7") = (uintptr_t)(which);  \
+    asm volatile ("ecall"                   \
+              : "+r" (a0)               \
+              : "r" (a1), "r" (a2), "r" (a7)        \
+              : "memory");              \
+    a0;                         \
+})
+
+#define SBI_CALL_1(which, arg0) SBI_CALL(which, arg0, 0, 0)
+
+static void putc(uint8_t ch)
+{
+    SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
+}
 #else
 #error Board not defined
 #endif
@@ -252,6 +284,7 @@ static void puthex64(uint64_t val)
     puts(buffer);
 }
 
+#ifdef ARCH_aarch64
 static void puthex(uintptr_t val)
 {
 #if WORD_SIZE == 32
@@ -394,6 +427,7 @@ static char *ec_to_string(uintptr_t ec)
     }
     return "<invalid EC>";
 }
+#endif
 
 /*
  * Print out the loader data structure.
@@ -459,6 +493,7 @@ static void copy_data(void)
     }
 }
 
+#ifdef ARCH_aarch64
 static int ensure_correct_el(void)
 {
     enum el el = current_el();
@@ -509,6 +544,7 @@ static int ensure_correct_el(void)
 
     return 0;
 }
+#endif
 
 static void start_kernel(void)
 {
@@ -569,12 +605,35 @@ static void configure_gicv2(void)
 }
 #endif
 
+#ifdef ARCH_riscv64
+
+/*
+ * This is the encoding for the MODE field of the satp register when
+ * implementing 39-bit virtual address spaces (known as Sv39).
+ */
+#define VM_MODE (0x8llu << 60)
+
+#define RISCV_PGSHIFT 12
+
+static inline void enable_mmu(void)
+{
+    // The RISC-V privileged spec (20211203), section 4.1.11 says that the
+    // SFENCE.VMA instruction may need to be executed before or after writing
+    // to satp. I don't understand why we do it before compared to after.
+    // Need to understand 4.2.1 of the spec.
+    asm volatile("sfence.vma" ::: "memory");
+    asm volatile(
+        "csrw satp, %0\n"
+        :
+        : "r"(VM_MODE | (uintptr_t)boot_lvl1_pt >> RISCV_PGSHIFT)
+        :
+    );
+    asm volatile("fence.i" ::: "memory");
+}
+#endif
 
 int main(void)
 {
-    int r;
-    enum el el;
-
 #if defined(BOARD_zcu102)
     uart_init();
 #endif
@@ -583,7 +642,7 @@ int main(void)
     /* Check that the loader magic number is set correctly */
     if (loader_data->magic != MAGIC) {
         puts("LDR|ERROR: mismatch on loader data structure magic number\n");
-        return 1;
+        goto fail;
     }
 
     print_loader_data();
@@ -597,6 +656,9 @@ int main(void)
     configure_gicv2();
 #endif
 
+#ifdef ARCH_aarch64
+    int r;
+    enum el el;
     r = ensure_correct_el();
     if (r != 0) {
         goto fail;
@@ -611,6 +673,10 @@ int main(void)
     } else {
         puts("LDR|ERROR: unknown EL level for MMU enable\n");
     }
+#elif defined(ARCH_riscv64)
+    puts("LDR|INFO: enabling MMU\n");
+    enable_mmu();
+#endif
 
     puts("LDR|INFO: jumping to kernel\n");
     start_kernel();
@@ -626,6 +692,7 @@ fail:
     }
 }
 
+#ifdef ARCH_aarch64
 void exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
 {
     uintptr_t ec = (esr >> 26) & 0x3f;
@@ -654,3 +721,4 @@ void exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
     for (;;) {
     }
 }
+#endif

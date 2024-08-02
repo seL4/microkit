@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Arch, ArmIrqTrigger, Config, PageSize};
+use crate::sel4::{Arch, Config, IrqTrigger, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
 use std::path::{Path, PathBuf};
@@ -84,7 +84,7 @@ pub struct PlatformDescription {
 impl PlatformDescription {
     pub const fn new(kernel_config: &Config) -> PlatformDescription {
         let page_sizes = match kernel_config.arch {
-            Arch::Aarch64 => [0x1000, 0x200_000],
+            Arch::Aarch64 | Arch::Riscv64 => [0x1000, 0x200_000],
         };
 
         PlatformDescription { page_sizes }
@@ -128,7 +128,7 @@ impl SysMemoryRegion {
 pub struct SysIrq {
     pub irq: u64,
     pub id: u64,
-    pub trigger: ArmIrqTrigger,
+    pub trigger: IrqTrigger,
 }
 
 // The use of SysSetVar depends on the context. In some
@@ -477,8 +477,8 @@ impl ProtectionDomain {
 
                     let trigger = if let Some(trigger_str) = child.attribute("trigger") {
                         match trigger_str {
-                            "level" => ArmIrqTrigger::Level,
-                            "edge" => ArmIrqTrigger::Edge,
+                            "level" => IrqTrigger::Level,
+                            "edge" => IrqTrigger::Edge,
                             _ => {
                                 return Err(value_error(
                                     xml_sdf,
@@ -489,7 +489,7 @@ impl ProtectionDomain {
                         }
                     } else {
                         // Default the level triggered
-                        ArmIrqTrigger::Level
+                        IrqTrigger::Level
                     };
 
                     let irq = SysIrq {
