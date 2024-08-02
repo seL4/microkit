@@ -5,7 +5,7 @@
 //
 
 use crate::elf::ElfFile;
-use crate::sel4::Config;
+use crate::sel4::{Arch, Config};
 use crate::util::{kb, mask, mb, round_up, struct_to_bytes};
 use crate::MemoryRegion;
 use std::fs::File;
@@ -37,6 +37,44 @@ impl Aarch64 {
     pub fn lvl2_index(addr: u64) -> usize {
         let idx = (addr >> (AARCH64_2MB_BLOCK_BITS)) & mask(AARCH64_LVL2_BITS);
         idx as usize
+    }
+}
+
+struct Riscv64;
+impl Riscv64 {
+    const BLOCK_BITS_2MB: u64 = 21;
+
+    const PAGE_TABLE_INDEX_BITS: u64 = 9;
+    const PAGE_SHIFT: u64 = 12;
+    /// This sets the page table entry bits: D,A,X,W,R.
+    const PTE_TYPE_BITS: u64 = 0b11001110;
+    // TODO: where does this come from?
+    const PTE_TYPE_TABLE: u64 = 0;
+    const PTE_TYPE_VALID: u64 = 1;
+
+    const PTE_PPN0_SHIFT: u64 = 10;
+
+    /// Due to RISC-V having various virtual memory setups, we have this generic function to
+    /// figure out the page-table index given the total number of page table levels for the
+    /// platform and which level we are currently looking at.
+    pub fn pt_index(pt_levels: usize, addr: u64, level: usize) -> usize {
+        let pt_index_bits = Self::PAGE_TABLE_INDEX_BITS * (pt_levels - level) as u64;
+        let idx = (addr >> (pt_index_bits + Self::PAGE_SHIFT)) % 512;
+
+        idx as usize
+    }
+
+    /// Generate physical page number given an address
+    pub fn pte_ppn(addr: u64) -> u64 {
+        (addr >> Self::PAGE_SHIFT) << Self::PTE_PPN0_SHIFT
+    }
+
+    pub fn pte_next(addr: u64) -> u64 {
+        Self::pte_ppn(addr) | Self::PTE_TYPE_TABLE | Self::PTE_TYPE_VALID
+    }
+
+    pub fn pte_leaf(addr: u64) -> u64 {
+        Self::pte_ppn(addr) | Self::PTE_TYPE_BITS | Self::PTE_TYPE_VALID
     }
 }
 
@@ -91,7 +129,7 @@ pub struct Loader<'a> {
 
 impl<'a> Loader<'a> {
     pub fn new(
-        kernel_config: Config,
+        config: &Config,
         loader_elf_path: &Path,
         kernel_elf: &'a ElfFile,
         initial_task_elf: &'a ElfFile,
@@ -154,8 +192,13 @@ impl<'a> Loader<'a> {
         // (and indeed initial did support multi-segment ELF files). However
         // it adds significant complexity, and the calling functions enforce
         // only single-segment ELF files, so we keep things simple here.
-        assert!(initial_task_elf.segments.len() == 1);
-        let segment = &initial_task_elf.segments[0];
+        let initial_task_segments: Vec<_> = initial_task_elf
+            .segments
+            .iter()
+            .filter(|s| s.loadable)
+            .collect();
+        assert!(initial_task_segments.len() == 1);
+        let segment = &initial_task_segments[0];
         assert!(segment.loadable);
 
         let inittask_first_vaddr = segment.virt_addr;
@@ -173,11 +216,19 @@ impl<'a> Loader<'a> {
         // Determine the pagetable variables
         assert!(kernel_first_vaddr.is_some());
         assert!(kernel_first_vaddr.is_some());
-        let pagetable_vars = Loader::setup_pagetables(
-            &elf,
-            kernel_first_vaddr.unwrap(),
-            kernel_first_paddr.unwrap(),
-        );
+        let pagetable_vars = match config.arch {
+            Arch::Aarch64 => Loader::aarch64_setup_pagetables(
+                &elf,
+                kernel_first_vaddr.unwrap(),
+                kernel_first_paddr.unwrap(),
+            ),
+            Arch::Riscv64 => Loader::riscv64_setup_pagetables(
+                config,
+                &elf,
+                kernel_first_vaddr.unwrap(),
+                kernel_first_paddr.unwrap(),
+            ),
+        };
 
         let image_segment = elf
             .segments
@@ -221,7 +272,7 @@ impl<'a> Loader<'a> {
 
         check_non_overlapping(&all_regions);
 
-        let flags = match kernel_config.hypervisor {
+        let flags = match config.hypervisor {
             true => 1,
             false => 0,
         };
@@ -295,11 +346,85 @@ impl<'a> Loader<'a> {
         loader_buf.flush().unwrap();
     }
 
-    fn setup_pagetables(
+    fn riscv64_setup_pagetables(
+        config: &Config,
         elf: &ElfFile,
         first_vaddr: u64,
         first_paddr: u64,
-    ) -> [(u64, u64, [u8; PAGE_TABLE_SIZE]); 5] {
+    ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
+        let (text_addr, _) = elf
+            .find_symbol("_text")
+            .expect("Could not find 'text' symbol");
+        let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = elf
+            .find_symbol("boot_lvl1_pt")
+            .expect("Could not find 'boot_lvl1_pt' symbol");
+        let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = elf
+            .find_symbol("boot_lvl2_pt")
+            .expect("Could not find 'boot_lvl2_pt' symbol");
+        let (boot_lvl2_pt_elf_addr, boot_lvl2_pt_elf_size) = elf
+            .find_symbol("boot_lvl2_pt_elf")
+            .expect("Could not find 'boot_lvl2_pt_elf' symbol");
+
+        let num_pt_levels = config.riscv_pt_levels.unwrap().levels();
+
+        let mut boot_lvl1_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+        {
+            let text_index_lvl1 = Riscv64::pt_index(num_pt_levels, text_addr, 1);
+            let pt_entry = Riscv64::pte_next(boot_lvl2_pt_elf_addr);
+            let start = 8 * text_index_lvl1;
+            let end = start + 8;
+            boot_lvl1_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+        }
+
+        let mut boot_lvl2_pt_elf: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+        {
+            let text_index_lvl2 = Riscv64::pt_index(num_pt_levels, text_addr, 2);
+            for (page, i) in (text_index_lvl2..512).enumerate() {
+                let start = 8 * i;
+                let end = start + 8;
+                let addr = text_addr + ((page as u64) << Riscv64::BLOCK_BITS_2MB);
+                let pt_entry = Riscv64::pte_leaf(addr);
+                boot_lvl2_pt_elf[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+            }
+        }
+
+        {
+            let index = Riscv64::pt_index(num_pt_levels, first_vaddr, 1);
+            let start = 8 * index;
+            let end = start + 8;
+            boot_lvl1_pt[start..end]
+                .copy_from_slice(&Riscv64::pte_next(boot_lvl2_pt_addr).to_le_bytes());
+        }
+
+        let mut boot_lvl2_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+
+        {
+            let index = Riscv64::pt_index(num_pt_levels, first_vaddr, 2);
+            for (page, i) in (index..512).enumerate() {
+                let start = 8 * i;
+                let end = start + 8;
+                let addr = first_paddr + ((page as u64) << Riscv64::BLOCK_BITS_2MB);
+                let pt_entry = Riscv64::pte_leaf(addr);
+                boot_lvl2_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+            }
+        }
+
+        vec![
+            (boot_lvl1_pt_addr, boot_lvl1_pt_size, boot_lvl1_pt),
+            (boot_lvl2_pt_addr, boot_lvl2_pt_size, boot_lvl2_pt),
+            (
+                boot_lvl2_pt_elf_addr,
+                boot_lvl2_pt_elf_size,
+                boot_lvl2_pt_elf,
+            ),
+        ]
+    }
+
+    fn aarch64_setup_pagetables(
+        elf: &ElfFile,
+        first_vaddr: u64,
+        first_paddr: u64,
+    ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
         let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = elf
             .find_symbol("boot_lvl1_lower")
             .expect("Could not find 'boot_lvl1_lower' symbol");
@@ -360,7 +485,7 @@ impl<'a> Loader<'a> {
             boot_lvl2_upper[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
-        [
+        vec![
             (boot_lvl0_lower_addr, boot_lvl0_lower_size, boot_lvl0_lower),
             (boot_lvl1_lower_addr, boot_lvl1_lower_size, boot_lvl1_lower),
             (boot_lvl0_upper_addr, boot_lvl0_upper_size, boot_lvl0_upper),

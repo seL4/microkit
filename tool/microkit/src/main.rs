@@ -18,8 +18,9 @@ use sdf::{
     SystemDescription, VirtualMachine,
 };
 use sel4::{
-    Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation, InvocationArgs, Object,
-    ObjectType, PageSize, Rights,
+    default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
+    InvocationArgs, Object, ObjectType, PageSize, Rights, Riscv64Regs, RiscvVirtualMemory,
+    RiscvVmAttributes,
 };
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -29,7 +30,7 @@ use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use util::{
-    bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str_as_bool, json_str_as_u64,
+    bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
     struct_to_bytes,
 };
 
@@ -133,7 +134,7 @@ impl FixedUntypedAlloc {
 }
 
 struct InitSystem<'a> {
-    kernel_config: &'a Config,
+    config: &'a Config,
     cnode_cap: u64,
     cnode_mask: u64,
     kao: &'a mut ObjectAllocator,
@@ -148,7 +149,7 @@ struct InitSystem<'a> {
 impl<'a> InitSystem<'a> {
     #[allow(clippy::too_many_arguments)] // just this one time, pinky-promise...
     pub fn new(
-        kernel_config: &'a Config,
+        config: &'a Config,
         cnode_cap: u64,
         cnode_mask: u64,
         first_available_cap_slot: u64,
@@ -171,7 +172,7 @@ impl<'a> InitSystem<'a> {
         device_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
 
         InitSystem {
-            kernel_config,
+            config,
             cnode_cap,
             cnode_mask,
             kao: kernel_object_allocator,
@@ -220,11 +221,11 @@ impl<'a> InitSystem<'a> {
         names: Vec<String>,
     ) -> Vec<Object> {
         assert!(phys_address >= self.last_fixed_address);
-        assert!(object_type.fixed_size().is_some());
+        assert!(object_type.fixed_size(self.config).is_some());
         assert!(count == names.len() as u64);
         assert!(count > 0);
 
-        let alloc_size = object_type.fixed_size().unwrap();
+        let alloc_size = object_type.fixed_size(self.config).unwrap();
         // Find an untyped that contains the given address
         let fut: &mut FixedUntypedAlloc = self
             .device_untyped
@@ -270,8 +271,9 @@ impl<'a> InitSystem<'a> {
             }
 
             for sz in padding_sizes {
-                self.invocations
-                    .push(Invocation::new(InvocationArgs::UntypedRetype {
+                self.invocations.push(Invocation::new(
+                    self.config,
+                    InvocationArgs::UntypedRetype {
                         untyped: fut.ut.cap,
                         object_type: ObjectType::Untyped,
                         size_bits: sz.ilog2() as u64,
@@ -280,15 +282,17 @@ impl<'a> InitSystem<'a> {
                         node_depth: 1,
                         node_offset: self.cap_slot,
                         num_objects: 1,
-                    }));
+                    },
+                ));
                 self.cap_slot += 1;
             }
         }
 
         let object_cap = self.cap_slot;
         self.cap_slot += 1;
-        self.invocations
-            .push(Invocation::new(InvocationArgs::UntypedRetype {
+        self.invocations.push(Invocation::new(
+            self.config,
+            InvocationArgs::UntypedRetype {
                 untyped: fut.ut.cap,
                 object_type,
                 size_bits: 0,
@@ -297,7 +301,8 @@ impl<'a> InitSystem<'a> {
                 node_depth: 1,
                 node_offset: object_cap,
                 num_objects: 1,
-            }));
+            },
+        ));
 
         fut.watermark = phys_address + alloc_size;
         self.last_fixed_address = phys_address + alloc_size;
@@ -330,7 +335,7 @@ impl<'a> InitSystem<'a> {
 
         let alloc_size;
         let api_size: u64;
-        if let Some(object_size) = object_type.fixed_size() {
+        if let Some(object_size) = object_type.fixed_size(self.config) {
             // An object with a fixed size should not be allocated with a given size
             assert!(size.is_none());
             alloc_size = object_size;
@@ -351,9 +356,10 @@ impl<'a> InitSystem<'a> {
         let mut to_alloc = count;
         let mut alloc_cap_slot = base_cap_slot;
         while to_alloc > 0 {
-            let call_count = min(to_alloc, self.kernel_config.fan_out_limit);
-            self.invocations
-                .push(Invocation::new(InvocationArgs::UntypedRetype {
+            let call_count = min(to_alloc, self.config.fan_out_limit);
+            self.invocations.push(Invocation::new(
+                self.config,
+                InvocationArgs::UntypedRetype {
                     untyped: allocation.untyped_cap_address,
                     object_type,
                     size_bits: api_size,
@@ -362,7 +368,8 @@ impl<'a> InitSystem<'a> {
                     node_depth: 1,
                     node_offset: alloc_cap_slot,
                     num_objects: call_count,
-                }));
+                },
+            ));
             to_alloc -= call_count;
             alloc_cap_slot += call_count;
         }
@@ -421,6 +428,7 @@ fn phys_mem_regions_from_elf(elf: &ElfFile, alignment: u64) -> Vec<MemoryRegion>
 
     elf.segments
         .iter()
+        .filter(|s| s.loadable)
         .map(|s| {
             MemoryRegion::new(
                 util::round_down(s.phys_addr, alignment),
@@ -436,7 +444,7 @@ fn phys_mem_regions_from_elf(elf: &ElfFile, alignment: u64) -> Vec<MemoryRegion>
 /// segment, and returns the region covering the first segment.
 fn phys_mem_region_from_elf(elf: &ElfFile, alignment: u64) -> MemoryRegion {
     assert!(alignment > 0);
-    assert!(elf.segments.len() == 1);
+    assert!(elf.segments.iter().filter(|s| s.loadable).count() == 1);
 
     phys_mem_regions_from_elf(elf, alignment)[0]
 }
@@ -450,6 +458,7 @@ fn virt_mem_regions_from_elf(elf: &ElfFile, alignment: u64) -> Vec<MemoryRegion>
     assert!(alignment > 0);
     elf.segments
         .iter()
+        .filter(|s| s.loadable)
         .map(|s| {
             MemoryRegion::new(
                 util::round_down(s.virt_addr, alignment),
@@ -465,7 +474,7 @@ fn virt_mem_regions_from_elf(elf: &ElfFile, alignment: u64) -> Vec<MemoryRegion>
 /// segment, and returns the region covering the first segment.
 fn virt_mem_region_from_elf(elf: &ElfFile, alignment: u64) -> MemoryRegion {
     assert!(alignment > 0);
-    assert!(elf.segments.len() == 1);
+    assert!(elf.segments.iter().filter(|s| s.loadable).count() == 1);
 
     virt_mem_regions_from_elf(elf, alignment)[0]
 }
@@ -489,31 +498,52 @@ struct KernelPartialBootInfo {
 
 // Corresponds to kernel_frame_t in the kernel
 #[repr(C)]
-struct KernelFrame64 {
+struct KernelFrameRiscv64 {
     pub paddr: u64,
     pub pptr: u64,
-    pub execute_never: u32,
-    pub user_accessible: u32,
+    pub user_accessible: i32,
 }
 
-fn kernel_device_addrs(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<u64> {
-    assert!(kernel_config.word_size == 64, "Unsupported word-size");
+#[repr(C)]
+struct KernelFrameAarch64 {
+    pub paddr: u64,
+    pub pptr: u64,
+    pub execute_never: i32,
+    pub user_accessible: i32,
+}
+
+fn kernel_device_addrs(config: &Config, kernel_elf: &ElfFile) -> Vec<u64> {
+    assert!(config.word_size == 64, "Unsupported word-size");
 
     let mut kernel_devices = Vec::new();
     let (vaddr, size) = kernel_elf
         .find_symbol("kernel_device_frames")
         .expect("Could not find 'kernel_device_frames' symbol");
     let kernel_frame_bytes = kernel_elf.get_data(vaddr, size).unwrap();
-    let kernel_frame_size = size_of::<KernelFrame64>();
+    let kernel_frame_size = match config.arch {
+        Arch::Aarch64 => size_of::<KernelFrameAarch64>(),
+        Arch::Riscv64 => size_of::<KernelFrameRiscv64>(),
+    };
     let mut offset: usize = 0;
     while offset < size as usize {
-        let kernel_frame = unsafe {
-            bytes_to_struct::<KernelFrame64>(
-                &kernel_frame_bytes[offset..offset + kernel_frame_size],
-            )
+        let (user_accessible, paddr) = unsafe {
+            match config.arch {
+                Arch::Aarch64 => {
+                    let frame = bytes_to_struct::<KernelFrameAarch64>(
+                        &kernel_frame_bytes[offset..offset + kernel_frame_size],
+                    );
+                    (frame.user_accessible, frame.paddr)
+                }
+                Arch::Riscv64 => {
+                    let frame = bytes_to_struct::<KernelFrameRiscv64>(
+                        &kernel_frame_bytes[offset..offset + kernel_frame_size],
+                    );
+                    (frame.user_accessible, frame.paddr)
+                }
+            }
         };
-        if kernel_frame.user_accessible == 0 {
-            kernel_devices.push(kernel_frame.paddr);
+        if user_accessible == 0 {
+            kernel_devices.push(paddr);
         }
         offset += kernel_frame_size;
     }
@@ -549,21 +579,23 @@ fn kernel_phys_mem(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<(u64, u6
 }
 
 fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
-    let base = kernel_elf.segments[0].phys_addr;
+    let segments = kernel_elf.loadable_segments();
+    let base = segments[0].phys_addr;
     let (ki_end_v, _) = kernel_elf
         .find_symbol("ki_end")
         .expect("Could not find 'ki_end' symbol");
-    let ki_end_p = ki_end_v - kernel_elf.segments[0].virt_addr + base;
+    let ki_end_p = ki_end_v - segments[0].virt_addr + base;
 
     MemoryRegion::new(base, ki_end_p)
 }
 
 fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
-    let base = kernel_elf.segments[0].phys_addr;
+    let segments = kernel_elf.loadable_segments();
+    let base = segments[0].phys_addr;
     let (ki_boot_end_v, _) = kernel_elf
         .find_symbol("ki_boot_end")
         .expect("Could not find 'ki_boot_end' symbol");
-    let ki_boot_end_p = ki_boot_end_v - kernel_elf.segments[0].virt_addr + base;
+    let ki_boot_end_p = ki_boot_end_v - segments[0].virt_addr + base;
 
     MemoryRegion::new(base, ki_boot_end_p)
 }
@@ -618,9 +650,9 @@ fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPa
 fn emulate_kernel_boot_partial(
     kernel_config: &Config,
     kernel_elf: &ElfFile,
-) -> DisjointMemoryRegion {
+) -> (DisjointMemoryRegion, MemoryRegion) {
     let partial_info = kernel_partial_boot(kernel_config, kernel_elf);
-    partial_info.normal_memory
+    (partial_info.normal_memory, partial_info.boot_region)
 }
 
 fn get_n_paging(region: MemoryRegion, bits: u64) -> u64 {
@@ -630,35 +662,47 @@ fn get_n_paging(region: MemoryRegion, bits: u64) -> u64 {
     (end - start) / (1 << bits)
 }
 
-fn get_arch_n_paging(region: MemoryRegion) -> u64 {
-    const PT_INDEX_OFFSET: u64 = 12;
-    const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
-    const PUD_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
+fn get_arch_n_paging(config: &Config, region: MemoryRegion) -> u64 {
+    match config.arch {
+        Arch::Aarch64 => {
+            const PT_INDEX_OFFSET: u64 = 12;
+            const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
+            const PUD_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
 
-    get_n_paging(region, PUD_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
+            get_n_paging(region, PUD_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
+        }
+        Arch::Riscv64 => match config.riscv_pt_levels.unwrap() {
+            RiscvVirtualMemory::Sv39 => {
+                const PT_INDEX_OFFSET: u64 = 12;
+                const LVL1_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
+                const LVL2_INDEX_OFFSET: u64 = LVL1_INDEX_OFFSET + 9;
+
+                get_n_paging(region, LVL2_INDEX_OFFSET) + get_n_paging(region, LVL1_INDEX_OFFSET)
+            }
+        },
+    }
 }
 
-fn rootserver_max_size_bits() -> u64 {
+fn rootserver_max_size_bits(config: &Config) -> u64 {
     let slot_bits = 5; // seL4_SlotBits
-    let root_cnode_bits = 12; // CONFIG_ROOT_CNODE_SIZE_BITS
-    let vspace_bits = 13; // seL4_VSpaceBits
+    let root_cnode_bits = config.init_cnode_bits; // CONFIG_ROOT_CNODE_SIZE_BITS
+    let vspace_bits = ObjectType::VSpace.fixed_size_bits(config).unwrap();
 
     let cnode_size_bits = root_cnode_bits + slot_bits;
     max(cnode_size_bits, vspace_bits)
 }
 
-fn calculate_rootserver_size(initial_task_region: MemoryRegion) -> u64 {
+fn calculate_rootserver_size(config: &Config, initial_task_region: MemoryRegion) -> u64 {
     // FIXME: These constants should ideally come from the config / kernel
     // binary not be hard coded here.
     // But they are constant so it isn't too bad.
-    // This is specifically for aarch64
     let slot_bits = 5; // seL4_SlotBits
-    let root_cnode_bits = 12; // CONFIG_ROOT_CNODE_SIZE_BITS
-    let tcb_bits = 11; // seL4_TCBBits
-    let page_bits = 12; // seL4_PageBits
+    let root_cnode_bits = config.init_cnode_bits; // CONFIG_ROOT_CNODE_SIZE_BITS
+    let tcb_bits = ObjectType::Tcb.fixed_size_bits(config).unwrap(); // seL4_TCBBits
+    let page_bits = ObjectType::SmallPage.fixed_size_bits(config).unwrap(); // seL4_PageBits
     let asid_pool_bits = 12; // seL4_ASIDPoolBits
-    let vspace_bits = 13; // seL4_VSpaceBits
-    let page_table_bits = 12; // seL4_PageTableBits
+    let vspace_bits = ObjectType::VSpace.fixed_size_bits(config).unwrap(); // seL4_VSpaceBits
+    let page_table_bits = ObjectType::PageTable.fixed_size_bits(config).unwrap(); // seL4_PageTableBits
     let min_sched_context_bits = 7; // seL4_MinSchedContextBits
 
     let mut size = 0;
@@ -667,7 +711,7 @@ fn calculate_rootserver_size(initial_task_region: MemoryRegion) -> u64 {
     size += 2 * (1 << page_bits);
     size += 1 << asid_pool_bits;
     size += 1 << vspace_bits;
-    size += get_arch_n_paging(initial_task_region) * (1 << page_table_bits);
+    size += get_arch_n_paging(config, initial_task_region) * (1 << page_table_bits);
     size += 1 << min_sched_context_bits;
 
     size
@@ -676,14 +720,14 @@ fn calculate_rootserver_size(initial_task_region: MemoryRegion) -> u64 {
 /// Emulate what happens during a kernel boot, generating a
 /// representation of the BootInfo struct.
 fn emulate_kernel_boot(
-    kernel_config: &Config,
+    config: &Config,
     kernel_elf: &ElfFile,
     initial_task_phys_region: MemoryRegion,
     initial_task_virt_region: MemoryRegion,
     reserved_region: MemoryRegion,
 ) -> BootInfo {
     assert!(initial_task_phys_region.size() == initial_task_virt_region.size());
-    let partial_info = kernel_partial_boot(kernel_config, kernel_elf);
+    let partial_info = kernel_partial_boot(config, kernel_elf);
     let mut normal_memory = partial_info.normal_memory;
     let device_memory = partial_info.device_memory;
     let boot_region = partial_info.boot_region;
@@ -692,8 +736,8 @@ fn emulate_kernel_boot(
     normal_memory.remove_region(reserved_region.base, reserved_region.end);
 
     // Now, the tricky part! determine which memory is used for the initial task objects
-    let initial_objects_size = calculate_rootserver_size(initial_task_virt_region);
-    let initial_objects_align = rootserver_max_size_bits();
+    let initial_objects_size = calculate_rootserver_size(config, initial_task_virt_region);
+    let initial_objects_align = rootserver_max_size_bits(config);
 
     // Find an appropriate region of normal memory to allocate the objects
     // from; this follows the same algorithm used within the kernel boot code
@@ -718,20 +762,24 @@ fn emulate_kernel_boot(
 
     let fixed_cap_count = 0x10;
     let sched_control_cap_count = 1;
-    let paging_cap_count = get_arch_n_paging(initial_task_virt_region);
-    let page_cap_count = initial_task_virt_region.size() / kernel_config.minimum_page_size;
+    let paging_cap_count = get_arch_n_paging(config, initial_task_virt_region);
+    let page_cap_count = initial_task_virt_region.size() / config.minimum_page_size;
     let first_untyped_cap =
         fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count;
     let sched_control_cap = fixed_cap_count + paging_cap_count;
 
+    let max_bits = match config.arch {
+        Arch::Aarch64 => 47,
+        Arch::Riscv64 => 38,
+    };
     let device_regions: Vec<MemoryRegion> = [
-        reserved_region.aligned_power_of_two_regions(),
-        device_memory.aligned_power_of_two_regions(),
+        reserved_region.aligned_power_of_two_regions(max_bits),
+        device_memory.aligned_power_of_two_regions(max_bits),
     ]
     .concat();
     let normal_regions: Vec<MemoryRegion> = [
-        boot_region.aligned_power_of_two_regions(),
-        normal_memory.aligned_power_of_two_regions(),
+        boot_region.aligned_power_of_two_regions(max_bits),
+        normal_memory.aligned_power_of_two_regions(max_bits),
     ]
     .concat();
     let mut untyped_objects = Vec::new();
@@ -758,7 +806,7 @@ fn emulate_kernel_boot(
 }
 
 fn build_system(
-    kernel_config: &Config,
+    config: &Config,
     kernel_elf: &ElfFile,
     monitor_elf: &ElfFile,
     system: &SystemDescription,
@@ -767,7 +815,7 @@ fn build_system(
     search_paths: &Vec<PathBuf>,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
-    assert!(invocation_table_size % kernel_config.minimum_page_size == 0);
+    assert!(invocation_table_size % config.minimum_page_size == 0);
     assert!(invocation_table_size <= MAX_SYSTEM_INVOCATION_SIZE);
 
     let mut cap_address_names: HashMap<u64, String> = HashMap::new();
@@ -783,8 +831,7 @@ fn build_system(
     // Emulate kernel boot
 
     // Determine physical memory region used by the monitor
-    let initial_task_size =
-        phys_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size).size();
+    let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
 
     // Get the elf files for each pd:
     let mut pd_elf_files = Vec::with_capacity(system.protection_domains.len());
@@ -811,7 +858,7 @@ fn build_system(
     // protection domains
     let mut pd_elf_size = 0;
     for pd_elf in &pd_elf_files {
-        for r in phys_mem_regions_from_elf(pd_elf, kernel_config.minimum_page_size) {
+        for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
             pd_elf_size += r.size();
         }
     }
@@ -819,20 +866,26 @@ fn build_system(
 
     // Now that the size is determined, find a free region in the physical memory
     // space.
-    let mut available_memory = emulate_kernel_boot_partial(kernel_config, kernel_elf);
+    let (mut available_memory, kernel_boot_region) =
+        emulate_kernel_boot_partial(config, kernel_elf);
 
-    let reserved_base = available_memory.allocate(reserved_size);
-    let initial_task_phys_base = available_memory.allocate(initial_task_size);
-    // The kernel relies on this ordering. The previous allocation functions do *NOT* enforce
-    // this though, should fix that.
+    // The kernel relies on the reserved region being allocated above the kernel
+    // boot/ELF region, so we have the end of the kernel boot region as the lower
+    // bound for allocating the reserved region.
+    let reserved_base = available_memory.allocate_from(reserved_size, kernel_boot_region.end);
+    assert!(kernel_boot_region.base < reserved_base);
+    // The kernel relies on the initial task being allocated above the reserved
+    // region, so we have the address of the end of the reserved region as the
+    // lower bound for allocating the initial task.
+    let initial_task_phys_base =
+        available_memory.allocate_from(initial_task_size, reserved_base + reserved_size);
     assert!(reserved_base < initial_task_phys_base);
 
     let initial_task_phys_region = MemoryRegion::new(
         initial_task_phys_base,
         initial_task_phys_base + initial_task_size,
     );
-    let initial_task_virt_region =
-        virt_mem_region_from_elf(monitor_elf, kernel_config.minimum_page_size);
+    let initial_task_virt_region = virt_mem_region_from_elf(monitor_elf, config.minimum_page_size);
 
     let reserved_region = MemoryRegion::new(reserved_base, reserved_base + reserved_size);
 
@@ -846,7 +899,7 @@ fn build_system(
     // boot can be emulated. This provides the boot info information which is needed
     // for the next steps
     let kernel_boot_info = emulate_kernel_boot(
-        kernel_config,
+        config,
         kernel_elf,
         initial_task_phys_region,
         initial_task_virt_region,
@@ -919,16 +972,19 @@ fn build_system(
     // First up create the root cnode
     let mut bootstrap_invocations = Vec::new();
 
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::UntypedRetype {
-        untyped: root_cnode_allocation.untyped_cap_address,
-        object_type: ObjectType::CNode,
-        size_bits: root_cnode_bits,
-        root: INIT_CNODE_CAP_ADDRESS,
-        node_index: 0,
-        node_depth: 0,
-        node_offset: root_cnode_cap,
-        num_objects: 1,
-    }));
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::UntypedRetype {
+            untyped: root_cnode_allocation.untyped_cap_address,
+            object_type: ObjectType::CNode,
+            size_bits: root_cnode_bits,
+            root: INIT_CNODE_CAP_ADDRESS,
+            node_index: 0,
+            node_depth: 0,
+            node_offset: root_cnode_cap,
+            num_objects: 1,
+        },
+    ));
 
     // 2.1.4: Now insert a cap to the initial Cnode into slot zero of the newly
     // allocated root Cnode. It uses sufficient guard bits to ensure it is
@@ -936,58 +992,70 @@ fn build_system(
     //
     // guard size is the lower bit of the guard, upper bits are the guard itself
     // which for out purposes is always zero.
-    let guard = kernel_config.cap_address_bits - root_cnode_bits - kernel_config.init_cnode_bits;
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-        cnode: root_cnode_cap,
-        dest_index: 0,
-        dest_depth: root_cnode_bits,
-        src_root: INIT_CNODE_CAP_ADDRESS,
-        src_obj: INIT_CNODE_CAP_ADDRESS,
-        src_depth: kernel_config.cap_address_bits,
-        rights: Rights::All as u64,
-        badge: guard,
-    }));
+    let guard = config.cap_address_bits - root_cnode_bits - config.init_cnode_bits;
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::CnodeMint {
+            cnode: root_cnode_cap,
+            dest_index: 0,
+            dest_depth: root_cnode_bits,
+            src_root: INIT_CNODE_CAP_ADDRESS,
+            src_obj: INIT_CNODE_CAP_ADDRESS,
+            src_depth: config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge: guard,
+        },
+    ));
 
     // 2.1.5: Now it is possible to switch our root Cnode to the newly create
     // root cnode. We have a zero sized guard. This Cnode represents the top
     // bit of any cap addresses.
     let root_guard = 0;
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::TcbSetSpace {
-        tcb: INIT_TCB_CAP_ADDRESS,
-        fault_ep: INIT_NULL_CAP_ADDRESS,
-        cspace_root: root_cnode_cap,
-        cspace_root_data: root_guard,
-        vspace_root: INIT_VSPACE_CAP_ADDRESS,
-        vspace_root_data: 0,
-    }));
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::TcbSetSpace {
+            tcb: INIT_TCB_CAP_ADDRESS,
+            fault_ep: INIT_NULL_CAP_ADDRESS,
+            cspace_root: root_cnode_cap,
+            cspace_root_data: root_guard,
+            vspace_root: INIT_VSPACE_CAP_ADDRESS,
+            vspace_root_data: 0,
+        },
+    ));
 
     // 2.1.6: Now we can create our new system Cnode. We will place it into
     // a temporary cap slot in the initial CNode to start with.
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::UntypedRetype {
-        untyped: system_cnode_allocation.untyped_cap_address,
-        object_type: ObjectType::CNode,
-        size_bits: system_cnode_bits,
-        root: INIT_CNODE_CAP_ADDRESS,
-        node_index: 0,
-        node_depth: 0,
-        node_offset: system_cnode_cap,
-        num_objects: 1,
-    }));
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::UntypedRetype {
+            untyped: system_cnode_allocation.untyped_cap_address,
+            object_type: ObjectType::CNode,
+            size_bits: system_cnode_bits,
+            root: INIT_CNODE_CAP_ADDRESS,
+            node_index: 0,
+            node_depth: 0,
+            node_offset: system_cnode_cap,
+            num_objects: 1,
+        },
+    ));
 
     // 2.1.7: Now that the we have create the object, we can 'mutate' it
     // to the correct place:
     // Slot #1 of the new root cnode
-    let system_cap_address_mask = 1 << (kernel_config.cap_address_bits - 1);
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-        cnode: root_cnode_cap,
-        dest_index: 1,
-        dest_depth: root_cnode_bits,
-        src_root: INIT_CNODE_CAP_ADDRESS,
-        src_obj: system_cnode_cap,
-        src_depth: kernel_config.cap_address_bits,
-        rights: Rights::All as u64,
-        badge: kernel_config.cap_address_bits - root_cnode_bits - system_cnode_bits,
-    }));
+    let system_cap_address_mask = 1 << (config.cap_address_bits - 1);
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::CnodeMint {
+            cnode: root_cnode_cap,
+            dest_index: 1,
+            dest_depth: root_cnode_bits,
+            src_root: INIT_CNODE_CAP_ADDRESS,
+            src_obj: system_cnode_cap,
+            src_depth: config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge: config.cap_address_bits - root_cnode_bits - system_cnode_bits,
+        },
+    ));
 
     // 2.2 At this point it is necessary to get the frames containing the
     // main system invocations into the virtual address space. (Remember the
@@ -1009,7 +1077,7 @@ fn build_system(
     // page size. It would be good in the future to use super pages (when
     // it makes sense to - this would reduce memory usage, and the number of
     // invocations required to set up the address space
-    let pages_required = invocation_table_size / kernel_config.minimum_page_size;
+    let pages_required = invocation_table_size / config.minimum_page_size;
     let base_page_cap = 0;
     for pta in base_page_cap..base_page_cap + pages_required {
         cap_address_names.insert(
@@ -1029,23 +1097,26 @@ fn build_system(
         .filter(|o| o.is_device)
         .collect();
     for ut in boot_info_device_untypeds {
-        let ut_pages = ut.region.size() / kernel_config.minimum_page_size;
+        let ut_pages = ut.region.size() / config.minimum_page_size;
         let retype_page_count = min(ut_pages, remaining_pages);
-        assert!(retype_page_count <= kernel_config.fan_out_limit);
-        bootstrap_invocations.push(Invocation::new(InvocationArgs::UntypedRetype {
-            untyped: ut.cap,
-            object_type: ObjectType::SmallPage,
-            size_bits: 0,
-            root: root_cnode_cap,
-            node_index: 1,
-            node_depth: 1,
-            node_offset: cap_slot,
-            num_objects: retype_page_count,
-        }));
+        assert!(retype_page_count <= config.fan_out_limit);
+        bootstrap_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::UntypedRetype {
+                untyped: ut.cap,
+                object_type: ObjectType::SmallPage,
+                size_bits: 0,
+                root: root_cnode_cap,
+                node_index: 1,
+                node_depth: 1,
+                node_offset: cap_slot,
+                num_objects: retype_page_count,
+            },
+        ));
 
         remaining_pages -= retype_page_count;
         cap_slot += retype_page_count;
-        phys_addr += retype_page_count * kernel_config.minimum_page_size;
+        phys_addr += retype_page_count * config.minimum_page_size;
         invocation_table_allocations.push((ut, phys_addr));
         if remaining_pages == 0 {
             break;
@@ -1060,9 +1131,11 @@ fn build_system(
     // sized system.
     //
     // Before mapping it is necessary to install page tables that can cover the region.
-    let page_tables_required = util::round_up(invocation_table_size, sel4::OBJECT_SIZE_LARGE_PAGE)
-        / sel4::OBJECT_SIZE_LARGE_PAGE;
-    let page_table_allocation = kao.alloc_n(sel4::OBJECT_SIZE_PAGE_TABLE, page_tables_required);
+    let large_page_size = ObjectType::LargePage.fixed_size(config).unwrap();
+    let page_table_size = ObjectType::PageTable.fixed_size(config).unwrap();
+    let page_tables_required =
+        util::round_up(invocation_table_size, large_page_size) / large_page_size;
+    let page_table_allocation = kao.alloc_n(page_table_size, page_tables_required);
     let base_page_table_cap = cap_slot;
 
     for pta in base_page_table_cap..base_page_table_cap + page_tables_required {
@@ -1072,27 +1145,37 @@ fn build_system(
         );
     }
 
-    assert!(page_tables_required <= kernel_config.fan_out_limit);
-    bootstrap_invocations.push(Invocation::new(InvocationArgs::UntypedRetype {
-        untyped: page_table_allocation.untyped_cap_address,
-        object_type: ObjectType::PageTable,
-        size_bits: 0,
-        root: root_cnode_cap,
-        node_index: 1,
-        node_depth: 1,
-        node_offset: cap_slot,
-        num_objects: page_tables_required,
-    }));
+    assert!(page_tables_required <= config.fan_out_limit);
+    bootstrap_invocations.push(Invocation::new(
+        config,
+        InvocationArgs::UntypedRetype {
+            untyped: page_table_allocation.untyped_cap_address,
+            object_type: ObjectType::PageTable,
+            size_bits: 0,
+            root: root_cnode_cap,
+            node_index: 1,
+            node_depth: 1,
+            node_offset: cap_slot,
+            num_objects: page_tables_required,
+        },
+    ));
     cap_slot += page_tables_required;
 
     let page_table_vaddr: u64 = 0x8000_0000;
     // Now that the page tables are allocated they can be mapped into vspace
-    let mut pt_map_invocation = Invocation::new(InvocationArgs::PageTableMap {
-        page_table: system_cap_address_mask | base_page_table_cap,
-        vspace: INIT_VSPACE_CAP_ADDRESS,
-        vaddr: page_table_vaddr,
-        attr: ArmVmAttributes::default(),
-    });
+    let bootstrap_pt_attr = match config.arch {
+        Arch::Aarch64 => ArmVmAttributes::default(),
+        Arch::Riscv64 => RiscvVmAttributes::default(),
+    };
+    let mut pt_map_invocation = Invocation::new(
+        config,
+        InvocationArgs::PageTableMap {
+            page_table: system_cap_address_mask | base_page_table_cap,
+            vspace: INIT_VSPACE_CAP_ADDRESS,
+            vaddr: page_table_vaddr,
+            attr: bootstrap_pt_attr,
+        },
+    );
     pt_map_invocation.repeat(
         page_tables_required as u32,
         InvocationArgs::PageTableMap {
@@ -1106,19 +1189,26 @@ fn build_system(
 
     // Finally, once the page tables are allocated the pages can be mapped
     let page_vaddr: u64 = 0x8000_0000;
-    let mut map_invocation = Invocation::new(InvocationArgs::PageMap {
-        page: system_cap_address_mask | base_page_cap,
-        vspace: INIT_VSPACE_CAP_ADDRESS,
-        vaddr: page_vaddr,
-        rights: Rights::Read as u64,
-        attr: ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
-    });
+    let bootstrap_page_attr = match config.arch {
+        Arch::Aarch64 => ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
+        Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
+    };
+    let mut map_invocation = Invocation::new(
+        config,
+        InvocationArgs::PageMap {
+            page: system_cap_address_mask | base_page_cap,
+            vspace: INIT_VSPACE_CAP_ADDRESS,
+            vaddr: page_vaddr,
+            rights: Rights::Read as u64,
+            attr: bootstrap_page_attr,
+        },
+    );
     map_invocation.repeat(
         pages_required as u32,
         InvocationArgs::PageMap {
             page: 1,
             vspace: 0,
-            vaddr: kernel_config.minimum_page_size,
+            vaddr: config.minimum_page_size,
             rights: 0,
             attr: 0,
         },
@@ -1154,8 +1244,7 @@ fn build_system(
                 continue;
             }
 
-            let segment_phys_addr =
-                phys_addr_next + (segment.virt_addr % kernel_config.minimum_page_size);
+            let segment_phys_addr = phys_addr_next + (segment.virt_addr % config.minimum_page_size);
             pd_elf_regions[i].push(Region::new(
                 format!("PD-ELF {}-{}", pd.name, seg_idx),
                 segment_phys_addr,
@@ -1174,10 +1263,10 @@ fn build_system(
                 perms |= SysMapPerms::Execute as u8;
             }
 
-            let base_vaddr = util::round_down(segment.virt_addr, kernel_config.minimum_page_size);
+            let base_vaddr = util::round_down(segment.virt_addr, config.minimum_page_size);
             let end_vaddr = util::round_up(
                 segment.virt_addr + segment.mem_size(),
-                kernel_config.minimum_page_size,
+                config.minimum_page_size,
             );
             let aligned_size = end_vaddr - base_vaddr;
             let name = format!("ELF:{}-{}", pd.name, seg_idx);
@@ -1221,7 +1310,7 @@ fn build_system(
             phys_addr: None,
         };
 
-        let stack_vaddr = kernel_config.user_top();
+        let stack_vaddr = config.user_top();
 
         let stack_map = SysMap {
             mr: stack_mr.name.clone(),
@@ -1247,7 +1336,7 @@ fn build_system(
 
     let mut system_invocations: Vec<Invocation> = Vec::new();
     let mut init_system = InitSystem::new(
-        kernel_config,
+        config,
         root_cnode_cap,
         system_cap_address_mask,
         cap_slot,
@@ -1491,9 +1580,15 @@ fn build_system(
         }
 
         for (vaddr, page_size) in vaddrs {
-            if !kernel_config.hypervisor && kernel_config.arm_pa_size_bits != 40 {
-                upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+            match config.arch {
+                Arch::Aarch64 => {
+                    if !config.hypervisor && config.arm_pa_size_bits.unwrap() != 40 {
+                        upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+                    }
+                }
+                Arch::Riscv64 => {}
             }
+
             directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
             if page_size == PageSize::Small {
                 page_table_vaddrs.insert(util::mask_bits(vaddr, 12 + 9));
@@ -1544,8 +1639,8 @@ fn build_system(
         }
 
         for (vaddr, page_size) in vaddrs {
-            assert!(kernel_config.hypervisor);
-            if kernel_config.arm_pa_size_bits != 40 {
+            assert!(config.hypervisor);
+            if config.arm_pa_size_bits.unwrap() != 40 {
                 upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
             }
             directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
@@ -1612,7 +1707,7 @@ fn build_system(
     let pd_ud_objs = init_system.allocate_objects(ObjectType::PageTable, pd_ud_names, None);
     let vm_ud_objs = init_system.allocate_objects(ObjectType::PageTable, vm_ud_names, None);
 
-    if kernel_config.hypervisor {
+    if config.hypervisor {
         assert!(vm_ud_objs.is_empty());
     }
 
@@ -1668,14 +1763,17 @@ fn build_system(
         irq_cap_addresses.insert(pd, vec![]);
         for sysirq in &pd.irqs {
             let cap_address = system_cap_address_mask | cap_slot;
-            system_invocations.push(Invocation::new(InvocationArgs::IrqControlGetTrigger {
-                irq_control: IRQ_CONTROL_CAP_ADDRESS,
-                irq: sysirq.irq,
-                trigger: sysirq.trigger,
-                dest_root: root_cnode_cap,
-                dest_index: cap_address,
-                dest_depth: kernel_config.cap_address_bits,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::IrqControlGetTrigger {
+                    irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                    irq: sysirq.irq,
+                    trigger: sysirq.trigger,
+                    dest_root: root_cnode_cap,
+                    dest_index: cap_address,
+                    dest_depth: config.cap_address_bits,
+                },
+            ));
 
             cap_slot += 1;
             cap_address_names.insert(cap_address, format!("IRQ Handler: irq={}", sysirq.irq));
@@ -1685,10 +1783,13 @@ fn build_system(
 
     // This has to be done prior to minting!
     let num_asid_invocations = system.protection_domains.len() + virtual_machines.len();
-    let mut asid_invocation = Invocation::new(InvocationArgs::AsidPoolAssign {
-        asid_pool: INIT_ASID_POOL_CAP_ADDRESS,
-        vspace: vspace_objs[0].cap_addr,
-    });
+    let mut asid_invocation = Invocation::new(
+        config,
+        InvocationArgs::AsidPoolAssign {
+            asid_pool: INIT_ASID_POOL_CAP_ADDRESS,
+            vspace: vspace_objs[0].cap_addr,
+        },
+    );
     asid_invocation.repeat(
         num_asid_invocations as u32,
         InvocationArgs::AsidPoolAssign {
@@ -1708,7 +1809,10 @@ fn build_system(
             for mp in map_set {
                 let mr = all_mr_by_name[mp.mr.as_str()];
                 let mut rights: u64 = Rights::None as u64;
-                let mut attrs = ArmVmAttributes::ParityEnabled as u64;
+                let mut attrs = match config.arch {
+                    Arch::Aarch64 => ArmVmAttributes::ParityEnabled as u64,
+                    Arch::Riscv64 => 0,
+                };
                 if mp.perms & SysMapPerms::Read as u8 != 0 {
                     rights |= Rights::Read as u64;
                 }
@@ -1716,25 +1820,34 @@ fn build_system(
                     rights |= Rights::Write as u64;
                 }
                 if mp.perms & SysMapPerms::Execute as u8 == 0 {
-                    attrs |= ArmVmAttributes::ExecuteNever as u64;
+                    match config.arch {
+                        Arch::Aarch64 => attrs |= ArmVmAttributes::ExecuteNever as u64,
+                        Arch::Riscv64 => attrs |= RiscvVmAttributes::ExecuteNever as u64,
+                    }
                 }
                 if mp.cached {
-                    attrs |= ArmVmAttributes::Cacheable as u64;
+                    match config.arch {
+                        Arch::Aarch64 => attrs |= ArmVmAttributes::Cacheable as u64,
+                        Arch::Riscv64 => {}
+                    }
                 }
 
                 assert!(!mr_pages[mr].is_empty());
                 assert!(util::objects_adjacent(&mr_pages[mr]));
 
-                let mut invocation = Invocation::new(InvocationArgs::CnodeMint {
-                    cnode: system_cnode_cap,
-                    dest_index: cap_slot,
-                    dest_depth: system_cnode_bits,
-                    src_root: root_cnode_cap,
-                    src_obj: mr_pages[mr][0].cap_addr,
-                    src_depth: kernel_config.cap_address_bits,
-                    rights,
-                    badge: 0,
-                });
+                let mut invocation = Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: system_cnode_cap,
+                        dest_index: cap_slot,
+                        dest_depth: system_cnode_bits,
+                        src_root: root_cnode_cap,
+                        src_obj: mr_pages[mr][0].cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights,
+                        badge: 0,
+                    },
+                );
                 invocation.repeat(
                     mr_pages[mr].len() as u32,
                     InvocationArgs::CnodeMint {
@@ -1782,7 +1895,10 @@ fn build_system(
         for mp in &vm.maps {
             let mr = all_mr_by_name[mp.mr.as_str()];
             let mut rights: u64 = Rights::None as u64;
-            let mut attrs = ArmVmAttributes::ParityEnabled as u64;
+            let mut attrs = match config.arch {
+                Arch::Aarch64 => ArmVmAttributes::ParityEnabled as u64,
+                Arch::Riscv64 => 0,
+            };
             if mp.perms & SysMapPerms::Read as u8 != 0 {
                 rights |= Rights::Read as u64;
             }
@@ -1790,25 +1906,34 @@ fn build_system(
                 rights |= Rights::Write as u64;
             }
             if mp.perms & SysMapPerms::Execute as u8 == 0 {
-                attrs |= ArmVmAttributes::ExecuteNever as u64;
+                match config.arch {
+                    Arch::Aarch64 => attrs |= ArmVmAttributes::ExecuteNever as u64,
+                    Arch::Riscv64 => attrs |= RiscvVmAttributes::ExecuteNever as u64,
+                }
             }
             if mp.cached {
-                attrs |= ArmVmAttributes::Cacheable as u64;
+                match config.arch {
+                    Arch::Aarch64 => attrs |= ArmVmAttributes::Cacheable as u64,
+                    Arch::Riscv64 => {}
+                }
             }
 
             assert!(!mr_pages[mr].is_empty());
             assert!(util::objects_adjacent(&mr_pages[mr]));
 
-            let mut invocation = Invocation::new(InvocationArgs::CnodeMint {
-                cnode: system_cnode_cap,
-                dest_index: cap_slot,
-                dest_depth: system_cnode_bits,
-                src_root: root_cnode_cap,
-                src_obj: mr_pages[mr][0].cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights,
-                badge: 0,
-            });
+            let mut invocation = Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: system_cnode_cap,
+                    dest_index: cap_slot,
+                    dest_depth: system_cnode_bits,
+                    src_root: root_cnode_cap,
+                    src_obj: mr_pages[mr][0].cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights,
+                    badge: 0,
+                },
+            );
             invocation.repeat(
                 mr_pages[mr].len() as u32,
                 InvocationArgs::CnodeMint {
@@ -1856,16 +1981,19 @@ fn build_system(
         for sysirq in &pd.irqs {
             let badge = 1 << sysirq.id;
             let badged_cap_address = system_cap_address_mask | cap_slot;
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: system_cnode_cap,
-                dest_index: cap_slot,
-                dest_depth: system_cnode_bits,
-                src_root: root_cnode_cap,
-                src_obj: notification_obj.cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: system_cnode_cap,
+                    dest_index: cap_slot,
+                    dest_depth: system_cnode_bits,
+                    src_root: root_cnode_cap,
+                    src_obj: notification_obj.cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge,
+                },
+            ));
             let badged_name = format!(
                 "{} (badge=0x{:x})",
                 cap_address_names[&notification_obj.cap_addr], badge
@@ -1897,16 +2025,19 @@ fn build_system(
             badge = FAULT_BADGE | pd.id.unwrap();
         }
 
-        let invocation = Invocation::new(InvocationArgs::CnodeMint {
-            cnode: system_cnode_cap,
-            dest_index: cap_slot,
-            dest_depth: system_cnode_bits,
-            src_root: root_cnode_cap,
-            src_obj: fault_ep_cap,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64,
-            badge,
-        });
+        let invocation = Invocation::new(
+            config,
+            InvocationArgs::CnodeMint {
+                cnode: system_cnode_cap,
+                dest_index: cap_slot,
+                dest_depth: system_cnode_bits,
+                src_root: root_cnode_cap,
+                src_obj: fault_ep_cap,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64,
+                badge,
+            },
+        );
         system_invocations.push(invocation);
         cap_slot += 1;
     }
@@ -1928,16 +2059,19 @@ fn build_system(
         let fault_ep_cap = pd_endpoint_objs[parent_pd.unwrap()].unwrap().cap_addr;
         let badge = FAULT_BADGE | vm.vcpu.id;
 
-        let invocation = Invocation::new(InvocationArgs::CnodeMint {
-            cnode: system_cnode_cap,
-            dest_index: cap_slot,
-            dest_depth: system_cnode_bits,
-            src_root: root_cnode_cap,
-            src_obj: fault_ep_cap,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64,
-            badge,
-        });
+        let invocation = Invocation::new(
+            config,
+            InvocationArgs::CnodeMint {
+                cnode: system_cnode_cap,
+                dest_index: cap_slot,
+                dest_depth: system_cnode_bits,
+                src_root: root_cnode_cap,
+                src_obj: fault_ep_cap,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64,
+                badge,
+            },
+        );
         system_invocations.push(invocation);
         cap_slot += 1;
     }
@@ -1953,30 +2087,36 @@ fn build_system(
         };
         assert!(INPUT_CAP_IDX < PD_CAP_SIZE);
 
-        system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-            cnode: cnode_objs[idx].cap_addr,
-            dest_index: INPUT_CAP_IDX,
-            dest_depth: PD_CAP_BITS,
-            src_root: root_cnode_cap,
-            src_obj: obj.cap_addr,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64,
-            badge: 0,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::CnodeMint {
+                cnode: cnode_objs[idx].cap_addr,
+                dest_index: INPUT_CAP_IDX,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: obj.cap_addr,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64,
+                badge: 0,
+            },
+        ));
     }
 
     // Mint access to the reply cap
     assert!(REPLY_CAP_IDX < PD_CAP_SIZE);
-    let mut reply_mint_invocation = Invocation::new(InvocationArgs::CnodeMint {
-        cnode: cnode_objs[0].cap_addr,
-        dest_index: REPLY_CAP_IDX,
-        dest_depth: PD_CAP_BITS,
-        src_root: root_cnode_cap,
-        src_obj: pd_reply_objs[0].cap_addr,
-        src_depth: kernel_config.cap_address_bits,
-        rights: Rights::All as u64,
-        badge: 1,
-    });
+    let mut reply_mint_invocation = Invocation::new(
+        config,
+        InvocationArgs::CnodeMint {
+            cnode: cnode_objs[0].cap_addr,
+            dest_index: REPLY_CAP_IDX,
+            dest_depth: PD_CAP_BITS,
+            src_root: root_cnode_cap,
+            src_obj: pd_reply_objs[0].cap_addr,
+            src_depth: config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge: 1,
+        },
+    );
     reply_mint_invocation.repeat(
         system.protection_domains.len() as u32,
         InvocationArgs::CnodeMint {
@@ -1995,16 +2135,19 @@ fn build_system(
     // Mint access to the VSpace cap
     assert!(VSPACE_CAP_IDX < PD_CAP_SIZE);
     let num_vspace_mint_invocations = system.protection_domains.len() + virtual_machines.len();
-    let mut vspace_mint_invocation = Invocation::new(InvocationArgs::CnodeMint {
-        cnode: cnode_objs[0].cap_addr,
-        dest_index: VSPACE_CAP_IDX,
-        dest_depth: PD_CAP_BITS,
-        src_root: root_cnode_cap,
-        src_obj: vspace_objs[0].cap_addr,
-        src_depth: kernel_config.cap_address_bits,
-        rights: Rights::All as u64,
-        badge: 0,
-    });
+    let mut vspace_mint_invocation = Invocation::new(
+        config,
+        InvocationArgs::CnodeMint {
+            cnode: cnode_objs[0].cap_addr,
+            dest_index: VSPACE_CAP_IDX,
+            dest_depth: PD_CAP_BITS,
+            src_root: root_cnode_cap,
+            src_obj: vspace_objs[0].cap_addr,
+            src_depth: config.cap_address_bits,
+            rights: Rights::All as u64,
+            badge: 0,
+        },
+    );
     vspace_mint_invocation.repeat(
         num_vspace_mint_invocations as u32,
         InvocationArgs::CnodeMint {
@@ -2025,16 +2168,19 @@ fn build_system(
         for (sysirq, irq_cap_address) in zip(&pd.irqs, &irq_cap_addresses[pd]) {
             let cap_idx = BASE_IRQ_CAP + sysirq.id;
             assert!(cap_idx < PD_CAP_SIZE);
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: cnode_objs[pd_idx].cap_addr,
-                dest_index: cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: *irq_cap_address,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge: 0,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: cnode_objs[pd_idx].cap_addr,
+                    dest_index: cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: *irq_cap_address,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge: 0,
+                },
+            ));
         }
     }
 
@@ -2048,16 +2194,19 @@ fn build_system(
                 if parent_idx == pd_idx {
                     let cap_idx = BASE_PD_TCB_CAP + maybe_child_pd.id.unwrap();
                     assert!(cap_idx < PD_CAP_SIZE);
-                    system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                        cnode: cnode_objs[pd_idx].cap_addr,
-                        dest_index: cap_idx,
-                        dest_depth: PD_CAP_BITS,
-                        src_root: root_cnode_cap,
-                        src_obj: tcb_objs[maybe_child_idx].cap_addr,
-                        src_depth: kernel_config.cap_address_bits,
-                        rights: Rights::All as u64,
-                        badge: 0,
-                    }));
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: cnode_objs[pd_idx].cap_addr,
+                            dest_index: cap_idx,
+                            dest_depth: PD_CAP_BITS,
+                            src_root: root_cnode_cap,
+                            src_obj: tcb_objs[maybe_child_idx].cap_addr,
+                            src_depth: config.cap_address_bits,
+                            rights: Rights::All as u64,
+                            badge: 0,
+                        },
+                    ));
                 }
             }
         }
@@ -2071,16 +2220,19 @@ fn build_system(
             let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
             let cap_idx = BASE_VM_TCB_CAP + vm.vcpu.id;
             assert!(cap_idx < PD_CAP_SIZE);
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: cnode_objs[pd_idx].cap_addr,
-                dest_index: cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: vm_tcb_objs[vm_idx].cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge: 0,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: cnode_objs[pd_idx].cap_addr,
+                    dest_index: cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: vm_tcb_objs[vm_idx].cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge: 0,
+                },
+            ));
         }
     }
 
@@ -2092,16 +2244,19 @@ fn build_system(
             let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
             let cap_idx = BASE_VCPU_CAP + vm.vcpu.id;
             assert!(cap_idx < PD_CAP_SIZE);
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: cnode_objs[pd_idx].cap_addr,
-                dest_index: cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: vcpu_objs[vm_idx].cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge: 0,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: cnode_objs[pd_idx].cap_addr,
+                    dest_index: cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: vcpu_objs[vm_idx].cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge: 0,
+                },
+            ));
         }
     }
 
@@ -2117,30 +2272,36 @@ fn build_system(
         let pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a;
         let pd_a_badge = 1 << cc.id_b;
         assert!(pd_a_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-            cnode: pd_a_cnode_obj.cap_addr,
-            dest_index: pd_a_cap_idx,
-            dest_depth: PD_CAP_BITS,
-            src_root: root_cnode_cap,
-            src_obj: pd_b_notification_obj.cap_addr,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64, // FIXME: Check rights
-            badge: pd_a_badge,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::CnodeMint {
+                cnode: pd_a_cnode_obj.cap_addr,
+                dest_index: pd_a_cap_idx,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: pd_b_notification_obj.cap_addr,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64, // FIXME: Check rights
+                badge: pd_a_badge,
+            },
+        ));
 
         let pd_b_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_b;
         let pd_b_badge = 1 << cc.id_a;
         assert!(pd_b_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-            cnode: pd_b_cnode_obj.cap_addr,
-            dest_index: pd_b_cap_idx,
-            dest_depth: PD_CAP_BITS,
-            src_root: root_cnode_cap,
-            src_obj: pd_a_notification_obj.cap_addr,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64, // FIXME: Check rights
-            badge: pd_b_badge,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::CnodeMint {
+                cnode: pd_b_cnode_obj.cap_addr,
+                dest_index: pd_b_cap_idx,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: pd_a_notification_obj.cap_addr,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64, // FIXME: Check rights
+                badge: pd_b_badge,
+            },
+        ));
 
         // Set up the endpoint caps
         if pd_b.pp {
@@ -2149,16 +2310,19 @@ fn build_system(
             let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b].unwrap();
             assert!(pd_a_cap_idx < PD_CAP_SIZE);
 
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: pd_a_cnode_obj.cap_addr,
-                dest_index: pd_a_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_b_endpoint_obj.cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_a_badge,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: pd_a_cnode_obj.cap_addr,
+                    dest_index: pd_a_cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: pd_b_endpoint_obj.cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64, // FIXME: Check rights
+                    badge: pd_a_badge,
+                },
+            ));
         }
 
         if pd_a.pp {
@@ -2167,16 +2331,19 @@ fn build_system(
             let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a].unwrap();
             assert!(pd_b_cap_idx < PD_CAP_SIZE);
 
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: pd_b_cnode_obj.cap_addr,
-                dest_index: pd_b_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_a_endpoint_obj.cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_b_badge,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: pd_b_cnode_obj.cap_addr,
+                    dest_index: pd_b_cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: pd_a_endpoint_obj.cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64, // FIXME: Check rights
+                    badge: pd_b_badge,
+                },
+            ));
         }
     }
 
@@ -2184,17 +2351,20 @@ fn build_system(
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         if pd.passive {
             let cnode_obj = &cnode_objs[pd_idx];
-            system_invocations.push(Invocation::new(InvocationArgs::CnodeMint {
-                cnode: cnode_obj.cap_addr,
-                dest_index: MONITOR_EP_CAP_IDX,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: fault_ep_endpoint_object.cap_addr,
-                src_depth: kernel_config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                // Badge needs to start at 1
-                badge: pd_idx as u64 + 1,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: cnode_obj.cap_addr,
+                    dest_index: MONITOR_EP_CAP_IDX,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: fault_ep_endpoint_object.cap_addr,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64, // FIXME: Check rights
+                    // Badge needs to start at 1
+                    badge: pd_idx as u64 + 1,
+                },
+            ));
         }
     }
 
@@ -2206,64 +2376,73 @@ fn build_system(
         for (irq_cap_address, badged_notification_cap_address) in
             zip(&irq_cap_addresses[pd], &badged_irq_caps[pd])
         {
-            system_invocations.push(Invocation::new(InvocationArgs::IrqHandlerSetNotification {
-                irq_handler: *irq_cap_address,
-                notification: *badged_notification_cap_address,
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::IrqHandlerSetNotification {
+                    irq_handler: *irq_cap_address,
+                    notification: *badged_notification_cap_address,
+                },
+            ));
         }
     }
 
     // Initialise the VSpaces -- assign them all the the initial asid pool.
-    let pd_vspace_invocations = if kernel_config.hypervisor && kernel_config.arm_pa_size_bits == 40
-    {
-        vec![(all_pd_ds, pd_d_objs), (all_pd_pts, pd_pt_objs)]
-    } else {
-        vec![
-            (all_pd_uds, pd_ud_objs),
-            (all_pd_ds, pd_d_objs),
-            (all_pd_pts, pd_pt_objs),
-        ]
-    };
+    let pd_vspace_invocations = [
+        (all_pd_uds, pd_ud_objs),
+        (all_pd_ds, pd_d_objs),
+        (all_pd_pts, pd_pt_objs),
+    ];
     for (descriptors, objects) in pd_vspace_invocations {
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects) {
-            system_invocations.push(Invocation::new(InvocationArgs::PageTableMap {
-                page_table: obj.cap_addr,
-                vspace: pd_vspace_objs[pd_idx].cap_addr,
-                vaddr,
-                attr: ArmVmAttributes::default(),
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::PageTableMap {
+                    page_table: obj.cap_addr,
+                    vspace: pd_vspace_objs[pd_idx].cap_addr,
+                    vaddr,
+                    attr: default_vm_attr(config),
+                },
+            ));
         }
     }
-    let vm_vspace_invocations = if kernel_config.hypervisor && kernel_config.arm_pa_size_bits == 40
-    {
-        vec![(all_vm_ds, vm_d_objs), (all_vm_pts, vm_pt_objs)]
-    } else {
-        vec![
-            (all_vm_uds, vm_ud_objs),
-            (all_vm_ds, vm_d_objs),
-            (all_vm_pts, vm_pt_objs),
-        ]
-    };
+
+    if config.hypervisor {
+        assert!(all_vm_uds.is_empty() && vm_ud_objs.is_empty());
+        assert!(all_vm_ds.is_empty() && vm_d_objs.is_empty());
+        assert!(all_vm_pts.is_empty() && vm_pt_objs.is_empty());
+    }
+
+    let vm_vspace_invocations = [
+        (all_vm_uds, vm_ud_objs),
+        (all_vm_ds, vm_d_objs),
+        (all_vm_pts, vm_pt_objs),
+    ];
     for (descriptors, objects) in vm_vspace_invocations {
         for ((vm_idx, vaddr), obj) in zip(descriptors, objects) {
-            system_invocations.push(Invocation::new(InvocationArgs::PageTableMap {
-                page_table: obj.cap_addr,
-                vspace: vm_vspace_objs[vm_idx].cap_addr,
-                vaddr,
-                attr: ArmVmAttributes::default(),
-            }));
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::PageTableMap {
+                    page_table: obj.cap_addr,
+                    vspace: vm_vspace_objs[vm_idx].cap_addr,
+                    vaddr,
+                    attr: default_vm_attr(config),
+                },
+            ));
         }
     }
 
     // Now map all the pages
     for (page_cap_address, pd_idx, vaddr, rights, attr, count, vaddr_incr) in pd_page_descriptors {
-        let mut invocation = Invocation::new(InvocationArgs::PageMap {
-            page: page_cap_address,
-            vspace: pd_vspace_objs[pd_idx].cap_addr,
-            vaddr,
-            rights,
-            attr,
-        });
+        let mut invocation = Invocation::new(
+            config,
+            InvocationArgs::PageMap {
+                page: page_cap_address,
+                vspace: pd_vspace_objs[pd_idx].cap_addr,
+                vaddr,
+                rights,
+                attr,
+            },
+        );
         invocation.repeat(
             count as u32,
             InvocationArgs::PageMap {
@@ -2277,13 +2456,16 @@ fn build_system(
         system_invocations.push(invocation);
     }
     for (page_cap_address, vm_idx, vaddr, rights, attr, count, vaddr_incr) in vm_page_descriptors {
-        let mut invocation = Invocation::new(InvocationArgs::PageMap {
-            page: page_cap_address,
-            vspace: vm_vspace_objs[vm_idx].cap_addr,
-            vaddr,
-            rights,
-            attr,
-        });
+        let mut invocation = Invocation::new(
+            config,
+            InvocationArgs::PageMap {
+                page: page_cap_address,
+                vspace: vm_vspace_objs[vm_idx].cap_addr,
+                vaddr,
+                rights,
+                attr,
+            },
+        );
         invocation.repeat(
             count as u32,
             InvocationArgs::PageMap {
@@ -2298,17 +2480,24 @@ fn build_system(
     }
 
     // And, finally, map all the IPC buffers
+    let ipc_buffer_attr = match config.arch {
+        Arch::Aarch64 => ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
+        Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
+    };
     for pd_idx in 0..system.protection_domains.len() {
         let (vaddr, _) = pd_elf_files[pd_idx]
             .find_symbol(SYMBOL_IPC_BUFFER)
             .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
-        system_invocations.push(Invocation::new(InvocationArgs::PageMap {
-            page: ipc_buffer_objs[pd_idx].cap_addr,
-            vspace: pd_vspace_objs[pd_idx].cap_addr,
-            vaddr,
-            rights: Rights::Read as u64 | Rights::Write as u64,
-            attr: ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::PageMap {
+                page: ipc_buffer_objs[pd_idx].cap_addr,
+                vspace: pd_vspace_objs[pd_idx].cap_addr,
+                vaddr,
+                rights: Rights::Read as u64 | Rights::Write as u64,
+                attr: ipc_buffer_attr,
+            },
+        ));
     }
 
     // Initialise the TCBs
@@ -2316,6 +2505,7 @@ fn build_system(
     // Set the scheduling parameters
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         system_invocations.push(Invocation::new(
+            config,
             InvocationArgs::SchedControlConfigureFlags {
                 sched_control: kernel_boot_info.sched_control_cap,
                 sched_context: pd_sched_context_objs[pd_idx].cap_addr,
@@ -2329,6 +2519,7 @@ fn build_system(
     }
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
         system_invocations.push(Invocation::new(
+            config,
             InvocationArgs::SchedControlConfigureFlags {
                 sched_control: kernel_boot_info.sched_control_cap,
                 sched_context: vm_sched_context_objs[vm_idx].cap_addr,
@@ -2342,40 +2533,49 @@ fn build_system(
     }
 
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        system_invocations.push(Invocation::new(InvocationArgs::TcbSetSchedParams {
-            tcb: pd_tcb_objs[pd_idx].cap_addr,
-            authority: INIT_TCB_CAP_ADDRESS,
-            mcp: pd.priority as u64,
-            priority: pd.priority as u64,
-            sched_context: pd_sched_context_objs[pd_idx].cap_addr,
-            // This gets over-written by the call to TCB_SetSpace
-            fault_ep: fault_ep_endpoint_object.cap_addr,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::TcbSetSchedParams {
+                tcb: pd_tcb_objs[pd_idx].cap_addr,
+                authority: INIT_TCB_CAP_ADDRESS,
+                mcp: pd.priority as u64,
+                priority: pd.priority as u64,
+                sched_context: pd_sched_context_objs[pd_idx].cap_addr,
+                // This gets over-written by the call to TCB_SetSpace
+                fault_ep: fault_ep_endpoint_object.cap_addr,
+            },
+        ));
     }
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
-        system_invocations.push(Invocation::new(InvocationArgs::TcbSetSchedParams {
-            tcb: vm_tcb_objs[vm_idx].cap_addr,
-            authority: INIT_TCB_CAP_ADDRESS,
-            mcp: vm.priority as u64,
-            priority: vm.priority as u64,
-            sched_context: vm_sched_context_objs[vm_idx].cap_addr,
-            // This gets over-written by the call to TCB_SetSpace
-            fault_ep: fault_ep_endpoint_object.cap_addr,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::TcbSetSchedParams {
+                tcb: vm_tcb_objs[vm_idx].cap_addr,
+                authority: INIT_TCB_CAP_ADDRESS,
+                mcp: vm.priority as u64,
+                priority: vm.priority as u64,
+                sched_context: vm_sched_context_objs[vm_idx].cap_addr,
+                // This gets over-written by the call to TCB_SetSpace
+                fault_ep: fault_ep_endpoint_object.cap_addr,
+            },
+        ));
     }
 
     // In the benchmark configuration, we allow PDs to access their own TCB.
     // This is necessary for accessing kernel's benchmark API.
-    if kernel_config.benchmark {
-        let mut tcb_cap_copy_invocation = Invocation::new(InvocationArgs::CnodeCopy {
-            cnode: cnode_objs[0].cap_addr,
-            dest_index: TCB_CAP_IDX,
-            dest_depth: PD_CAP_BITS,
-            src_root: root_cnode_cap,
-            src_obj: pd_tcb_objs[0].cap_addr,
-            src_depth: kernel_config.cap_address_bits,
-            rights: Rights::All as u64,
-        });
+    if config.benchmark {
+        let mut tcb_cap_copy_invocation = Invocation::new(
+            config,
+            InvocationArgs::CnodeCopy {
+                cnode: cnode_objs[0].cap_addr,
+                dest_index: TCB_CAP_IDX,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: pd_tcb_objs[0].cap_addr,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64,
+            },
+        );
         tcb_cap_copy_invocation.repeat(
             system.protection_domains.len() as u32,
             InvocationArgs::CnodeCopy {
@@ -2393,14 +2593,17 @@ fn build_system(
 
     // Set VSpace and CSpace
     let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
-    let mut set_space_invocation = Invocation::new(InvocationArgs::TcbSetSpace {
-        tcb: tcb_objs[0].cap_addr,
-        fault_ep: badged_fault_ep,
-        cspace_root: cnode_objs[0].cap_addr,
-        cspace_root_data: kernel_config.cap_address_bits - PD_CAP_BITS,
-        vspace_root: vspace_objs[0].cap_addr,
-        vspace_root_data: 0,
-    });
+    let mut set_space_invocation = Invocation::new(
+        config,
+        InvocationArgs::TcbSetSpace {
+            tcb: tcb_objs[0].cap_addr,
+            fault_ep: badged_fault_ep,
+            cspace_root: cnode_objs[0].cap_addr,
+            cspace_root_data: config.cap_address_bits - PD_CAP_BITS,
+            vspace_root: vspace_objs[0].cap_addr,
+            vspace_root_data: 0,
+        },
+    );
     set_space_invocation.repeat(
         num_set_space_invocations as u32,
         InvocationArgs::TcbSetSpace {
@@ -2419,37 +2622,55 @@ fn build_system(
         let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx]
             .find_symbol(SYMBOL_IPC_BUFFER)
             .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
-        system_invocations.push(Invocation::new(InvocationArgs::TcbSetIpcBuffer {
-            tcb: tcb_objs[pd_idx].cap_addr,
-            buffer: ipc_buffer_vaddr,
-            buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::TcbSetIpcBuffer {
+                tcb: tcb_objs[pd_idx].cap_addr,
+                buffer: ipc_buffer_vaddr,
+                buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
+            },
+        ));
     }
 
     // Set TCB registers (we only set the entry point)
     for pd_idx in 0..system.protection_domains.len() {
-        let regs = Aarch64Regs {
-            pc: pd_elf_files[pd_idx].entry,
-            sp: kernel_config.user_top(),
-            ..Default::default()
+        let regs = match config.arch {
+            Arch::Aarch64 => Aarch64Regs {
+                pc: pd_elf_files[pd_idx].entry,
+                sp: config.user_top(),
+                ..Default::default()
+            }
+            .field_names(),
+            Arch::Riscv64 => Riscv64Regs {
+                pc: pd_elf_files[pd_idx].entry,
+                sp: config.user_top(),
+                ..Default::default()
+            }
+            .field_names(),
         };
 
-        system_invocations.push(Invocation::new(InvocationArgs::TcbWriteRegisters {
-            tcb: tcb_objs[pd_idx].cap_addr,
-            resume: false,
-            // There are no arch-dependent flags to set
-            arch_flags: 0,
-            // FIXME: we could optimise this since we are only setting the program counter
-            count: Aarch64Regs::LEN as u64,
-            regs,
-        }));
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::TcbWriteRegisters {
+                tcb: tcb_objs[pd_idx].cap_addr,
+                resume: false,
+                // There are no arch-dependent flags to set
+                arch_flags: 0,
+                // FIXME: we could optimise this since we are only setting the program counter
+                count: regs.len() as u64,
+                regs,
+            },
+        ));
     }
 
     // Bind the notification object
-    let mut bind_ntfn_invocation = Invocation::new(InvocationArgs::TcbBindNotification {
-        tcb: tcb_objs[0].cap_addr,
-        notification: notification_objs[0].cap_addr,
-    });
+    let mut bind_ntfn_invocation = Invocation::new(
+        config,
+        InvocationArgs::TcbBindNotification {
+            tcb: tcb_objs[0].cap_addr,
+            notification: notification_objs[0].cap_addr,
+        },
+    );
     bind_ntfn_invocation.repeat(
         system.protection_domains.len() as u32,
         InvocationArgs::TcbBindNotification {
@@ -2461,10 +2682,17 @@ fn build_system(
 
     // Bind virtual machine TCBs to vCPUs
     if !virtual_machines.is_empty() {
-        let mut vcpu_bind_invocation = Invocation::new(InvocationArgs::ArmVcpuSetTcb {
-            vcpu: vcpu_objs[0].cap_addr,
-            tcb: vm_tcb_objs[0].cap_addr,
-        });
+        match config.arch {
+            Arch::Aarch64 => {}
+            _ => panic!("Support for virtual machines is only for AArch64"),
+        }
+        let mut vcpu_bind_invocation = Invocation::new(
+            config,
+            InvocationArgs::ArmVcpuSetTcb {
+                vcpu: vcpu_objs[0].cap_addr,
+                tcb: vm_tcb_objs[0].cap_addr,
+            },
+        );
         vcpu_bind_invocation.repeat(
             virtual_machines.len() as u32,
             InvocationArgs::ArmVcpuSetTcb { vcpu: 1, tcb: 1 },
@@ -2473,9 +2701,12 @@ fn build_system(
     }
 
     // Resume (start) all the threads that belong to PDs (VMs are not started upon system init)
-    let mut resume_invocation = Invocation::new(InvocationArgs::TcbResume {
-        tcb: tcb_objs[0].cap_addr,
-    });
+    let mut resume_invocation = Invocation::new(
+        config,
+        InvocationArgs::TcbResume {
+            tcb: tcb_objs[0].cap_addr,
+        },
+    );
     resume_invocation.repeat(
         system.protection_domains.len() as u32,
         InvocationArgs::TcbResume { tcb: 1 },
@@ -2489,7 +2720,7 @@ fn build_system(
 
     let mut system_invocation_data: Vec<u8> = Vec::new();
     for system_invocation in &system_invocations {
-        system_invocation.add_raw_invocation(&mut system_invocation_data);
+        system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
     for (i, pd) in system.protection_domains.iter().enumerate() {
@@ -2556,6 +2787,7 @@ fn build_system(
 
 fn write_report<W: std::io::Write>(
     buf: &mut BufWriter<W>,
+    config: &Config,
     built_system: &BuiltSystem,
     bootstrap_invocation_data: &[u8],
 ) -> std::io::Result<()> {
@@ -2632,18 +2864,21 @@ fn write_report<W: std::io::Write>(
         writeln!(
             buf,
             "    {:<50} {} cap_addr={:x} phys_addr={:x}",
-            ko.name, ko.object_type as u64, ko.cap_addr, ko.phys_addr
+            ko.name,
+            ko.object_type.value(config),
+            ko.cap_addr,
+            ko.phys_addr
         )?;
     }
     writeln!(buf, "\n# Bootstrap Kernel Invocations Detail\n")?;
     for (i, invocation) in built_system.bootstrap_invocations.iter().enumerate() {
         write!(buf, "    0x{:04x} ", i)?;
-        invocation.report_fmt(buf, &built_system.cap_lookup);
+        invocation.report_fmt(buf, config, &built_system.cap_lookup);
     }
     writeln!(buf, "\n# System Kernel Invocations Detail\n")?;
     for (i, invocation) in built_system.system_invocations.iter().enumerate() {
         write!(buf, "    0x{:04x} ", i)?;
-        invocation.report_fmt(buf, &built_system.cap_lookup);
+        invocation.report_fmt(buf, config, &built_system.cap_lookup);
     }
 
     Ok(())
@@ -2938,34 +3173,66 @@ fn main() -> Result<(), String> {
     let kernel_config_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
 
+    let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
+        "aarch64" => Arch::Aarch64,
+        "riscv64" => Arch::Riscv64,
+        _ => panic!("Unsupported kernel config architecture"),
+    };
+
+    let hypervisor = match arch {
+        Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+        // Hypervisor mode is not available on RISC-V
+        Arch::Riscv64 => false,
+    };
+
+    let arm_pa_size_bits = match arch {
+        Arch::Aarch64 => {
+            if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
+                Some(40)
+            } else if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_44")? {
+                Some(44)
+            } else {
+                panic!("Expected ARM platform to have 40 or 44 physical address bits")
+            }
+        }
+        Arch::Riscv64 => None,
+    };
+
+    let kernel_frame_size = match arch {
+        Arch::Aarch64 => 1 << 12,
+        Arch::Riscv64 => 1 << 21,
+    };
+
     let kernel_config = Config {
-        arch: Arch::Aarch64,
+        arch,
         word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
         minimum_page_size: 4096,
         paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
-        kernel_frame_size: 1 << 12,
+        kernel_frame_size,
         init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
         cap_address_bits: 64,
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
-        arm_pa_size_bits: 40,
-        hypervisor: json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+        hypervisor,
         benchmark: args.config == "benchmark",
+        fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+        arm_pa_size_bits,
+        riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
     };
 
-    match kernel_config.arch {
-        Arch::Aarch64 => assert!(
+    if let Arch::Aarch64 = kernel_config.arch {
+        assert!(
             kernel_config.hypervisor,
             "Microkit tool expects a kernel with hypervisor mode enabled on AArch64."
-        ),
+        );
+        assert!(
+            kernel_config.arm_pa_size_bits.unwrap() == 40,
+            "Microkit tool has assumptions about the ARM physical address size bits"
+        );
     }
 
     assert!(
         kernel_config.word_size == 64,
         "Microkit tool has various assumptions about the word size being 64-bits."
-    );
-    assert!(
-        kernel_config.arm_pa_size_bits == 40,
-        "Microkit tool has assumptions about the ARM physical address size bits"
     );
 
     let plat_desc = PlatformDescription::new(&kernel_config);
@@ -2987,7 +3254,7 @@ fn main() -> Result<(), String> {
     let kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
     let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
 
-    if monitor_elf.segments.len() > 1 {
+    if monitor_elf.segments.iter().filter(|s| s.loadable).count() > 1 {
         eprintln!(
             "Monitor ({}) has {} segments, it must only have one",
             monitor_elf_path.display(),
@@ -3097,7 +3364,7 @@ fn main() -> Result<(), String> {
 
     let mut bootstrap_invocation_data: Vec<u8> = Vec::new();
     for invocation in &built_system.bootstrap_invocations {
-        invocation.add_raw_invocation(&mut bootstrap_invocation_data);
+        invocation.add_raw_invocation(&kernel_config, &mut bootstrap_invocation_data);
     }
 
     let (_, bootstrap_invocation_data_size) =
@@ -3113,7 +3380,7 @@ fn main() -> Result<(), String> {
         );
         let mut stderr = BufWriter::new(std::io::stderr());
         for bootstrap_invocation in &built_system.bootstrap_invocations {
-            bootstrap_invocation.report_fmt(&mut stderr, &built_system.cap_lookup);
+            bootstrap_invocation.report_fmt(&mut stderr, &kernel_config, &built_system.cap_lookup);
         }
         stderr.flush().unwrap();
 
@@ -3184,7 +3451,12 @@ fn main() -> Result<(), String> {
     };
 
     let mut report_buf = BufWriter::new(report);
-    match write_report(&mut report_buf, &built_system, &bootstrap_invocation_data) {
+    match write_report(
+        &mut report_buf,
+        &kernel_config,
+        &built_system,
+        &bootstrap_invocation_data,
+    ) {
         Ok(()) => report_buf.flush().unwrap(),
         Err(err) => {
             return Err(format!(
@@ -3206,7 +3478,7 @@ fn main() -> Result<(), String> {
     }
 
     let loader = Loader::new(
-        kernel_config,
+        &kernel_config,
         Path::new(&loader_elf_path),
         &kernel_elf,
         &monitor_elf,

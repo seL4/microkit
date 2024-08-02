@@ -113,6 +113,82 @@ seL4_Word *system_invocation_data = (void *)0x80000000;
 
 struct untyped_info untyped_info;
 
+void dump_untyped_info()
+{
+    puts("\nUntyped Info Memory Ranges\n");
+    seL4_Word start = untyped_info.regions[0].paddr;
+    seL4_Word end = start + (1ULL << untyped_info.regions[0].size_bits);
+    seL4_Word is_device = untyped_info.regions[0].is_device;
+    for (int i = 1; i < untyped_info.cap_end - untyped_info.cap_start; i++) {
+        if (untyped_info.regions[i].paddr != end || untyped_info.regions[i].is_device != is_device) {
+            puts("                                     paddr: ");
+            puthex64(start);
+            puts(" - ");
+            puthex64(end);
+            puts(" (");
+            puts(is_device ? "device" : "normal");
+            puts(")\n");
+            start = untyped_info.regions[i].paddr;
+            end = start + (1ULL << untyped_info.regions[i].size_bits);
+            is_device = untyped_info.regions[i].is_device;
+        } else {
+            end += (1ULL << untyped_info.regions[i].size_bits);
+        }
+    }
+    puts("                                     paddr: ");
+    puthex64(start);
+    puts(" - ");
+    puthex64(end);
+    puts(" (");
+    puts(is_device ? "device" : "normal");
+    puts(")\n");
+}
+
+/*
+ * Convert the fault status register given by the kernel into a string describing
+ * what fault happened. The FSR is the 'scause' register.
+ */
+#ifdef ARCH_riscv64
+static char *riscv_fsr_to_string(seL4_Word fsr)
+{
+    switch (fsr) {
+    case 0:
+        return "Instruction address misaligned";
+    case 1:
+        return "Instruction access fault";
+    case 2:
+        return "Illegal instruction";
+    case 3:
+        return "Breakpoint";
+    case 4:
+        return "Load address misaligned";
+    case 5:
+        return "Load access fault";
+    case 6:
+        return "Store/AMO address misaligned";
+    case 7:
+        return "Store/AMO access fault";
+    case 8:
+        return "Environment call from U-mode";
+    case 9:
+        return "Environment call from S-mode";
+    case 12:
+        return "Instruction page fault";
+    case 13:
+        return "Load page fault";
+    case 15:
+        return "Store/AMO page fault";
+    case 18:
+        return "Software check";
+    case 19:
+        return "Hardware error";
+    default:
+        return "<Unexpected FSR>";
+    }
+}
+#endif
+
+#ifdef ARCH_aarch64
 static char *ec_to_string(uintptr_t ec)
 {
     switch (ec) {
@@ -244,6 +320,7 @@ static char *data_abort_dfsc_to_string(uintptr_t dfsc)
     }
     return "<unexpected DFSC>";
 }
+#endif
 
 static void check_untypeds_match(seL4_BootInfo *bi)
 {
@@ -429,6 +506,215 @@ static unsigned perform_invocation(seL4_Word *invocation_data, unsigned offset, 
     return next_offset;
 }
 
+static void print_tcb_registers(seL4_UserContext *regs)
+{
+#if defined(ARCH_riscv64)
+    puts("Registers: \n");
+    puts("pc : ");
+    puthex64(regs->pc);
+    puts("\n");
+    puts("ra : ");
+    puthex64(regs->ra);
+    puts("\n");
+    puts("s0 : ");
+    puthex64(regs->s0);
+    puts("\n");
+    puts("s1 : ");
+    puthex64(regs->s1);
+    puts("\n");
+    puts("s2 : ");
+    puthex64(regs->s2);
+    puts("\n");
+    puts("s3 : ");
+    puthex64(regs->s3);
+    puts("\n");
+    puts("s4 : ");
+    puthex64(regs->s4);
+    puts("\n");
+    puts("s5 : ");
+    puthex64(regs->s5);
+    puts("\n");
+    puts("s6 : ");
+    puthex64(regs->s6);
+    puts("\n");
+    puts("s7 : ");
+    puthex64(regs->s7);
+    puts("\n");
+    puts("s8 : ");
+    puthex64(regs->s8);
+    puts("\n");
+    puts("s9 : ");
+    puthex64(regs->s9);
+    puts("\n");
+    puts("s10 : ");
+    puthex64(regs->s10);
+    puts("\n");
+    puts("s11 : ");
+    puthex64(regs->s11);
+    puts("\n");
+    puts("a0 : ");
+    puthex64(regs->a0);
+    puts("\n");
+    puts("a1 : ");
+    puthex64(regs->a1);
+    puts("\n");
+    puts("a2 : ");
+    puthex64(regs->a2);
+    puts("\n");
+    puts("a3 : ");
+    puthex64(regs->a3);
+    puts("\n");
+    puts("a4 : ");
+    puthex64(regs->a4);
+    puts("\n");
+    puts("a5 : ");
+    puthex64(regs->a5);
+    puts("\n");
+    puts("a6 : ");
+    puthex64(regs->a6);
+    puts("\n");
+    puts("t0 : ");
+    puthex64(regs->t0);
+    puts("\n");
+    puts("t1 : ");
+    puthex64(regs->t1);
+    puts("\n");
+    puts("t2 : ");
+    puthex64(regs->t2);
+    puts("\n");
+    puts("t3 : ");
+    puthex64(regs->t3);
+    puts("\n");
+    puts("t4 : ");
+    puthex64(regs->t4);
+    puts("\n");
+    puts("t5 : ");
+    puthex64(regs->t5);
+    puts("\n");
+    puts("t6 : ");
+    puthex64(regs->t6);
+    puts("\n");
+    puts("tp : ");
+    puthex64(regs->tp);
+    puts("\n");
+#elif defined(ARCH_aarch64)
+    // FIXME: Would be good to print the whole register set
+    puts("Registers: \n");
+    puts("pc : ");
+    puthex64(regs->pc);
+    puts("\n");
+    puts("spsr : ");
+    puthex64(regs->spsr);
+    puts("\n");
+    puts("x0 : ");
+    puthex64(regs->x0);
+    puts("\n");
+    puts("x1 : ");
+    puthex64(regs->x1);
+    puts("\n");
+    puts("x2 : ");
+    puthex64(regs->x2);
+    puts("\n");
+    puts("x3 : ");
+    puthex64(regs->x3);
+    puts("\n");
+    puts("x4 : ");
+    puthex64(regs->x4);
+    puts("\n");
+    puts("x5 : ");
+    puthex64(regs->x5);
+    puts("\n");
+    puts("x6 : ");
+    puthex64(regs->x6);
+    puts("\n");
+    puts("x7 : ");
+    puthex64(regs->x7);
+    puts("\n");
+#endif
+}
+
+#ifdef ARCH_riscv64
+static void riscv_print_vm_fault()
+{
+    seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
+    seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+    seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+    seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
+    puts("MON|ERROR: VMFault: ip=");
+    puthex64(ip);
+    puts("  fault_addr=");
+    puthex64(fault_addr);
+    puts("  fsr=");
+    puthex64(fsr);
+    puts("  ");
+    puts(is_instruction ? "(instruction fault)" : "(data fault)");
+    puts("\n");
+    puts("MON|ERROR: description of fault: ");
+    puts(riscv_fsr_to_string(fsr));
+    puts("\n");
+}
+#endif
+
+#ifdef ARCH_aarch64
+static void aarch64_print_vm_fault()
+{
+    seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
+    seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+    seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+    seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
+    seL4_Word ec = fsr >> 26;
+    seL4_Word il = fsr >> 25 & 1;
+    seL4_Word iss = fsr & 0x1ffffffUL;
+    puts("MON|ERROR: VMFault: ip=");
+    puthex64(ip);
+    puts("  fault_addr=");
+    puthex64(fault_addr);
+    puts("  fsr=");
+    puthex64(fsr);
+    puts("  ");
+    puts(is_instruction ? "(instruction fault)" : "(data fault)");
+    puts("\n");
+    puts("MON|ERROR:   ec: ");
+    puthex32(ec);
+    puts("  ");
+    puts(ec_to_string(ec));
+    puts("   il: ");
+    puts(il ? "1" : "0");
+    puts("   iss: ");
+    puthex32(iss);
+    puts("\n");
+
+    if (ec == 0x24) {
+        /* FIXME: Note, this is not a complete decoding of the fault! Just some of the more
+           common fields!
+        */
+        seL4_Word dfsc = iss & 0x3f;
+        bool ea = (iss >> 9) & 1;
+        bool cm = (iss >> 8) & 1;
+        bool s1ptw = (iss >> 7) & 1;
+        bool wnr = (iss >> 6) & 1;
+        puts("MON|ERROR:   dfsc = ");
+        puts(data_abort_dfsc_to_string(dfsc));
+        puts(" (");
+        puthex32(dfsc);
+        puts(")");
+        if (ea) {
+            puts(" -- external abort");
+        }
+        if (cm) {
+            puts(" -- cache maint");
+        }
+        if (s1ptw) {
+            puts(" -- stage 2 fault for stage 1 page table walk");
+        }
+        if (wnr) {
+            puts(" -- write not read");
+        }
+        puts("\n");
+    }
+}
+#endif
+
 static void monitor(void)
 {
     for (;;) {
@@ -478,38 +764,7 @@ static void monitor(void)
             fail("error reading registers");
         }
 
-        // FIXME: Would be good to print the whole register set
-        puts("MON|ERROR: Registers: \n");
-        puts("MON|ERROR: pc : ");
-        puthex64(regs.pc);
-        puts("\n");
-        puts("MON|ERROR: spsr : ");
-        puthex64(regs.spsr);
-        puts("\n");
-        puts("MON|ERROR: x0 : ");
-        puthex64(regs.x0);
-        puts("\n");
-        puts("MON|ERROR: x1 : ");
-        puthex64(regs.x1);
-        puts("\n");
-        puts("MON|ERROR: x2 : ");
-        puthex64(regs.x2);
-        puts("\n");
-        puts("MON|ERROR: x3 : ");
-        puthex64(regs.x3);
-        puts("\n");
-        puts("MON|ERROR: x4 : ");
-        puthex64(regs.x4);
-        puts("\n");
-        puts("MON|ERROR: x5 : ");
-        puthex64(regs.x5);
-        puts("\n");
-        puts("MON|ERROR: x6 : ");
-        puthex64(regs.x6);
-        puts("\n");
-        puts("MON|ERROR: x7 : ");
-        puthex64(regs.x7);
-        puts("\n");
+        print_tcb_registers(&regs);
 
         switch (label) {
         case seL4_Fault_CapFault: {
@@ -575,60 +830,13 @@ static void monitor(void)
             break;
         }
         case seL4_Fault_VMFault: {
-            seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
-            seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
-            seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
-            seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
-            seL4_Word ec = fsr >> 26;
-            seL4_Word il = fsr >> 25 & 1;
-            seL4_Word iss = fsr & 0x1ffffffUL;
-            puts("MON|ERROR: VMFault: ip=");
-            puthex64(ip);
-            puts("  fault_addr=");
-            puthex64(fault_addr);
-            puts("  fsr=");
-            puthex64(fsr);
-            puts("  ");
-            puts(is_instruction ? "(instruction fault)" : "(data fault)");
-            puts("\n");
-            puts("MON|ERROR:   ec: ");
-            puthex32(ec);
-            puts("  ");
-            puts(ec_to_string(ec));
-            puts("   il: ");
-            puts(il ? "1" : "0");
-            puts("   iss: ");
-            puthex32(iss);
-            puts("\n");
-
-            if (ec == 0x24) {
-                /* FIXME: Note, this is not a complete decoding of the fault! Just some of the more
-                   common fields!
-                */
-                seL4_Word dfsc = iss & 0x3f;
-                bool ea = (iss >> 9) & 1;
-                bool cm = (iss >> 8) & 1;
-                bool s1ptw = (iss >> 7) & 1;
-                bool wnr = (iss >> 6) & 1;
-                puts("MON|ERROR:   dfsc = ");
-                puts(data_abort_dfsc_to_string(dfsc));
-                puts(" (");
-                puthex32(dfsc);
-                puts(")");
-                if (ea) {
-                    puts(" -- external abort");
-                }
-                if (cm) {
-                    puts(" -- cache maint");
-                }
-                if (s1ptw) {
-                    puts(" -- stage 2 fault for stage 1 page table walk");
-                }
-                if (wnr) {
-                    puts(" -- write not read");
-                }
-                puts("\n");
-            }
+#if defined(ARCH_aarch64)
+            aarch64_print_vm_fault();
+#elif defined(ARCH_riscv64)
+            riscv_print_vm_fault();
+#else
+#error "Unknown architecture to print a VM fault for"
+#endif
 
             break;
         }
@@ -649,6 +857,7 @@ void main(seL4_BootInfo *bi)
      * if there are problems
      */
     dump_bootinfo(bi);
+    dump_untyped_info();
 #endif
 
     check_untypeds_match(bi);

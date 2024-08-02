@@ -40,13 +40,19 @@ SECTIONS
     {
         _data = .;
         *(.data)
+        . = ALIGN(8);
+        __global_pointer$ = . + 0x800;
+        *(.srodata)
+        *(.sdata)
         _data_end = .;
     } :data
 
     .bss :
     {
         _bss = .;
+        *(.sbss)
         *(.bss)
+        *(.bss*)
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;

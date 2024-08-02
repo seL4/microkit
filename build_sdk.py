@@ -20,8 +20,10 @@ from dataclasses import dataclass
 from sys import executable
 from tarfile import open as tar_open, TarInfo
 import platform as host_platform
+from enum import IntEnum
+import json
 
-from typing import Dict, Union, List, Tuple
+from typing import Any, Dict, Union, List, Tuple, Optional
 
 NAME = "microkit"
 VERSION = "1.3.0"
@@ -30,20 +32,39 @@ ENV_BIN_DIR = Path(executable).parent
 
 MICROKIT_EPOCH = 1616367257
 
-# Due to only supporting AArch64 (for now), we hard-code
-# the prefix of the toolchain used to compile seL4.
-TOOLCHAIN_PREFIX = "aarch64-none-elf-"
+TOOLCHAIN_AARCH64 = "aarch64-none-elf-"
+TOOLCHAIN_RISCV = "riscv64-unknown-elf-"
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
-KERNEL_OPTIONS = Dict[str, KERNEL_CONFIG_TYPE]
+KERNEL_OPTIONS = Dict[str, Union[bool, str]]
+
+
+class KernelArch(IntEnum):
+    AARCH64 = 1
+    RISCV64 = 2
+
+    def is_riscv(self) -> bool:
+        return self == KernelArch.RISCV64
+
+    def is_arm(self) -> bool:
+        return self == KernelArch.AARCH64
+
+    def to_str(self) -> str:
+        if self == KernelArch.AARCH64:
+            return "aarch64"
+        elif self == KernelArch.RISCV64:
+            return "riscv64"
+        else:
+            raise Exception(f"Unsupported arch {self}")
 
 
 @dataclass
 class BoardInfo:
     name: str
-    gcc_cpu: str
+    arch: KernelArch
+    gcc_cpu: Optional[str]
     loader_link_address: int
-    kernel_options: KERNEL_CONFIG_TYPE
+    kernel_options: KERNEL_OPTIONS
     examples: Dict[str, Path]
 
 
@@ -51,12 +72,13 @@ class BoardInfo:
 class ConfigInfo:
     name: str
     debug: bool
-    kernel_options: KERNEL_CONFIG_TYPE
+    kernel_options: KERNEL_OPTIONS
 
 
 SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
         loader_link_address=0x80280000,
         kernel_options={
@@ -71,6 +93,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="zcu102",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
         kernel_options={
@@ -86,6 +109,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="maaxboard",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x40480000,
         kernel_options={
@@ -100,6 +124,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="imx8mm_evk",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         kernel_options={
@@ -114,6 +139,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="imx8mq_evk",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         kernel_options={
@@ -128,6 +154,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="odroidc2",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x20000000,
         kernel_options={
@@ -142,6 +169,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="odroidc4",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a55",
         loader_link_address=0x20000000,
         kernel_options={
@@ -156,6 +184,7 @@ SUPPORTED_BOARDS = (
     ),
     BoardInfo(
         name="qemu_virt_aarch64",
+        arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x70000000,
         kernel_options={
@@ -199,6 +228,15 @@ SUPPORTED_CONFIGS = (
         },
     ),
 )
+
+
+def c_toolchain(arch: KernelArch) -> str:
+    if arch == KernelArch.AARCH64:
+        return TOOLCHAIN_AARCH64
+    elif arch == KernelArch.RISCV64:
+        return TOOLCHAIN_RISCV
+    else:
+        raise Exception("Unsupported toolchain architecture '{arch}'")
 
 
 def tar_filter(tarinfo: TarInfo) -> TarInfo:
@@ -270,7 +308,7 @@ def build_sel4(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
-) -> None:
+) -> Dict[str, Any]:
     """Build seL4"""
     build_dir = build_dir / board.name / config.name / "sel4"
     build_dir.mkdir(exist_ok=True, parents=True)
@@ -294,10 +332,11 @@ def build_sel4(
         config_strs.append(s)
     config_str = " ".join(config_strs)
 
+    toolchain = c_toolchain(board.arch)
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "
         f" -DPYTHON3={executable} "
-        f" -DCROSS_COMPILER_PREFIX={TOOLCHAIN_PREFIX}"
+        f" -DCROSS_COMPILER_PREFIX={toolchain}"
         f" {config_str} "
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
 
@@ -337,6 +376,11 @@ def build_sel4(
             copy(p, dest)
             dest.chmod(0o744)
 
+    gen_config_path = sel4_install_dir / "libsel4/include/kernel/gen_config.json"
+    with open(gen_config_path, "r") as f:
+        gen_config = json.load(f)
+        return gen_config
+
 
 def build_elf_component(
     component_name: str,
@@ -353,9 +397,15 @@ def build_elf_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
+    toolchain = c_toolchain(board.arch)
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
+    defines_str += f" ARCH={board.arch.to_str()} BOARD={board.name} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
+
+    if board.gcc_cpu is not None:
+        defines_str += f" GCC_CPU={board.gcc_cpu}"
+
     r = system(
-        f"BOARD={board.name} BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} {defines_str} make -C {component_name}"
+        f"{defines_str} make -C {component_name}"
     )
     if r != 0:
         raise Exception(
@@ -371,7 +421,7 @@ def build_elf_component(
     dest.chmod(0o744)
 
 
-def build_doc(root_dir):
+def build_doc(root_dir: Path):
     output = root_dir / "doc" / "microkit_user_manual.pdf"
 
     environ["TEXINPUTS"] = "docs/style:"
@@ -393,8 +443,15 @@ def build_lib_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
+
+    toolchain = c_toolchain(board.arch)
+    defines_str = f" ARCH={board.arch.to_str()} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
+
+    if board.gcc_cpu is not None:
+        defines_str += f" GCC_CPU={board.gcc_cpu}"
+
     r = system(
-        f"BUILD_DIR={build_dir.absolute()} GCC_CPU={board.gcc_cpu} SEL4_SDK={sel4_dir.absolute()} make -C {component_name}"
+        f"{defines_str} make -C {component_name}"
     )
     if r != 0:
         raise Exception(
@@ -512,13 +569,25 @@ def main() -> None:
     build_dir = Path("build")
     for board in selected_boards:
         for config in selected_configs:
-            build_sel4(sel4_dir, root_dir, build_dir, board, config)
+            sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config)
             loader_printing = 1 if config.name == "debug" else 0
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
-                ("PHYSICAL_ADDRESS_BITS", 40),
                 ("PRINTING", loader_printing)
             ]
+            # There are some architecture dependent configuration options that the loader
+            # needs to know about, so we figure that out here
+            if board.arch.is_riscv():
+                loader_defines.append(("FIRST_HART_ID", sel4_gen_config["FIRST_HART_ID"]))
+            if board.arch.is_arm():
+                if sel4_gen_config["ARM_PA_SIZE_BITS_40"]:
+                    arm_pa_size_bits = 40
+                elif sel4_gen_config["ARM_PA_SIZE_BITS_44"]:
+                    arm_pa_size_bits = 44
+                else:
+                    raise Exception("Unexpected ARM physical address bits defines")
+                loader_defines.append(("PHYSICAL_ADDRESS_BITS", arm_pa_size_bits))
+
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config)

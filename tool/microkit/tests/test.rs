@@ -16,8 +16,10 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     cap_address_bits: 64,
     fan_out_limit: 256,
     hypervisor: true,
-    arm_pa_size_bits: 40,
     benchmark: false,
+    fpu: true,
+    arm_pa_size_bits: Some(40),
+    riscv_pt_levels: None,
 };
 
 const DEFAULT_PLAT_DESC: sdf::PlatformDescription =

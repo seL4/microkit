@@ -202,7 +202,12 @@ impl ElfFile {
             let segment_start = phent.offset as usize;
             let segment_end = phent.offset as usize + phent.filesz as usize;
             let mut segment_data = Vec::from(&bytes[segment_start..segment_end]);
-            let num_zeroes = (phent.memsz - phent.filesz) as usize;
+            // If it is not loadable, we do not have any zeroes to represent
+            let num_zeroes = if phent.type_ != 1 {
+                0
+            } else {
+                (phent.memsz - phent.filesz) as usize
+            };
             segment_data.resize(segment_data.len() + num_zeroes, 0);
 
             let segment = ElfSegment {
@@ -353,5 +358,9 @@ impl ElfFile {
                 idx
             )),
         }
+    }
+
+    pub fn loadable_segments(&self) -> Vec<&ElfSegment> {
+        self.segments.iter().filter(|s| s.loadable).collect()
     }
 }

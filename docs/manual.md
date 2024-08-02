@@ -648,8 +648,8 @@ The `map` element has the following attributes:
 * `mr`: Identifies the memory region to map.
 * `vaddr`: Identifies the virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute), with the exception of a write-only mapping (just `w`).
-* `cached`: Determines if mapped with caching enabled or disabled. Defaults to `true`.
-* `setvar_vaddr`: Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
+* `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
+* `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 
 The `irq` element has the following attributes:
 
@@ -701,6 +701,11 @@ The `memory_region` element does not support any child elements.
 Below are the available page sizes for each architecture that Microkit supports.
 
 #### AArch64
+
+* 0x1000 (4KiB)
+* 0x200000 (2MiB)
+
+#### RISC-V 64-bit
 
 * 0x1000 (4KiB)
 * 0x200000 (2MiB)
@@ -879,8 +884,7 @@ To avoid this behaviour, the call to `armv8_switch_to_el1` should be replaced wi
 
 ## Adding Platform Support
 
-The following section is a guide for adding support for a new platform to Microkit. Currently only AArch64
-is supported in Microkit, so this guide assumes you are trying to add support for an AArch64 platform.
+The following section is a guide for adding support for a new platform to Microkit.
 
 ### Prerequisites
 
@@ -902,6 +906,8 @@ loads the image to). This means that the address is restricted to the platform's
 The other component of Microkit that is platform dependent is the loader itself. The loader will attempt to access
 the UART for debug output which requires a basic `putc` implementation. The UART device used in the loader should be
 the same as what is used for the seL4 kernel debug output.
+
+It should be noted that on RISC-V platforms, the SBI will be used for `putc` so no porting is necessary.
 
 Once you have patched the loader and the SDK build script, there should be no other changes required to have a working
 platform port. It is a good idea at this point to boot a hello world system to confirm the port is working.
