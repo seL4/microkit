@@ -12,3 +12,4 @@ pyenv/
 release/
 tmp_build/
 target/
+*.orig
