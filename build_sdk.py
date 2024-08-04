@@ -513,9 +513,11 @@ def main() -> None:
     for board in selected_boards:
         for config in selected_configs:
             build_sel4(sel4_dir, root_dir, build_dir, board, config)
+            loader_printing = 1 if config.name == "debug" else 0
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
-                ("PHYSICAL_ADDRESS_BITS", 40)
+                ("PHYSICAL_ADDRESS_BITS", 40),
+                ("PRINTING", loader_printing)
             ]
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])

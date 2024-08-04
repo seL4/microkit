@@ -23,8 +23,12 @@ ifeq ($(strip $(PHYSICAL_ADDRESS_BITS)),)
 $(error PHYSICAL_ADDRESS_BITS must be specified)
 endif
 
+ifeq ($(strip $(PRINTING)),)
+$(error PRINTING must be specified)
+endif
+
 TOOLCHAIN := aarch64-none-elf-
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DBOARD_$(BOARD) -Wall -Werror -mgeneral-regs-only
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -mcpu=$(GCC_CPU) -DPRINTING=$(PRINTING) -DBOARD_$(BOARD) -Wno-unused-function -Wall -Werror -mgeneral-regs-only
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o util64.o
