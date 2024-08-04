@@ -213,10 +213,12 @@ static void putc(uint8_t ch)
 
 static void puts(const char *s)
 {
+#if PRINTING
     while (*s) {
         putc(*s);
         s++;
     }
+#endif
 }
 
 static char hexchar(unsigned int v)
