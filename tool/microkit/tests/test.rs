@@ -241,6 +241,22 @@ mod protection_domain {
             "Error: duplicate id: 0 in protection domain: 'parent' @",
         )
     }
+
+    #[test]
+    fn test_small_stack_size() {
+        check_error(
+            "pd_small_stack_size.xml",
+            "Error: stack size must be between",
+        )
+    }
+
+    #[test]
+    fn test_unaligned_stack_size() {
+        check_error(
+            "pd_unaligned_stack_size.xml",
+            "Error: stack size must be aligned to the smallest page size",
+        )
+    }
 }
 
 #[cfg(test)]

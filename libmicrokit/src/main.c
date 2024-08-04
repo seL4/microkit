@@ -18,8 +18,6 @@
 #define PD_MASK 0xff
 #define CHANNEL_MASK 0x3f
 
-char _stack[4096]  __attribute__((__aligned__(16)));
-
 /* All globals are prefixed with microkit_* to avoid clashes with user defined globals. */
 
 bool microkit_passive;

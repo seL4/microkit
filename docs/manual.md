@@ -605,6 +605,8 @@ It supports the following attributes:
 * `budget`: (optional) The PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
+* `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
+  Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
 
 Additionally, it supports the following child elements:
 

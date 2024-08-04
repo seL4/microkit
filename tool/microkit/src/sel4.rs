@@ -51,6 +51,21 @@ pub struct Config {
     pub benchmark: bool,
 }
 
+impl Config {
+    pub fn user_top(&self) -> u64 {
+        match self.arch {
+            Arch::Aarch64 => match self.hypervisor {
+                true => match self.arm_pa_size_bits {
+                    40 => 0x10000000000,
+                    44 => 0x100000000000,
+                    _ => panic!("Unknown ARM physical address size bits"),
+                },
+                false => 0x800000000000,
+            },
+        }
+    }
+}
+
 pub enum Arch {
     Aarch64,
 }
