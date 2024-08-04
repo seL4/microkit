@@ -1209,6 +1209,32 @@ fn build_system(
         }
     }
 
+    // Here we create a memory region/mapping for the stack for each PD.
+    // We allocate the stack at the highest possible virtual address that the
+    // kernel allows us.
+    for pd in &system.protection_domains {
+        let stack_mr = SysMemoryRegion {
+            name: format!("STACK:{}", pd.name),
+            size: pd.stack_size,
+            page_size: PageSize::Small,
+            page_count: pd.stack_size / PageSize::Small as u64,
+            phys_addr: None,
+        };
+
+        let stack_vaddr = kernel_config.user_top();
+
+        let stack_map = SysMap {
+            mr: stack_mr.name.clone(),
+            vaddr: stack_vaddr - pd.stack_size,
+            perms: SysMapPerms::Read as u8 | SysMapPerms::Write as u8,
+            cached: true,
+            text_pos: None,
+        };
+
+        extra_mrs.push(stack_mr);
+        pd_extra_maps.get_mut(pd).unwrap().push(stack_map);
+    }
+
     let mut all_mrs: Vec<&SysMemoryRegion> =
         Vec::with_capacity(system.memory_regions.len() + extra_mrs.len());
     for mr_set in [&system.memory_regions, &extra_mrs] {
@@ -2404,6 +2430,7 @@ fn build_system(
     for pd_idx in 0..system.protection_domains.len() {
         let regs = Aarch64Regs {
             pc: pd_elf_files[pd_idx].entry,
+            sp: kernel_config.user_top(),
             ..Default::default()
         };
 

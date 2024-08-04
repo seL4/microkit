@@ -40,6 +40,11 @@ const PD_MAX_PRIORITY: u8 = 254;
 /// In microseconds
 const BUDGET_DEFAULT: u64 = 1000;
 
+/// Default to a stack size of a single page
+const PD_DEFAULT_STACK_SIZE: u64 = 0x1000;
+const PD_MIN_STACK_SIZE: u64 = 0x1000;
+const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -154,6 +159,7 @@ pub struct ProtectionDomain {
     pub period: u64,
     pub pp: bool,
     pub passive: bool,
+    pub stack_size: u64,
     pub program_image: PathBuf,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
@@ -275,9 +281,18 @@ impl ProtectionDomain {
     fn from_xml(
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
+        plat_desc: &PlatformDescription,
         is_child: bool,
     ) -> Result<ProtectionDomain, String> {
-        let mut attrs = vec!["name", "priority", "pp", "budget", "period", "passive"];
+        let mut attrs = vec![
+            "name",
+            "priority",
+            "pp",
+            "budget",
+            "period",
+            "passive",
+            "stack_size",
+        ];
         if is_child {
             attrs.push("id");
         }
@@ -345,6 +360,35 @@ impl ProtectionDomain {
         } else {
             false
         };
+
+        let stack_size = if let Some(xml_stack_size) = node.attribute("stack_size") {
+            sdf_parse_number(xml_stack_size, node)?
+        } else {
+            PD_DEFAULT_STACK_SIZE
+        };
+
+        #[allow(clippy::manual_range_contains)]
+        if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "stack size must be between 0x{:x} bytes and 0x{:x} bytes",
+                    PD_MIN_STACK_SIZE, PD_MAX_STACK_SIZE
+                ),
+            ));
+        }
+
+        if stack_size % plat_desc.page_sizes[0] != 0 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "stack size must be aligned to the smallest page size, {} bytes",
+                    plat_desc.page_sizes[0]
+                ),
+            ));
+        }
 
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
@@ -476,9 +520,9 @@ impl ProtectionDomain {
                         vaddr: None,
                     })
                 }
-                "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?)
-                }
+                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(
+                    xml_sdf, &child, plat_desc, true,
+                )?),
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
                         return Err(value_error(
@@ -520,6 +564,7 @@ impl ProtectionDomain {
             period,
             pp,
             passive,
+            stack_size,
             program_image: program_image.unwrap(),
             maps,
             irqs,
@@ -979,9 +1024,9 @@ pub fn parse(
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                &xml_sdf, &child, plat_desc, false,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
             _ => {
