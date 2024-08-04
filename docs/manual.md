@@ -421,6 +421,8 @@ If the protection domain has children it must also implement:
     seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo);
     seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
+    void microkit_deferred_notify(microkit_channel ch);
+    void microkit_deferred_irq_ack(microkit_channel ch);
     void microkit_pd_restart(microkit_child pd, seL4_Word entry_point);
     void microkit_pd_stop(microkit_child pd);
     void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
@@ -510,6 +512,28 @@ Channel identifiers are specified in the system configuration.
 ## `void microkit_irq_ack(microkit_channel ch)`
 
 Acknowledge the interrupt identified by the specified channel.
+
+## `void microkit_deferred_notify(microkit_channel ch)`
+
+The same as `microkit_notify` but will instead not actually perform the notify until
+the entry point where `microkit_deferred_notify` was called returns.
+
+It is important to note that only a single 'deferred' API call can be made within the
+same entry point.
+
+The purpose of this API is for performance critical code as this API saves
+a kernel system call.
+
+## `void microkit_deferred_irq_ack(microkit_channel ch)`
+
+The same as `microkit_irq_ack` but will instead not actually perform the IRQ acknowledge
+until the entry point where `microkit_deferred_irq_ack` was called returns.
+
+It is important to note that only a single 'deferred' API call can be made within the
+same entry point.
+
+The purpose of this API is for performance critical code as this API saves
+a kernel system call.
 
 ## `void microkit_pd_restart(microkit_child pd, uintptr_t entry_point)`
 
