@@ -13,3 +13,4 @@ release/
 tmp_build/
 target/
 *.orig
+.DS_Store
