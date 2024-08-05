@@ -251,6 +251,7 @@ SUPPORTED_CONFIGS = (
         kernel_options={
             "KernelArmExportPMUUser": True,
             "KernelDebugBuild": False,
+            "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation"
         },
     ),
