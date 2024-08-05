@@ -141,6 +141,7 @@ struct InitSystem<'a> {
     invocations: &'a mut Vec<Invocation>,
     cap_slot: u64,
     last_fixed_address: u64,
+    normal_untyped: Vec<FixedUntypedAlloc>,
     device_untyped: Vec<FixedUntypedAlloc>,
     cap_address_names: &'a mut HashMap<u64, String>,
     objects: Vec<Object>,
@@ -171,6 +172,19 @@ impl<'a> InitSystem<'a> {
             .collect();
         device_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
 
+        let mut normal_untyped: Vec<FixedUntypedAlloc> = kernel_boot_info
+            .untyped_objects
+            .iter()
+            .filter_map(|ut| {
+                if !ut.is_device {
+                    Some(FixedUntypedAlloc::new(*ut))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        normal_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
+
         InitSystem {
             config,
             cnode_cap,
@@ -179,6 +193,7 @@ impl<'a> InitSystem<'a> {
             invocations,
             cap_slot: first_available_cap_slot,
             last_fixed_address: 0,
+            normal_untyped,
             device_untyped,
             cap_address_names,
             objects: Vec::new(),
@@ -226,17 +241,31 @@ impl<'a> InitSystem<'a> {
         assert!(count > 0);
 
         let alloc_size = object_type.fixed_size(self.config).unwrap();
-        // Find an untyped that contains the given address
-        let fut: &mut FixedUntypedAlloc = self
+        // Find an untyped that contains the given address, it may be in device
+        // memory
+        let device_fut: Option<&mut FixedUntypedAlloc> = self
             .device_untyped
             .iter_mut()
-            .find(|fut| fut.contains(phys_address))
-            .unwrap_or_else(|| {
-                panic!(
-                    "Error: physical address {:x} not in any device untyped",
-                    phys_address
-                )
-            });
+            .find(|fut| fut.contains(phys_address));
+
+        let normal_fut: Option<&mut FixedUntypedAlloc> = self
+            .normal_untyped
+            .iter_mut()
+            .find(|fut| fut.contains(phys_address));
+
+        // We should never have found the physical address in both device and normal untyped
+        assert!(!(device_fut.is_some() && normal_fut.is_some()));
+
+        let fut = if let Some(fut) = device_fut {
+            fut
+        } else if let Some(fut) = normal_fut {
+            fut
+        } else {
+            panic!(
+                "Error: physical address {:x} not in any device untyped",
+                phys_address
+            )
+        };
 
         if phys_address < fut.watermark {
             panic!(
