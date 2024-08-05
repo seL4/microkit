@@ -1707,7 +1707,7 @@ fn build_system(
     let pd_ud_objs = init_system.allocate_objects(ObjectType::PageTable, pd_ud_names, None);
     let vm_ud_objs = init_system.allocate_objects(ObjectType::PageTable, vm_ud_names, None);
 
-    if config.hypervisor {
+    if !config.hypervisor {
         assert!(vm_ud_objs.is_empty());
     }
 
@@ -2406,7 +2406,7 @@ fn build_system(
         }
     }
 
-    if config.hypervisor {
+    if !config.hypervisor {
         assert!(all_vm_uds.is_empty() && vm_ud_objs.is_empty());
         assert!(all_vm_ds.is_empty() && vm_d_objs.is_empty());
         assert!(all_vm_pts.is_empty() && vm_pt_objs.is_empty());
