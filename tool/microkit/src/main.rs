@@ -228,16 +228,15 @@ impl<'a> InitSystem<'a> {
     }
 
     /// Note: Fixed objects must be allocated in order!
-    pub fn allocate_fixed_objects(
+    pub fn allocate_fixed_object(
         &mut self,
         phys_address: u64,
         object_type: ObjectType,
         count: u64,
-        names: Vec<String>,
-    ) -> Vec<Object> {
+        name: &String,
+    ) -> Object {
         assert!(phys_address >= self.last_fixed_address);
         assert!(object_type.fixed_size(self.config).is_some());
-        assert!(count == names.len() as u64);
         assert!(count > 0);
 
         let alloc_size = object_type.fixed_size(self.config).unwrap();
@@ -336,7 +335,6 @@ impl<'a> InitSystem<'a> {
         fut.watermark = phys_address + alloc_size;
         self.last_fixed_address = phys_address + alloc_size;
         let cap_addr = self.cnode_mask | object_cap;
-        let name = &names[0];
         let kernel_object = Object {
             name: name.clone(),
             object_type,
@@ -346,7 +344,7 @@ impl<'a> InitSystem<'a> {
         self.objects.push(kernel_object.clone());
         self.cap_address_names.insert(cap_addr, name.clone());
 
-        vec![kernel_object]
+        kernel_object
     }
 
     pub fn allocate_objects(
@@ -1464,9 +1462,8 @@ fn build_system(
 
         let obj_type_name = format!("Page({})", util::human_size_strict(mr.page_size as u64));
         let name = format!("{}: MR={} @ {:x}", obj_type_name, mr.name, phys_addr);
-        let page = init_system.allocate_fixed_objects(phys_addr, obj_type, 1, vec![name]);
-        assert!(page.len() == 1);
-        mr_pages.get_mut(mr).unwrap().push(page[0].clone());
+        let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, &name);
+        mr_pages.get_mut(mr).unwrap().push(page.clone());
     }
 
     let virtual_machines: Vec<&VirtualMachine> = system
@@ -1783,7 +1780,7 @@ fn build_system(
     }
 
     let mut cap_slot = init_system.cap_slot;
-    let kernel_objects = init_system.objects.clone();
+    let kernel_objects = init_system.objects;
 
     // Create all the necessary interrupt handler objects. These aren't
     // created through retype though!
