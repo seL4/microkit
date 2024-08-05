@@ -43,6 +43,7 @@ Please file an issue if additional packages are required.
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
+* RISC-V GCC compiler for unknown-elf; version 13.2.0
 * device tree compiler
 * xmllint
 * qemu-system-aarch64
@@ -64,7 +65,8 @@ On a Debian-like system you can do:
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
         python3.9 python3.9-venv \
-        qemu-system-arm
+        qemu-system-arm qemu-system-misc \
+        gcc-riscv64-unknown-elf
 
 If you do not have Python 3.9 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
@@ -77,6 +79,8 @@ To use this:
 On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
 
     $ curl https://sh.rustup.rs -sSf | sh
+    $ brew tap riscv-software-src/riscv
+    $ brew install riscv-tools
     $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
 
 Additonally, a number of Python libraries are needed.
