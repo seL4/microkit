@@ -207,7 +207,8 @@ impl ElfFile {
             }
 
             let mut segment_data = vec![0; phent.memsz as usize];
-            segment_data[..phent.filesz as usize].copy_from_slice(&bytes[segment_start..segment_end]);
+            segment_data[..phent.filesz as usize]
+                .copy_from_slice(&bytes[segment_start..segment_end]);
 
             let segment = ElfSegment {
                 data: segment_data,

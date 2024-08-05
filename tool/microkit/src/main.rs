@@ -270,12 +270,14 @@ impl<'a> InitSystem<'a> {
         if space_left < alloc_size {
             for ut in &self.device_untyped {
                 let space_left = ut.ut.region.end - ut.watermark;
-                println!("ut [0x{:x}..0x{:x}], space left: 0x{:x}", ut.ut.region.base, ut.ut.region.end, space_left);
+                println!(
+                    "ut [0x{:x}..0x{:x}], space left: 0x{:x}",
+                    ut.ut.region.base, ut.ut.region.end, space_left
+                );
             }
             panic!(
                 "Error: allocation for physical address {:x} is too large ({:x}) for untyped",
-                phys_address,
-                alloc_size
+                phys_address, alloc_size
             );
         }
 
@@ -456,7 +458,11 @@ struct BuiltSystem {
     initial_task_phys_region: MemoryRegion,
 }
 
-pub fn pd_write_symbols(pds: &Vec<ProtectionDomain>, pd_elf_files: &mut Vec<ElfFile>, pd_setvar_values: &Vec<Vec<u64>>) -> Result<(), String> {
+pub fn pd_write_symbols(
+    pds: &[ProtectionDomain],
+    pd_elf_files: &mut [ElfFile],
+    pd_setvar_values: &[Vec<u64>],
+) -> Result<(), String> {
     for (i, pd) in pds.iter().enumerate() {
         let elf = &mut pd_elf_files[i];
         let name = pd.name.as_bytes();
@@ -1396,8 +1402,7 @@ fn build_system(
         let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Small as u64);
         let ipc_buffer_str = format!(
             "Page({} {}): IPC Buffer PD={}",
-            page_size_human, page_size_label,
-            pd.name
+            page_size_human, page_size_label, pd.name
         );
         small_page_names.push(ipc_buffer_str);
     }
@@ -1409,7 +1414,10 @@ fn build_system(
 
         let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
         for idx in 0..mr.page_count {
-            let page_str = format!("Page({} {}): MR={} #{}", page_size_human, page_size_label, mr.name, idx);
+            let page_str = format!(
+                "Page({} {}): MR={} #{}",
+                page_size_human, page_size_label, mr.name, idx
+            );
             match mr.page_size as PageSize {
                 PageSize::Small => small_page_names.push(page_str),
                 PageSize::Large => large_page_names.push(page_str),
@@ -1443,10 +1451,7 @@ fn build_system(
             PageSize::Small => small_page_objs[idx..idx + mr.page_count as usize].to_vec(),
             PageSize::Large => large_page_objs[idx..idx + mr.page_count as usize].to_vec(),
         };
-        mr_pages.insert(
-            mr,
-            objs
-        );
+        mr_pages.insert(mr, objs);
         match mr.page_size {
             PageSize::Small => page_small_idx += mr.page_count as usize,
             PageSize::Large => page_large_idx += mr.page_count as usize,
@@ -1478,7 +1483,10 @@ fn build_system(
         };
 
         let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
-        let name = format!("Page({} {}): MR={} @ {:x}", page_size_human, page_size_label, mr.name, phys_addr);
+        let name = format!(
+            "Page({} {}): MR={} @ {:x}",
+            page_size_human, page_size_label, mr.name, phys_addr
+        );
         let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, name);
         mr_pages.get_mut(mr).unwrap().push(page);
     }
@@ -3485,7 +3493,11 @@ fn main() -> Result<(), String> {
     monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
 
     // Write out all the symbols for each PD
-    pd_write_symbols(&system.protection_domains, &mut pd_elf_files, &built_system.pd_setvar_values)?;
+    pd_write_symbols(
+        &system.protection_domains,
+        &mut pd_elf_files,
+        &built_system.pd_setvar_values,
+    )?;
 
     // Generate the report
     let report = match std::fs::File::create(args.report) {
