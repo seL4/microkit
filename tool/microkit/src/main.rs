@@ -266,6 +266,19 @@ impl<'a> InitSystem<'a> {
             )
         };
 
+        let space_left = fut.ut.region.end - fut.watermark;
+        if space_left < alloc_size {
+            for ut in &self.device_untyped {
+                let space_left = ut.ut.region.end - ut.watermark;
+                println!("ut [0x{:x}..0x{:x}], space left: 0x{:x}", ut.ut.region.base, ut.ut.region.end, space_left);
+            }
+            panic!(
+                "Error: allocation for physical address {:x} is too large ({:x}) for untyped",
+                phys_address,
+                alloc_size
+            );
+        }
+
         if phys_address < fut.watermark {
             panic!(
                 "Error: physical address {:x} is below watermark",
@@ -1322,6 +1335,8 @@ fn build_system(
             extra_mrs.push(mr);
         }
     }
+
+    assert!(phys_addr_next - (reserved_base + invocation_table_size) == pd_elf_size);
 
     // Here we create a memory region/mapping for the stack for each PD.
     // We allocate the stack at the highest possible virtual address that the
