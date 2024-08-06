@@ -100,6 +100,14 @@ mod memory_region {
             "Error: invalid attribute 'page_count' on element 'memory_region': ",
         )
     }
+
+    #[test]
+    fn test_overlapping_phys_addr() {
+        check_error(
+            "mr_overlapping_phys_addr.xml",
+            "Error: memory region 'mr2' physical address range [0x9001000..0x9002000) overlaps with another memory region 'mr1' [0x9000000..0x9002000) @ ",
+        )
+    }
 }
 
 #[cfg(test)]
@@ -257,6 +265,14 @@ mod protection_domain {
         check_error(
             "pd_unaligned_stack_size.xml",
             "Error: stack size must be aligned to the smallest page size",
+        )
+    }
+
+    #[test]
+    fn test_overlapping_maps() {
+        check_error(
+            "pd_overlapping_maps.xml",
+            "Error: map for 'mr2' has virtual address range [0x1000000..0x1001000) which overlaps with map for 'mr1' [0x1000000..0x1001000) in protection domain 'hello' @"
         )
     }
 }

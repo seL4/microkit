@@ -1320,6 +1320,7 @@ fn build_system(
                 page_size: PageSize::Small,
                 page_count: aligned_size / PageSize::Small as u64,
                 phys_addr: Some(phys_addr_next),
+                text_pos: None,
             };
             phys_addr_next += aligned_size;
 
@@ -1354,6 +1355,7 @@ fn build_system(
             page_size: PageSize::Small,
             page_count: pd.stack_size / PageSize::Small as u64,
             phys_addr: None,
+            text_pos: None,
         };
 
         let stack_vaddr = config.user_top();

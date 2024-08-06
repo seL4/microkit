@@ -116,6 +116,7 @@ pub struct SysMemoryRegion {
     pub page_size: PageSize,
     pub page_count: u64,
     pub phys_addr: Option<u64>,
+    pub text_pos: Option<roxmltree::TextPos>,
 }
 
 impl SysMemoryRegion {
@@ -740,6 +741,7 @@ impl SysMemoryRegion {
             page_size: page_size.into(),
             page_count,
             phys_addr,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
 }
@@ -1154,6 +1156,7 @@ pub fn parse(
 
     // Ensure that all maps are correct
     for pd in &pds {
+        let mut checked_maps = Vec::with_capacity(pd.maps.len());
         for map in &pd.maps {
             let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
             let pos = map.text_pos.unwrap();
@@ -1165,6 +1168,27 @@ pub fn parse(
                             loc_string(&xml_sdf, pos)
                         ));
                     }
+
+                    let map_start = map.vaddr;
+                    let map_end = map.vaddr + mr.size;
+                    for (name, start, end) in &checked_maps {
+                        if !(map_start >= *end || map_end <= *start) {
+                            return Err(
+                                format!(
+                                    "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in protection domain '{}' @ {}",
+                                    map.mr,
+                                    map_start,
+                                    map_end,
+                                    name,
+                                    start,
+                                    end,
+                                    pd.name,
+                                    loc_string(&xml_sdf, map.text_pos.unwrap())
+                                )
+                            );
+                        }
+                    }
+                    checked_maps.push((&map.mr, map_start, map_end));
                 }
                 None => {
                     return Err(format!(
@@ -1174,6 +1198,35 @@ pub fn parse(
                     ))
                 }
             };
+        }
+    }
+
+    // Ensure MRs with physical addresses do not overlap
+    let mut checked_mrs = Vec::with_capacity(mrs.len());
+    for mr in &mrs {
+        if let Some(phys_addr) = mr.phys_addr {
+            let mr_start = phys_addr;
+            let mr_end = phys_addr + mr.size;
+
+            for (name, start, end) in &checked_mrs {
+                if !(mr_start >= *end || mr_end <= *start) {
+                    let pos = mr.text_pos.unwrap();
+                    return Err(
+                        format!(
+                            "Error: memory region '{}' physical address range [0x{:x}..0x{:x}) overlaps with another memory region '{}' [0x{:x}..0x{:x}) @ {}",
+                            mr.name,
+                            mr_start,
+                            mr_end,
+                            name,
+                            start,
+                            end,
+                            loc_string(&xml_sdf, pos)
+                        )
+                    );
+                }
+            }
+
+            checked_mrs.push((&mr.name, mr_start, mr_end));
         }
     }
 

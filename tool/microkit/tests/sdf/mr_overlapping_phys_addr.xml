@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="mr1" size="0x2000" phys_addr="0x9000000" />
+    <memory_region name="mr2" size="0x1000" phys_addr="0x9001000" />
+    <protection_domain name="hello">
+        <program_image path="hello.elf" />
+    </protection_domain>
+</system>
