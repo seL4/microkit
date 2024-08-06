@@ -1225,7 +1225,7 @@ fn build_system(
         InvocationArgs::PageTableMap {
             page_table: 1,
             vspace: 0,
-            vaddr: ObjectType::LargePage as u64,
+            vaddr: ObjectType::LargePage.fixed_size(config).unwrap(),
             attr: 0,
         },
     );
