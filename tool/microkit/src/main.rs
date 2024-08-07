@@ -1143,23 +1143,29 @@ fn build_system(
     for ut in boot_info_device_untypeds {
         let ut_pages = ut.region.size() / config.minimum_page_size;
         let retype_page_count = min(ut_pages, remaining_pages);
-        assert!(retype_page_count <= config.fan_out_limit);
-        bootstrap_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::UntypedRetype {
-                untyped: ut.cap,
-                object_type: ObjectType::SmallPage,
-                size_bits: 0,
-                root: root_cnode_cap,
-                node_index: 1,
-                node_depth: 1,
-                node_offset: cap_slot,
-                num_objects: retype_page_count,
-            },
-        ));
+
+        let mut retypes_remaining = retype_page_count;
+        while retypes_remaining > 0 {
+            let num_retypes = min(retypes_remaining, config.fan_out_limit);
+            bootstrap_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::UntypedRetype {
+                    untyped: ut.cap,
+                    object_type: ObjectType::SmallPage,
+                    size_bits: 0,
+                    root: root_cnode_cap,
+                    node_index: 1,
+                    node_depth: 1,
+                    node_offset: cap_slot,
+                    num_objects: num_retypes,
+                },
+            ));
+
+            retypes_remaining -= num_retypes;
+            cap_slot += num_retypes;
+        }
 
         remaining_pages -= retype_page_count;
-        cap_slot += retype_page_count;
         phys_addr += retype_page_count * config.minimum_page_size;
         invocation_table_allocations.push((ut, phys_addr));
         if remaining_pages == 0 {
