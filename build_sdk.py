@@ -210,6 +210,8 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "qemu-riscv-virt",
             "KernelIsMCS": True,
             "QEMU_MEMORY": "2048",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
         },
         examples={
             "hello": Path("example/qemu_virt_riscv64/hello"),
@@ -223,6 +225,8 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelIsMCS": True,
             "KernelPlatform": "star64",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
         },
         examples={
             "hello": Path("example/star64/hello")
