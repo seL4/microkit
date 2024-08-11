@@ -47,6 +47,7 @@ Please file an issue if additional packages are required.
 * device tree compiler
 * xmllint
 * qemu-system-aarch64
+* qemu-system-riscv64
 
 To build the documentation you also need
 * pandoc
@@ -81,7 +82,7 @@ On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
     $ curl https://sh.rustup.rs -sSf | sh
     $ brew tap riscv-software-src/riscv
     $ brew install riscv-tools
-    $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
+    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
 
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
