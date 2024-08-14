@@ -1512,22 +1512,26 @@ fn build_system(
         .iter()
         .map(|pd| format!("TCB: PD={}", pd.name))
         .collect();
-    let vm_tcb_names: Vec<String> = virtual_machines
-        .iter()
-        .map(|vm| format!("TCB: VM={}", vm.name))
-        .collect();
-    tcb_names.extend(vm_tcb_names);
+    let mut vcpu_tcb_names = vec![];
+    for vm in &virtual_machines {
+        for vcpu in &vm.vcpus {
+            vcpu_tcb_names.push(format!("TCB: VM(VCPU-{})={}", vcpu.id, vm.name));
+        }
+    }
+    tcb_names.extend(vcpu_tcb_names);
     let tcb_objs = init_system.allocate_objects(ObjectType::Tcb, tcb_names, None);
     let tcb_caps: Vec<u64> = tcb_objs.iter().map(|tcb| tcb.cap_addr).collect();
 
     let pd_tcb_objs = &tcb_objs[..system.protection_domains.len()];
-    let vm_tcb_objs = &tcb_objs[system.protection_domains.len()..];
-    assert!(pd_tcb_objs.len() + vm_tcb_objs.len() == tcb_objs.len());
+    let vcpu_tcb_objs = &tcb_objs[system.protection_domains.len()..];
+    assert!(pd_tcb_objs.len() + vcpu_tcb_objs.len() == tcb_objs.len());
     // VCPUs
-    let vcpu_names: Vec<String> = virtual_machines
-        .iter()
-        .map(|vm| format!("VCPU: VM={}", vm.name))
-        .collect();
+    let mut vcpu_names = vec![];
+    for vm in &virtual_machines {
+        for vcpu in &vm.vcpus {
+            vcpu_names.push(format!("VCPU-{}: VM={}", vcpu.id, vm.name));
+        }
+    }
     let vcpu_objs = init_system.allocate_objects(ObjectType::Vcpu, vcpu_names, None);
     // Scheduling Contexts
     let mut sched_context_names: Vec<String> = system
@@ -1535,10 +1539,12 @@ fn build_system(
         .iter()
         .map(|pd| format!("SchedContext: PD={}", pd.name))
         .collect();
-    let vm_sched_context_names: Vec<String> = virtual_machines
-        .iter()
-        .map(|vm| format!("SchedContext: VM={}", vm.name))
-        .collect();
+    let mut vm_sched_context_names = vec![];
+    for vm in &virtual_machines {
+        for vcpu in &vm.vcpus {
+            vm_sched_context_names.push(format!("SchedContext: VM(VCPU-{})={}", vcpu.id, vm.name));
+        }
+    }
     sched_context_names.extend(vm_sched_context_names);
     let sched_context_objs = init_system.allocate_objects(
         ObjectType::SchedContext,
@@ -1809,6 +1815,8 @@ fn build_system(
     for (i, pd) in system.protection_domains.iter().enumerate() {
         cnode_objs_by_pd.insert(pd, &cnode_objs[i]);
     }
+
+    let vm_cnode_objs = &cnode_objs[system.protection_domains.len()..];
 
     let mut cap_slot = init_system.cap_slot;
     let kernel_objects = init_system.objects;
@@ -2114,23 +2122,26 @@ fn build_system(
         assert!(parent_pd.is_some());
 
         let fault_ep_cap = pd_endpoint_objs[parent_pd.unwrap()].unwrap().cap_addr;
-        let badge = FAULT_BADGE | vm.vcpu.id;
 
-        let invocation = Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: system_cnode_cap,
-                dest_index: cap_slot,
-                dest_depth: system_cnode_bits,
-                src_root: root_cnode_cap,
-                src_obj: fault_ep_cap,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge,
-            },
-        );
-        system_invocations.push(invocation);
-        cap_slot += 1;
+        for vcpu in &vm.vcpus {
+            let badge = FAULT_BADGE | vcpu.id;
+
+            let invocation = Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: system_cnode_cap,
+                    dest_index: cap_slot,
+                    dest_depth: system_cnode_bits,
+                    src_root: root_cnode_cap,
+                    src_obj: fault_ep_cap,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge,
+                },
+            );
+            system_invocations.push(invocation);
+            cap_slot += 1;
+        }
     }
 
     let final_cap_slot = cap_slot;
@@ -2275,21 +2286,24 @@ fn build_system(
             // This PD that we are dealing with has a virtual machine, now we
             // need to find the TCB that corresponds to it.
             let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
-            let cap_idx = BASE_VM_TCB_CAP + vm.vcpu.id;
-            assert!(cap_idx < PD_CAP_SIZE);
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: cnode_objs[pd_idx].cap_addr,
-                    dest_index: cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: vm_tcb_objs[vm_idx].cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64,
-                    badge: 0,
-                },
-            ));
+
+            for (vcpu_idx, vcpu) in vm.vcpus.iter().enumerate() {
+                let cap_idx = BASE_VM_TCB_CAP + vcpu.id;
+                assert!(cap_idx < PD_CAP_SIZE);
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: cnode_objs[pd_idx].cap_addr,
+                        dest_index: cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: vcpu_tcb_objs[vm_idx + vcpu_idx].cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64,
+                        badge: 0,
+                    },
+                ));
+            }
         }
     }
 
@@ -2299,21 +2313,24 @@ fn build_system(
             // This PD that we are dealing with has a virtual machine, now we
             // need to find the vCPU that corresponds to it.
             let vm_idx = virtual_machines.iter().position(|&x| x == vm).unwrap();
-            let cap_idx = BASE_VCPU_CAP + vm.vcpu.id;
-            assert!(cap_idx < PD_CAP_SIZE);
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: cnode_objs[pd_idx].cap_addr,
-                    dest_index: cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: vcpu_objs[vm_idx].cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64,
-                    badge: 0,
-                },
-            ));
+
+            for (vcpu_idx, vcpu) in vm.vcpus.iter().enumerate() {
+                let cap_idx = BASE_VCPU_CAP + vcpu.id;
+                assert!(cap_idx < PD_CAP_SIZE);
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: cnode_objs[pd_idx].cap_addr,
+                        dest_index: cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: vcpu_objs[vm_idx + vcpu_idx].cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64,
+                        badge: 0,
+                    },
+                ));
+            }
         }
     }
 
@@ -2575,18 +2592,21 @@ fn build_system(
         ));
     }
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::SchedControlConfigureFlags {
-                sched_control: kernel_boot_info.sched_control_cap,
-                sched_context: vm_sched_context_objs[vm_idx].cap_addr,
-                budget: vm.budget,
-                period: vm.period,
-                extra_refills: 0,
-                badge: 0x100 + vm_idx as u64,
-                flags: 0,
-            },
-        ));
+        for vcpu_idx in 0..vm.vcpus.len() {
+            let idx = vm_idx + vcpu_idx;
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::SchedControlConfigureFlags {
+                    sched_control: kernel_boot_info.sched_control_cap,
+                    sched_context: vm_sched_context_objs[idx].cap_addr,
+                    budget: vm.budget,
+                    period: vm.period,
+                    extra_refills: 0,
+                    badge: 0x100 + idx as u64,
+                    flags: 0,
+                },
+            ));
+        }
     }
 
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
@@ -2604,18 +2624,20 @@ fn build_system(
         ));
     }
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::TcbSetSchedParams {
-                tcb: vm_tcb_objs[vm_idx].cap_addr,
-                authority: INIT_TCB_CAP_ADDRESS,
-                mcp: vm.priority as u64,
-                priority: vm.priority as u64,
-                sched_context: vm_sched_context_objs[vm_idx].cap_addr,
-                // This gets over-written by the call to TCB_SetSpace
-                fault_ep: fault_ep_endpoint_object.cap_addr,
-            },
-        ));
+        for vcpu_idx in 0..vm.vcpus.len() {
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::TcbSetSchedParams {
+                    tcb: vcpu_tcb_objs[vm_idx + vcpu_idx].cap_addr,
+                    authority: INIT_TCB_CAP_ADDRESS,
+                    mcp: vm.priority as u64,
+                    priority: vm.priority as u64,
+                    sched_context: vm_sched_context_objs[vm_idx + vcpu_idx].cap_addr,
+                    // This gets over-written by the call to TCB_SetSpace
+                    fault_ep: fault_ep_endpoint_object.cap_addr,
+                },
+            ));
+        }
     }
 
     // In the benchmark configuration, we allow PDs to access their own TCB.
@@ -2649,8 +2671,7 @@ fn build_system(
     }
 
     // Set VSpace and CSpace
-    let num_set_space_invocations = system.protection_domains.len() + virtual_machines.len();
-    let mut set_space_invocation = Invocation::new(
+    let mut pd_set_space_invocation = Invocation::new(
         config,
         InvocationArgs::TcbSetSpace {
             tcb: tcb_objs[0].cap_addr,
@@ -2661,8 +2682,8 @@ fn build_system(
             vspace_root_data: 0,
         },
     );
-    set_space_invocation.repeat(
-        num_set_space_invocations as u32,
+    pd_set_space_invocation.repeat(
+        system.protection_domains.len() as u32,
         InvocationArgs::TcbSetSpace {
             tcb: 1,
             fault_ep: 1,
@@ -2672,7 +2693,34 @@ fn build_system(
             vspace_root_data: 0,
         },
     );
-    system_invocations.push(set_space_invocation);
+    system_invocations.push(pd_set_space_invocation);
+
+    for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+        let fault_ep_offset = system.protection_domains.len() + vm_idx;
+        let mut vcpu_set_space_invocation = Invocation::new(
+            config,
+            InvocationArgs::TcbSetSpace {
+                tcb: vcpu_tcb_objs[vm_idx].cap_addr,
+                fault_ep: badged_fault_ep + fault_ep_offset as u64,
+                cspace_root: vm_cnode_objs[vm_idx].cap_addr,
+                cspace_root_data: config.cap_address_bits - PD_CAP_BITS,
+                vspace_root: vm_vspace_objs[vm_idx].cap_addr,
+                vspace_root_data: 0,
+            },
+        );
+        vcpu_set_space_invocation.repeat(
+            vm.vcpus.len() as u32,
+            InvocationArgs::TcbSetSpace {
+                tcb: 1,
+                fault_ep: 1,
+                cspace_root: 0,
+                cspace_root_data: 0,
+                vspace_root: 0,
+                vspace_root_data: 0,
+            },
+        );
+        system_invocations.push(vcpu_set_space_invocation);
+    }
 
     // Set IPC buffer
     for pd_idx in 0..system.protection_domains.len() {
@@ -2747,11 +2795,14 @@ fn build_system(
             config,
             InvocationArgs::ArmVcpuSetTcb {
                 vcpu: vcpu_objs[0].cap_addr,
-                tcb: vm_tcb_objs[0].cap_addr,
+                tcb: vcpu_tcb_objs[0].cap_addr,
             },
         );
+        let num_vcpus = virtual_machines
+            .iter()
+            .fold(0, |acc, vm| acc + vm.vcpus.len());
         vcpu_bind_invocation.repeat(
-            virtual_machines.len() as u32,
+            num_vcpus as u32,
             InvocationArgs::ArmVcpuSetTcb { vcpu: 1, tcb: 1 },
         );
         system_invocations.push(vcpu_bind_invocation);
