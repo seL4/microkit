@@ -179,8 +179,7 @@ pub struct ProtectionDomain {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct VirtualMachine {
-    // Right now virtual machines are limited to a single vCPU
-    pub vcpu: VirtualCpu,
+    pub vcpus: Vec<VirtualCpu>,
     pub name: String,
     pub maps: Vec<SysMap>,
     pub priority: u8,
@@ -616,7 +615,7 @@ impl VirtualMachine {
             0
         };
 
-        let mut vcpu = None;
+        let mut vcpus: Vec<VirtualCpu> = Vec::new();
         let mut maps = Vec::new();
         for child in node.children() {
             if !child.is_element() {
@@ -626,14 +625,6 @@ impl VirtualMachine {
             let child_name = child.tag_name().name();
             match child_name {
                 "vcpu" => {
-                    if vcpu.is_some() {
-                        return Err(value_error(
-                            xml_sdf,
-                            node,
-                            "vcpu must only be specified once".to_string(),
-                        ));
-                    }
-
                     check_attributes(xml_sdf, &child, &["id"])?;
                     let id = checked_lookup(xml_sdf, &child, "id")?
                         .parse::<u64>()
@@ -645,7 +636,20 @@ impl VirtualMachine {
                             format!("id must be < {}", VCPU_MAX_ID + 1),
                         ));
                     }
-                    vcpu = Some(VirtualCpu { id });
+
+                    for vcpu in &vcpus {
+                        if vcpu.id == id {
+                            let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                            return Err(format!(
+                                "Error: duplicate vcpu id {} in virtual machine '{}' @ {}",
+                                id,
+                                name,
+                                loc_string(xml_sdf, pos)
+                            ));
+                        }
+                    }
+
+                    vcpus.push(VirtualCpu { id });
                 }
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
@@ -664,7 +668,7 @@ impl VirtualMachine {
             }
         }
 
-        if vcpu.is_none() {
+        if vcpus.is_empty() {
             return Err(format!(
                 "Error: missing 'vcpu' element on virtual_machine: '{}'",
                 name
@@ -672,7 +676,7 @@ impl VirtualMachine {
         }
 
         Ok(VirtualMachine {
-            vcpu: vcpu.unwrap(),
+            vcpus,
             name,
             maps,
             // This downcast is safe as we have checked that this is less than
@@ -939,11 +943,13 @@ fn pd_tree_to_list(
                 loc_string(xml_sdf, child_pd.text_pos)
             ));
         }
-        // Also check that the child ID does not clash with the virtual machine ID, if the PD has one
+        // Also check that the child ID does not clash with any vCPU IDs, if the PD has a virtual machine
         if let Some(vm) = &pd.virtual_machine {
-            if child_id == vm.vcpu.id {
-                return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
-                                    child_id, pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+            for vcpu in &vm.vcpus {
+                if child_id == vcpu.id {
+                    return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
+                                        child_id, pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+                }
             }
         }
         child_ids.push(child_id);
