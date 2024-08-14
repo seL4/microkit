@@ -27,7 +27,7 @@ pub struct BootInfo {
 /// The cap_address refers to a cap address that addresses this cap.
 /// The cap_address is is intended to be valid within the context of the
 /// initial task.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Object {
     /// Type of kernel object
     pub object_type: ObjectType,
@@ -822,7 +822,7 @@ impl Invocation {
         cap_lookup: &HashMap<u64, String>,
     ) {
         let mut arg_strs = Vec::new();
-        let (service, service_str) = match self.args {
+        let (service, service_str): (u64, &str) = match self.args {
             InvocationArgs::UntypedRetype {
                 untyped,
                 object_type,
@@ -1052,7 +1052,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("extra_refills", extra_refills));
                 arg_strs.push(Invocation::fmt_field("badge", badge));
                 arg_strs.push(Invocation::fmt_field("flags", flags));
-                (sched_control, &"None".to_string())
+                (sched_control, "None")
             }
             InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => {
                 arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
