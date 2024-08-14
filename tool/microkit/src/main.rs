@@ -232,12 +232,10 @@ impl<'a> InitSystem<'a> {
         &mut self,
         phys_address: u64,
         object_type: ObjectType,
-        count: u64,
         name: String,
     ) -> Object {
         assert!(phys_address >= self.last_fixed_address);
         assert!(object_type.fixed_size(self.config).is_some());
-        assert!(count > 0);
 
         let alloc_size = object_type.fixed_size(self.config).unwrap();
         // Find an untyped that contains the given address, it may be in device
@@ -355,7 +353,7 @@ impl<'a> InitSystem<'a> {
             cap_addr,
             phys_addr: phys_address,
         };
-        self.objects.push(kernel_object.clone());
+        self.objects.push(kernel_object);
         self.cap_address_names.insert(cap_addr, name);
 
         kernel_object
@@ -425,7 +423,7 @@ impl<'a> InitSystem<'a> {
                 cap_addr,
                 phys_addr,
             };
-            kernel_objects.push(kernel_object.clone());
+            kernel_objects.push(kernel_object);
             self.cap_address_names.insert(cap_addr, name);
 
             phys_addr += alloc_size;
@@ -1495,7 +1493,7 @@ fn build_system(
             "Page({} {}): MR={} @ {:x}",
             page_size_human, page_size_label, mr.name, phys_addr
         );
-        let page = init_system.allocate_fixed_object(phys_addr, obj_type, 1, name);
+        let page = init_system.allocate_fixed_object(phys_addr, obj_type, name);
         mr_pages.get_mut(mr).unwrap().push(page);
     }
 
