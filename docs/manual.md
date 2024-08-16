@@ -744,7 +744,7 @@ The MaaXBoard is a low-cost ARM SBC based on the NXP i.MX8MQ system-on-chip.
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
-    => go 0x40480000
+    => go 0x50000000
 
 ## Odroid-C2
 
