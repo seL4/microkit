@@ -86,6 +86,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "ethernet": Path("example/tqma8xqp1gb/ethernet")
@@ -102,6 +103,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "hello": Path("example/zcu102/hello")
@@ -117,6 +119,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "hello": Path("example/maaxboard/hello")
@@ -132,6 +135,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "passive_server": Path("example/imx8mm_evk/passive_server")
@@ -147,6 +151,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "hello": Path("example/imx8mq_evk/hello")
@@ -162,6 +167,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "hello": Path("example/odroidc2/hello")
@@ -177,6 +183,7 @@ SUPPORTED_BOARDS = (
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "timer": Path("example/odroidc4/timer")
@@ -195,6 +202,7 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmExportPTMRUser": True,
+            "KernelArmVtimerUpdateVOffset": False,
         },
         examples={
             "hello": Path("example/qemu_virt_aarch64/hello"),
