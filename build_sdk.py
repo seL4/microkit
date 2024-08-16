@@ -26,7 +26,7 @@ import json
 from typing import Any, Dict, Union, List, Tuple, Optional
 
 NAME = "microkit"
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 ENV_BIN_DIR = Path(executable).parent
 
