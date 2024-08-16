@@ -270,7 +270,9 @@ impl<'a> Loader<'a> {
             }
         }
 
-        check_non_overlapping(&all_regions);
+        let mut all_regions_with_loader = all_regions.clone();
+        all_regions_with_loader.push((image_vaddr, &image));
+        check_non_overlapping(&all_regions_with_loader);
 
         let flags = match config.hypervisor {
             true => 1,
