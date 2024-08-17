@@ -13,7 +13,7 @@ This release contains various bug fixes. It does not include any new features.
 * Enabled FPU for QEMU RISC-V virt and Pine64 Star64.
   * libmicrokit builds with hardware floating point enabled and, while it does not use the FPU,
     it means that every object linked with libmicrokit must also build with hardware floating
-    point enabled. Previously using floating point operations would caused a crash in user-space.
+    point enabled. Previously using floating point operations would cause a crash in user-space.
 * Fixed the loader link address for the MaaXBoard.
   * This does mean that if you target the MaaxBoard you will have to loader Microkit images at
     a different address. See the manual for details.
