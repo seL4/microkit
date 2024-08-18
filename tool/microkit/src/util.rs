@@ -60,7 +60,6 @@ pub fn is_power_of_two(n: u64) -> bool {
 
 /// Mask out (set to zero) the lower bits from n
 pub fn mask_bits(n: u64, bits: u64) -> u64 {
-    assert!(n > 0);
     (n >> bits) << bits
 }
 
