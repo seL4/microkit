@@ -14,8 +14,8 @@ use microkit_tool::{
     UntypedObject, MAX_PDS, PD_MAX_NAME_LENGTH,
 };
 use sdf::{
-    parse, PlatformDescription, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion,
-    SystemDescription, VirtualMachine,
+    parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
+    VirtualMachine,
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
@@ -1362,11 +1362,9 @@ fn build_system(
             text_pos: None,
         };
 
-        let stack_vaddr = config.user_top();
-
         let stack_map = SysMap {
             mr: stack_mr.name.clone(),
-            vaddr: stack_vaddr - pd.stack_size,
+            vaddr: config.pd_stack_bottom(pd.stack_size),
             perms: SysMapPerms::Read as u8 | SysMapPerms::Write as u8,
             cached: true,
             text_pos: None,
@@ -2742,13 +2740,13 @@ fn build_system(
         let regs = match config.arch {
             Arch::Aarch64 => Aarch64Regs {
                 pc: pd_elf_files[pd_idx].entry,
-                sp: config.user_top(),
+                sp: config.pd_stack_top(),
                 ..Default::default()
             }
             .field_names(),
             Arch::Riscv64 => Riscv64Regs {
                 pc: pd_elf_files[pd_idx].entry,
-                sp: config.user_top(),
+                sp: config.pd_stack_top(),
                 ..Default::default()
             }
             .field_names(),
@@ -3328,8 +3326,7 @@ fn main() -> Result<(), String> {
         "Microkit tool has various assumptions about the word size being 64-bits."
     );
 
-    let plat_desc = PlatformDescription::new(&kernel_config);
-    let system = match parse(args.system, &xml, &plat_desc) {
+    let system = match parse(args.system, &xml, &kernel_config) {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");

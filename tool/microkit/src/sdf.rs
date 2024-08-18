@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Arch, Config, IrqTrigger, PageSize};
+use crate::sel4::{Config, IrqTrigger, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
 use std::path::{Path, PathBuf};
@@ -72,23 +72,6 @@ fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
 
 fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String {
     format!("{}:{}:{}", xml_sdf.filename, pos.row, pos.col)
-}
-
-/// There are some platform-specific properties that must be known when parsing the
-/// SDF for error-checking and validation, these go in this struct.
-pub struct PlatformDescription {
-    /// Note that we have the invariant that page sizes are be ordered by size
-    page_sizes: [u64; 2],
-}
-
-impl PlatformDescription {
-    pub const fn new(kernel_config: &Config) -> PlatformDescription {
-        let page_sizes = match kernel_config.arch {
-            Arch::Aarch64 | Arch::Riscv64 => [0x1000, 0x200_000],
-        };
-
-        PlatformDescription { page_sizes }
-    }
 }
 
 #[repr(u8)]
@@ -213,6 +196,7 @@ impl SysMap {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         allow_setvar: bool,
+        max_vaddr: u64,
     ) -> Result<SysMap, String> {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
         if allow_setvar {
@@ -222,6 +206,15 @@ impl SysMap {
 
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
         let vaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "vaddr")?, node)?;
+
+        if vaddr >= max_vaddr {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("vaddr (0x{:x}) must be less than 0x{:x}", vaddr, max_vaddr),
+            ));
+        }
+
         let perms = if let Some(xml_perms) = node.attribute("perms") {
             match SysMapPerms::from_str(xml_perms) {
                 Ok(parsed_perms) => parsed_perms,
@@ -279,9 +272,9 @@ impl ProtectionDomain {
     }
 
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-        plat_desc: &PlatformDescription,
         is_child: bool,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
@@ -379,13 +372,13 @@ impl ProtectionDomain {
             ));
         }
 
-        if stack_size % plat_desc.page_sizes[0] != 0 {
+        if stack_size % config.page_sizes()[0] != 0 {
             return Err(value_error(
                 xml_sdf,
                 node,
                 format!(
                     "stack size must be aligned to the smallest page size, {} bytes",
-                    plat_desc.page_sizes[0]
+                    config.page_sizes()[0]
                 ),
             ));
         }
@@ -433,7 +426,8 @@ impl ProtectionDomain {
                     program_image = Some(Path::new(program_image_path).to_path_buf());
                 }
                 "map" => {
-                    let map = SysMap::from_xml(xml_sdf, &child, true)?;
+                    let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         // Check that the symbol does not already exist
@@ -520,9 +514,9 @@ impl ProtectionDomain {
                         vaddr: None,
                     })
                 }
-                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(
-                    xml_sdf, &child, plat_desc, true,
-                )?),
+                "protection_domain" => {
+                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
+                }
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
                         return Err(value_error(
@@ -532,7 +526,7 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    virtual_machine = Some(VirtualMachine::from_xml(xml_sdf, &child)?);
+                    virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -580,6 +574,7 @@ impl ProtectionDomain {
 
 impl VirtualMachine {
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
     ) -> Result<VirtualMachine, String> {
@@ -654,7 +649,7 @@ impl VirtualMachine {
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
                     // setvar_vaddr on SysMap
-                    let map = SysMap::from_xml(xml_sdf, &child, false)?;
+                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr())?;
                     maps.push(map);
                 }
                 _ => {
@@ -690,9 +685,9 @@ impl VirtualMachine {
 
 impl SysMemoryRegion {
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-        plat_desc: &PlatformDescription,
     ) -> Result<SysMemoryRegion, String> {
         check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
 
@@ -703,10 +698,10 @@ impl SysMemoryRegion {
             sdf_parse_number(xml_page_size, node)?
         } else {
             // Default to the minimum page size
-            plat_desc.page_sizes[0]
+            config.page_sizes()[0]
         };
 
-        let page_size_valid = plat_desc.page_sizes.contains(&page_size);
+        let page_size_valid = config.page_sizes().contains(&page_size);
         if !page_size_valid {
             return Err(value_error(
                 xml_sdf,
@@ -999,11 +994,7 @@ fn pd_flatten(
     Ok(all_pds)
 }
 
-pub fn parse(
-    filename: &str,
-    xml: &str,
-    plat_desc: &PlatformDescription,
-) -> Result<SystemDescription, String> {
+pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
         Err(err) => return Err(format!("Could not parse '{}': {}", filename, err)),
@@ -1039,11 +1030,11 @@ pub fn parse(
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
-                &xml_sdf, &child, plat_desc, false,
-            )?),
+            "protection_domain" => {
+                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
+            }
             "channel" => channel_nodes.push(child),
-            "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
+            "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
