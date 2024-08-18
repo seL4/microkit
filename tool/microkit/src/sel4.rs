@@ -68,6 +68,38 @@ impl Config {
             Arch::Riscv64 => 0x0000003ffffff000,
         }
     }
+
+    pub fn page_sizes(&self) -> [u64; 2] {
+        match self.arch {
+            Arch::Aarch64 | Arch::Riscv64 => [0x1000, 0x200_000],
+        }
+    }
+
+    pub fn pd_stack_top(&self) -> u64 {
+        self.user_top()
+    }
+
+    pub fn pd_stack_bottom(&self, stack_size: u64) -> u64 {
+        self.pd_stack_top() - stack_size
+    }
+
+    /// For simplicity and consistency, the stack of each PD occupies the highest
+    /// possible virtual memory region. That means that the highest possible address
+    /// for a user to be able to create a mapping at is below the stack region.
+    pub fn pd_map_max_vaddr(&self, stack_size: u64) -> u64 {
+        // This function depends on the invariant that the stack of a PD
+        // consumes the highest possible address of the virtual address space.
+        assert!(self.pd_stack_top() == self.user_top());
+
+        self.pd_stack_bottom(stack_size)
+    }
+
+    /// Unlike PDs, virtual machines do not have a stack and so the max virtual
+    /// address of a mapping is whatever seL4 chooses as the maximum virtual address
+    /// in a VSpace.
+    pub fn vm_map_max_vaddr(&self) -> u64 {
+        self.user_top()
+    }
 }
 
 pub enum Arch {

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="foo" size="0x1_000" />
+    <protection_domain name="test1">
+        <program_image path="test" />
+        <!-- This number is 2^60. -->
+        <map mr="foo" vaddr="0x1000000000000000" />
+    </protection_domain>
+</system>
