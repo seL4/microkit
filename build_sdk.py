@@ -535,8 +535,11 @@ def main() -> None:
     parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
+    parser.add_argument("--version", default=VERSION, help="SDK version")
 
     args = parser.parse_args()
+
+    version = args.version
 
     if args.boards is not None:
         supported_board_names = frozenset(board.name for board in SUPPORTED_BOARDS)
@@ -562,9 +565,9 @@ def main() -> None:
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
 
-    root_dir = Path("release") / f"{NAME}-sdk-{VERSION}"
-    tar_file = Path("release") / f"{NAME}-sdk-{VERSION}.tar.gz"
-    source_tar_file = Path("release") / f"{NAME}-source-{VERSION}.tar.gz"
+    root_dir = Path("release") / f"{NAME}-sdk-{version}"
+    tar_file = Path("release") / f"{NAME}-sdk-{version}.tar.gz"
+    source_tar_file = Path("release") / f"{NAME}-source-{version}.tar.gz"
     dir_structure = [
         root_dir / "bin",
         root_dir / "board",
@@ -656,7 +659,7 @@ def main() -> None:
         process = popen("git ls-files")
         filenames = [Path(fn.strip()) for fn in process.readlines()]
         process.close()
-        source_prefix = Path(f"{NAME}-source-{VERSION}")
+        source_prefix = Path(f"{NAME}-source-{version}")
         with tar_open(source_tar_file, "w:gz") as tar:
             for filename in filenames:
                 tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
