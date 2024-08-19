@@ -22,6 +22,9 @@ jobs:
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
       - name: Checkout seL4 repository
         uses: actions/checkout@v4
         with:
@@ -47,18 +50,28 @@ jobs:
           wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz%3Frev%3D28d5199f6db34e5980aae1062e5a6703%26hash%3DF6F5604BC1A2BBAAEAC4F6E98D8DC35B
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Set version
+        run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
-          ./pyenv/bin/python build_sdk.py --sel4=seL4
+          ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
   build_macos_x64:
     name: Build SDK (macOS x86-64)
     runs-on: macos-14
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
       - name: Checkout seL4 repository
         uses: actions/checkout@v4
         with:
@@ -75,18 +88,28 @@ jobs:
           wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Set version
+        run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
-          ./pyenv/bin/python build_sdk.py --sel4=seL4
+          ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
   build_macos_arm64:
     name: Build SDK (macOS ARM64)
     runs-on: macos-14
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
       - name: Checkout seL4 repository
         uses: actions/checkout@v4
         with:
@@ -104,9 +127,16 @@ jobs:
           wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Set version
+        run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK
         run: |
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
-          ./pyenv/bin/python build_sdk.py --sel4=seL4 --tool-target-triple=aarch64-apple-darwin
+          ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}
+      - name: Upload SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
