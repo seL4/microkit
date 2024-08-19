@@ -182,8 +182,11 @@ The main difference between a VM and a PD is that VMs have a higher privilege le
 guest operations and have their own user-space programs at a separate exception level.
 
 The virtual machine is always a child of a PD. Exceptions caused by the virtual machine are delivered to the parent PD
-through the `fault` entry point. Each virtual machine has at least one 'virtual CPU' associated with it which is used to identify
-the fault.
+through the `fault` entry point.
+
+Each virtual machine has a number of 'virtual CPU's associated with it. Each virtual CPU (vCPU) that belongs to a
+virtual machine has its own thread of execution. A vCPU also has an identifier which is used to know which vCPU caused
+the invocation of the `fault` entry point.
 
 The parent PD is responsible for starting and managing the virtual machine. Microkit provides the abstractions in
 order to manage the virtual machine through seL4 but there is typically a non-trivial amount
