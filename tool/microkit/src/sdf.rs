@@ -144,6 +144,7 @@ pub struct ProtectionDomain {
     pub pp: bool,
     pub passive: bool,
     pub stack_size: u64,
+    pub smc: bool,
     pub program_image: PathBuf,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
@@ -285,6 +286,9 @@ impl ProtectionDomain {
             "period",
             "passive",
             "stack_size",
+            // The SMC field is only available in certain configurations
+            // but we do the error-checking further down.
+            "smc",
         ];
         if is_child {
             attrs.push("id");
@@ -359,6 +363,37 @@ impl ProtectionDomain {
         } else {
             PD_DEFAULT_STACK_SIZE
         };
+
+        let smc = if let Some(xml_smc) = node.attribute("smc") {
+            match str_to_bool(xml_smc) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "smc must be 'true' or 'false'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            false
+        };
+
+        if smc {
+            match config.arm_smc {
+                Some(smc_allowed) => {
+                    if !smc_allowed {
+                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled for this platform".to_string()));
+                    }
+                }
+                None => {
+                    return Err(
+                        "ARM SMC forwarding support is not available for this architecture"
+                            .to_string(),
+                    )
+                }
+            }
+        }
 
         #[allow(clippy::manual_range_contains)]
         if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
@@ -559,6 +594,7 @@ impl ProtectionDomain {
             pp,
             passive,
             stack_size,
+            smc,
             program_image: program_image.unwrap(),
             maps,
             irqs,

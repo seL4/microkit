@@ -18,6 +18,8 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define MONITOR_EP 5
 /* Only valid in the 'benchmark' configuration */
 #define TCB_CAP 6
+/* Only valid when the PD has been configured to make SMC calls */
+#define ARM_SMC_CAP 7
 #define BASE_OUTPUT_NOTIFICATION_CAP 10
 #define BASE_ENDPOINT_CAP 74
 #define BASE_IRQ_CAP 138
@@ -201,6 +203,18 @@ static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word re
     err = seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vcpu, reg, value);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_arm_vcpu_write_reg: error writing vCPU register\n");
+        microkit_internal_crash(err);
+    }
+}
+#endif
+
+#if defined(CONFIG_ALLOW_SMC_CALLS)
+static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)
+{
+    seL4_Error err;
+    err = seL4_ARM_SMC_Call(ARM_SMC_CAP, args, response);
+    if (err != seL4_NoError) {
+        microkit_dbg_puts("microkit_arm_smc_call: error making SMC call\n");
         microkit_internal_crash(err);
     }
 }

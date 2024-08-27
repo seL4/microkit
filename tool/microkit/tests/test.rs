@@ -19,6 +19,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     benchmark: false,
     fpu: true,
     arm_pa_size_bits: Some(40),
+    arm_smc: None,
     riscv_pt_levels: None,
 };
 

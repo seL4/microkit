@@ -50,6 +50,10 @@ pub struct Config {
     pub fpu: bool,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,
+    /// ARM-specific, where or not SMC forwarding is allowed
+    /// False if the kernel config option has not been enabled.
+    /// None on any non-ARM architecture.
+    pub arm_smc: Option<bool>,
     /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
 }
