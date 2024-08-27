@@ -470,7 +470,15 @@ pub fn pd_write_symbols(
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
             let value = pd_setvar_values[i][setvar_idx];
-            elf.write_symbol(&setvar.symbol, &value.to_le_bytes())?;
+            let result = elf.write_symbol(&setvar.symbol, &value.to_le_bytes());
+            if result.is_err() {
+                return Err(format!(
+                    "No symbol named '{}' in ELF '{}' for PD '{}'",
+                    setvar.symbol,
+                    pd.program_image.display(),
+                    pd.name
+                ));
+            }
         }
     }
 
