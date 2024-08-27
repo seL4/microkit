@@ -438,6 +438,7 @@ If the protection domain has children it must also implement:
     void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq);
     seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
     void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
+    void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
 
 
 ## `void init(void)`
@@ -605,6 +606,16 @@ Write to a register for a given virtual CPU with ID `vcpu`. The `reg` argument i
 register that is written to. The `value` argument is what the register will be set to.
 The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source code.
 
+## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
+
+This API is available only on ARM and only when seL4 has been configured to enable the
+`KernelAllowSMCCalls` option.
+
+The API takes in arguments for a Secure Monitor Call which will be performed by seL4. Any
+response values will be placed into the `response` structure.
+
+The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -634,6 +645,7 @@ It supports the following attributes:
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
+* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform. Only available when the kernel has been configured with `KernelAllowSMCCalls`. Defaults to false.
 
 Additionally, it supports the following child elements:
 
