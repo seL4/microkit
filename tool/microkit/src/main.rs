@@ -2574,6 +2574,8 @@ fn build_system(
             },
         ));
     }
+    // AArch64 and RISC-V expect the stack pointer to be 16-byte aligned
+    assert!(config.pd_stack_top() % 16 == 0);
 
     // Bind the notification object
     let mut bind_ntfn_invocation = Invocation::new(
