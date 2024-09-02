@@ -320,6 +320,54 @@ mod channel {
             "Error: invalid PD name 'invalidpd' on element 'end': ",
         )
     }
+
+    #[test]
+    fn test_invalid_element() {
+        check_error(
+            "ch_invalid_element.xml",
+            "Error: invalid XML element 'ending': ",
+        )
+    }
+
+    #[test]
+    fn test_not_enough_ends() {
+        check_error(
+            "ch_not_enough_ends.xml",
+            "Error: exactly two end elements must be specified on element 'channel': ",
+        )
+    }
+
+    #[test]
+    fn test_too_many_ends() {
+        check_error(
+            "ch_too_many_ends.xml",
+            "Error: exactly two end elements must be specified on element 'channel': ",
+        )
+    }
+
+    #[test]
+    fn test_end_invalid_pp() {
+        check_error(
+            "ch_end_invalid_pp.xml",
+            "Error: pp must be 'true' or 'false' on element 'end': ",
+        )
+    }
+
+    #[test]
+    fn test_end_invalid_notify() {
+        check_error(
+            "ch_end_invalid_notify.xml",
+            "Error: notify must be 'true' or 'false' on element 'end': ",
+        )
+    }
+
+    #[test]
+    fn test_bidirectional_ppc() {
+        check_error(
+            "ch_bidirectional_ppc.xml",
+            "Error: cannot ppc bidirectionally on element 'channel': ",
+        )
+    }
 }
 
 #[cfg(test)]
