@@ -2860,29 +2860,27 @@ fn build_system(
         system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
-    let mut pd_setvar_values: Vec<Vec<u64>> = vec![vec![]; system.protection_domains.len()];
-    for (i, pd) in system.protection_domains.iter().enumerate() {
-        for setvar in &pd.setvars {
-            assert!(setvar.region_paddr.is_some() || setvar.vaddr.is_some());
-            assert!(!(setvar.region_paddr.is_some() && setvar.vaddr.is_some()));
+    let pd_setvar_values: Vec<Vec<u64>> = system
+        .protection_domains
+        .iter()
+        .map(|pd| {
+            pd.setvars
+                .iter()
+                .map(|setvar| match &setvar.kind {
+                    sdf::SysSetVarKind::Vaddr { address } => *address,
+                    sdf::SysSetVarKind::Paddr { region } => {
+                        let mr = system
+                            .memory_regions
+                            .iter()
+                            .find(|mr| mr.name == *region)
+                            .unwrap_or_else(|| panic!("Cannot find region: {}", region));
 
-            let value;
-            if let Some(region_paddr) = &setvar.region_paddr {
-                let mr = system
-                    .memory_regions
-                    .iter()
-                    .find(|mr| mr.name == *region_paddr)
-                    .unwrap_or_else(|| panic!("Cannot find region: {}", region_paddr));
-                value = mr_pages[mr][0].phys_addr;
-            } else if let Some(vaddr) = setvar.vaddr {
-                value = vaddr;
-            } else {
-                panic!("Internal error: expected setvar to either have region paddr or vaddr");
-            }
-
-            pd_setvar_values[i].push(value);
-        }
-    }
+                        mr_pages[mr][0].phys_addr
+                    }
+                })
+                .collect()
+        })
+        .collect();
 
     Ok(BuiltSystem {
         number_of_system_caps: final_cap_slot,

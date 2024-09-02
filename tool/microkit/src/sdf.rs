@@ -115,14 +115,16 @@ pub struct SysIrq {
     pub trigger: IrqTrigger,
 }
 
-// The use of SysSetVar depends on the context. In some
-// cases it will contain a symbol and a physical or a
-// symbol and vaddr. Never both.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum SysSetVarKind {
+    Vaddr { address: u64 },
+    Paddr { region: String },
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SysSetVar {
     pub symbol: String,
-    pub region_paddr: Option<String>,
-    pub vaddr: Option<u64>,
+    pub kind: SysSetVarKind,
 }
 
 #[derive(Debug)]
@@ -478,8 +480,7 @@ impl ProtectionDomain {
 
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
-                            region_paddr: None,
-                            vaddr: Some(map.vaddr),
+                            kind: SysSetVarKind::Vaddr { address: map.vaddr },
                         });
                     }
 
@@ -531,8 +532,7 @@ impl ProtectionDomain {
                 "setvar" => {
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
-                    let region_paddr =
-                        Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
+                    let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
                     // Check that the symbol does not already exist
                     for setvar in &setvars {
                         if symbol == setvar.symbol {
@@ -545,8 +545,7 @@ impl ProtectionDomain {
                     }
                     setvars.push(SysSetVar {
                         symbol,
-                        region_paddr,
-                        vaddr: None,
+                        kind: SysSetVarKind::Paddr { region },
                     })
                 }
                 "protection_domain" => {
