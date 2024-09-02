@@ -638,7 +638,6 @@ The `protection_domain` element describes a protection domain.
 It supports the following attributes:
 
 * `name`: A unique name for the protection domain
-* `pp`: (optional) Indicates that the protection domain has a protected procedure; defaults to false.
 * `priority`: The priority of the protection domain (integer 0 to 254).
 * `budget`: (optional) The PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
@@ -732,6 +731,9 @@ The `end` element has the following attributes:
 
 * `pd`: Name of the protection domain for this end.
 * `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
+* `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
+        Protected procedure calls can only be to PDs of strictly higher priority.
+* `notify`: (optional) Indicates that the protection domain for this end can send a notification to the other end; defaults to true.
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
 The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functions.

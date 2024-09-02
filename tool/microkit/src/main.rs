@@ -1569,8 +1569,9 @@ fn build_system(
     let pd_endpoint_names: Vec<String> = system
         .protection_domains
         .iter()
-        .filter(|pd| pd.needs_ep())
-        .map(|pd| format!("EP: PD={}", pd.name))
+        .enumerate()
+        .filter(|(idx, pd)| pd.needs_ep(*idx, &system.channels))
+        .map(|(_, pd)| format!("EP: PD={}", pd.name))
         .collect();
     let endpoint_names = [vec![format!("EP: Monitor Fault")], pd_endpoint_names].concat();
     // Reply objects
@@ -1593,8 +1594,9 @@ fn build_system(
         system
             .protection_domains
             .iter()
-            .map(|pd| {
-                if pd.needs_ep() {
+            .enumerate()
+            .map(|(idx, pd)| {
+                if pd.needs_ep(idx, &system.channels) {
                     let obj = &endpoint_objs[1..][i];
                     i += 1;
                     Some(obj)
@@ -2157,7 +2159,7 @@ fn build_system(
 
     // Minting in the address space
     for (idx, pd) in system.protection_domains.iter().enumerate() {
-        let obj = if pd.needs_ep() {
+        let obj = if pd.needs_ep(idx, &system.channels) {
             pd_endpoint_objs[idx].unwrap()
         } else {
             &notification_objs[idx]
@@ -2344,89 +2346,55 @@ fn build_system(
     }
 
     for cc in &system.channels {
-        let pd_a = &system.protection_domains[cc.pd_a];
-        let pd_b = &system.protection_domains[cc.pd_b];
-        let pd_a_cnode_obj = cnode_objs_by_pd[pd_a];
-        let pd_b_cnode_obj = cnode_objs_by_pd[pd_b];
-        let pd_a_notification_obj = &notification_objs[cc.pd_a];
-        let pd_b_notification_obj = &notification_objs[cc.pd_b];
+        for (send, recv) in [(&cc.end_a, &cc.end_b), (&cc.end_b, &cc.end_a)] {
+            let send_pd = &system.protection_domains[send.pd];
+            let send_cnode_obj = cnode_objs_by_pd[send_pd];
+            let recv_notification_obj = &notification_objs[recv.pd];
 
-        // Set up the notification caps
-        let pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a;
-        let pd_a_badge = 1 << cc.id_b;
-        assert!(pd_a_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: pd_a_cnode_obj.cap_addr,
-                dest_index: pd_a_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_b_notification_obj.cap_addr,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_a_badge,
-            },
-        ));
+            if send.notify {
+                let send_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + send.id;
+                assert!(send_cap_idx < PD_CAP_SIZE);
+                // receiver sees the sender's badge.
+                let send_badge = 1 << recv.id;
 
-        let pd_b_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_b;
-        let pd_b_badge = 1 << cc.id_a;
-        assert!(pd_b_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: pd_b_cnode_obj.cap_addr,
-                dest_index: pd_b_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_a_notification_obj.cap_addr,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_b_badge,
-            },
-        ));
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: send_cnode_obj.cap_addr,
+                        dest_index: send_cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: recv_notification_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64, // FIXME: Check rights
+                        badge: send_badge,
+                    },
+                ));
+            }
 
-        // Set up the endpoint caps
-        if pd_b.pp {
-            let pd_a_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_a;
-            let pd_a_badge = PPC_BADGE | cc.id_b;
-            let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b].unwrap();
-            assert!(pd_a_cap_idx < PD_CAP_SIZE);
+            if send.pp {
+                let send_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + send.id;
+                assert!(send_cap_idx < PD_CAP_SIZE);
+                // receiver sees the sender's badge.
+                let send_badge = PPC_BADGE | recv.id;
 
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: pd_a_cnode_obj.cap_addr,
-                    dest_index: pd_a_cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: pd_b_endpoint_obj.cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64, // FIXME: Check rights
-                    badge: pd_a_badge,
-                },
-            ));
-        }
+                let recv_endpoint_obj =
+                    pd_endpoint_objs[recv.pd].expect("endpoint object to exist");
 
-        if pd_a.pp {
-            let pd_b_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_b;
-            let pd_b_badge = PPC_BADGE | cc.id_a;
-            let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a].unwrap();
-            assert!(pd_b_cap_idx < PD_CAP_SIZE);
-
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: pd_b_cnode_obj.cap_addr,
-                    dest_index: pd_b_cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: pd_a_endpoint_obj.cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64, // FIXME: Check rights
-                    badge: pd_b_badge,
-                },
-            ));
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: send_cnode_obj.cap_addr,
+                        dest_index: send_cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: recv_endpoint_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64, // FIXME: Check rights
+                        badge: send_badge,
+                    },
+                ));
+            }
         }
     }
 
