@@ -3130,6 +3130,9 @@ impl<'a> Args<'a> {
         if config.is_none() {
             missing_args.push("--config");
         }
+        if system.is_none() {
+            missing_args.push("system");
+        }
 
         if !missing_args.is_empty() {
             print_usage(available_boards);
