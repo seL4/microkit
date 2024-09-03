@@ -147,7 +147,7 @@ static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_po
           );
 
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_vm_restart: error writing registers\n");
+        microkit_dbg_puts("microkit_vcpu_restart: error writing registers\n");
         microkit_internal_crash(err);
     }
 }
@@ -157,7 +157,7 @@ static inline void microkit_vcpu_stop(microkit_child vcpu)
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_VM_TCB_CAP + vcpu);
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_vm_stop: error suspending TCB\n");
+        microkit_dbg_puts("microkit_vcpu_stop: error suspending TCB\n");
         microkit_internal_crash(err);
     }
 }
@@ -168,7 +168,7 @@ static inline void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16
     seL4_Error err;
     err = seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vcpu, irq, priority, group, index);
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_arm_vcpu_inject_irq: error injecting IRQ\n");
+        microkit_dbg_puts("microkit_vcpu_arm_inject_irq: error injecting IRQ\n");
         microkit_internal_crash(err);
     }
 }
@@ -178,7 +178,7 @@ static inline void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq
     seL4_Error err;
     err = seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vcpu, irq);
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_arm_vcpu_ack_vppi: error acking VPPI\n");
+        microkit_dbg_puts("microkit_vcpu_arm_ack_vppi: error acking VPPI\n");
         microkit_internal_crash(err);
     }
 }
@@ -188,7 +188,7 @@ static inline seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Wor
     seL4_ARM_VCPU_ReadRegs_t ret;
     ret = seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vcpu, reg);
     if (ret.error != seL4_NoError) {
-        microkit_dbg_puts("microkit_arm_vcpu_read_reg: error reading vCPU register\n");
+        microkit_dbg_puts("microkit_vcpu_arm_read_reg: error reading vCPU register\n");
         microkit_internal_crash(ret.error);
     }
 
@@ -200,7 +200,7 @@ static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word re
     seL4_Error err;
     err = seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vcpu, reg, value);
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_arm_vcpu_write_reg: error writing vCPU register\n");
+        microkit_dbg_puts("microkit_vcpu_arm_write_reg: error writing vCPU register\n");
         microkit_internal_crash(err);
     }
 }
