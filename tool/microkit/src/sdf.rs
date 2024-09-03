@@ -1227,6 +1227,28 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
+    // Check that all MRs are used
+    let mut all_maps = vec![];
+    for pd in &pds {
+        all_maps.extend(&pd.maps);
+        if let Some(vm) = &pd.virtual_machine {
+            all_maps.extend(&vm.maps);
+        }
+    }
+    for mr in &mrs {
+        let mut found = false;
+        for map in &all_maps {
+            if map.mr == mr.name {
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            println!("WARNING: unused memory region '{}'", mr.name);
+        }
+    }
+
     Ok(SystemDescription {
         protection_domains: pds,
         memory_regions: mrs,
