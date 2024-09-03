@@ -14,7 +14,7 @@ use microkit_tool::{
     UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
 };
 use sdf::{
-    parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
+    parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
     VirtualMachine,
 };
 use sel4::{
@@ -341,6 +341,7 @@ struct BuiltSystem {
 
 pub fn pd_write_symbols(
     pds: &[ProtectionDomain],
+    channels: &[Channel],
     pd_elf_files: &mut [ElfFile],
     pd_setvar_values: &[Vec<u64>],
 ) -> Result<(), String> {
@@ -350,6 +351,31 @@ pub fn pd_write_symbols(
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         elf.write_symbol("microkit_name", &name[..name_length])?;
         elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
+
+        let mut notification_bits: u64 = 0;
+        let mut pp_bits: u64 = 0;
+        for channel in channels {
+            if channel.end_a.pd == i {
+                if channel.end_a.notify {
+                    notification_bits |= 1 << channel.end_a.id;
+                }
+                if channel.end_a.pp {
+                    pp_bits |= 1 << channel.end_a.id;
+                }
+            }
+            if channel.end_b.pd == i {
+                if channel.end_b.notify {
+                    notification_bits |= 1 << channel.end_b.id;
+                }
+                if channel.end_b.pp {
+                    pp_bits |= 1 << channel.end_b.id;
+                }
+            }
+        }
+
+        elf.write_symbol("microkit_irqs", &pd.irq_bits().to_le_bytes())?;
+        elf.write_symbol("microkit_notifications", &notification_bits.to_le_bytes())?;
+        elf.write_symbol("microkit_pps", &pp_bits.to_le_bytes())?;
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
             let value = pd_setvar_values[i][setvar_idx];
@@ -3406,6 +3432,7 @@ fn main() -> Result<(), String> {
     // Write out all the symbols for each PD
     pd_write_symbols(
         &system.protection_domains,
+        &system.channels,
         &mut pd_elf_files,
         &built_system.pd_setvar_values,
     )?;

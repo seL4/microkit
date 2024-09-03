@@ -27,6 +27,19 @@ microkit_dbg_puts(const char *s)
     }
 }
 
+void
+microkit_dbg_put8(seL4_Uint8 x)
+{
+    char tmp[4];
+    unsigned i = 3;
+    tmp[3] = 0;
+    do {
+        seL4_Uint8 c = x % 10;
+        tmp[--i] = '0' + c;
+        x /= 10;
+    } while (x);
+    microkit_dbg_puts(&tmp[i]);
+}
 
 void
 __assert_fail(const char  *str, const char *file, int line, const char *function)
