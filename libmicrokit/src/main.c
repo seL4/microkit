@@ -28,6 +28,10 @@ seL4_Bool microkit_have_signal = seL4_False;
 seL4_CPtr microkit_signal_cap;
 seL4_MessageInfo_t microkit_signal_msg;
 
+seL4_Word microkit_irqs;
+seL4_Word microkit_notifications;
+seL4_Word microkit_pps;
+
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;

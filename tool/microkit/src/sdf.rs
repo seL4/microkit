@@ -326,6 +326,15 @@ impl ProtectionDomain {
             })
     }
 
+    pub fn irq_bits(&self) -> u64 {
+        let mut irqs = 0;
+        for irq in &self.irqs {
+            irqs |= 1 << irq.id;
+        }
+
+        irqs
+    }
+
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
