@@ -1198,6 +1198,18 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             ));
         }
 
+        let pd_a = &pds[ch.end_a.pd];
+        let pd_b = &pds[ch.end_b.pd];
+        if !(!ch.end_a.can_ppcall_other || (pd_a.priority < pd_b.priority)) {
+            // a can ppcall =>   priority(a) < priority(b)
+            return Err(format!("Error: PPCs must be to protection domains of strictly higher priorities; you did from pd {} (priority: {}) to pd {} (priority: {})",
+            pd_a.name, pd_a.priority, pd_b.name, pd_b.priority));
+        } else if !(!ch.end_b.can_ppcall_other || (pd_b.priority < pd_a.priority)) {
+            // b can ppcall =>   priority(b) < priority(a)
+            return Err(format!("Error: PPCs must be to protection domains of strictly higher priorities; you did from pd {} (priority: {}) to pd {} (priority: {})",
+            pd_b.name, pd_b.priority, pd_a.name, pd_a.priority));
+        }
+
         ch_ids[ch.end_a.pd].push(ch.end_a.id);
         ch_ids[ch.end_b.pd].push(ch.end_b.id);
     }
