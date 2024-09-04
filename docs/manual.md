@@ -746,6 +746,12 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x41000000
 
+## i.MX8MP-EVK
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x41000000
+
 ## i.MX8MQ-EVK
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:

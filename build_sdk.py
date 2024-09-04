@@ -142,6 +142,22 @@ SUPPORTED_BOARDS = (
         }
     ),
     BoardInfo(
+        name="imx8mp_evk",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x41000000,
+        kernel_options={
+            "KernelPlatform": "imx8mp-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+        },
+        examples={
+            "hello": Path("example/imx8mp_evk/hello")
+        }
+    ),
+    BoardInfo(
         name="imx8mq_evk",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
