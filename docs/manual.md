@@ -767,7 +767,7 @@ The `domain_schedule` element has has a list of up to 256 `domain` child element
 The `domain` element has the following attributes:
 
 * `name`: Name of the domain.
-* `length`: Length of time the domain will run each time it is active, in microseconds.
+* `length`: Length of time the domain will run each time it is active, in milliseconds.
 
 The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
 
