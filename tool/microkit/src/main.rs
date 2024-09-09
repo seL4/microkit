@@ -3331,8 +3331,7 @@ fn main() -> Result<(), String> {
             &(schedule.len() as u64).to_le_bytes(),
         )?;
 
-        let mut out = Vec::new();
-        out.reserve_exact(schedule.len() * 16);
+        let mut out = Vec::with_capacity(schedule.len() * 16);
 
         for timeslice in schedule.iter() {
             out.extend(timeslice.id.to_le_bytes());
