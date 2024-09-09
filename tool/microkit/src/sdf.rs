@@ -42,7 +42,7 @@ const PD_DEFAULT_STACK_SIZE: u64 = 0x1000;
 const PD_MIN_STACK_SIZE: u64 = 0x1000;
 const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
 
-/// The maximum length of domain schedule supported by the kernel
+/// The maximum length of domain schedule supported by the kernel (in milliseconds)
 const DOMAIN_SCHEDULE_MAX_LENGTH: usize = 256;
 
 /// The purpose of this function is to parse an integer that could
