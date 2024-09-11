@@ -34,6 +34,7 @@ MICROKIT_EPOCH = 1616367257
 
 TOOLCHAIN_AARCH64 = "aarch64-none-elf"
 TOOLCHAIN_RISCV = "riscv64-unknown-elf"
+TOOLCHAIN_X86_64 = "x86_64-linux-gnu"
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, Union[bool, str]]
@@ -42,12 +43,15 @@ KERNEL_OPTIONS = Dict[str, Union[bool, str]]
 class KernelArch(IntEnum):
     AARCH64 = 1
     RISCV64 = 2
+    X86_64 = 3
 
     def c_toolchain(self) -> str:
         if self == KernelArch.AARCH64:
             return TOOLCHAIN_AARCH64
         elif self == KernelArch.RISCV64:
             return TOOLCHAIN_RISCV
+        elif self == KernelArch.X86_64:
+            return TOOLCHAIN_X86_64
         else:
             raise Exception(f"Unsupported toolchain architecture '{self}'")
 
@@ -57,11 +61,16 @@ class KernelArch(IntEnum):
     def is_arm(self) -> bool:
         return self == KernelArch.AARCH64
 
+    def is_x86_64(self) -> bool:
+        return self == KernelArch.X86_64
+
     def to_str(self) -> str:
         if self == KernelArch.AARCH64:
             return "aarch64"
         elif self == KernelArch.RISCV64:
             return "riscv64"
+        elif self == KernelArch.X86_64:
+            return "x86_64"
         else:
             raise Exception(f"Unsupported arch {self}")
 
@@ -74,6 +83,7 @@ class BoardInfo:
     loader_link_address: int
     kernel_options: KERNEL_OPTIONS
     examples: Dict[str, Path]
+    gcc_march: Optional[str] = None
 
 
 @dataclass
@@ -477,6 +487,8 @@ def build_elf_component(
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
+    if board.gcc_march is not None:
+        defines_str += f" GCC_MARCH={board.gcc_march}"
 
     r = system(
         f"{defines_str} make -C {component_name}"
@@ -523,6 +535,8 @@ def build_lib_component(
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
+    if board.gcc_march is not None:
+        defines_str += f" GCC_MARCH={board.gcc_march}"
 
     r = system(
         f"{defines_str} make -C {component_name}"
