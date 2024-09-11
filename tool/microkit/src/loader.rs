@@ -228,6 +228,9 @@ impl<'a> Loader<'a> {
                 kernel_first_vaddr.unwrap(),
                 kernel_first_paddr.unwrap(),
             ),
+            _ => {
+                panic!("Target architecture not supported by the Loader");
+            },
         };
 
         let image_segment = elf

@@ -57,6 +57,7 @@ pub struct Config {
     /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
     pub invocations_labels: serde_json::Value,
+    pub x86_xsave_size: Option<u64>,
 }
 
 impl Config {
@@ -71,12 +72,30 @@ impl Config {
                 false => 0x800000000000,
             },
             Arch::Riscv64 => 0x0000003ffffff000,
+            // On x86 USER_TOP is really 0x7fffffffffff but since it
+            // isn't a very nicely aligned address we round this down.
+            // This way stack pages can be allocated there and the
+            // world is at peace, at the cost of one wasted page.
+            Arch::X86_64 => 0x7ffffffff000,
+        }
+    }
+
+    pub fn kernel_virtual_base(&self) -> u64 {
+        match self.arch {
+            Arch::Aarch64 => match self.hypervisor {
+                true => 0x0000008000000000,
+                false => u64::pow(2, 64) - u64::pow(2, 39),
+            }
+            Arch::Riscv64 => match self.riscv_pt_levels.unwrap() {
+                RiscvVirtualMemory::Sv39 => u64::pow(2, 64) - u64::pow(2,38),
+            }
+            Arch::X86_64 => u64::pow(2, 64) - u64::pow(2,39),
         }
     }
 
     pub fn page_sizes(&self) -> [u64; 2] {
         match self.arch {
-            Arch::Aarch64 | Arch::Riscv64 => [0x1000, 0x200_000],
+            Arch::Aarch64 | Arch::Riscv64 | Arch::X86_64=> [0x1000, 0x200_000],
         }
     }
 
@@ -110,6 +129,7 @@ impl Config {
 pub enum Arch {
     Aarch64,
     Riscv64,
+    X86_64,
 }
 
 /// RISC-V supports multiple virtual memory systems and so we use this enum
@@ -143,6 +163,14 @@ pub enum ObjectType {
     LargePage,
     PageTable,
     Vcpu,
+    PageDirectory,
+    PdPt,
+    Pml4,
+    IOPageTable,
+    EptPml4,
+    EptPdPt,
+    EptPageDirectory,
+    EptPageTable,
 }
 
 impl ObjectType {
@@ -156,6 +184,14 @@ impl ObjectType {
                     true => Some(11),
                     false => Some(10),
                 },
+                Arch::X86_64 => match config.x86_xsave_size {
+                    Some(size) => if size >= 832 {
+                        Some(12)
+                    } else {
+                        Some(11)
+                    }
+                    None => Some(11)
+                }
             },
             ObjectType::Endpoint => Some(4),
             ObjectType::Notification => Some(6),
@@ -172,6 +208,7 @@ impl ObjectType {
                     false => Some(12),
                 },
                 Arch::Riscv64 => Some(12),
+                Arch::X86_64 => Some(12),
             },
             ObjectType::PageTable => Some(12),
             ObjectType::HugePage => Some(30),
@@ -179,8 +216,17 @@ impl ObjectType {
             ObjectType::SmallPage => Some(12),
             ObjectType::Vcpu => match config.arch {
                 Arch::Aarch64 => Some(12),
+                Arch::X86_64 => Some(14),
                 _ => panic!("Unexpected architecture asking for vCPU size bits"),
             },
+            ObjectType::PageDirectory => Some(12),
+            ObjectType::PdPt => Some(12),
+            ObjectType::Pml4 => Some(12),
+            ObjectType::IOPageTable => Some(12),
+            ObjectType::EptPml4 => Some(12),
+            ObjectType::EptPdPt => Some(12),
+            ObjectType::EptPageDirectory => Some(12),
+            ObjectType::EptPageTable => Some(12),
             _ => None,
         }
     }
@@ -204,6 +250,14 @@ impl ObjectType {
             ObjectType::LargePage => "SEL4_LARGE_PAGE_OBJECT",
             ObjectType::PageTable => "SEL4_PAGE_TABLE_OBJECT",
             ObjectType::Vcpu => "SEL4_VCPU_OBJECT",
+            ObjectType::PageDirectory => "SEL4_PAGE_DIRECTORY_OBJECT",
+            ObjectType::PdPt => "SEL4_PDPT_OBJECT",
+            ObjectType::Pml4 => "SEL4_PML4_OBJECT",
+            ObjectType::IOPageTable => "SEL4_IO_PAGE_TABLE_OBJECT",
+            ObjectType::EptPml4 => "SEL4_EPT_PML4_OBJECT",
+            ObjectType::EptPdPt => "SEL4_EPT_PDPT_OBJECT",
+            ObjectType::EptPageDirectory => "SEL4_EPT_PAGE_DIRECTORY_OBJECT",
+            ObjectType::EptPageTable => "SEL4_EPT_PAGE_TABLE_OBJECT",
         }
     }
 
@@ -220,27 +274,44 @@ impl ObjectType {
             ObjectType::CNode => 4,
             ObjectType::SchedContext => 5,
             ObjectType::Reply => 6,
-            ObjectType::HugePage => 7,
+            ObjectType::HugePage => match config.arch {
+                Arch::Aarch64 => 7,
+                Arch::Riscv64 => 7,
+                Arch::X86_64 => 9,
+            },
             ObjectType::VSpace => match config.arch {
                 Arch::Aarch64 => 8,
                 Arch::Riscv64 => 10,
+                Arch::X86_64 => 8,
             },
             ObjectType::SmallPage => match config.arch {
                 Arch::Aarch64 => 9,
                 Arch::Riscv64 => 8,
+                Arch::X86_64 => 10,
             },
             ObjectType::LargePage => match config.arch {
                 Arch::Aarch64 => 10,
                 Arch::Riscv64 => 9,
+                Arch::X86_64 => 11,
             },
             ObjectType::PageTable => match config.arch {
                 Arch::Aarch64 => 11,
                 Arch::Riscv64 => 10,
+                Arch::X86_64 => 12,
             },
             ObjectType::Vcpu => match config.arch {
                 Arch::Aarch64 => 12,
+                Arch::X86_64 => 15,
                 _ => panic!("Unknown vCPU object type value for given kernel config"),
             },
+            ObjectType::PdPt => 7,
+            ObjectType::Pml4 => 8,
+            ObjectType::PageDirectory => 13,
+            ObjectType::IOPageTable => 14,
+            ObjectType::EptPml4 => 16,
+            ObjectType::EptPdPt => 17,
+            ObjectType::EptPageDirectory => 18,
+            ObjectType::EptPageTable => 19,
         }
     }
 
@@ -294,6 +365,16 @@ pub enum RiscvVmAttributes {
     ExecuteNever = 1,
 }
 
+/// Virtual memory attributes for X86
+/// The values for each enum variant corresponds to what seL4
+/// expects when doing a virtual memory invocation.
+#[repr(u64)]
+pub enum X86VmAttributes {
+    PageAttributeTable = 1, // x86PATBit
+    CacheDisable = 2, // x86PCDBit
+    WriteThrough = 4, // x86PWTBit
+}
+
 impl ArmVmAttributes {
     #[allow(clippy::should_implement_trait)] // Default::default would return Self, not u64
     pub fn default() -> u64 {
@@ -308,10 +389,18 @@ impl RiscvVmAttributes {
     }
 }
 
+impl X86VmAttributes {
+    #[allow(clippy::should_implement_trait)] // Default::default would return Self, not u64
+    pub fn default() -> u64 {
+        0
+    }
+}
+
 pub fn default_vm_attr(config: &Config) -> u64 {
     match config.arch {
         Arch::Aarch64 => ArmVmAttributes::default(),
         Arch::Riscv64 => RiscvVmAttributes::default(),
+        Arch::X86_64 => X86VmAttributes::default(),
     }
 }
 
@@ -421,6 +510,58 @@ enum InvocationLabel {
     RISCVASIDPoolAssign,
     // RISC-V IRQ
     RISCVIRQIssueIRQHandlerTrigger,
+    // X86 PDPT
+    X86PDPTMap,
+    X86PDPTUnmap,
+    // X86 Page Directory
+    X86PageDirectoryMap,
+    X86PageDirectoryUnmap,
+    // X86 Page Table
+    X86PageTableMap,
+    X86PageTableUnmap,
+    // X86 IO Page
+    X86IOPageTableMap,
+    X86IOPageTableUnmap,
+    // X86 Page
+    X86PageMap,
+    X86PageUnmap,
+    X86PageMapIO,
+    X86PageGetAddress,
+    X86PageMapEPT,
+    // X86 ASID
+    X86ASIDControlMakePool,
+    // X86 ASID Pool
+    X86ASIDPoolAssign,
+    // X86 IO Port Control
+    X86IOPortControlIssue,
+    // X86 IO PORT
+    X86IOPortIn8,
+    X86IOPortIn16,
+    X86IOPortIn32,
+    X86IOPortOut8,
+    X86IOPortOut16,
+    X86IOPortOut32,
+    // X86 IRQ
+    X86IRQIssueIRQHandlerIOAPIC,
+    X86IRQIssueIRQHandlerMSI,
+    // X86 TCB
+    TCBSetEPTRoot,
+    // X86 VCPU
+    X86VCPUSetTCB,
+    X86VCPUReadVMCS,
+    X86VCPUWriteVMCS,
+    X86VCPUEnableIOPort,
+    X86VCPUDisableIOPort,
+    X86VCPUWriteRegisters,
+    // X86 EPTPDPT
+    X86EPTPDPTMap,
+    X86EPTPDPTUnmap,
+    // X86 EPTPD
+    X86EPTPDMap,
+    X86EPTPDUnmap,
+    // X86 EPTPT
+    X86EPTPTMap,
+    X86EPTPTUnmap,
 }
 
 impl std::fmt::Display for InvocationLabel {
@@ -515,6 +656,86 @@ impl Riscv64Regs {
 
     /// Number of registers
     pub const LEN: usize = 32;
+}
+
+#[derive(Copy, Clone, Default)]
+#[allow(dead_code)]
+pub struct X86_64Regs {
+    pub rip: u64,
+    pub rsp: u64,
+    pub rflags: u64,
+    pub rax: u64,
+    pub rbx: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub rbp: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+    pub fs_base: u64,
+    pub gs_base: u64,
+}
+
+impl X86_64Regs {
+    pub fn field_names(&self) -> Vec<(&'static str, u64)> {
+        vec![
+            ("rip", self.rip),
+            ("rsp", self.rsp),
+            ("rflags", self.rflags),
+            ("rax", self.rax),
+            ("rbx", self.rbx),
+            ("rcx", self.rcx),
+            ("rdx", self.rdx),
+            ("rsi", self.rsi),
+            ("rdi", self.rdi),
+            ("rbp", self.rbp),
+            ("r8", self.r8),
+            ("r9", self.r9),
+            ("r10", self.r10),
+            ("r11", self.r11),
+            ("r12", self.r12),
+            ("r13", self.r13),
+            ("r14", self.r14),
+            ("r15", self.r15),
+            ("fs_base", self.fs_base),
+            ("gs_base", self.gs_base),
+        ]
+    }
+
+    pub fn as_slice(&self) -> Vec<u64> {
+        vec![
+            self.rip,
+            self.rsp,
+            self.rflags,
+            self.rax,
+            self.rbx,
+            self.rcx,
+            self.rdx,
+            self.rsi,
+            self.rdi,
+            self.rbp,
+            self.r8,
+            self.r9,
+            self.r10,
+            self.r11,
+            self.r12,
+            self.r13,
+            self.r14,
+            self.r15,
+            self.fs_base,
+            self.gs_base,
+        ]
+    }
+
+    /// Number of registers
+    pub const LEN: usize = 20;
 }
 
 #[derive(Copy, Clone, Default)]
@@ -923,6 +1144,56 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
                 (irq_control, &cap_lookup[&irq_control])
             }
+            InvocationArgs::IrqControlGetIOAPIC {
+                irq_control,
+                dest_root,
+                dest_index,
+                dest_depth,
+                ioapic,
+                pin,
+                level,
+                polarity,
+                vector,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "dest_root",
+                    dest_root,
+                    cap_lookup,
+                ));
+                arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
+                arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
+                arg_strs.push(Invocation::fmt_field("ioapic", ioapic));
+                arg_strs.push(Invocation::fmt_field("pin", pin));
+                arg_strs.push(Invocation::fmt_field("level", level));
+                arg_strs.push(Invocation::fmt_field("polarity", polarity));
+                arg_strs.push(Invocation::fmt_field("vector", vector));
+                (irq_control, &cap_lookup[&irq_control])
+            }
+            InvocationArgs::IrqControlGetMSI {
+                irq_control,
+                dest_root,
+                dest_index,
+                dest_depth,
+                pci_bus,
+                pci_dev,
+                pci_func,
+                handle,
+                vector,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "dest_root",
+                    dest_root,
+                    cap_lookup,
+                ));
+                arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
+                arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
+                arg_strs.push(Invocation::fmt_field("pci_bus", pci_bus));
+                arg_strs.push(Invocation::fmt_field("pci_dev", pci_dev));
+                arg_strs.push(Invocation::fmt_field("pci_func", pci_func));
+                arg_strs.push(Invocation::fmt_field("handle", handle));
+                arg_strs.push(Invocation::fmt_field("vector", vector));
+                (irq_control, &cap_lookup[&irq_control])
+            }
             InvocationArgs::IrqHandlerSetNotification {
                 irq_handler,
                 notification,
@@ -933,6 +1204,28 @@ impl Invocation {
                     cap_lookup,
                 ));
                 (irq_handler, &cap_lookup[&irq_handler])
+            }
+            InvocationArgs::PageUpperDirectoryMap {
+                page_upper_directory,
+                vspace,
+                vaddr,
+                attr,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
+                arg_strs.push(Invocation::fmt_field("attr", attr));
+                (page_upper_directory, cap_lookup.get(&page_upper_directory).unwrap())
+            }
+            InvocationArgs::PageDirectoryMap {
+                page_directory,
+                vspace,
+                vaddr,
+                attr,
+            } => {
+                arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
+                arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
+                arg_strs.push(Invocation::fmt_field("attr", attr));
+                (page_directory, cap_lookup.get(&page_directory).unwrap())
             }
             InvocationArgs::PageTableMap {
                 page_table,
@@ -1043,15 +1336,24 @@ impl Invocation {
             | InvocationLabel::TCBResume
             | InvocationLabel::TCBWriteRegisters
             | InvocationLabel::TCBBindNotification => "TCB",
-            InvocationLabel::ARMASIDPoolAssign | InvocationLabel::RISCVASIDPoolAssign => {
-                "ASID Pool"
-            }
+            InvocationLabel::ARMASIDPoolAssign
+            | InvocationLabel::RISCVASIDPoolAssign
+            | InvocationLabel::X86ASIDPoolAssign => "ASID Pool",
             InvocationLabel::ARMIRQIssueIRQHandlerTrigger
-            | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger => "IRQ Control",
+            | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger
+            | InvocationLabel::X86IRQIssueIRQHandlerIOAPIC
+            | InvocationLabel::X86IRQIssueIRQHandlerMSI => "IRQ Control",
             InvocationLabel::IRQSetIRQHandler => "IRQ Handler",
-            InvocationLabel::ARMPageTableMap | InvocationLabel::RISCVPageTableMap => "Page Table",
-            InvocationLabel::ARMPageMap | InvocationLabel::RISCVPageMap => "Page",
-            InvocationLabel::CNodeCopy | InvocationLabel::CNodeMint => "CNode",
+            InvocationLabel::X86PDPTMap => "Page Upper Directory",
+            InvocationLabel::X86PageDirectoryMap => "Page Directory",
+            InvocationLabel::ARMPageTableMap
+            | InvocationLabel::RISCVPageTableMap
+            | InvocationLabel::X86PageTableMap => "Page Table",
+            InvocationLabel::ARMPageMap
+            | InvocationLabel::RISCVPageMap
+            | InvocationLabel::X86PageMap => "Page",
+            InvocationLabel::CNodeCopy
+            | InvocationLabel::CNodeMint => "CNode",
             InvocationLabel::SchedControlConfigureFlags => "SchedControl",
             InvocationLabel::ARMVCPUSetTCB => "VCPU",
             _ => panic!(
@@ -1070,14 +1372,22 @@ impl Invocation {
             InvocationLabel::TCBResume => "Resume",
             InvocationLabel::TCBWriteRegisters => "WriteRegisters",
             InvocationLabel::TCBBindNotification => "BindNotification",
-            InvocationLabel::ARMASIDPoolAssign | InvocationLabel::RISCVASIDPoolAssign => "Assign",
+            InvocationLabel::ARMASIDPoolAssign
+            | InvocationLabel::RISCVASIDPoolAssign
+            | InvocationLabel::X86ASIDPoolAssign => "Assign",
             InvocationLabel::ARMIRQIssueIRQHandlerTrigger
-            | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger => "Get",
+            | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger
+            | InvocationLabel::X86IRQIssueIRQHandlerIOAPIC
+            | InvocationLabel::X86IRQIssueIRQHandlerMSI => "Get",
             InvocationLabel::IRQSetIRQHandler => "SetNotification",
             InvocationLabel::ARMPageTableMap
             | InvocationLabel::ARMPageMap
             | InvocationLabel::RISCVPageTableMap
-            | InvocationLabel::RISCVPageMap => "Map",
+            | InvocationLabel::RISCVPageMap
+            | InvocationLabel::X86PDPTMap
+            | InvocationLabel::X86PageDirectoryMap
+            | InvocationLabel::X86PageTableMap
+            | InvocationLabel::X86PageMap => "Map",
             InvocationLabel::CNodeCopy => "Copy",
             InvocationLabel::CNodeMint => "Mint",
             InvocationLabel::SchedControlConfigureFlags => "ConfigureFlags",
@@ -1103,19 +1413,35 @@ impl InvocationArgs {
             InvocationArgs::AsidPoolAssign { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMASIDPoolAssign,
                 Arch::Riscv64 => InvocationLabel::RISCVASIDPoolAssign,
+                Arch::X86_64  => InvocationLabel::X86ASIDPoolAssign,
             },
             InvocationArgs::IrqControlGetTrigger { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMIRQIssueIRQHandlerTrigger,
                 Arch::Riscv64 => InvocationLabel::RISCVIRQIssueIRQHandlerTrigger,
+                Arch::X86_64  => panic!("IrqControlGetTrigger is not supported on X86")
             },
+            InvocationArgs::IrqControlGetIOAPIC { .. } => InvocationLabel::X86IRQIssueIRQHandlerIOAPIC,
+            InvocationArgs::IrqControlGetMSI { .. } => InvocationLabel::X86IRQIssueIRQHandlerMSI,
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IRQSetIRQHandler,
+            InvocationArgs::PageUpperDirectoryMap { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ARMPageTableMap,
+                Arch::Riscv64 => InvocationLabel::RISCVPageTableMap,
+                Arch::X86_64  => InvocationLabel::X86PDPTMap,
+            },
+            InvocationArgs::PageDirectoryMap { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ARMPageTableMap,
+                Arch::Riscv64 => InvocationLabel::RISCVPageTableMap,
+                Arch::X86_64  => InvocationLabel::X86PageDirectoryMap,
+            },
             InvocationArgs::PageTableMap { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMPageTableMap,
                 Arch::Riscv64 => InvocationLabel::RISCVPageTableMap,
+                Arch::X86_64  => InvocationLabel::X86PageTableMap,
             },
             InvocationArgs::PageMap { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMPageMap,
                 Arch::Riscv64 => InvocationLabel::RISCVPageMap,
+                Arch::X86_64  => InvocationLabel::X86PageMap,
             },
             InvocationArgs::CnodeCopy { .. } => InvocationLabel::CNodeCopy,
             InvocationArgs::CnodeMint { .. } => InvocationLabel::CNodeMint,
@@ -1216,10 +1542,52 @@ impl InvocationArgs {
                 vec![irq, trigger as u64, dest_index, dest_depth],
                 vec![dest_root],
             ),
+            InvocationArgs::IrqControlGetIOAPIC {
+                irq_control,
+                dest_root,
+                dest_index,
+                dest_depth,
+                ioapic,
+                pin,
+                level,
+                polarity,
+                vector,
+            } => (
+                irq_control,
+                vec![dest_index, dest_depth, ioapic, pin, level, polarity, vector],
+                vec![dest_root],
+            ),
+            InvocationArgs::IrqControlGetMSI {
+                irq_control,
+                dest_root,
+                dest_index,
+                dest_depth,
+                pci_bus,
+                pci_dev,
+                pci_func,
+                handle,
+                vector,
+            } => (
+                irq_control,
+                vec![dest_index, dest_depth, pci_bus, pci_dev, pci_func, handle, vector],
+                vec![dest_root],
+            ),
             InvocationArgs::IrqHandlerSetNotification {
                 irq_handler,
                 notification,
             } => (irq_handler, vec![], vec![notification]),
+            InvocationArgs::PageUpperDirectoryMap {
+                page_upper_directory,
+                vspace,
+                vaddr,
+                attr,
+            } => (page_upper_directory, vec![vaddr, attr], vec![vspace]),
+            InvocationArgs::PageDirectoryMap {
+                page_directory,
+                vspace,
+                vaddr,
+                attr,
+            } => (page_directory, vec![vaddr, attr], vec![vspace]),
             InvocationArgs::PageTableMap {
                 page_table,
                 vspace,
@@ -1338,9 +1706,43 @@ pub enum InvocationArgs {
         dest_index: u64,
         dest_depth: u64,
     },
+    IrqControlGetIOAPIC {
+        irq_control: u64,
+        dest_root: u64,
+        dest_index: u64,
+        dest_depth: u64,
+        ioapic: u64,
+        pin: u64,
+        level: u64,
+        polarity: u64,
+        vector: u64,
+    },
+    IrqControlGetMSI {
+        irq_control: u64,
+        dest_root: u64,
+        dest_index: u64,
+        dest_depth: u64,
+        pci_bus: u64,
+        pci_dev: u64,
+        pci_func: u64,
+        handle: u64,
+        vector: u64,
+    },
     IrqHandlerSetNotification {
         irq_handler: u64,
         notification: u64,
+    },
+    PageUpperDirectoryMap {
+        page_upper_directory: u64,
+        vspace: u64,
+        vaddr: u64,
+        attr: u64,
+    },
+    PageDirectoryMap {
+        page_directory: u64,
+        vspace: u64,
+        vaddr: u64,
+        attr: u64,
     },
     PageTableMap {
         page_table: u64,

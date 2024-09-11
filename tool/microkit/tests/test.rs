@@ -24,6 +24,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     riscv_pt_levels: None,
     // Not necessary for SDF parsing
     invocations_labels: json!(null),
+    x86_xsave_size: None,
 };
 
 fn check_error(test_name: &str, expected_err: &str) {
@@ -145,7 +146,10 @@ mod protection_domain {
 
     #[test]
     fn test_missing_irq() {
-        check_missing("pd_missing_irq.system", "irq", "irq")
+        check_error(
+            "pd_missing_irq.system",
+            "Error: Missing required attribute 'irq', or 'pin' (x86 IOAPIC), or 'pcidev' (x86 MSI) on element 'irq': "
+        )
     }
 
     #[test]
