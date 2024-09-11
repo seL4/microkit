@@ -79,7 +79,11 @@ static inline void microkit_pd_restart(microkit_child pd, seL4_Word entry_point)
 {
     seL4_Error err;
     seL4_UserContext ctxt = {0};
+#ifdef ARCH_x86_64
+    ctxt.rip = entry_point;
+#else
     ctxt.pc = entry_point;
+#endif
     err = seL4_TCB_WriteRegisters(
               BASE_TCB_CAP + pd,
               seL4_True,

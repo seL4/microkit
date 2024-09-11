@@ -25,6 +25,11 @@ else ifeq ($(ARCH),riscv64)
 	CFLAGS_RISCV64 := -mcmodel=medany -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
 	CFLAGS_ARCH := $(CFLAGS_RISCV64)
 	ARCH_DIR := riscv
+else ifeq ($(ARCH),x86_64)
+	ASM_FLAGS := -march=generic64
+	CFLAGS_X86_64 := -march=$(GCC_MARCH) -DARCH_x86_64
+	CFLAGS_ARCH := $(CFLAGS_X86_64)
+	ARCH_DIR := x86_64
 endif
 
 CFLAGS := -std=gnu11 \
