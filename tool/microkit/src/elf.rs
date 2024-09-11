@@ -4,12 +4,22 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::util::bytes_to_struct;
+use crate::round_up;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::mem;
+
+use bincode::{serialize,deserialize};
+use serde::{Serialize, Deserialize};
+use concat_idents::concat_idents;
+
+//
+// Elf32 definitions
+//
 
 #[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
 struct ElfHeader32 {
     ident_magic: u32,
     ident_class: u8,
@@ -34,43 +44,50 @@ struct ElfHeader32 {
 }
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
-struct ElfSymbol64 {
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfProgramHeader32 {
+    type_: u32,
+    offset: u32,
+    vaddr: u32,
+    paddr: u32,
+    filesz: u32,
+    memsz: u32,
+    flags: u32,
+    align: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfSectionHeader32 {
     name: u32,
+    type_: u32,
+    flags: u32,
+    addr: u32,
+    offset: u32,
+    size: u32,
+    link: u32,
+    info: u32,
+    addralign: u32,
+    entsize: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfSymbol32 {
+    name: u32,
+    value: u32,
+    size: u32,
     info: u8,
     other: u8,
     shndx: u16,
-    value: u64,
-    size: u64,
 }
 
-#[repr(C, packed)]
-struct ElfSectionHeader64 {
-    name: u32,
-    type_: u32,
-    flags: u64,
-    addr: u64,
-    offset: u64,
-    size: u64,
-    link: u32,
-    info: u32,
-    addralign: u64,
-    entsize: u64,
-}
+//
+// Elf64 definitions
+//
 
 #[repr(C, packed)]
-struct ElfProgramHeader64 {
-    type_: u32,
-    flags: u32,
-    offset: u64,
-    vaddr: u64,
-    paddr: u64,
-    filesz: u64,
-    memsz: u64,
-    align: u64,
-}
-
-#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
 struct ElfHeader64 {
     ident_magic: u32,
     ident_class: u8,
@@ -94,14 +111,185 @@ struct ElfHeader64 {
     shstrndx: u16,
 }
 
+#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfProgramHeader64 {
+    type_: u32,
+    flags: u32,
+    offset: u64,
+    vaddr: u64,
+    paddr: u64,
+    filesz: u64,
+    memsz: u64,
+    align: u64,
+}
+
+#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfSectionHeader64 {
+    name: u32,
+    type_: u32,
+    flags: u64,
+    addr: u64,
+    offset: u64,
+    size: u64,
+    link: u32,
+    info: u32,
+    addralign: u64,
+    entsize: u64,
+}
+
+#[repr(C, packed)]
+#[derive(Serialize, Deserialize, Copy, Clone, Default, Debug)]
+struct ElfSymbol64 {
+    name: u32,
+    info: u8,
+    other: u8,
+    shndx: u16,
+    value: u64,
+    size: u64,
+}
+
+//
+// Elf32/Elf64 wrapping enumerates
+//
+
+macro_rules! define_sizeof {
+    ($type:ident) => {
+        fn sizeof(&self) -> usize {
+            match self {
+                $type::EH32(x) => mem::size_of_val(x),
+                $type::EH64(x) => mem::size_of_val(x),
+            }
+        }
+    }
+}
+
+macro_rules! define_accessors {
+    ($type:ident, $name:ident, $type32:ident, $type64:ident) => {
+        fn $name(&self) -> $type64 {
+            match self {
+                $type::EH32(x) => x.$name as $type64,
+                $type::EH64(x) => x.$name as $type64,
+            }
+        }
+        concat_idents!(fn_name = set_, $name {
+            fn fn_name(&mut self, value: $type64) {
+                match self {
+                    $type::EH32(x) => (*x).$name = value as $type32,
+                    $type::EH64(x) => (*x).$name = value,
+                };
+            }
+        });
+    };
+}
+
+#[derive(Copy, Clone, Debug)]
+enum ElfHeader {
+    EH32(ElfHeader32),
+    EH64(ElfHeader64),
+}
+
+#[allow(dead_code)]
+impl ElfHeader {
+    define_sizeof!(ElfHeader);
+
+    define_accessors!(ElfHeader, ident_magic, u32, u32);
+    define_accessors!(ElfHeader, ident_class, u8, u8);
+    define_accessors!(ElfHeader, ident_data, u8, u8);
+    define_accessors!(ElfHeader, ident_version, u8, u8);
+    define_accessors!(ElfHeader, ident_osabi, u8, u8);
+    define_accessors!(ElfHeader, ident_abiversion, u8, u8);
+    define_accessors!(ElfHeader, type_, u16, u16);
+    define_accessors!(ElfHeader, machine, u16, u16);
+    define_accessors!(ElfHeader, version, u32, u32);
+    define_accessors!(ElfHeader, entry, u32, u64);
+    define_accessors!(ElfHeader, phoff, u32, u64);
+    define_accessors!(ElfHeader, shoff, u32, u64);
+    define_accessors!(ElfHeader, flags, u32, u32);
+    define_accessors!(ElfHeader, ehsize, u16, u16);
+    define_accessors!(ElfHeader, phentsize, u16, u16);
+    define_accessors!(ElfHeader, phnum, u16, u16);
+    define_accessors!(ElfHeader, shentsize, u16, u16);
+    define_accessors!(ElfHeader, shnum, u16, u16);
+    define_accessors!(ElfHeader, shstrndx, u16, u16);
+}
+
+#[derive(Copy, Clone)]
+#[derive(Debug)]
+enum ElfProgramHeader {
+    EH32(ElfProgramHeader32),
+    EH64(ElfProgramHeader64),
+}
+
+#[allow(dead_code)]
+impl ElfProgramHeader {
+    define_sizeof!(ElfProgramHeader);
+
+    define_accessors!(ElfProgramHeader, type_, u32, u32);
+    define_accessors!(ElfProgramHeader, flags, u32, u32);
+    define_accessors!(ElfProgramHeader, offset, u32, u64);
+    define_accessors!(ElfProgramHeader, vaddr, u32, u64);
+    define_accessors!(ElfProgramHeader, paddr, u32, u64);
+    define_accessors!(ElfProgramHeader, filesz, u32, u64);
+    define_accessors!(ElfProgramHeader, memsz, u32, u64);
+    define_accessors!(ElfProgramHeader, align, u32, u64);
+}
+
+#[derive(Copy, Clone)]
+#[derive(Debug)]
+enum ElfSectionHeader {
+    EH32(ElfSectionHeader32),
+    EH64(ElfSectionHeader64),
+}
+
+#[allow(dead_code)]
+impl ElfSectionHeader {
+    define_sizeof!(ElfSectionHeader);
+
+    define_accessors!(ElfSectionHeader, name, u32, u32);
+    define_accessors!(ElfSectionHeader, type_, u32, u32);
+    define_accessors!(ElfSectionHeader, flags, u32, u64);
+    define_accessors!(ElfSectionHeader, addr, u32, u64);
+    define_accessors!(ElfSectionHeader, offset, u32, u64);
+    define_accessors!(ElfSectionHeader, size, u32, u64);
+    define_accessors!(ElfSectionHeader, link, u32, u32);
+    define_accessors!(ElfSectionHeader, info, u32, u32);
+    define_accessors!(ElfSectionHeader, addralign, u32, u64);
+    define_accessors!(ElfSectionHeader, entsize, u32, u64);
+}
+
+#[derive(Copy, Clone)]
+enum ElfSymbol {
+    EH32(ElfSymbol32),
+    EH64(ElfSymbol64),
+}
+
+#[allow(dead_code)]
+impl ElfSymbol {
+    define_sizeof!(ElfSymbol);
+
+    define_accessors!(ElfSymbol, name, u32, u32);
+    define_accessors!(ElfSymbol, info, u8, u8);
+    define_accessors!(ElfSymbol, other, u8, u8);
+    define_accessors!(ElfSymbol, shndx, u16, u16);
+    define_accessors!(ElfSymbol, value, u32, u64);
+    define_accessors!(ElfSymbol, size, u32, u64);
+}
+
+//
+// Common Elf definitions
+//
+
 const ELF_MAGIC: &[u8; 4] = b"\x7FELF";
 
+#[derive(Clone, Debug)]
 pub struct ElfSegment {
     pub data: Vec<u8>,
     pub phys_addr: u64,
     pub virt_addr: u64,
     pub loadable: bool,
-    attrs: u32,
+    pub attrs: u32,
 }
 
 impl ElfSegment {
@@ -122,7 +310,7 @@ impl ElfSegment {
     }
 }
 
-enum ElfSegmentAttributes {
+pub enum ElfSegmentAttributes {
     /// Corresponds to PF_X
     Execute = 0x1,
     /// Corresponds to PF_W
@@ -135,7 +323,8 @@ pub struct ElfFile {
     pub word_size: usize,
     pub entry: u64,
     pub segments: Vec<ElfSegment>,
-    symbols: HashMap<String, (ElfSymbol64, bool)>,
+    symbols: HashMap<String, (ElfSymbol, bool)>,
+    header: ElfHeader,
 }
 
 impl ElfFile {
@@ -150,19 +339,10 @@ impl ElfFile {
             return Err(format!("ELF '{}': magic check failed", path.display()));
         }
 
-        let word_size;
-        let hdr_size;
-
-        let class = &bytes[4..5][0];
-        match class {
-            1 => {
-                hdr_size = std::mem::size_of::<ElfHeader32>();
-                word_size = 32;
-            }
-            2 => {
-                hdr_size = std::mem::size_of::<ElfHeader64>();
-                word_size = 64;
-            }
+        let class: u8 = bytes[4..5][0];
+        let (hdr_size, word_size) = match class {
+            1 => (std::mem::size_of::<ElfHeader32>(), 32),
+            2 => (std::mem::size_of::<ElfHeader64>(), 64),
             _ => {
                 return Err(format!(
                     "ELF '{}': invalid class '{}'",
@@ -174,64 +354,71 @@ impl ElfFile {
 
         // Now need to read the header into a struct
         let hdr_bytes = &bytes[..hdr_size];
-        let hdr = unsafe { bytes_to_struct::<ElfHeader64>(hdr_bytes) };
+        let hdr: ElfHeader = match class {
+            1 => ElfHeader::EH32(deserialize(hdr_bytes).unwrap()),
+            2 => ElfHeader::EH64(deserialize(hdr_bytes).unwrap()),
+            _ => unimplemented!(),
+        };
 
         // We have checked this above but we should check again once we actually cast it to
         // a struct.
-        assert!(hdr.ident_magic.to_le_bytes() == *magic);
-        assert!(hdr.ident_class == *class);
+        assert!(hdr.ident_magic().to_le_bytes() == *magic);
+        assert!(hdr.ident_class() == class);
+        assert!(hdr.ident_data() == 1, "only little endian architectures are supported");
 
-        if hdr.ident_data != 1 {
-            return Err(format!(
-                "ELF '{}': incorrect endianness, only little endian architectures are supported",
-                path.display()
-            ));
-        }
-
-        let entry = hdr.entry;
+        let entry = hdr.entry();
 
         // Read all the segments
-        let mut segments = Vec::with_capacity(hdr.phnum as usize);
-        for i in 0..hdr.phnum {
-            let phent_start = hdr.phoff + (i * hdr.phentsize) as u64;
-            let phent_end = phent_start + (hdr.phentsize as u64);
+        let mut segments = Vec::with_capacity(hdr.phnum() as usize);
+        for i in 0..hdr.phnum() {
+            let phent_start = hdr.phoff() + (i * hdr.phentsize()) as u64;
+            let phent_end = phent_start + (hdr.phentsize() as u64);
             let phent_bytes = &bytes[phent_start as usize..phent_end as usize];
 
-            let phent = unsafe { bytes_to_struct::<ElfProgramHeader64>(phent_bytes) };
+            let phent: ElfProgramHeader = match class {
+                1 => ElfProgramHeader::EH32(deserialize(phent_bytes).unwrap()),
+                2 => ElfProgramHeader::EH64(deserialize(phent_bytes).unwrap()),
+                _ => unimplemented!(),
+            };
 
-            let segment_start = phent.offset as usize;
-            let segment_end = phent.offset as usize + phent.filesz as usize;
+            let segment_start = phent.offset() as usize;
+            let segment_end = phent.offset() as usize + phent.filesz() as usize;
 
-            if phent.type_ != 1 {
+            if phent.type_() != 1 {
                 continue;
             }
 
-            let mut segment_data = vec![0; phent.memsz as usize];
-            segment_data[..phent.filesz as usize]
+            let mut segment_data = vec![0; phent.memsz() as usize];
+            segment_data[..phent.filesz() as usize]
                 .copy_from_slice(&bytes[segment_start..segment_end]);
 
             let segment = ElfSegment {
                 data: segment_data,
-                phys_addr: phent.paddr,
-                virt_addr: phent.vaddr,
-                loadable: phent.type_ == 1,
-                attrs: phent.flags,
+                phys_addr: phent.paddr(),
+                virt_addr: phent.vaddr(),
+                loadable: phent.type_() == 1,
+                attrs: phent.flags(),
             };
 
             segments.push(segment)
         }
 
         // Read all the section headers
-        let mut shents = Vec::with_capacity(hdr.shnum as usize);
-        let mut symtab_shent: Option<&ElfSectionHeader64> = None;
-        let mut shstrtab_shent: Option<&ElfSectionHeader64> = None;
-        for i in 0..hdr.shnum {
-            let shent_start = hdr.shoff + (i * hdr.shentsize) as u64;
-            let shent_end = shent_start + hdr.shentsize as u64;
+        let mut shents = Vec::with_capacity(hdr.shnum() as usize);
+        let mut symtab_shent: Option<ElfSectionHeader> = None;
+        let mut shstrtab_shent: Option<ElfSectionHeader> = None;
+        for i in 0..hdr.shnum() {
+            let shent_start = hdr.shoff() + (i * hdr.shentsize()) as u64;
+            let shent_end = shent_start + hdr.shentsize() as u64;
             let shent_bytes = &bytes[shent_start as usize..shent_end as usize];
 
-            let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
-            match shent.type_ {
+            let shent: ElfSectionHeader = match class {
+                1 => ElfSectionHeader::EH32(deserialize(shent_bytes).unwrap()),
+                2 => ElfSectionHeader::EH64(deserialize(shent_bytes).unwrap()),
+                _ => unimplemented!(),
+            };
+
+            match shent.type_() {
                 2 => symtab_shent = Some(shent),
                 3 => shstrtab_shent = Some(shent),
                 _ => {}
@@ -255,29 +442,44 @@ impl ElfFile {
         }
 
         // Reading the symbol table
-        let symtab_start = symtab_shent.unwrap().offset as usize;
-        let symtab_end = symtab_start + symtab_shent.unwrap().size as usize;
+        let symtab_start = symtab_shent.unwrap().offset() as usize;
+        let symtab_end = symtab_start + symtab_shent.unwrap().size() as usize;
         let symtab = &bytes[symtab_start..symtab_end];
 
-        let symtab_str_shent = shents[symtab_shent.unwrap().link as usize];
-        let symtab_str_start = symtab_str_shent.offset as usize;
-        let symtab_str_end = symtab_str_start + symtab_str_shent.size as usize;
+        let symtab_str_shent = shents[symtab_shent.unwrap().link() as usize];
+        let symtab_str_start = symtab_str_shent.offset() as usize;
+        let symtab_str_end = symtab_str_start + symtab_str_shent.size() as usize;
         let symtab_str = &bytes[symtab_str_start..symtab_str_end];
 
         // Read all the symbols
-        let mut symbols: HashMap<String, (ElfSymbol64, bool)> = HashMap::new();
+        let mut symbols: HashMap<String, (ElfSymbol, bool)> = HashMap::new();
         let mut offset = 0;
-        let symbol_size = std::mem::size_of::<ElfSymbol64>();
+        let symbol_size = match class {
+            1 => std::mem::size_of::<ElfSymbol32>(),
+            2 => std::mem::size_of::<ElfSymbol64>(),
+            _ => unimplemented!(),
+        };
         while offset < symtab.len() {
             let sym_bytes = &symtab[offset..offset + symbol_size];
-            let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol64>() };
-            assert!(sym_head.is_empty());
-            assert!(sym_body.len() == 1);
-            assert!(sym_tail.is_empty());
+            let sym: ElfSymbol = match class {
+                1 => {
+                    let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol32>() };
+                    assert!(sym_head.is_empty());
+                    assert!(sym_body.len() == 1);
+                    assert!(sym_tail.is_empty());
+                    ElfSymbol::EH32(sym_body[0])
+                }
+                2 => {
+                    let (sym_head, sym_body, sym_tail) = unsafe { sym_bytes.align_to::<ElfSymbol64>() };
+                    assert!(sym_head.is_empty());
+                    assert!(sym_body.len() == 1);
+                    assert!(sym_tail.is_empty());
+                    ElfSymbol::EH64(sym_body[0])
+                }
+                _ => unimplemented!(),
+            };
 
-            let sym = sym_body[0];
-
-            let name = Self::get_string(symtab_str, sym.name as usize)?;
+            let name = Self::get_string(symtab_str, sym.name() as usize)?;
             // It is possible for a valid ELF to contain multiple global symbols with the same name.
             // Because we are making the hash map of symbols now, what we do is keep track of how many
             // times we encounter the symbol name. Only when we go to find a particular symbol, do
@@ -299,6 +501,7 @@ impl ElfFile {
             entry,
             segments,
             symbols,
+            header: hdr,
         })
     }
 
@@ -309,7 +512,7 @@ impl ElfFile {
                     "Found multiple symbols with name '{variable_name}'"
                 ))
             } else {
-                Ok((sym.value, sym.size))
+                Ok((sym.value(), sym.size()))
             }
         } else {
             Err(format!("No symbol named '{variable_name}' not found"))
@@ -362,5 +565,96 @@ impl ElfFile {
 
     pub fn loadable_segments(&self) -> Vec<&ElfSegment> {
         self.segments.iter().filter(|s| s.loadable).collect()
+    }
+
+    pub fn add_segment(&mut self, segment: ElfSegment) {
+        self.segments.push(segment);
+    }
+
+    pub fn write<W: std::io::Write+std::io::Seek>(&self, writer: &mut W) -> std::io::Result<()> {
+        let (phentsize, shentsize) = match self.header {
+            ElfHeader::EH32(_) => {(
+                std::mem::size_of::<ElfProgramHeader32>() as u16,
+                std::mem::size_of::<ElfSectionHeader32>() as u16,
+            )}
+            ElfHeader::EH64(_) => {(
+                std::mem::size_of::<ElfProgramHeader64>() as u16,
+                std::mem::size_of::<ElfSectionHeader64>() as u16,
+            )}
+        };
+
+        // Start the program headers on an 8-byte boundary.
+        let phoff = round_up(self.header.sizeof(), 8) as u64;
+
+        // Add the segment headers to the end of the file.
+        let shoff = phoff
+            + (self.segments.len() as u64 * phentsize as u64)
+            + self.segments.iter().map(|s| s.data.len() as u64).sum::<u64>();
+        let shoff = round_up(shoff as usize, 8) as u64;
+
+        // As we will rewrite the ELF file we need to update a few fields in the header.
+        let mut header = self.header.clone();
+        header.set_entry(self.entry);
+        header.set_phoff(phoff);
+        header.set_shoff(shoff);
+        header.set_phentsize(phentsize);
+        header.set_phnum(self.segments.len() as u16);
+        header.set_shentsize(shentsize);
+        header.set_shnum(1);
+        header.set_shstrndx(0);
+
+        // Write the ELF header.
+        let header_bytes = match header {
+            ElfHeader::EH32(hdr) => serialize(&hdr).unwrap(),
+            ElfHeader::EH64(hdr) => serialize(&hdr).unwrap(),
+        };
+        assert!(header_bytes.len() == header.sizeof());
+        writer.write_all(&header_bytes)?;
+
+        // Write all program headers, bumping the data offset within the file as we go.
+        writer.seek(std::io::SeekFrom::Start(phoff))?;
+        let mut data_offset = phoff + self.segments.len() as u64 * phentsize as u64;
+        for segment in &self.segments {
+            let mut pheader: ElfProgramHeader = match header {
+                ElfHeader::EH32(_) => ElfProgramHeader::EH32(ElfProgramHeader32::default()),
+                ElfHeader::EH64(_) => ElfProgramHeader::EH64(ElfProgramHeader64::default()),
+            };
+            pheader.set_type_(1);
+            pheader.set_flags(segment.attrs);
+            pheader.set_offset(data_offset);
+            pheader.set_vaddr(segment.virt_addr);
+            pheader.set_paddr(segment.phys_addr);
+            pheader.set_filesz(segment.mem_size());
+            pheader.set_memsz(segment.mem_size());
+            pheader.set_align(0x1000);
+
+            let pheader_bytes = match pheader {
+                ElfProgramHeader::EH32(hdr) => serialize(&hdr).unwrap(),
+                ElfProgramHeader::EH64(hdr) => serialize(&hdr).unwrap(),
+            };
+            assert!(pheader_bytes.len() == pheader.sizeof());
+            writer.write_all(&pheader_bytes)?;
+
+            data_offset += segment.mem_size();
+        }
+
+        // Write all segments.
+        for segment in &self.segments {
+            writer.write_all(&segment.data)?;
+        }
+
+        // Write one dummy section header with a single empty section to pacify grub.
+        writer.seek(std::io::SeekFrom::Start(shoff))?;
+        let sheader: ElfSectionHeader = match header {
+            ElfHeader::EH32(_) => ElfSectionHeader::EH32(ElfSectionHeader32::default()),
+            ElfHeader::EH64(_) => ElfSectionHeader::EH64(ElfSectionHeader64::default()),
+        };
+        let sheader_bytes = match sheader {
+            ElfSectionHeader::EH32(hdr) => serialize(&hdr).unwrap(),
+            ElfSectionHeader::EH64(hdr) => serialize(&hdr).unwrap(),
+        };
+        writer.write_all(&sheader_bytes)?;
+
+        Ok(())
     }
 }

@@ -9,18 +9,19 @@
 
 use elf::ElfFile;
 use loader::Loader;
+use x86loader::X86Loader;
 use microkit_tool::{
-    elf, loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
+    elf, loader, x86loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
     UntypedObject, MAX_PDS, PD_MAX_NAME_LENGTH,
 };
 use sdf::{
-    parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
+    parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SysIrqKind, SystemDescription,
     VirtualMachine,
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
     InvocationArgs, Object, ObjectType, PageSize, Rights, Riscv64Regs, RiscvVirtualMemory,
-    RiscvVmAttributes,
+    RiscvVmAttributes, X86_64Regs, X86VmAttributes
 };
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -72,6 +73,9 @@ const INIT_VSPACE_CAP_ADDRESS: u64 = 3;
 const IRQ_CONTROL_CAP_ADDRESS: u64 = 4; // Singleton
 const INIT_ASID_POOL_CAP_ADDRESS: u64 = 6;
 const SMC_CAP_ADDRESS: u64 = 15;
+
+const N_VTD_CONTEXTS: u64 = 256;
+const VTD_PT_INDEX_BITS: u64 = 9;
 
 // const ASID_CONTROL_CAP_ADDRESS: u64 = 5; // Singleton
 // const IO_PORT_CONTROL_CAP_ADDRESS: u64 = 7; // Null on this platform
@@ -592,6 +596,7 @@ fn kernel_device_addrs(config: &Config, kernel_elf: &ElfFile) -> Vec<u64> {
     let kernel_frame_size = match config.arch {
         Arch::Aarch64 => size_of::<KernelFrameAarch64>(),
         Arch::Riscv64 => size_of::<KernelFrameRiscv64>(),
+        Arch::X86_64 => unimplemented!(),
     };
     let mut offset: usize = 0;
     while offset < size as usize {
@@ -609,6 +614,7 @@ fn kernel_device_addrs(config: &Config, kernel_elf: &ElfFile) -> Vec<u64> {
                     );
                     (frame.user_accessible, frame.paddr)
                 }
+                Arch::X86_64 => unimplemented!()
             }
         };
         if user_accessible == 0 {
@@ -653,7 +659,9 @@ fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
     let (ki_end_v, _) = kernel_elf
         .find_symbol("ki_end")
         .expect("Could not find 'ki_end' symbol");
-    let ki_end_p = ki_end_v - segments[0].virt_addr + base;
+    let last_segment = segments.last().unwrap();
+    let v_p_offset = last_segment.virt_addr - last_segment.phys_addr;
+    let ki_end_p = ki_end_v - v_p_offset;
 
     MemoryRegion::new(base, ki_end_p)
 }
@@ -664,7 +672,9 @@ fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
     let (ki_boot_end_v, _) = kernel_elf
         .find_symbol("ki_boot_end")
         .expect("Could not find 'ki_boot_end' symbol");
-    let ki_boot_end_p = ki_boot_end_v - segments[0].virt_addr + base;
+    let last_segment = segments.last().unwrap();
+    let v_p_offset = last_segment.virt_addr - last_segment.phys_addr;
+    let ki_boot_end_p = ki_boot_end_v - v_p_offset;
 
     MemoryRegion::new(base, ki_boot_end_p)
 }
@@ -676,7 +686,11 @@ fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
 /// This factors the common parts of 'emulate_kernel_boot' and
 /// 'emulate_kernel_boot_partial' to avoid code duplication.
 ///
-fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPartialBootInfo {
+fn kernel_partial_boot(
+    kernel_config: &Config,
+    kernel_elf: &ElfFile,
+    x86_machine: &Option<serde_json::Value>,
+) -> KernelPartialBootInfo {
     // Determine the untyped caps of the system
     // This lets allocations happen correctly.
     let mut device_memory = DisjointMemoryRegion::default();
@@ -690,20 +704,48 @@ fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPa
     // NOTE: There is an assumption each kernel device is one frame
     // in size only. It's possible this assumption could break in the
     // future.
-    for paddr in kernel_device_addrs(kernel_config, kernel_elf) {
-        device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size);
-    }
+    match kernel_config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => {
+            for paddr in kernel_device_addrs(kernel_config, kernel_elf) {
+                device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size);
+            }
+        }
+        Arch::X86_64 => {
+            for kdev in x86_machine.as_ref().unwrap()["kdevs"].as_array().unwrap() {
+                let base = kdev["base"].as_u64().unwrap();
+                let size = kdev["size"].as_u64().unwrap();
+                device_memory.remove_region(base, base + size);
+            }
+        }
+    };
 
     // Remove all the actual physical memory from the device regions
     // but add it all to the actual normal memory regions
-    for (start, end) in kernel_phys_mem(kernel_config, kernel_elf) {
-        device_memory.remove_region(start, end);
-        normal_memory.insert_region(start, end);
+    match kernel_config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => {
+            for (start, end) in kernel_phys_mem(kernel_config, kernel_elf) {
+                device_memory.remove_region(start, end);
+                normal_memory.insert_region(start, end);
+            }
+        }
+        Arch::X86_64 => {
+            for mr in x86_machine.as_ref().unwrap()["memory"].as_array().unwrap() {
+                let base = mr["base"].as_u64().unwrap();
+                let size = mr["size"].as_u64().unwrap();
+                device_memory.remove_region(base, base + size);
+                normal_memory.insert_region(base, base + size);
+            }
+        }
     }
 
     // Remove the kernel image itself
     let self_mem = kernel_self_mem(kernel_elf);
     normal_memory.remove_region(self_mem.base, self_mem.end);
+
+    // Remove the MSI region on X86
+    if let Arch::X86_64 = kernel_config.arch {
+        device_memory.remove_region(0xfffffff8, 0x100000000);
+    }
 
     // but get the boot region, we'll add that back later
     // FIXME: Why calcaultae it now if we add it back later?
@@ -719,8 +761,9 @@ fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPa
 fn emulate_kernel_boot_partial(
     kernel_config: &Config,
     kernel_elf: &ElfFile,
+    x86_machine: &Option<serde_json::Value>,
 ) -> (DisjointMemoryRegion, MemoryRegion) {
-    let partial_info = kernel_partial_boot(kernel_config, kernel_elf);
+    let partial_info = kernel_partial_boot(kernel_config, kernel_elf, x86_machine);
     (partial_info.normal_memory, partial_info.boot_region)
 }
 
@@ -729,6 +772,75 @@ fn get_n_paging(region: MemoryRegion, bits: u64) -> u64 {
     let end = util::round_up(region.end, 1 << bits);
 
     (end - start) / (1 << bits)
+}
+
+struct AcpiRmrr {
+    device: u32,
+    base: u64,
+    limit: u64,
+}
+
+impl AcpiRmrr {
+    pub fn from_json_object(obj: &serde_json::Value) -> AcpiRmrr {
+        match obj {
+            serde_json::Value::Object(x) =>
+                AcpiRmrr {
+                    device: x["devid"].as_u64().unwrap() as u32,
+                    base: x["base"].as_u64().unwrap(),
+                    limit: x["limit"].as_u64().unwrap(),
+                },
+            _ => panic!("AcpiRmrr::fromJsonObject called with an invalid argument")
+        }
+    }
+
+    fn get_pci_bus(&self) -> u32 {
+        (self.device >> 8) & 0xff
+    }
+}
+
+fn get_vtd_n_paging(x86_machine: &Option<serde_json::Value>) -> u64 {
+    let rmrrs = x86_machine.as_ref().unwrap()["rmrrs"].as_array().unwrap();
+
+    let mut size = 1;           // one for the root table
+    size += N_VTD_CONTEXTS;     // one for each context
+    size += rmrrs.len() as u64; // one for each device
+
+    if rmrrs.len() == 0 {
+        return size;
+    }
+
+    // Filter the identical regions by pci bus id
+    let mut filtered: Vec<AcpiRmrr> = vec![AcpiRmrr::from_json_object(&rmrrs[0])];
+    for rmrr in rmrrs {
+        let this = AcpiRmrr::from_json_object(rmrr);
+        let last = filtered.last().unwrap();
+        if this.get_pci_bus() != last.get_pci_bus()
+            && this.base != last.base
+            && this.limit != last.limit {
+                filtered.push(this);
+            }
+    }
+
+    let bootinfo = x86_machine.as_ref().unwrap()["bootinfo"].as_object().unwrap();
+    let nlevels = bootinfo["numIOPTLevels"].as_u64().unwrap();
+
+    for i in (1..nlevels).rev() {
+        let nbits = VTD_PT_INDEX_BITS * i + 12;
+        // If we are still looking up bits beyond the 32bit of physical
+        // that we support then we select entry 0 in the current PT
+        if nbits >= 32 {
+            size += 1;
+        } else {
+            for rmrr in &filtered {
+                let region = MemoryRegion {
+                    base: rmrr.base,
+                    end: rmrr.limit,
+                };
+                size += get_n_paging(region, 32 - nbits);
+            }
+        }
+    }
+    size
 }
 
 fn get_arch_n_paging(config: &Config, region: MemoryRegion) -> u64 {
@@ -748,7 +860,15 @@ fn get_arch_n_paging(config: &Config, region: MemoryRegion) -> u64 {
 
                 get_n_paging(region, LVL2_INDEX_OFFSET) + get_n_paging(region, LVL1_INDEX_OFFSET)
             }
-        },
+        }
+        Arch::X86_64 => {
+            const PT_INDEX_OFFSET: u64 = 12;
+            const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
+            const PDPT_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
+            const PML4_INDEX_OFFSET: u64 = PDPT_INDEX_OFFSET + 9;
+
+            get_n_paging(region, PML4_INDEX_OFFSET) + get_n_paging(region, PDPT_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
+        }
     }
 }
 
@@ -761,7 +881,9 @@ fn rootserver_max_size_bits(config: &Config) -> u64 {
     max(cnode_size_bits, vspace_bits)
 }
 
-fn calculate_rootserver_size(config: &Config, initial_task_region: MemoryRegion) -> u64 {
+fn calculate_rootserver_size(config: &Config,
+                             initial_task_region: MemoryRegion,
+                             x86_machine: &Option<serde_json::Value>) -> u64 {
     // FIXME: These constants should ideally come from the config / kernel
     // binary not be hard coded here.
     // But they are constant so it isn't too bad.
@@ -779,10 +901,16 @@ fn calculate_rootserver_size(config: &Config, initial_task_region: MemoryRegion)
     size += 1 << (tcb_bits);
     size += 2 * (1 << page_bits);
     size += 1 << asid_pool_bits;
+    if let Arch::X86_64 = config.arch {
+        // One more page the the extra boot info.
+        size += 1 << page_bits;
+    }
     size += 1 << vspace_bits;
-    size += get_arch_n_paging(config, initial_task_region) * (1 << page_table_bits);
     size += 1 << min_sched_context_bits;
-
+    size += get_arch_n_paging(config, initial_task_region) * (1 << page_table_bits);
+    if let Arch::X86_64 = config.arch {
+        size += get_vtd_n_paging(x86_machine) * (1 << page_table_bits);
+    }
     size
 }
 
@@ -794,9 +922,10 @@ fn emulate_kernel_boot(
     initial_task_phys_region: MemoryRegion,
     initial_task_virt_region: MemoryRegion,
     reserved_region: MemoryRegion,
+    x86_machine: &Option<serde_json::Value>,
 ) -> BootInfo {
     assert!(initial_task_phys_region.size() == initial_task_virt_region.size());
-    let partial_info = kernel_partial_boot(config, kernel_elf);
+    let partial_info = kernel_partial_boot(config, kernel_elf, x86_machine);
     let mut normal_memory = partial_info.normal_memory;
     let device_memory = partial_info.device_memory;
     let boot_region = partial_info.boot_region;
@@ -805,7 +934,7 @@ fn emulate_kernel_boot(
     normal_memory.remove_region(reserved_region.base, reserved_region.end);
 
     // Now, the tricky part! determine which memory is used for the initial task objects
-    let initial_objects_size = calculate_rootserver_size(config, initial_task_virt_region);
+    let initial_objects_size = calculate_rootserver_size(config, initial_task_virt_region, x86_machine);
     let initial_objects_align = rootserver_max_size_bits(config);
 
     // Find an appropriate region of normal memory to allocate the objects
@@ -832,23 +961,34 @@ fn emulate_kernel_boot(
     let fixed_cap_count = 0x10;
     let sched_control_cap_count = 1;
     let paging_cap_count = get_arch_n_paging(config, initial_task_virt_region);
-    let page_cap_count = initial_task_virt_region.size() / config.minimum_page_size;
+    let virt_page_cap_count = initial_task_virt_region.size() / config.minimum_page_size;
+    let page_cap_count = match config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => virt_page_cap_count,
+        // On x84_64 we have one more frame for the extra bootinfo region.
+        Arch::X86_64 => virt_page_cap_count + 1,
+    };
     let first_untyped_cap =
         fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count;
-    let sched_control_cap = fixed_cap_count + paging_cap_count;
+    let sched_control_cap = match config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => fixed_cap_count + paging_cap_count,
+        // On x86_64 the schedcontrol caps are created before the paging caps.
+        Arch::X86_64 => fixed_cap_count,
+    };
 
     let max_bits = match config.arch {
         Arch::Aarch64 => 47,
         Arch::Riscv64 => 38,
+        Arch::X86_64 => 47,
     };
+    let kernel_virtual_base = config.kernel_virtual_base();
     let device_regions: Vec<MemoryRegion> = [
-        reserved_region.aligned_power_of_two_regions(max_bits),
-        device_memory.aligned_power_of_two_regions(max_bits),
+        reserved_region.aligned_power_of_two_regions(kernel_virtual_base, max_bits),
+        device_memory.aligned_power_of_two_regions(kernel_virtual_base, max_bits),
     ]
     .concat();
     let normal_regions: Vec<MemoryRegion> = [
-        boot_region.aligned_power_of_two_regions(max_bits),
-        normal_memory.aligned_power_of_two_regions(max_bits),
+        boot_region.aligned_power_of_two_regions(kernel_virtual_base, max_bits),
+        normal_memory.aligned_power_of_two_regions(kernel_virtual_base, max_bits),
     ]
     .concat();
     let mut untyped_objects = Vec::new();
@@ -882,6 +1022,7 @@ fn build_system(
     system: &SystemDescription,
     invocation_table_size: u64,
     system_cnode_size: u64,
+    x86_machine: &Option<serde_json::Value>,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
     assert!(invocation_table_size % config.minimum_page_size == 0);
@@ -920,19 +1061,39 @@ fn build_system(
     // Now that the size is determined, find a free region in the physical memory
     // space.
     let (mut available_memory, kernel_boot_region) =
-        emulate_kernel_boot_partial(config, kernel_elf);
+        emulate_kernel_boot_partial(config, kernel_elf, x86_machine);
 
-    // The kernel relies on the reserved region being allocated above the kernel
-    // boot/ELF region, so we have the end of the kernel boot region as the lower
-    // bound for allocating the reserved region.
-    let reserved_base = available_memory.allocate_from(reserved_size, kernel_boot_region.end);
-    assert!(kernel_boot_region.base < reserved_base);
-    // The kernel relies on the initial task being allocated above the reserved
-    // region, so we have the address of the end of the reserved region as the
-    // lower bound for allocating the initial task.
-    let initial_task_phys_base =
-        available_memory.allocate_from(initial_task_size, reserved_base + reserved_size);
-    assert!(reserved_base < initial_task_phys_base);
+    let (reserved_base, initial_task_phys_base) = match config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => {
+            // The kernel relies on the reserved region being allocated above the kernel
+            // boot/ELF region, so we have the end of the kernel boot region as the lower
+            // bound for allocating the reserved region.
+            let reserved_base = available_memory.allocate_from(reserved_size, kernel_boot_region.end);
+            assert!(kernel_boot_region.base < reserved_base);
+            // The kernel relies on the initial task being allocated above the reserved
+            // region, so we have the address of the end of the reserved region as the
+            // lower bound for allocating the initial task.
+            let initial_task_phys_base =
+                available_memory.allocate_from(initial_task_size, reserved_base + reserved_size);
+            assert!(reserved_base < initial_task_phys_base);
+            (reserved_base, initial_task_phys_base)
+        }
+        Arch::X86_64 => {
+            // On x86 the kernel loads the inittask at the end of the boot/ELF
+            // region, so we have the end of the kernel boot region as the lower
+            // bound for allocating the initial task.
+            let initial_task_phys_base =
+                available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
+            assert!(kernel_boot_region.base < initial_task_phys_base);
+            // On x86 the kernel relies on the reserved region being allocated above
+            // the inittask region, so we have the address of the end of the inittask
+            // region as the lower bound for allocating the reserved region.
+            let reserved_base =
+                available_memory.allocate_from(reserved_size, initial_task_phys_base + initial_task_size);
+            assert!(initial_task_phys_base < reserved_base);
+            (reserved_base, initial_task_phys_base)
+        }
+    };
 
     let initial_task_phys_region = MemoryRegion::new(
         initial_task_phys_base,
@@ -957,6 +1118,7 @@ fn build_system(
         initial_task_phys_region,
         initial_task_virt_region,
         reserved_region,
+        x86_machine,
     );
 
     for ut in &kernel_boot_info.untyped_objects {
@@ -1225,6 +1387,7 @@ fn build_system(
     let bootstrap_pt_attr = match config.arch {
         Arch::Aarch64 => ArmVmAttributes::default(),
         Arch::Riscv64 => RiscvVmAttributes::default(),
+        Arch::X86_64  => X86VmAttributes::default(),
     };
     let mut pt_map_invocation = Invocation::new(
         config,
@@ -1251,6 +1414,7 @@ fn build_system(
     let bootstrap_page_attr = match config.arch {
         Arch::Aarch64 => ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
         Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
+        Arch::X86_64  => X86VmAttributes::default(),
     };
     let mut map_invocation = Invocation::new(
         config,
@@ -1661,6 +1825,9 @@ fn build_system(
                     }
                 }
                 Arch::Riscv64 => {}
+                Arch::X86_64 => {
+                    upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
+                }
             }
 
             directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
@@ -1769,33 +1936,70 @@ fn build_system(
     let pd_vspace_objs = &vspace_objs[..system.protection_domains.len()];
     let vm_vspace_objs = &vspace_objs[system.protection_domains.len()..];
 
-    let pd_ud_names: Vec<String> = all_pd_uds
-        .iter()
-        .map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
-        .collect();
-    let vm_ud_names: Vec<String> = all_vm_uds
-        .iter()
-        .map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
-        .collect();
+    // Page upper directories
+    let (pd_ud_objs, vm_ud_objs) = match config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => {
+            let pd_ud_names: Vec<String> = all_pd_uds
+                .iter()
+                .map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
+                .collect();
+            let vm_ud_names: Vec<String> = all_vm_uds
+                .iter()
+                .map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
+                .collect();
+            let pd_ud_objs = init_system.allocate_objects(ObjectType::PageTable, pd_ud_names, None);
+            let vm_ud_objs = init_system.allocate_objects(ObjectType::PageTable, vm_ud_names, None);
+            if !config.hypervisor {
+                assert!(vm_ud_objs.is_empty());
+            }
+            (pd_ud_objs, vm_ud_objs)
+        }
+        Arch::X86_64 => {
+            let pd_ud_names: Vec<String> = all_pd_uds
+                .iter()
+                .map(|(pd_idx, vaddr)| format!("PdPt: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
+                .collect();
+            let vm_ud_names: Vec<String> = all_vm_uds
+                .iter()
+                .map(|(vm_idx, vaddr)| format!("PdPt: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
+                .collect();
+            let pd_ud_objs = init_system.allocate_objects(ObjectType::PdPt, pd_ud_names, None);
+            let vm_ud_objs = init_system.allocate_objects(ObjectType::PdPt, vm_ud_names, None);
+            (pd_ud_objs, vm_ud_objs)
+        }
+    };
 
-    let pd_ud_objs = init_system.allocate_objects(ObjectType::PageTable, pd_ud_names, None);
-    let vm_ud_objs = init_system.allocate_objects(ObjectType::PageTable, vm_ud_names, None);
+    // Page directories
+    let (pd_d_objs, vm_d_objs) = match config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => {
+            let pd_d_names: Vec<String> = all_pd_ds
+                .iter()
+                .map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
+                .collect();
+            let vm_d_names: Vec<String> = all_vm_ds
+                .iter()
+                .map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
+                .collect();
+            let pd_d_objs = init_system.allocate_objects(ObjectType::PageTable, pd_d_names, None);
+            let vm_d_objs = init_system.allocate_objects(ObjectType::PageTable, vm_d_names, None);
+            (pd_d_objs, vm_d_objs)
+        }
+        Arch::X86_64 => {
+            let pd_d_names: Vec<String> = all_pd_ds
+                .iter()
+                .map(|(pd_idx, vaddr)| format!("PageDirectory: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
+                .collect();
+            let vm_d_names: Vec<String> = all_vm_ds
+                .iter()
+                .map(|(vm_idx, vaddr)| format!("PageDirectory: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
+                .collect();
+            let pd_d_objs = init_system.allocate_objects(ObjectType::PageDirectory, pd_d_names, None);
+            let vm_d_objs = init_system.allocate_objects(ObjectType::PageDirectory, vm_d_names, None);
+            (pd_d_objs, vm_d_objs)
+        }
+    };
 
-    if !config.hypervisor {
-        assert!(vm_ud_objs.is_empty());
-    }
-
-    let pd_d_names: Vec<String> = all_pd_ds
-        .iter()
-        .map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
-        .collect();
-    let vm_d_names: Vec<String> = all_vm_ds
-        .iter()
-        .map(|(vm_idx, vaddr)| format!("PageTable: VM={} VADDR=0x{:x}", vm_names[*vm_idx], vaddr))
-        .collect();
-    let pd_d_objs = init_system.allocate_objects(ObjectType::PageTable, pd_d_names, None);
-    let vm_d_objs = init_system.allocate_objects(ObjectType::PageTable, vm_d_names, None);
-
+    // Page tables
     let pd_pt_names: Vec<String> = all_pd_pts
         .iter()
         .map(|(pd_idx, vaddr)| format!("PageTable: PD={} VADDR=0x{:x}", pd_names[*pd_idx], vaddr))
@@ -1839,20 +2043,52 @@ fn build_system(
         irq_cap_addresses.insert(pd, vec![]);
         for sysirq in &pd.irqs {
             let cap_address = system_cap_address_mask | cap_slot;
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::IrqControlGetTrigger {
-                    irq_control: IRQ_CONTROL_CAP_ADDRESS,
-                    irq: sysirq.irq,
-                    trigger: sysirq.trigger,
-                    dest_root: root_cnode_cap,
-                    dest_index: cap_address,
-                    dest_depth: config.cap_address_bits,
-                },
-            ));
+            let (invocation, description) = match sysirq.kind {
+                SysIrqKind::Simple { irq, trigger } => (
+                    InvocationArgs::IrqControlGetTrigger {
+                        irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                        irq: irq,
+                        trigger: trigger,
+                        dest_root: root_cnode_cap,
+                        dest_index: cap_address,
+                        dest_depth: config.cap_address_bits,
+                    },
+                    format!("IRQ Handler: irq={}", irq),
+                ),
+                SysIrqKind::IOAPIC { ioapic, pin, level, polarity, vector } => (
+                    InvocationArgs::IrqControlGetIOAPIC {
+                        irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                        dest_root: root_cnode_cap,
+                        dest_index: cap_address,
+                        dest_depth: config.cap_address_bits,
+                        ioapic: ioapic,
+                        pin: pin,
+                        level: level,
+                        polarity: polarity,
+                        vector: vector,
+                    },
+                    format!("IRQ Handler: ioapic={} pin={}", ioapic, pin),
+                ),
+                SysIrqKind::MSI { pci_bus, pci_dev, pci_func, handle, vector } => (
+                    InvocationArgs::IrqControlGetMSI {
+                        irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                        dest_root: root_cnode_cap,
+                        dest_index: cap_address,
+                        dest_depth: config.cap_address_bits,
+                        pci_bus: pci_bus,
+                        pci_dev: pci_dev,
+                        pci_func: pci_func,
+                        handle: handle,
+                        vector: vector,
+                    },
+                    format!("IRQ Handler: pcidev={:02x}:{:02x}:{:02x}", pci_bus, pci_dev, pci_func),
+                ),
+            };
+
+            system_invocations.push(Invocation::new(config, invocation));
 
             cap_slot += 1;
-            cap_address_names.insert(cap_address, format!("IRQ Handler: irq={}", sysirq.irq));
+            cap_address_names.insert(cap_address, description);
             irq_cap_addresses.get_mut(pd).unwrap().push(cap_address);
         }
     }
@@ -1888,6 +2124,7 @@ fn build_system(
                 let mut attrs = match config.arch {
                     Arch::Aarch64 => ArmVmAttributes::ParityEnabled as u64,
                     Arch::Riscv64 => 0,
+                    Arch::X86_64  => 0,
                 };
                 if mp.perms & SysMapPerms::Read as u8 != 0 {
                     rights |= Rights::Read as u64;
@@ -1899,12 +2136,20 @@ fn build_system(
                     match config.arch {
                         Arch::Aarch64 => attrs |= ArmVmAttributes::ExecuteNever as u64,
                         Arch::Riscv64 => attrs |= RiscvVmAttributes::ExecuteNever as u64,
+                        Arch::X86_64 => {},
                     }
                 }
                 if mp.cached {
                     match config.arch {
                         Arch::Aarch64 => attrs |= ArmVmAttributes::Cacheable as u64,
                         Arch::Riscv64 => {}
+                        Arch::X86_64 => {}
+                    }
+                } else {
+                    match config.arch {
+                        Arch::Aarch64 => {}
+                        Arch::Riscv64 => {}
+                        Arch::X86_64 => attrs |= X86VmAttributes::CacheDisable as u64,
                     }
                 }
 
@@ -1974,6 +2219,7 @@ fn build_system(
             let mut attrs = match config.arch {
                 Arch::Aarch64 => ArmVmAttributes::ParityEnabled as u64,
                 Arch::Riscv64 => 0,
+                Arch::X86_64 => 0,
             };
             if mp.perms & SysMapPerms::Read as u8 != 0 {
                 rights |= Rights::Read as u64;
@@ -1985,12 +2231,20 @@ fn build_system(
                 match config.arch {
                     Arch::Aarch64 => attrs |= ArmVmAttributes::ExecuteNever as u64,
                     Arch::Riscv64 => attrs |= RiscvVmAttributes::ExecuteNever as u64,
+                    Arch::X86_64 => {},
                 }
             }
             if mp.cached {
                 match config.arch {
                     Arch::Aarch64 => attrs |= ArmVmAttributes::Cacheable as u64,
-                    Arch::Riscv64 => {}
+                    Arch::Riscv64 => {},
+                    Arch::X86_64 => {},
+                }
+            } else {
+               match config.arch {
+                    Arch::Aarch64 => {},
+                    Arch::Riscv64 => {},
+                    Arch::X86_64 => attrs |= X86VmAttributes::CacheDisable as u64,
                 }
             }
 
@@ -2459,21 +2713,48 @@ fn build_system(
 
     // Initialise the VSpaces -- assign them all the the initial asid pool.
     let pd_vspace_invocations = [
-        (all_pd_uds, pd_ud_objs),
-        (all_pd_ds, pd_d_objs),
-        (all_pd_pts, pd_pt_objs),
+        (3, all_pd_uds, pd_ud_objs),
+        (2, all_pd_ds, pd_d_objs),
+        (1, all_pd_pts, pd_pt_objs),
     ];
-    for (descriptors, objects) in pd_vspace_invocations {
+    for (level, descriptors, objects) in pd_vspace_invocations {
         for ((pd_idx, vaddr), obj) in zip(descriptors, objects) {
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::PageTableMap {
-                    page_table: obj.cap_addr,
-                    vspace: pd_vspace_objs[pd_idx].cap_addr,
-                    vaddr,
-                    attr: default_vm_attr(config),
-                },
-            ));
+            match level {
+                1 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageTableMap {
+                            page_table: obj.cap_addr,
+                            vspace: pd_vspace_objs[pd_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                2 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageDirectoryMap {
+                            page_directory: obj.cap_addr,
+                            vspace: pd_vspace_objs[pd_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                3 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageUpperDirectoryMap {
+                            page_upper_directory: obj.cap_addr,
+                            vspace: pd_vspace_objs[pd_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                _ => panic!(),
+            }
         }
     }
 
@@ -2484,21 +2765,48 @@ fn build_system(
     }
 
     let vm_vspace_invocations = [
-        (all_vm_uds, vm_ud_objs),
-        (all_vm_ds, vm_d_objs),
-        (all_vm_pts, vm_pt_objs),
+        (3, all_vm_uds, vm_ud_objs),
+        (2, all_vm_ds, vm_d_objs),
+        (1, all_vm_pts, vm_pt_objs),
     ];
-    for (descriptors, objects) in vm_vspace_invocations {
+    for (level, descriptors, objects) in vm_vspace_invocations {
         for ((vm_idx, vaddr), obj) in zip(descriptors, objects) {
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::PageTableMap {
-                    page_table: obj.cap_addr,
-                    vspace: vm_vspace_objs[vm_idx].cap_addr,
-                    vaddr,
-                    attr: default_vm_attr(config),
-                },
-            ));
+            match level {
+                1 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageTableMap {
+                            page_table: obj.cap_addr,
+                            vspace: vm_vspace_objs[vm_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                2 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageDirectoryMap {
+                            page_directory: obj.cap_addr,
+                            vspace: vm_vspace_objs[vm_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                3 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::PageUpperDirectoryMap {
+                            page_upper_directory: obj.cap_addr,
+                            vspace: vm_vspace_objs[vm_idx].cap_addr,
+                            vaddr,
+                            attr: default_vm_attr(config),
+                        },
+                    ));
+                }
+                _ => panic!(),
+            }
         }
     }
 
@@ -2554,6 +2862,7 @@ fn build_system(
     let ipc_buffer_attr = match config.arch {
         Arch::Aarch64 => ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
         Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
+        Arch::X86_64 => X86VmAttributes::default(),
     };
     for pd_idx in 0..system.protection_domains.len() {
         let (vaddr, _) = pd_elf_files[pd_idx]
@@ -2746,6 +3055,12 @@ fn build_system(
             Arch::Riscv64 => Riscv64Regs {
                 pc: pd_elf_files[pd_idx].entry,
                 sp: config.pd_stack_top(),
+                ..Default::default()
+            }
+            .field_names(),
+            Arch::X86_64 => X86_64Regs {
+                rip: pd_elf_files[pd_idx].entry,
+                rsp: config.pd_stack_top(),
                 ..Default::default()
             }
             .field_names(),
@@ -2996,6 +3311,7 @@ struct Args<'a> {
     report: &'a str,
     output: &'a str,
     search_paths: Vec<&'a String>,
+    x86_machine: Option<&'a str>,
 }
 
 impl<'a> Args<'a> {
@@ -3008,6 +3324,7 @@ impl<'a> Args<'a> {
         let mut system = None;
         let mut board = None;
         let mut config = None;
+        let mut x86_machine = None;
 
         if args.len() <= 1 {
             print_usage(available_boards);
@@ -3066,6 +3383,15 @@ impl<'a> Args<'a> {
                 "--search-path" => {
                     in_search_path = true;
                 }
+                "--x86-machine" => {
+                    if i < args.len() - 1 {
+                        x86_machine = Some(args[i + 1].as_str());
+                        i += 1;
+                    } else {
+                        eprintln!("microkit: error: argument --x86-machine: expected one argument");
+                        std::process::exit(1);
+                    }
+                }
                 _ => {
                     if in_search_path {
                         search_paths.push(&args[i]);
@@ -3118,6 +3444,7 @@ impl<'a> Args<'a> {
             report,
             output,
             search_paths,
+            x86_machine: x86_machine,
         }
     }
 }
@@ -3283,13 +3610,14 @@ fn main() -> Result<(), String> {
     let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
         "aarch64" => Arch::Aarch64,
         "riscv64" => Arch::Riscv64,
+        "x86_64"  => Arch::X86_64,
         _ => panic!("Unsupported kernel config architecture"),
     };
 
     let hypervisor = match arch {
         Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
-        // Hypervisor mode is not available on RISC-V
-        Arch::Riscv64 => false,
+        // Hypervisor mode is not available on RISC-V or X86
+        Arch::Riscv64 | Arch::X86_64 => false,
     };
 
     let arm_pa_size_bits = match arch {
@@ -3302,7 +3630,7 @@ fn main() -> Result<(), String> {
                 panic!("Expected ARM platform to have 40 or 44 physical address bits")
             }
         }
-        Arch::Riscv64 => None,
+        Arch::Riscv64 | Arch::X86_64 => None,
     };
 
     let arm_smc = match arch {
@@ -3313,6 +3641,22 @@ fn main() -> Result<(), String> {
     let kernel_frame_size = match arch {
         Arch::Aarch64 => 1 << 12,
         Arch::Riscv64 => 1 << 21,
+        Arch::X86_64  => 1 << 12,
+    };
+
+    let x86_machine: Option<serde_json::Value> = match arch {
+        Arch::X86_64 => {
+            match args.x86_machine {
+                Some(path) => Some(serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()),
+                None => panic!("Tool argument --x86-machine is mandatory on x86"),
+            }
+        },
+        _ => {
+            match args.x86_machine {
+                Some(_) => panic!("Tool argument --x86-machine is only valid for x86"),
+                None => None,
+            }
+        }
     };
 
     let kernel_config = Config {
@@ -3331,6 +3675,7 @@ fn main() -> Result<(), String> {
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
         invocations_labels,
+        x86_xsave_size: json_str_as_u64(&kernel_config_json, "XSAVE_SIZE").ok(),
     };
 
     if let Arch::Aarch64 = kernel_config.arch {
@@ -3411,6 +3756,7 @@ fn main() -> Result<(), String> {
             &system,
             invocation_table_size,
             system_cnode_size,
+            &x86_machine,
         )?;
         println!("BUILT: system_cnode_size={} built_system.number_of_system_caps={} invocation_table_size={} built_system.invocation_data_size={}",
                  system_cnode_size, built_system.number_of_system_caps, invocation_table_size, built_system.invocation_data_size);
@@ -3617,16 +3963,29 @@ fn main() -> Result<(), String> {
         }
     }
 
-    let loader = Loader::new(
-        &kernel_config,
-        Path::new(&loader_elf_path),
-        &kernel_elf,
-        &monitor_elf,
-        Some(built_system.initial_task_phys_region.base),
-        built_system.reserved_region,
-        loader_regions,
-    );
-    loader.write_image(Path::new(args.output));
+    if let Arch::X86_64 = kernel_config.arch {
+        let loader = X86Loader::new(
+            &kernel_config,
+            Path::new(&loader_elf_path),
+            &kernel_elf,
+            &monitor_elf,
+            Some(built_system.initial_task_phys_region.base),
+            built_system.reserved_region,
+            loader_regions,
+        );
+        loader.write_image(Path::new(args.output)).unwrap();
+    } else {
+        let loader = Loader::new(
+            &kernel_config,
+            Path::new(&loader_elf_path),
+            &kernel_elf,
+            &monitor_elf,
+            Some(built_system.initial_task_phys_region.base),
+            built_system.reserved_region,
+            loader_regions,
+        );
+        loader.write_image(Path::new(args.output));
+    }
 
     Ok(())
 }
