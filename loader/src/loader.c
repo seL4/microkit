@@ -639,10 +639,6 @@ static void configure_gicv2(void)
 
 static inline void enable_mmu(void)
 {
-    // The RISC-V privileged spec (20211203), section 4.1.11 says that the
-    // SFENCE.VMA instruction may need to be executed before or after writing
-    // to satp. I don't understand why we do it before compared to after.
-    // Need to understand 4.2.1 of the spec.
     asm volatile("sfence.vma" ::: "memory");
     asm volatile(
         "csrw satp, %0\n"
