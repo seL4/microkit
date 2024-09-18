@@ -18,6 +18,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     fan_out_limit: 256,
     hypervisor: true,
     benchmark: false,
+    cores: 1,
     fpu: true,
     arm_pa_size_bits: Some(40),
     arm_smc: None,

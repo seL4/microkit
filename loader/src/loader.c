@@ -86,7 +86,7 @@ void switch_to_el2(void);
 void el1_mmu_enable(void);
 void el2_mmu_enable(void);
 
-char _stack[STACK_SIZE] ALIGN(16);
+volatile char _stack[NUM_CPUS][STACK_SIZE] ALIGN(16);
 
 #ifdef ARCH_aarch64
 /* Paging structures for kernel mapping */
@@ -131,7 +131,7 @@ static void putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mp_evk)
+#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mp_evk) || defined(BOARD_imx8mm_evk_4_cores)
 #define UART_BASE 0x30890000
 #define STAT 0x98
 #define TRANSMIT 0x40
@@ -165,7 +165,7 @@ static void putc(uint8_t ch)
     while (!(*UART_REG(UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY));
     *UART_REG(UART_TX_RX_FIFO) = ch;
 }
-#elif defined(BOARD_maaxboard) || defined(BOARD_imx8mq_evk)
+#elif defined(BOARD_maaxboard) || defined(BOARD_imx8mq_evk) || defined(BOARD_maaxboard_4_cores)
 #define UART_BASE 0x30860000
 #define STAT 0x98
 #define TRANSMIT 0x40
@@ -194,7 +194,7 @@ static void putc(uint8_t ch)
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
 }
-#elif defined(BOARD_odroidc4)
+#elif defined(BOARD_odroidc4) || defined(BOARD_odroidc4_4_cores)
 #define UART_BASE 0xff803000
 #define UART_WFIFO 0x0
 #define UART_STATUS 0xC
@@ -650,6 +650,98 @@ static inline void enable_mmu(void)
 }
 #endif
 
+void disable_caches_el2(void);
+
+#if NUM_CPUS > 1
+
+#define PSCI_SM64_CPU_ON 0xc4000003
+
+void start_secondary_cpu(void);
+volatile uint64_t curr_cpu_id;
+volatile uintptr_t secondary_cpu_stack;
+static volatile int core_up[NUM_CPUS];
+
+volatile uint64_t cpu_magic;
+
+static inline void dsb(void)
+{
+    asm volatile("dsb sy" ::: "memory");
+}
+
+// @ivanv: Shouldn't need psci_func, we should be just making a direct assembly call to turn the
+// CPU on, just providing CPU ID.
+int psci_func(unsigned long smc_function_id, unsigned long param1, unsigned long param2, unsigned long param3);
+
+int psci_cpu_on(uint64_t cpu_id) {
+    puts("IN psci_cpu_on\n");
+    // __atomic_store_n(&curr_cpu_id, cpu_id, __ATOMIC_SEQ_CST);
+    asm volatile("dsb sy" ::: "memory");
+    curr_cpu_id = cpu_id;
+    asm volatile("dsb sy" ::: "memory");
+    puts("stored curr cpu id\n");
+    uintptr_t cpu_stack = (uintptr_t)(&_stack[curr_cpu_id][0xff0]);
+    // puthex64(cpu_stack);
+    // puts("\n");
+    __atomic_store_n(&secondary_cpu_stack, cpu_stack, __ATOMIC_SEQ_CST);
+    // puts("got secondary cpu stack\n");
+    // asm volatile("dsb sy" ::: "memory");
+    // asm volatile("dmb sy" ::: "memory");
+    // puthex64(__atomic_load_n(&curr_cpu_id, __ATOMIC_SEQ_CST));
+    // asm volatile("dsb sy" ::: "memory");
+    // asm volatile("isb" ::: "memory");
+    // puts("\n");
+    return psci_func(PSCI_SM64_CPU_ON, curr_cpu_id, (unsigned long)&start_secondary_cpu, 0);
+}
+
+#define MSR(reg, v)                                \
+    do {                                           \
+        uint64_t _v = v;                             \
+        asm volatile("msr " reg ",%0" :: "r" (_v));\
+    } while(0)
+
+void secondary_cpu_entry() {
+    asm volatile("dsb sy" ::: "memory");
+    uint64_t cpu = curr_cpu_id;
+
+    int r;
+    r = ensure_correct_el();
+    if (r != 0) {
+        goto fail;
+    }
+
+    /* Get this CPU's ID and save it to TPIDR_EL1 for seL4. */
+    /* Whether or not seL4 is booting in EL2 does not matter, as it always looks at tpidr_el1 */
+    MSR("tpidr_el1", cpu);
+
+    puts("LDR|INFO: enabling MMU (CPU ");
+    puthex32(cpu);
+    puts(")\n");
+    el2_mmu_enable();
+
+    puts("LDR|INFO: jumping to kernel (CPU ");
+    puthex32(cpu);
+    puts(")\n");
+
+    dsb();
+    __atomic_store_n(&core_up[cpu], 1, __ATOMIC_RELEASE);
+    dsb();
+
+    start_kernel();
+
+    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED (CPU ");
+    puthex32(cpu);
+    puts(")\n");
+
+fail:
+    /* Note: can't usefully return to U-Boot once we are here. */
+    /* IMPROVEMENT: use SMC SVC call to try and power-off / reboot system.
+     * or at least go to a WFI loop
+     */
+    for (;;) {
+    }
+}
+#endif
+
 int main(void)
 {
 #if defined(BOARD_zcu102)
@@ -681,6 +773,61 @@ int main(void)
     if (r != 0) {
         goto fail;
     }
+
+    disable_caches_el2();
+
+    puts("stack addr: ");
+    puthex64((uintptr_t)(&_stack));
+    puts("\n");
+
+#if NUM_CPUS > 1
+    /* Get the CPU ID of the CPU we are booting on. */
+    uint64_t boot_cpu_id;
+    asm volatile("mrs %x0, mpidr_el1" : "=r"(boot_cpu_id) :: "cc");
+    boot_cpu_id = boot_cpu_id & 0x00ffffff;
+    /* We assume that the ID of each CPU will be from 0 to n-1 where n is the
+     * number of CPUs we want to start.
+     */
+    if (boot_cpu_id >= NUM_CPUS) {
+        puts("LDR|ERROR: Boot CPU ID (");
+        puthex32(boot_cpu_id);
+        puts(") exceeds the maximum CPU ID expected (");
+        puthex32(NUM_CPUS - 1);
+        puts(")\n");
+        goto fail;
+    }
+    puts("LDR|INFO: Boot CPU ID (");
+    puthex32(boot_cpu_id);
+    puts(")\n");
+    /* Start each CPU, other than the one we are booting on. */
+    for (int i = 0; i < NUM_CPUS; i++) {
+        if (i == boot_cpu_id) continue;
+
+        asm volatile("dmb sy" ::: "memory");
+
+        puts("LDR|INFO: Starting secondary CPU (");
+        puthex32(i);
+        puts(")\n");
+
+        r = psci_cpu_on(i);
+        /* PSCI success is 0. */
+        // TODO: decode PSCI error and print out something meaningful.
+        if (r != 0) {
+            puts("LDR|ERROR: Failed to start CPU ");
+            puthex32(i);
+            puts(", PSCI error code is ");
+            puthex64(r);
+            puts("\n");
+            goto fail;
+        }
+
+        dsb();
+        while (!__atomic_load_n(&core_up[i], __ATOMIC_ACQUIRE)) {
+            // puts("waiting for core up\n");
+            // dsb();
+        }
+    }
+#endif
 
     puts("LDR|INFO: enabling MMU\n");
     el = current_el();

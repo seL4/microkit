@@ -61,6 +61,7 @@ pub struct Config {
     pub hypervisor: bool,
     pub benchmark: bool,
     pub fpu: bool,
+    pub cores: u64,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,
     /// ARM-specific, where or not SMC forwarding is allowed
@@ -452,6 +453,7 @@ enum InvocationLabel {
     ARMVCPUAckVppi,
     // ARM IRQ
     ARMIRQIssueIRQHandlerTrigger,
+    ARMIRQIssueIRQHandlerTriggerCore,
     // RISC-V Page Table
     RISCVPageTableMap,
     RISCVPageTableUnmap,
@@ -966,6 +968,27 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
                 (irq_control, &cap_lookup[&irq_control])
             }
+            InvocationArgs::IrqControlGetTriggerCore {
+                irq_control,
+                irq,
+                trigger,
+                dest_root,
+                dest_index,
+                dest_depth,
+                target,
+            } => {
+                arg_strs.push(Invocation::fmt_field("irq", irq));
+                arg_strs.push(Invocation::fmt_field("trigger", trigger as u64));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "dest_root",
+                    dest_root,
+                    cap_lookup,
+                ));
+                arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
+                arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
+                arg_strs.push(Invocation::fmt_field("target", target));
+                (irq_control, &cap_lookup[&irq_control])
+            }
             InvocationArgs::IrqHandlerSetNotification {
                 irq_handler,
                 notification,
@@ -1090,6 +1113,7 @@ impl Invocation {
                 "ASID Pool"
             }
             InvocationLabel::ARMIRQIssueIRQHandlerTrigger
+            | InvocationLabel::ARMIRQIssueIRQHandlerTriggerCore
             | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger => "IRQ Control",
             InvocationLabel::IRQSetIRQHandler => "IRQ Handler",
             InvocationLabel::ARMPageTableMap | InvocationLabel::RISCVPageTableMap => "Page Table",
@@ -1115,6 +1139,7 @@ impl Invocation {
             InvocationLabel::TCBBindNotification => "BindNotification",
             InvocationLabel::ARMASIDPoolAssign | InvocationLabel::RISCVASIDPoolAssign => "Assign",
             InvocationLabel::ARMIRQIssueIRQHandlerTrigger
+            | InvocationLabel::ARMIRQIssueIRQHandlerTriggerCore
             | InvocationLabel::RISCVIRQIssueIRQHandlerTrigger => "Get",
             InvocationLabel::IRQSetIRQHandler => "SetNotification",
             InvocationLabel::ARMPageTableMap
@@ -1150,6 +1175,10 @@ impl InvocationArgs {
             InvocationArgs::IrqControlGetTrigger { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMIRQIssueIRQHandlerTrigger,
                 Arch::Riscv64 => InvocationLabel::RISCVIRQIssueIRQHandlerTrigger,
+            },
+            InvocationArgs::IrqControlGetTriggerCore { .. } => match config.arch {
+                Arch::Aarch64 => InvocationLabel::ARMIRQIssueIRQHandlerTriggerCore,
+                Arch::Riscv64 => todo!(),
             },
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IRQSetIRQHandler,
             InvocationArgs::PageTableMap { .. } => match config.arch {
@@ -1257,6 +1286,19 @@ impl InvocationArgs {
             } => (
                 irq_control,
                 vec![irq, trigger as u64, dest_index, dest_depth],
+                vec![dest_root],
+            ),
+            InvocationArgs::IrqControlGetTriggerCore {
+                irq_control,
+                irq,
+                trigger,
+                dest_root,
+                dest_index,
+                dest_depth,
+                target,
+            } => (
+                irq_control,
+                vec![irq, trigger as u64, dest_index, dest_depth, target],
                 vec![dest_root],
             ),
             InvocationArgs::IrqHandlerSetNotification {
@@ -1380,6 +1422,15 @@ pub enum InvocationArgs {
         dest_root: u64,
         dest_index: u64,
         dest_depth: u64,
+    },
+    IrqControlGetTriggerCore {
+        irq_control: u64,
+        irq: u64,
+        trigger: IrqTrigger,
+        dest_root: u64,
+        dest_index: u64,
+        dest_depth: u64,
+        target: u64,
     },
     IrqHandlerSetNotification {
         irq_handler: u64,

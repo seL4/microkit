@@ -151,6 +151,14 @@ finished_\op:
     isb
 .endm
 
+.macro disable_id_cache sctlr tmp
+    mrs     \tmp, \sctlr
+    bic     \tmp, \tmp, #(1 << 2)
+    bic     \tmp, \tmp, #(1 << 12)
+    msr     \sctlr, \tmp
+    isb
+.endm
+
 /*
  * Enable the MMU.
  *
@@ -399,6 +407,30 @@ BEGIN_FUNC(el2_mmu_enable)
     ret
 
 END_FUNC(el2_mmu_enable)
+
+#if NUM_CPUS > 1
+BEGIN_FUNC(start_secondary_cpu)
+    ldr     x9, =secondary_cpu_stack
+    ldr     x9, [x9]
+    mov     sp, x9
+
+    b secondary_cpu_entry
+END_FUNC(start_secondary_cpu)
+
+BEGIN_FUNC(psci_func)
+    smc #0
+    ret
+END_FUNC(psci_func)
+#endif
+
+BEGIN_FUNC(disable_caches_el2)
+    stp     x29, x30, [sp, #-16]!
+    mov     x29, sp
+    bl      flush_dcache
+    disable_id_cache sctlr_el2, x9
+    ldp     x29, x30, [sp], #16
+    ret
+END_FUNC(disable_caches_el2)
 
 .extern exception_handler
 .extern exception_register_state

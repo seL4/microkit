@@ -15,6 +15,10 @@ ifeq ($(strip $(BOARD)),)
 $(error BOARD must be specified)
 endif
 
+ifeq ($(strip $(NUM_CPUS)),)
+$(error NUM_CPUS must be specified)
+endif
+
 ifeq ($(strip $(LINK_ADDRESS)),)
 $(error LINK_ADDRESS must be specified)
 endif
@@ -39,9 +43,9 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding $(CFLAGS_ARCH) -DBOARD_$(BOARD) -DPRINTING=$(PRINTING) -Wall -Werror -Wno-unused-function
+CFLAGS := -std=gnu11 -g -O0 -nostdlib -ffreestanding $(CFLAGS_ARCH) -DNUM_CPUS=$(NUM_CPUS) -DBOARD_$(BOARD) -DPRINTING=$(PRINTING) -Wall -Werror -Wno-unused-function
 
-ASM_FLAGS := $(ASM_FLAGS_ARCH) -g
+ASM_FLAGS := $(ASM_FLAGS_ARCH) -DNUM_CPUS=$(NUM_CPUS) -g
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o
