@@ -120,6 +120,24 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
+        },
+        examples={
+            "hello": Path("example/maaxboard/hello")
+        }
+    ),
+    BoardInfo(
+        name="maaxboard_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x50000000,
+        kernel_options={
+            "KernelPlatform": "maaxboard",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
         },
         examples={
             "hello": Path("example/maaxboard/hello")
@@ -129,13 +147,30 @@ SUPPORTED_BOARDS = (
         name="imx8mm_evk",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
-        loader_link_address=0x41000000,
+        loader_link_address=0x42000000,
         kernel_options={
             "KernelPlatform": "imx8mm-evk",
             "KernelIsMCS": True,
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+        },
+        examples={
+            "passive_server": Path("example/imx8mm_evk/passive_server")
+        }
+    ),
+    BoardInfo(
+        name="imx8mm_evk_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x42000000,
+        kernel_options={
+            "KernelPlatform": "imx8mm-evk",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
         },
         examples={
             "passive_server": Path("example/imx8mm_evk/passive_server")
@@ -200,6 +235,23 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+        },
+        examples={
+            "timer": Path("example/odroidc4/timer")
+        }
+    ),
+    BoardInfo(
+        name="odroidc4_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a55",
+        loader_link_address=0x20000000,
+        kernel_options={
+            "KernelPlatform": "odroidc4",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
         },
         examples={
             "timer": Path("example/odroidc4/timer")
@@ -631,7 +683,8 @@ def main() -> None:
             loader_printing = 1 if config.name == "debug" else 0
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
-                ("PRINTING", loader_printing)
+                ("PRINTING", loader_printing),
+                ("NUM_CPUS", sel4_gen_config["MAX_NUM_NODES"]),
             ]
             # There are some architecture dependent configuration options that the loader
             # needs to know about, so we figure that out here

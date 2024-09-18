@@ -830,7 +830,7 @@ fn emulate_kernel_boot(
     }
 
     let fixed_cap_count = 0x10;
-    let sched_control_cap_count = 1;
+    let sched_control_cap_count = config.cores;
     let paging_cap_count = get_arch_n_paging(config, initial_task_virt_region);
     let page_cap_count = initial_task_virt_region.size() / config.minimum_page_size;
     let first_untyped_cap =
@@ -1837,18 +1837,36 @@ fn build_system(
         irq_cap_addresses.insert(pd, vec![]);
         for sysirq in &pd.irqs {
             let cap_address = system_cap_address_mask | cap_slot;
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::IrqControlGetTrigger {
-                    irq_control: IRQ_CONTROL_CAP_ADDRESS,
-                    irq: sysirq.irq,
-                    trigger: sysirq.trigger,
-                    dest_root: root_cnode_cap,
-                    dest_index: cap_address,
-                    dest_depth: config.cap_address_bits,
+            // We can't use TriggerCore on non-SMP configurations, so we have to do this.
+            match config.cores {
+                1 => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::IrqControlGetTrigger {
+                            irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                            irq: sysirq.irq,
+                            trigger: sysirq.trigger,
+                            dest_root: root_cnode_cap,
+                            dest_index: cap_address,
+                            dest_depth: config.cap_address_bits,
+                        },
+                    ));
                 },
-            ));
-
+                _ => {
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::IrqControlGetTriggerCore {
+                            irq_control: IRQ_CONTROL_CAP_ADDRESS,
+                            irq: sysirq.irq,
+                            trigger: sysirq.trigger,
+                            dest_root: root_cnode_cap,
+                            dest_index: cap_address,
+                            dest_depth: config.cap_address_bits,
+                            target: sysirq.cpu,
+                        },
+                    ));
+                }
+            }
             cap_slot += 1;
             cap_address_names.insert(cap_address, format!("IRQ Handler: irq={}", sysirq.irq));
             irq_cap_addresses.get_mut(pd).unwrap().push(cap_address);
@@ -2610,7 +2628,7 @@ fn build_system(
         system_invocations.push(Invocation::new(
             config,
             InvocationArgs::SchedControlConfigureFlags {
-                sched_control: kernel_boot_info.sched_control_cap,
+                sched_control: kernel_boot_info.sched_control_cap + pd.cpu,
                 sched_context: pd_sched_context_objs[pd_idx].cap_addr,
                 budget: pd.budget,
                 period: pd.period,
@@ -2620,6 +2638,7 @@ fn build_system(
             },
         ));
     }
+    // TODO: add SMP support for vCPU
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
         for vcpu_idx in 0..vm.vcpus.len() {
             let idx = vm_idx + vcpu_idx;
@@ -3342,6 +3361,7 @@ fn main() -> Result<(), String> {
         hypervisor,
         benchmark: args.config == "benchmark",
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+        cores: json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?,
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
