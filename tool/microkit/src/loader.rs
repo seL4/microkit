@@ -108,6 +108,7 @@ struct LoaderRegion64 {
 
 #[repr(C)]
 struct LoaderHeader64 {
+    size: u64,
     magic: u64,
     flags: u64,
     kernel_entry: u64,
@@ -279,19 +280,6 @@ impl<'a> Loader<'a> {
             false => 0,
         };
 
-        let header = LoaderHeader64 {
-            magic,
-            flags,
-            kernel_entry,
-            ui_p_reg_start,
-            ui_p_reg_end,
-            pv_offset,
-            v_entry,
-            extra_device_addr_p,
-            extra_device_size,
-            num_regions: all_regions.len() as u64,
-        };
-
         let mut region_metadata = Vec::new();
         let mut offset: u64 = 0;
         for (addr, data) in &all_regions {
@@ -303,6 +291,25 @@ impl<'a> Loader<'a> {
             });
             offset += data.len() as u64;
         }
+
+        let size = std::mem::size_of::<LoaderHeader64>() as u64
+            + region_metadata.iter().fold(0_u64, |acc, x| {
+                acc + x.size + std::mem::size_of::<LoaderRegion64>() as u64
+            });
+
+        let header = LoaderHeader64 {
+            size,
+            magic,
+            flags,
+            kernel_entry,
+            ui_p_reg_start,
+            ui_p_reg_end,
+            pv_offset,
+            v_entry,
+            extra_device_addr_p,
+            extra_device_size,
+            num_regions: all_regions.len() as u64,
+        };
 
         Loader {
             image,
