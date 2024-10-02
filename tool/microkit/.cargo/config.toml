@@ -2,4 +2,4 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 [target.aarch64-unknown-linux-musl]
-linker = "aarch64-none-elf-ld"
+linker = "aarch64-linux-gnu-ld"
