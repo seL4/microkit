@@ -350,9 +350,6 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
     tool_output = f"./tool/microkit/target/{target_triple}/release/microkit"
 
-    r = system(f"strip {tool_output}")
-    assert r == 0
-
     copy(tool_output, tool_target)
 
     tool_target.chmod(0o755)
