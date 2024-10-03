@@ -45,8 +45,7 @@ jobs:
             texlive-fonts-recommended texlive-fonts-extra \
             libxml2-utils \
             python3.9 python3-pip python3.9-venv \
-            qemu-system-arm qemu-system-misc \
-            gcc-aarch64-linux-gnu
+            qemu-system-arm qemu-system-misc
           python3.9 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
