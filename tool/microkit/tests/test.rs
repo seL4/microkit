@@ -5,6 +5,7 @@
 //
 
 use microkit_tool::{sdf, sel4};
+use serde_json::json;
 
 const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -21,6 +22,8 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
+    // Not necessary for SDF parsing
+    invocations_labels: json!(null),
 };
 
 fn check_error(test_name: &str, expected_err: &str) {
