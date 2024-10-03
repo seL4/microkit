@@ -431,6 +431,12 @@ def build_sel4(
     # Make output read-only
     dest.chmod(0o744)
 
+    invocations_all = sel4_build_dir / "generated" / "invocations_all.json"
+    dest = (root_dir / "board" / board.name / config.name / "invocations_all.json")
+    dest.unlink(missing_ok=True)
+    copy(invocations_all, dest)
+    dest.chmod(0o744)
+
     include_dir = root_dir / "board" / board.name / config.name / "include"
     for source in ("kernel_Config", "libsel4", "libsel4/sel4_Config", "libsel4/autoconf"):
         source_dir = sel4_install_dir / source / "include"
