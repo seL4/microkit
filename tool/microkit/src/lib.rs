@@ -20,7 +20,7 @@ pub const MAX_PDS: usize = 63;
 // It should be noted that if you were to change the value of
 // the maximum PD name length, you would also have to change
 // the monitor and libmicrokit.
-pub const PD_MAX_NAME_LENGTH: usize = 16;
+pub const PD_MAX_NAME_LENGTH: usize = 64;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct UntypedObject {

@@ -3580,6 +3580,9 @@ fn main() -> Result<(), String> {
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         let end = start + name_length;
         pd_names_bytes[start..end].copy_from_slice(&name[..name_length]);
+        // These bytes will be interpreted as a C string, so we must include
+        // a null-terminator.
+        pd_names_bytes[start + PD_MAX_NAME_LENGTH - 1] = 0;
     }
     monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
 

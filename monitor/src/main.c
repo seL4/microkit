@@ -66,7 +66,7 @@
 #include "debug.h"
 
 #define MAX_PDS 64
-#define MAX_NAME_LEN 16
+#define MAX_NAME_LEN 64
 #define MAX_TCBS 64
 
 #define MAX_UNTYPED_REGIONS 256
