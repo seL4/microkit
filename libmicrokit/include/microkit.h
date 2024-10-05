@@ -28,6 +28,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_VCPU_CAP 330
 
 #define MICROKIT_MAX_CHANNELS 62
+#define MICROKIT_PD_NAME_LENGTH 64
 
 /* User provided functions */
 void init(void);
@@ -35,7 +36,7 @@ void notified(microkit_channel ch);
 microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo);
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo);
 
-extern char microkit_name[16];
+extern char microkit_name[MICROKIT_PD_NAME_LENGTH];
 /* These next three variables are so our PDs can combine a signal with the next Recv syscall */
 extern seL4_Bool microkit_have_signal;
 extern seL4_CPtr microkit_signal_cap;
