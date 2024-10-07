@@ -3245,6 +3245,12 @@ fn main() -> Result<(), String> {
         .join(args.config)
         .join("include/kernel/gen_config.json");
 
+    let invocations_all_path = sdk_dir
+        .join("board")
+        .join(args.board)
+        .join(args.config)
+        .join("invocations_all.json");
+
     if !elf_path.exists() {
         eprintln!(
             "Error: board ELF directory '{}' does not exist",
@@ -3280,6 +3286,13 @@ fn main() -> Result<(), String> {
         );
         std::process::exit(1);
     }
+    if !invocations_all_path.exists() {
+        eprintln!(
+            "Error: invocations JSON file '{}' does not exist",
+            invocations_all_path.display()
+        );
+        std::process::exit(1);
+    }
 
     let system_path = Path::new(args.system);
     if !system_path.exists() {
@@ -3294,6 +3307,9 @@ fn main() -> Result<(), String> {
 
     let kernel_config_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
+    let invocations_map: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
 
     let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
         "aarch64" => Arch::Aarch64,
@@ -3345,6 +3361,7 @@ fn main() -> Result<(), String> {
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
+        invocations_map,
     };
 
     if let Arch::Aarch64 = kernel_config.arch {
