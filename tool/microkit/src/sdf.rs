@@ -115,22 +115,30 @@ pub struct SysIrq {
     pub trigger: IrqTrigger,
 }
 
-// The use of SysSetVar depends on the context. In some
-// cases it will contain a symbol and a physical or a
-// symbol and vaddr. Never both.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum SysSetVarKind {
+    Vaddr { address: u64 },
+    Paddr { region: String },
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SysSetVar {
     pub symbol: String,
-    pub region_paddr: Option<String>,
-    pub vaddr: Option<u64>,
+    pub kind: SysSetVarKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChannelEnd {
+    pub pd: usize,
+    pub id: u64,
+    pub can_notify_other: bool,
+    pub can_ppcall_other: bool,
 }
 
 #[derive(Debug)]
 pub struct Channel {
-    pub pd_a: usize,
-    pub id_a: u64,
-    pub pd_b: usize,
-    pub id_b: u64,
+    pub end_a: ChannelEnd,
+    pub end_b: ChannelEnd,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -141,7 +149,6 @@ pub struct ProtectionDomain {
     pub priority: u8,
     pub budget: u64,
     pub period: u64,
-    pub pp: bool,
     pub passive: bool,
     pub stack_size: u64,
     pub smc: bool,
@@ -268,8 +275,13 @@ impl SysMap {
 }
 
 impl ProtectionDomain {
-    pub fn needs_ep(&self) -> bool {
-        self.pp || self.has_children || self.virtual_machine.is_some()
+    pub fn needs_ep(&self, self_id: usize, channels: &[Channel]) -> bool {
+        self.has_children
+            || self.virtual_machine.is_some()
+            || channels.iter().any(|channel| {
+                (channel.end_a.can_ppcall_other && channel.end_b.pd == self_id)
+                    || (channel.end_b.can_ppcall_other && channel.end_a.pd == self_id)
+            })
     }
 
     fn from_xml(
@@ -281,7 +293,6 @@ impl ProtectionDomain {
         let mut attrs = vec![
             "name",
             "priority",
-            "pp",
             "budget",
             "period",
             "passive",
@@ -327,21 +338,6 @@ impl ProtectionDomain {
                 ),
             ));
         }
-
-        let pp = if let Some(xml_pp) = node.attribute("pp") {
-            match str_to_bool(xml_pp) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "pp must be 'true' or 'false'".to_string(),
-                    ))
-                }
-            }
-        } else {
-            false
-        };
 
         let passive = if let Some(xml_passive) = node.attribute("passive") {
             match str_to_bool(xml_passive) {
@@ -478,8 +474,7 @@ impl ProtectionDomain {
 
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
-                            region_paddr: None,
-                            vaddr: Some(map.vaddr),
+                            kind: SysSetVarKind::Vaddr { address: map.vaddr },
                         });
                     }
 
@@ -531,8 +526,7 @@ impl ProtectionDomain {
                 "setvar" => {
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
-                    let region_paddr =
-                        Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
+                    let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
                     // Check that the symbol does not already exist
                     for setvar in &setvars {
                         if symbol == setvar.symbol {
@@ -545,8 +539,7 @@ impl ProtectionDomain {
                     }
                     setvars.push(SysSetVar {
                         symbol,
-                        region_paddr,
-                        vaddr: None,
+                        kind: SysSetVarKind::Paddr { region },
                     })
                 }
                 "protection_domain" => {
@@ -591,7 +584,6 @@ impl ProtectionDomain {
             priority: priority as u8,
             budget,
             period,
-            pp,
             passive,
             stack_size,
             smc,
@@ -781,6 +773,69 @@ impl SysMemoryRegion {
     }
 }
 
+impl ChannelEnd {
+    fn from_xml<'a>(
+        xml_sdf: &'a XmlSystemDescription,
+        node: &'a roxmltree::Node,
+        pds: &[ProtectionDomain],
+    ) -> Result<ChannelEnd, String> {
+        let node_name = node.tag_name().name();
+        if node_name != "end" {
+            let pos = xml_sdf.doc.text_pos_at(node.range().start);
+            return Err(format!(
+                "Error: invalid XML element '{}': {}",
+                node_name,
+                loc_string(xml_sdf, pos)
+            ));
+        }
+
+        check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify"])?;
+        let end_pd = checked_lookup(xml_sdf, node, "pd")?;
+        let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<i64>().unwrap();
+
+        if end_id > PD_MAX_ID as i64 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("id must be < {}", PD_MAX_ID + 1),
+            ));
+        }
+
+        if end_id < 0 {
+            return Err(value_error(xml_sdf, node, "id must be >= 0".to_string()));
+        }
+
+        let can_notify_other = node
+            .attribute("notify")
+            .map(str_to_bool)
+            .unwrap_or(Some(true))
+            .ok_or_else(|| {
+                value_error(xml_sdf, node, "notify must be 'true'/'false'".to_string())
+            })?;
+
+        let can_ppcall_other = node
+            .attribute("pp")
+            .map(str_to_bool)
+            .unwrap_or(Some(false))
+            .ok_or_else(|| value_error(xml_sdf, node, "pp must be 'true'/'false'".to_string()))?;
+
+        if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
+            Ok(ChannelEnd {
+                pd: pd_idx,
+                id: end_id.try_into().unwrap(),
+                can_notify_other,
+                can_ppcall_other,
+            })
+        } else {
+            Err(value_error(
+                xml_sdf,
+                node,
+                format!("invalid PD name '{end_pd}'"),
+            ))
+        }
+    }
+}
+
 impl Channel {
     /// It should be noted that this function assumes that `pds` is populated
     /// with all the Protection Domains that could potentially be connected with
@@ -792,70 +847,30 @@ impl Channel {
     ) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 
-        let mut ends: Vec<(usize, u64)> = Vec::new();
-        for child in node.children() {
-            if !child.is_element() {
-                continue;
-            }
-
-            let child_name = child.tag_name().name();
-            match child_name {
-                "end" => {
-                    check_attributes(xml_sdf, &child, &["pd", "id"])?;
-                    let end_pd = checked_lookup(xml_sdf, &child, "pd")?;
-                    let end_id = checked_lookup(xml_sdf, &child, "id")?
-                        .parse::<i64>()
-                        .unwrap();
-
-                    if end_id > PD_MAX_ID as i64 {
-                        return Err(value_error(
-                            xml_sdf,
-                            &child,
-                            format!("id must be < {}", PD_MAX_ID + 1),
-                        ));
-                    }
-
-                    if end_id < 0 {
-                        return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
-                    }
-
-                    if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
-                        ends.push((pd_idx, end_id as u64))
-                    } else {
-                        return Err(value_error(
-                            xml_sdf,
-                            &child,
-                            format!("invalid PD name '{end_pd}'"),
-                        ));
-                    }
-                }
-                _ => {
-                    let pos = xml_sdf.doc.text_pos_at(node.range().start);
-                    return Err(format!(
-                        "Error: invalid XML element '{}': {}",
-                        child_name,
-                        loc_string(xml_sdf, pos)
-                    ));
-                }
-            }
-        }
-
-        if ends.len() != 2 {
+        let [ref end_a, ref end_b] = node
+            .children()
+            .filter(|child| child.is_element())
+            .map(|node| ChannelEnd::from_xml(xml_sdf, &node, pds))
+            .collect::<Result<Vec<_>, _>>()?[..]
+        else {
             return Err(value_error(
                 xml_sdf,
                 node,
                 "exactly two end elements must be specified".to_string(),
             ));
+        };
+
+        if end_a.can_ppcall_other && end_b.can_ppcall_other {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "cannot ppc bidirectionally".to_string(),
+            ));
         }
 
-        let (pd_a, id_a) = ends[0];
-        let (pd_b, id_b) = ends[1];
-
         Ok(Channel {
-            pd_a,
-            id_a,
-            pd_b,
-            id_b,
+            end_a: end_a.clone(),
+            end_b: end_b.clone(),
         })
     }
 }
@@ -1167,24 +1182,36 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     }
 
     for ch in &channels {
-        if ch_ids[ch.pd_a].contains(&ch.id_a) {
-            let pd = &pds[ch.pd_a];
+        if ch_ids[ch.end_a.pd].contains(&ch.end_a.id) {
+            let pd = &pds[ch.end_a.pd];
             return Err(format!(
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
-                ch.id_a, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+                ch.end_a.id, pd.name, filename, pd.text_pos.row, pd.text_pos.col
             ));
         }
 
-        if ch_ids[ch.pd_b].contains(&ch.id_b) {
-            let pd = &pds[ch.pd_b];
+        if ch_ids[ch.end_b.pd].contains(&ch.end_b.id) {
+            let pd = &pds[ch.end_b.pd];
             return Err(format!(
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
-                ch.id_b, pd.name, filename, pd.text_pos.row, pd.text_pos.col
+                ch.end_b.id, pd.name, filename, pd.text_pos.row, pd.text_pos.col
             ));
         }
 
-        ch_ids[ch.pd_a].push(ch.id_a);
-        ch_ids[ch.pd_b].push(ch.id_b);
+        let pd_a = &pds[ch.end_a.pd];
+        let pd_b = &pds[ch.end_b.pd];
+        if !(!ch.end_a.can_ppcall_other || (pd_a.priority < pd_b.priority)) {
+            // a can ppcall =>   priority(a) < priority(b)
+            return Err(format!("Error: PPCs must be to protection domains of strictly higher priorities; you did from pd {} (priority: {}) to pd {} (priority: {})",
+            pd_a.name, pd_a.priority, pd_b.name, pd_b.priority));
+        } else if !(!ch.end_b.can_ppcall_other || (pd_b.priority < pd_a.priority)) {
+            // b can ppcall =>   priority(b) < priority(a)
+            return Err(format!("Error: PPCs must be to protection domains of strictly higher priorities; you did from pd {} (priority: {}) to pd {} (priority: {})",
+            pd_b.name, pd_b.priority, pd_a.name, pd_a.priority));
+        }
+
+        ch_ids[ch.end_a.pd].push(ch.end_a.id);
+        ch_ids[ch.end_b.pd].push(ch.end_b.id);
     }
 
     // Ensure that all maps are correct

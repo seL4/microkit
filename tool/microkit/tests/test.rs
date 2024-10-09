@@ -320,6 +320,62 @@ mod channel {
             "Error: invalid PD name 'invalidpd' on element 'end': ",
         )
     }
+
+    #[test]
+    fn test_invalid_element() {
+        check_error(
+            "ch_invalid_element.xml",
+            "Error: invalid XML element 'ending': ",
+        )
+    }
+
+    #[test]
+    fn test_not_enough_ends() {
+        check_error(
+            "ch_not_enough_ends.xml",
+            "Error: exactly two end elements must be specified on element 'channel': ",
+        )
+    }
+
+    #[test]
+    fn test_too_many_ends() {
+        check_error(
+            "ch_too_many_ends.xml",
+            "Error: exactly two end elements must be specified on element 'channel': ",
+        )
+    }
+
+    #[test]
+    fn test_end_invalid_pp() {
+        check_error(
+            "ch_end_invalid_pp.xml",
+            "Error: pp must be 'true'/'false' on element 'end': ",
+        )
+    }
+
+    #[test]
+    fn test_end_invalid_notify() {
+        check_error(
+            "ch_end_invalid_notify.xml",
+            "Error: notify must be 'true'/'false' on element 'end': ",
+        )
+    }
+
+    #[test]
+    fn test_bidirectional_ppc() {
+        check_error(
+            "ch_bidirectional_ppc.xml",
+            "Error: cannot ppc bidirectionally on element 'channel': ",
+        )
+    }
+
+    #[test]
+    fn test_ppcall_priority() {
+        check_error(
+            "ch_ppcall_priority.xml",
+            "Error: PPCs must be to protection domains of strictly higher priorities; you did from pd test1 (priority: 2) to pd test2 (priority: 1)",
+        )
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2024, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="test1">
+        <program_image path="test" />
+    </protection_domain>
+    <protection_domain name="test2">
+        <program_image path="test" />
+    </protection_domain>
+
+    <channel>
+        <end pd="test1" id="5" notify="true" />
+        <end pd="test2" id="5" notify="true" />
+        <end pd="test2" id="5" notify="true" />
+    </channel>
+</system>
