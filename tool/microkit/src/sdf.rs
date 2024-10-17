@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Config, IrqTrigger, PageSize};
+use crate::sel4::{Config, IrqTrigger, PageSize, Arch};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
 use std::path::{Path, PathBuf};
@@ -164,6 +164,13 @@ pub struct Channel {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+pub struct IOPort {
+    pub id: u64,
+    pub addr: u64,
+    pub size: u64,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ProtectionDomain {
     /// Only populated for child protection domains
     pub id: Option<u64>,
@@ -179,6 +186,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub setvars: Vec<SysSetVar>,
     pub virtual_machine: Option<VirtualMachine>,
+    pub ioports: Vec<IOPort>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
     pub child_pds: Vec<ProtectionDomain>,
@@ -466,6 +474,7 @@ impl ProtectionDomain {
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
+        let mut ioports: Vec<IOPort> = Vec::new();
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
@@ -677,6 +686,24 @@ impl ProtectionDomain {
                         kind: SysSetVarKind::Paddr { region },
                     })
                 }
+                "ioport" => {
+                    if let Arch::X86_64 = config.arch {
+                        check_attributes(xml_sdf, &child, &["id", "addr", "size"])?;
+                        let addr = checked_lookup(xml_sdf, &child, "addr")?.trim_start_matches("0x");
+                        let addr = u64::from_str_radix(addr, 16).unwrap();
+                        ioports.push(IOPort {
+                            id: checked_lookup(xml_sdf, &child, "id")?.parse::<u64>().unwrap(),
+                            addr: addr,
+                            size: checked_lookup(xml_sdf, &child, "size")?.parse::<u64>().unwrap(),
+                        })
+                    } else {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "ioports are only available on x86 hardware".to_string(),
+                        ));
+                    }
+                }
                 "protection_domain" => {
                     child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
                 }
@@ -728,6 +755,7 @@ impl ProtectionDomain {
             setvars,
             child_pds,
             virtual_machine,
+            ioports,
             has_children,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
