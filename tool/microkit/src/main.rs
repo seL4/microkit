@@ -56,6 +56,7 @@ const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
 const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
 const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
 const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
+const BASE_IOPORT_CAP: u64 = BASE_VCPU_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -78,7 +79,7 @@ const N_VTD_CONTEXTS: u64 = 256;
 const VTD_PT_INDEX_BITS: u64 = 9;
 
 // const ASID_CONTROL_CAP_ADDRESS: u64 = 5; // Singleton
-// const IO_PORT_CONTROL_CAP_ADDRESS: u64 = 7; // Null on this platform
+const IO_PORT_CONTROL_CAP_ADDRESS: u64 = 7; // X86 only
 // const IO_SPACE_CAP_ADDRESS: u64 = 8;  // Null on this platform
 // const BOOT_INFO_FRAME_CAP_ADDRESS: u64 = 9;
 // const INIT_THREAD_IPC_BUFFER_CAP_ADDRESS: u64 = 10;
@@ -1035,6 +1036,7 @@ fn build_system(
     cap_address_names.insert(INIT_VSPACE_CAP_ADDRESS, "VSpace: init".to_string());
     cap_address_names.insert(INIT_ASID_POOL_CAP_ADDRESS, "ASID Pool: init".to_string());
     cap_address_names.insert(IRQ_CONTROL_CAP_ADDRESS, "IRQ Control".to_string());
+    cap_address_names.insert(IO_PORT_CONTROL_CAP_ADDRESS, "I/O Port Control".to_string());
     cap_address_names.insert(SMC_CAP_IDX, "SMC".to_string());
 
     let system_cnode_bits = system_cnode_size.ilog2() as u64;
@@ -2093,6 +2095,30 @@ fn build_system(
         }
     }
 
+    // Create all x86 I/O port objects.
+    let mut ioport_cap_addresses: HashMap<&ProtectionDomain, Vec<u64>> = HashMap::new();
+    for pd in &system.protection_domains {
+        ioport_cap_addresses.insert(pd, vec![]);
+        for ioport in &pd.ioports {
+            let cap_address = system_cap_address_mask | cap_slot;
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::IoPortControlIssue {
+                    ioport_control: IO_PORT_CONTROL_CAP_ADDRESS,
+                    first_port: ioport.addr,
+                    last_port: ioport.addr + ioport.size,
+                    dest_root: root_cnode_cap,
+                    dest_index: cap_address,
+                    dest_depth: config.cap_address_bits
+                },
+            ));
+
+            cap_slot += 1;
+            cap_address_names.insert(cap_address, format!("I/O Port: addr={:#x} size={}", ioport.addr, ioport.size));
+            ioport_cap_addresses.get_mut(pd).unwrap().push(cap_address);
+        }
+    }
+
     // This has to be done prior to minting!
     let num_asid_invocations = system.protection_domains.len() + virtual_machines.len();
     let mut asid_invocation = Invocation::new(
@@ -2509,6 +2535,27 @@ fn build_system(
                     dest_depth: PD_CAP_BITS,
                     src_root: root_cnode_cap,
                     src_obj: *irq_cap_address,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                    badge: 0,
+                },
+            ));
+        }
+    }
+
+    // Mint access to x86 I/O ports in the PD CSpace
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        for (ioport, ioport_cap_address) in zip(&pd.ioports, &ioport_cap_addresses[pd]) {
+            let cap_idx = BASE_IOPORT_CAP + ioport.id;
+            assert!(cap_idx < PD_CAP_SIZE);
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeMint {
+                    cnode: cnode_objs[pd_idx].cap_addr,
+                    dest_index: cap_idx,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: *ioport_cap_address,
                     src_depth: config.cap_address_bits,
                     rights: Rights::All as u64,
                     badge: 0,

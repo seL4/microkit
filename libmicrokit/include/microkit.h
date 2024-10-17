@@ -26,6 +26,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_TCB_CAP 202
 #define BASE_VM_TCB_CAP 266
 #define BASE_VCPU_CAP 330
+#define BASE_IOPORT_CAP 394
 
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_PD_NAME_LENGTH 64
@@ -238,3 +239,10 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
     microkit_signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
     microkit_signal_cap = (BASE_IRQ_CAP + ch);
 }
+
+#if defined(CONFIG_ARCH_X86_64)
+static inline seL4_Word microkit_ioport_cap(seL4_Word id)
+{
+    return (seL4_Word) BASE_IOPORT_CAP + id;
+}
+#endif

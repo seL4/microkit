@@ -1205,6 +1205,25 @@ impl Invocation {
                 ));
                 (irq_handler, &cap_lookup[&irq_handler])
             }
+            InvocationArgs::IoPortControlIssue {
+                ioport_control,
+                first_port,
+                last_port,
+                dest_root,
+                dest_index,
+                dest_depth,
+            } => {
+                arg_strs.push(Invocation::fmt_field("addr", first_port));
+                arg_strs.push(Invocation::fmt_field("size", last_port - first_port));
+                arg_strs.push(Invocation::fmt_field_cap(
+                    "dest_root",
+                    dest_root,
+                    cap_lookup,
+                ));
+                arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
+                arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
+                (ioport_control, cap_lookup.get(&ioport_control).unwrap())
+            }
             InvocationArgs::PageUpperDirectoryMap {
                 page_upper_directory,
                 vspace,
@@ -1344,6 +1363,7 @@ impl Invocation {
             | InvocationLabel::X86IRQIssueIRQHandlerIOAPIC
             | InvocationLabel::X86IRQIssueIRQHandlerMSI => "IRQ Control",
             InvocationLabel::IRQSetIRQHandler => "IRQ Handler",
+            InvocationLabel::X86IOPortControlIssue => "I/O Port",
             InvocationLabel::X86PDPTMap => "Page Upper Directory",
             InvocationLabel::X86PageDirectoryMap => "Page Directory",
             InvocationLabel::ARMPageTableMap
@@ -1380,6 +1400,7 @@ impl Invocation {
             | InvocationLabel::X86IRQIssueIRQHandlerIOAPIC
             | InvocationLabel::X86IRQIssueIRQHandlerMSI => "Get",
             InvocationLabel::IRQSetIRQHandler => "SetNotification",
+            InvocationLabel::X86IOPortControlIssue => "Issue",
             InvocationLabel::ARMPageTableMap
             | InvocationLabel::ARMPageMap
             | InvocationLabel::RISCVPageTableMap
@@ -1423,6 +1444,7 @@ impl InvocationArgs {
             InvocationArgs::IrqControlGetIOAPIC { .. } => InvocationLabel::X86IRQIssueIRQHandlerIOAPIC,
             InvocationArgs::IrqControlGetMSI { .. } => InvocationLabel::X86IRQIssueIRQHandlerMSI,
             InvocationArgs::IrqHandlerSetNotification { .. } => InvocationLabel::IRQSetIRQHandler,
+            InvocationArgs::IoPortControlIssue { .. } => InvocationLabel::X86IOPortControlIssue,
             InvocationArgs::PageUpperDirectoryMap { .. } => match config.arch {
                 Arch::Aarch64 => InvocationLabel::ARMPageTableMap,
                 Arch::Riscv64 => InvocationLabel::RISCVPageTableMap,
@@ -1576,6 +1598,18 @@ impl InvocationArgs {
                 irq_handler,
                 notification,
             } => (irq_handler, vec![], vec![notification]),
+            InvocationArgs::IoPortControlIssue {
+                ioport_control,
+                first_port,
+                last_port,
+                dest_root,
+                dest_index,
+                dest_depth,
+            } => (
+                ioport_control,
+                vec![first_port, last_port, dest_index, dest_depth],
+                vec![dest_root],
+            ),
             InvocationArgs::PageUpperDirectoryMap {
                 page_upper_directory,
                 vspace,
@@ -1731,6 +1765,14 @@ pub enum InvocationArgs {
     IrqHandlerSetNotification {
         irq_handler: u64,
         notification: u64,
+    },
+    IoPortControlIssue {
+        ioport_control: u64,
+        first_port: u64,
+        last_port: u64,
+        dest_root: u64,
+        dest_index: u64,
+        dest_depth: u64,
     },
     PageUpperDirectoryMap {
         page_upper_directory: u64,
