@@ -21,6 +21,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
+    domain_scheduler: false,
 };
 
 fn check_error(test_name: &str, expected_err: &str) {
