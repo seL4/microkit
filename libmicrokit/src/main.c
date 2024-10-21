@@ -37,11 +37,17 @@ extern const void (*const __init_array_end [])(void);
 
 __attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
 {
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(" is missing the 'protected' entry point\n");
+    microkit_internal_crash(0);
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }
 
 __attribute__((weak)) seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts(" is missing the 'fault' entry point\n");
+    microkit_internal_crash(0);
     return seL4_False;
 }
 
