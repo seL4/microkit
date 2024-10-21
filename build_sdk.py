@@ -235,6 +235,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
         },
         examples={
             "timer": Path("example/odroidc4/timer")
@@ -271,6 +272,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelMaxNumNodes": "4",
         },
         examples={
             "hello": Path("example/qemu_virt_aarch64/hello"),

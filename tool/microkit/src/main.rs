@@ -2638,14 +2638,13 @@ fn build_system(
             },
         ));
     }
-    // TODO: add SMP support for vCPU
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
-        for vcpu_idx in 0..vm.vcpus.len() {
+        for (vcpu_idx, vcpu) in vm.vcpus.iter().enumerate() {
             let idx = vm_idx + vcpu_idx;
             system_invocations.push(Invocation::new(
                 config,
                 InvocationArgs::SchedControlConfigureFlags {
-                    sched_control: kernel_boot_info.sched_control_cap,
+                    sched_control: kernel_boot_info.sched_control_cap + vcpu.cpu,
                     sched_context: vm_sched_context_objs[idx].cap_addr,
                     budget: vm.budget,
                     period: vm.period,
