@@ -2982,7 +2982,7 @@ fn write_report<W: std::io::Write>(
     writeln!(buf, "\n# Allocated Kernel Objects Detail\n")?;
     for ko in &built_system.kernel_objects {
         // FIXME: would be good to print both the number for the object type and the string
-        let name = built_system.cap_lookup.get(&ko.cap_addr).unwrap();
+        let name = &built_system.cap_lookup[&ko.cap_addr];
         writeln!(
             buf,
             "    {:<50} {} cap_addr={:x} phys_addr={:x}",
