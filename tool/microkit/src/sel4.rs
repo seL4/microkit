@@ -884,7 +884,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("node_depth", node_depth));
                 arg_strs.push(Invocation::fmt_field("node_offset", node_offset));
                 arg_strs.push(Invocation::fmt_field("num_objects", num_objects));
-                (untyped, cap_lookup.get(&untyped).unwrap())
+                (untyped, &cap_lookup[&untyped])
             }
             InvocationArgs::TcbSetSchedParams {
                 tcb,
@@ -907,7 +907,7 @@ impl Invocation {
                     cap_lookup,
                 ));
                 arg_strs.push(Invocation::fmt_field_cap("fault_ep", fault_ep, cap_lookup));
-                (tcb, cap_lookup.get(&tcb).unwrap())
+                (tcb, &cap_lookup[&tcb])
             }
             InvocationArgs::TcbSetSpace {
                 tcb,
@@ -930,7 +930,7 @@ impl Invocation {
                     cap_lookup,
                 ));
                 arg_strs.push(Invocation::fmt_field("vspace_root_data", vspace_root_data));
-                (tcb, cap_lookup.get(&tcb).unwrap())
+                (tcb, &cap_lookup[&tcb])
             }
             InvocationArgs::TcbSetIpcBuffer {
                 tcb,
@@ -943,9 +943,9 @@ impl Invocation {
                     buffer_frame,
                     cap_lookup,
                 ));
-                (tcb, cap_lookup.get(&tcb).unwrap())
+                (tcb, &cap_lookup[&tcb])
             }
-            InvocationArgs::TcbResume { tcb } => (tcb, cap_lookup.get(&tcb).unwrap()),
+            InvocationArgs::TcbResume { tcb } => (tcb, &cap_lookup[&tcb]),
             InvocationArgs::TcbWriteRegisters {
                 tcb,
                 resume,
@@ -965,7 +965,7 @@ impl Invocation {
                     arg_strs.push(format!("                              {}", s));
                 }
 
-                (tcb, cap_lookup.get(&tcb).unwrap())
+                (tcb, &cap_lookup[&tcb])
             }
             InvocationArgs::TcbBindNotification { tcb, notification } => {
                 arg_strs.push(Invocation::fmt_field_cap(
@@ -973,11 +973,11 @@ impl Invocation {
                     notification,
                     cap_lookup,
                 ));
-                (tcb, cap_lookup.get(&tcb).unwrap())
+                (tcb, &cap_lookup[&tcb])
             }
             InvocationArgs::AsidPoolAssign { asid_pool, vspace } => {
                 arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
-                (asid_pool, cap_lookup.get(&asid_pool).unwrap())
+                (asid_pool, &cap_lookup[&asid_pool])
             }
             InvocationArgs::IrqControlGetTrigger {
                 irq_control,
@@ -996,7 +996,7 @@ impl Invocation {
                 ));
                 arg_strs.push(Invocation::fmt_field("dest_index", dest_index));
                 arg_strs.push(Invocation::fmt_field("dest_depth", dest_depth));
-                (irq_control, cap_lookup.get(&irq_control).unwrap())
+                (irq_control, &cap_lookup[&irq_control])
             }
             InvocationArgs::IrqHandlerSetNotification {
                 irq_handler,
@@ -1007,7 +1007,7 @@ impl Invocation {
                     notification,
                     cap_lookup,
                 ));
-                (irq_handler, cap_lookup.get(&irq_handler).unwrap())
+                (irq_handler, &cap_lookup[&irq_handler])
             }
             InvocationArgs::PageTableMap {
                 page_table,
@@ -1018,7 +1018,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field_cap("vspace", vspace, cap_lookup));
                 arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
                 arg_strs.push(Invocation::fmt_field("attr", attr));
-                (page_table, cap_lookup.get(&page_table).unwrap())
+                (page_table, &cap_lookup[&page_table])
             }
             InvocationArgs::PageMap {
                 page,
@@ -1031,7 +1031,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field_hex("vaddr", vaddr));
                 arg_strs.push(Invocation::fmt_field("rights", rights));
                 arg_strs.push(Invocation::fmt_field("attr", attr));
-                (page, cap_lookup.get(&page).unwrap())
+                (page, &cap_lookup[&page])
             }
             InvocationArgs::CnodeCopy {
                 cnode,
@@ -1048,7 +1048,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field_cap("src_obj", src_obj, cap_lookup));
                 arg_strs.push(Invocation::fmt_field("src_depth", src_depth));
                 arg_strs.push(Invocation::fmt_field("rights", rights));
-                (cnode, cap_lookup.get(&cnode).unwrap())
+                (cnode, &cap_lookup[&cnode])
             }
             InvocationArgs::CnodeMint {
                 cnode,
@@ -1067,7 +1067,7 @@ impl Invocation {
                 arg_strs.push(Invocation::fmt_field("src_depth", src_depth));
                 arg_strs.push(Invocation::fmt_field("rights", rights));
                 arg_strs.push(Invocation::fmt_field("badge", badge));
-                (cnode, cap_lookup.get(&cnode).unwrap())
+                (cnode, &cap_lookup[&cnode])
             }
             InvocationArgs::SchedControlConfigureFlags {
                 sched_control,
@@ -1092,7 +1092,7 @@ impl Invocation {
             }
             InvocationArgs::ArmVcpuSetTcb { vcpu, tcb } => {
                 arg_strs.push(Invocation::fmt_field_cap("tcb", tcb, cap_lookup));
-                (vcpu, cap_lookup.get(&vcpu).unwrap())
+                (vcpu, &cap_lookup[&vcpu])
             }
         };
         _ = writeln!(
