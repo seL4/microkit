@@ -1123,17 +1123,14 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
     let mut vms = vec![];
     for pd in &pds {
-        match &pd.virtual_machine {
-            Some(vm) => {
-                if vms.contains(&vm) {
-                    return Err(format!(
-                        "Error: duplicate virtual machine name '{}'.",
-                        vm.name
-                    ));
-                }
-                vms.push(vm);
+        if let Some(vm) = &pd.virtual_machine {
+            if vms.contains(&vm) {
+                return Err(format!(
+                    "Error: duplicate virtual machine name '{}'.",
+                    vm.name
+                ));
             }
-            None => {}
+            vms.push(vm);
         }
     }
 
