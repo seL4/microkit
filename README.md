@@ -129,6 +129,12 @@ Testing has been performed using commit `4cae30a6ef166a378d4d23697b00106ce7e4e76
 
     $ ./pyenv/bin/python build_sdk.py --sel4=<path to sel4>
 
+The SDK will be in `release/`.
+
+See the help menu of `build_sdk.py` for configuring how the SDK is built:
+
+    $ ./pyenv/bin/python build_sdk.py --help
+
 ## Using the SDK
 
 After building the SDK you probably want to build a system!
