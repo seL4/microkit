@@ -32,8 +32,8 @@ ENV_BIN_DIR = Path(executable).parent
 
 MICROKIT_EPOCH = 1616367257
 
-TOOLCHAIN_AARCH64 = "aarch64-none-elf-"
-TOOLCHAIN_RISCV = "riscv64-unknown-elf-"
+TOOLCHAIN_AARCH64 = "aarch64-none-elf"
+TOOLCHAIN_RISCV = "riscv64-unknown-elf"
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, Union[bool, str]]
@@ -42,6 +42,14 @@ KERNEL_OPTIONS = Dict[str, Union[bool, str]]
 class KernelArch(IntEnum):
     AARCH64 = 1
     RISCV64 = 2
+
+    def c_toolchain(self) -> str:
+        if self == KernelArch.AARCH64:
+            return TOOLCHAIN_AARCH64
+        elif self == KernelArch.RISCV64:
+            return TOOLCHAIN_RISCV
+        else:
+            raise Exception(f"Unsupported toolchain architecture '{self}'")
 
     def is_riscv(self) -> bool:
         return self == KernelArch.RISCV64
@@ -286,15 +294,6 @@ SUPPORTED_CONFIGS = (
 )
 
 
-def c_toolchain(arch: KernelArch) -> str:
-    if arch == KernelArch.AARCH64:
-        return TOOLCHAIN_AARCH64
-    elif arch == KernelArch.RISCV64:
-        return TOOLCHAIN_RISCV
-    else:
-        raise Exception("Unsupported toolchain architecture '{arch}'")
-
-
 def tar_filter(tarinfo: TarInfo) -> TarInfo:
     """This is used to change the tarinfo when created the .tar.gz archive.
 
@@ -385,7 +384,7 @@ def build_sel4(
         config_strs.append(s)
     config_str = " ".join(config_strs)
 
-    toolchain = c_toolchain(board.arch)
+    toolchain = f"{board.arch.c_toolchain()}-"
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "
         f" -DPYTHON3={executable} "
@@ -450,7 +449,7 @@ def build_elf_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
-    toolchain = c_toolchain(board.arch)
+    toolchain = f"{board.arch.c_toolchain()}-"
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
     defines_str += f" ARCH={board.arch.to_str()} BOARD={board.name} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
 
@@ -497,7 +496,7 @@ def build_lib_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
 
-    toolchain = c_toolchain(board.arch)
+    toolchain = f"{board.arch.c_toolchain()}-"
     defines_str = f" ARCH={board.arch.to_str()} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
 
     if board.gcc_cpu is not None:
@@ -549,6 +548,9 @@ def main() -> None:
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
     parser.add_argument("--version", default=VERSION, help="SDK version")
+    for arch in KernelArch:
+        arch_str = arch.name.lower()
+        parser.add_argument(f"--toolchain-prefix-{arch_str}", default=arch.c_toolchain(), help=f"C toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
 
     args = parser.parse_args()
 
