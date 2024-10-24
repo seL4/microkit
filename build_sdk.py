@@ -307,6 +307,24 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/x86_64_nehalem/hello")
         }
     ),
+    BoardInfo(
+        name="x86_64_goldmont_plus",
+        arch=KernelArch.X86_64,
+        gcc_cpu=None,
+        gcc_march="goldmont-plus",
+        loader_link_address=0x10000000, # 256MB
+        kernel_options = {
+            "KernelIsMCS": True,
+            "KernelPlatform": "pc99",
+            "KernelSel4Arch": "x86_64",
+            "KernelVTX": True,
+            "KernelX86MicroArch": "goldmont-plus",
+            "KernelSupportPCID": False,
+        },
+        examples = {
+            "hello": Path("example/x86_64_goldmont_plus/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
