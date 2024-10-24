@@ -191,6 +191,7 @@ The currently supported boards are:
 * odroidc4
 * qemu_virt_aarch64
 * qemu_virt_riscv64
+* rockpro64
 * star64
 * tqma8xqp1gb
 * zcu102
