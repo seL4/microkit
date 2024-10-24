@@ -892,6 +892,12 @@ QEMU will start the system image using its packaged version of OpenSBI.
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
 
+## Pine64 ROCKPro64
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x30000000
+
 ## Pine64 Star64
 
 Support is available for the Pine64 Star64 platform which is based on the
