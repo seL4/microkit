@@ -576,6 +576,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    TOOLCHAIN_AARCH64 = args.toolchain_prefix_aarch64
+    TOOLCHAIN_RISCV = args.toolchain_prefix_riscv64
+
     version = args.version
 
     if args.boards is not None:
