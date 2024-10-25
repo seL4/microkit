@@ -472,6 +472,7 @@ def build_elf_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
     toolchain = f"{board.arch.c_toolchain()}-"
+    print(f"TOOLCHAIN is {toolchain}")
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
     defines_str += f" ARCH={board.arch.to_str()} BOARD={board.name} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
 
@@ -518,6 +519,7 @@ def build_lib_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
 
+    print(f"TOOLCHAIN is {toolchain}")
     toolchain = f"{board.arch.c_toolchain()}-"
     defines_str = f" ARCH={board.arch.to_str()} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
 
