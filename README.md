@@ -57,6 +57,8 @@ To build the documentation you also need
 * texlive-fonts-extra
 * texlive-latex-extra
 
+### Linux (with apt)
+
 On a Debian-like system you can do:
 
     $ curl https://sh.rustup.rs -sSf | sh
@@ -68,6 +70,9 @@ On a Debian-like system you can do:
         python3.9 python3.9-venv \
         qemu-system-arm qemu-system-misc \
         gcc-riscv64-unknown-elf
+    $ python3.9 -m venv pyenv
+    $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
+    $ ./pyenv/bin/pip install -r requirements.txt
 
 If you do not have Python 3.9 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
@@ -76,24 +81,6 @@ To use this:
     $ sudo add-apt-repository ppa:deadsnakes/ppa
     $ sudo apt update
     $ sudo apt install python3.9 python3.9-venv
-
-On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
-
-    $ curl https://sh.rustup.rs -sSf | sh
-    $ brew tap riscv-software-src/riscv
-    $ brew install riscv-tools
-    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
-
-Additonally, a number of Python libraries are needed.
-These should be installed using `pip`.
-
-    $ python3.9 -m venv pyenv
-    $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
-    $ ./pyenv/bin/pip install -r requirements.txt
-
-Note: It is a high priority of the authors to ensure builds are self-contained and repeatable.
-A high value is placed on using specifically versioned tools.
-At this point in time this is not fully realised, however it is a high priority to enable this in the near future.
 
 The ARM toolchain is available from:
 
@@ -104,11 +91,42 @@ Development is done with the aarch64-none-elf- toolchain.
 On Linux x86-64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf.tar.xz?rev=28d5199f6db34e5980aae1062e5a6703&hash=F6F5604BC1A2BBAAEAC4F6E98D8DC35B
 
+### macOS
+
+On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
+
+    $ curl https://sh.rustup.rs -sSf | sh
+    $ brew tap riscv-software-src/riscv
+    $ brew install riscv-tools
+    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
+    $ python3.9 -m venv pyenv
+    $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
+    $ ./pyenv/bin/pip install -r requirements.txt
+
+The ARM toolchain is available from:
+
+https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads.
+
+Development is done with the aarch64-none-elf- toolchain.
+
 On macOS Apple Silicon/AArch64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-arm64-aarch64-none-elf.tar.xz?rev=c5523a33dc7e49278f2a943a6a9822c4&hash=6DC6989BB1E6A9C7F8CBFEAA84842FA1
 
 On macOS Intel/x86-64 the following version is used:
 https://developer.arm.com/-/media/Files/downloads/gnu/12.2.rel1/binrel/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz?rev=09b11f159fc24fdda01e05bb32695dd5&hash=6AAF4239F28AE17389AB3E611DFFE0A6
+
+### Nix
+
+Running:
+
+    $ nix develop
+
+Will give a shell with all the required dependencies to build the SDK.
+
+An important note is that Nix's RISC-V cross-compiler will have a different
+prefix to the default one the SDK build script expects.
+
+When you build the SDK, provide an extra argument `--toolchain-prefix-riscv64 riscv64-none-elf`.
 
 ## seL4 Version
 
