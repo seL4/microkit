@@ -5,6 +5,7 @@ Source: http://sel4.systems
 
 Files:
   tool/microkit/Cargo.lock
+  flake.lock
   CHANGES.md
   VERSION
 Copyright: 2024, UNSW
