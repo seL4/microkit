@@ -576,6 +576,13 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    global TOOLCHAIN_AARCH64
+    global TOOLCHAIN_RISCV
+    TOOLCHAIN_AARCH64 = args.toolchain_prefix_aarch64
+    TOOLCHAIN_RISCV = args.toolchain_prefix_riscv64
+
+    print(TOOLCHAIN_RISCV)
+
     version = args.version
 
     if args.boards is not None:
