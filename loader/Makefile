@@ -54,7 +54,7 @@ LINKSCRIPT_INPUT := $(ARCH).ld
 LINKSCRIPT := $(BUILD_DIR)/link.ld
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
-	$(TOOLCHAIN)gcc -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
+	$(TOOLCHAIN)gcc -DLINK_ADDRESS=$(LINK_ADDRESS) -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 	$(TOOLCHAIN)as $< -o $@
