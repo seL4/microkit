@@ -184,6 +184,9 @@ The SDK top-level directory is `microkit-sdk-$VERSION`.
 The directory layout underneath the top-level directory is:
 
 ```
+VERSION
+LICENSE.md
+LICENSES/$licence.txt
 doc/
 doc/microkit_user_manual.pdf
 bin/
