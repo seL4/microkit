@@ -631,6 +631,9 @@ def main() -> None:
     for dr in dir_structure:
         dr.mkdir(exist_ok=True, parents=True)
 
+    with open(root_dir / "VERSION", "w+") as f:
+        f.write(version + "\n")
+
     copy(Path("LICENSE.md"), root_dir)
     licenses_dir = Path("LICENSES")
     licenses_dest_dir = root_dir / "LICENSES"
