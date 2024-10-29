@@ -3262,6 +3262,20 @@ fn write_report<W: std::io::Write>(
         "    # of untyped objects: {:>8}",
         comma_sep_usize(built_system.kernel_boot_info.untyped_objects.len())
     )?;
+    writeln!(buf, "\n# Untyped Objects\n")?;
+    for (i,ut) in built_system.kernel_boot_info.untyped_objects.iter().enumerate() {
+        let memtype = match ut.is_device {
+            true => "device",
+            false => "normal",
+        };
+        let size = ut.region.end - ut.region.base;
+        writeln!(buf, "     {:#010x}  slot: {:#010x}  paddr: {:#018x} - {:#018x} ({}) bits: {:#010x}",
+                 i, ut.cap,
+                 ut.region.base,
+                 ut.region.end,
+                 memtype,
+                 size.trailing_zeros())?;
+    }
     writeln!(buf, "\n# Loader Regions\n")?;
     for regions in &built_system.pd_elf_regions {
         for region in regions {
