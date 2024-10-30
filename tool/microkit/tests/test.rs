@@ -254,6 +254,14 @@ mod protection_domain {
     }
 
     #[test]
+    fn test_duplicate_child_id_vcpu() {
+        check_error(
+            "pd_duplicate_child_id_vcpu.xml",
+            "Error: duplicate id: 0 clashes with virtual machine vcpu id in protection domain: 'parent' @",
+        )
+    }
+
+    #[test]
     fn test_small_stack_size() {
         check_error(
             "pd_small_stack_size.xml",
@@ -279,13 +287,66 @@ mod protection_domain {
 }
 
 #[cfg(test)]
-mod channel {
+mod virtual_machine {
     use super::*;
 
     #[test]
-    fn test_missing_pd() {
-        check_missing("ch_missing_pd.xml", "pd", "end")
+    fn test_vm_not_child() {
+        check_error(
+            "vm_not_child.xml",
+            "Error: virtual machine must be a child of a protection domain",
+        )
     }
+
+    #[test]
+    fn test_duplicate_name() {
+        check_error(
+            "vm_duplicate_name.xml",
+            "Error: duplicate virtual machine name 'guest'",
+        )
+    }
+
+    #[test]
+    fn test_missing_vcpu() {
+        check_error(
+            "vm_missing_vcpu.xml",
+            "Error: missing 'vcpu' element on virtual_machine: ",
+        )
+    }
+
+    #[test]
+    fn test_missing_vcpu_id() {
+        check_missing("vm_missing_vcpu_id.xml", "id", "vcpu")
+    }
+
+    #[test]
+    fn test_invalid_vcpu_id() {
+        check_error(
+            "vm_invalid_vcpu_id.xml",
+            "Error: id must be < 62 on element 'vcpu'",
+        )
+    }
+
+    #[test]
+    fn test_overlapping_maps() {
+        check_error(
+            "vm_overlapping_maps.xml",
+            "Error: map for 'mr2' has virtual address range [0x1000000..0x1001000) which overlaps with map for 'mr1' [0x1000000..0x1001000) in virtual machine 'guest' @"
+        )
+    }
+
+    #[test]
+    fn test_missing_mr() {
+        check_error(
+            "vm_missing_mr.xml",
+            "Error: invalid memory region name 'mr1' on 'map' @",
+        )
+    }
+}
+
+#[cfg(test)]
+mod channel {
+    use super::*;
 
     #[test]
     fn test_missing_id() {

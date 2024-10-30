@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="mr1" size="0x1000" />
+    <memory_region name="mr2" size="0x1000" />
+    <protection_domain name="hello" priority="254">
+        <program_image path="hello.elf" />
+        <virtual_machine name="guest">
+            <vcpu id="0" />
+            <map mr="mr1" perms="rw" vaddr="0x1_000_000" />
+            <map mr="mr2" perms="rw" vaddr="0x1_000_000" />
+        </virtual_machine>
+    </protection_domain>
+</system>
