@@ -242,6 +242,18 @@ SUPPORTED_BOARDS = (
             "KernelRiscvExtF": True,
         },
     ),
+    BoardInfo(
+        name="ariane",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "ariane",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        },
+    ),
 )
 
 SUPPORTED_CONFIGS = (
