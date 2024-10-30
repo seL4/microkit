@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2024, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="pd">
+        <virtual_machine name="guest">
+            <vcpu id="300" />
+        </virtual_machine>
+    </protection_domain>
+</system>

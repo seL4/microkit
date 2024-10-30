@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="hello1">
+        <program_image path="hello.elf" />
+        <virtual_machine name="guest">
+            <vcpu id="0" />
+        </virtual_machine>
+    </protection_domain>
+    <protection_domain name="hello2">
+        <program_image path="hello.elf" />
+        <virtual_machine name="guest">
+            <vcpu id="0" />
+        </virtual_machine>
+    </protection_domain>
+</system>
