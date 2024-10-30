@@ -1,0 +1,63 @@
+#!/bin/sh
+#
+# Copyright 2024, Neutrality Sarl.
+# SPDX-License-Identifier: BSD-2-Clause
+#
+# This is a wrapper around QEMU that can be used to test the images built for
+# the qemu_virt_x86_64 microkit board. Pass the "loader.img" file as first argument.
+#
+set -eu
+
+# QEMU machine setup.
+MACHINE=q35,accel=kvm,kernel-irqchip=split
+CPU=Nehalem,+fsgsbase,+pdpe1gb,+pcid,+invpcid,+xsave,+xsaves,+xsaveopt,+vmx,+vme
+RAM=4G
+
+# Parse the command line.
+if [ $# -lt 1 ]; then
+    echo "Usage: $(basename "$0") <image> [qemu args]" >&2
+    exit 1
+fi
+image="$1"
+shift
+
+# Create a temporary directory.
+TMPDIR="$(mktemp -d)"
+trap "rm -rf -- '$TMPDIR'" EXIT
+
+# A subdirectory for the ISO files.
+ISODIR="$TMPDIR"/iso
+mkdir -p "$ISODIR"
+
+# Copy the microkit image.
+cp "$image" "$ISODIR"/image
+
+# Create the grub configuration file.
+mkdir -p "$ISODIR"/boot/grub
+cat > "$ISODIR"/boot/grub/grub.cfg <<-EOF
+set default=0
+set timeout=0
+
+serial --unit=0 --speed=115200
+terminal_input serial
+terminal_output serial
+
+menuentry 'microkit' {
+  multiboot2 /image
+}
+EOF
+
+# Build a bootable grub ISO image.
+grub-mkrescue -o "$TMPDIR"/grub.iso "$ISODIR"
+
+# Run qemu.
+set -x
+qemu-system-x86_64                      \
+        -machine "$MACHINE"             \
+        -cpu "$CPU"                     \
+        -m "$RAM"                       \
+        -display none                   \
+        -serial mon:stdio               \
+        -device intel-iommu             \
+        -cdrom "$TMPDIR"/grub.iso       \
+	"$@"
