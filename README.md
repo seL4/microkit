@@ -207,6 +207,7 @@ board/$board/$config/elf/monitor.elf
 
 The currently supported boards are:
 
+* ariane
 * imx8mm_evk
 * imx8mp_evk
 * imx8mq_evk
