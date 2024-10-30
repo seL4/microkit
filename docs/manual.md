@@ -704,7 +704,7 @@ It supports the following attributes:
 
 * `name`: A unique name for the memory region
 * `size`: Size of the memory region in bytes (must be a multiple of the page size)
-* `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the smallest page size for the target architecture.
+* `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the largest page size for the target architecture that the memory region is aligned to.
 * `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
 
 The `memory_region` element does not support any child elements.
