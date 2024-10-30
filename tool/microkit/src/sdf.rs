@@ -183,6 +183,33 @@ pub struct VirtualCpu {
     pub id: u64,
 }
 
+/// To avoid code duplication for handling protection domains
+/// and virtual machines, which have a lot in common.
+trait ExecutionContext {
+    fn name(&self) -> &String;
+    fn kind(&self) -> &'static str;
+}
+
+impl ExecutionContext for ProtectionDomain {
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn kind(&self) -> &'static str {
+        "protection domain"
+    }
+}
+
+impl ExecutionContext for VirtualMachine {
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn kind(&self) -> &'static str {
+        "virtual machine"
+    }
+}
+
 impl SysMapPerms {
     fn from_str(s: &str) -> Result<u8, ()> {
         let mut perms = 0;
@@ -893,6 +920,60 @@ pub struct SystemDescription {
     pub channels: Vec<Channel>,
 }
 
+fn check_maps(
+    xml_sdf: &XmlSystemDescription,
+    mrs: &[SysMemoryRegion],
+    e: &dyn ExecutionContext,
+    maps: &[SysMap],
+) -> Result<(), String> {
+    let mut checked_maps = Vec::with_capacity(maps.len());
+    for map in maps {
+        let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
+        let pos = map.text_pos.unwrap();
+        match maybe_mr {
+            Some(mr) => {
+                if map.vaddr % mr.page_size as u64 != 0 {
+                    return Err(format!(
+                        "Error: invalid vaddr alignment on 'map' @ {}",
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+
+                let map_start = map.vaddr;
+                let map_end = map.vaddr + mr.size;
+                for (name, start, end) in &checked_maps {
+                    if !(map_start >= *end || map_end <= *start) {
+                        return Err(
+                            format!(
+                                "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
+                                map.mr,
+                                map_start,
+                                map_end,
+                                name,
+                                start,
+                                end,
+                                e.kind(),
+                                e.name(),
+                                loc_string(xml_sdf, map.text_pos.unwrap())
+                            )
+                        );
+                    }
+                }
+                checked_maps.push((&map.mr, map_start, map_end));
+            }
+            None => {
+                return Err(format!(
+                    "Error: invalid memory region name '{}' on 'map' @ {}",
+                    map.mr,
+                    loc_string(xml_sdf, pos)
+                ))
+            }
+        };
+    }
+
+    Ok(())
+}
+
 fn check_attributes(
     xml_sdf: &XmlSystemDescription,
     node: &roxmltree::Node,
@@ -1092,10 +1173,17 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             }
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
+            "virtual_machine" => {
+                let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                return Err(format!(
+                    "Error: virtual machine must be a child of a protection domain: {}",
+                    loc_string(&xml_sdf, pos)
+                ));
+            }
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
-                    "Invalid XML element '{}': {}",
+                    "Error: invalid XML element '{}': {}",
                     child_name,
                     loc_string(&xml_sdf, pos)
                 ));
@@ -1223,48 +1311,9 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
     // Ensure that all maps are correct
     for pd in &pds {
-        let mut checked_maps = Vec::with_capacity(pd.maps.len());
-        for map in &pd.maps {
-            let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
-            let pos = map.text_pos.unwrap();
-            match maybe_mr {
-                Some(mr) => {
-                    if map.vaddr % mr.page_size as u64 != 0 {
-                        return Err(format!(
-                            "Error: invalid vaddr alignment on 'map' @ {}",
-                            loc_string(&xml_sdf, pos)
-                        ));
-                    }
-
-                    let map_start = map.vaddr;
-                    let map_end = map.vaddr + mr.size;
-                    for (name, start, end) in &checked_maps {
-                        if !(map_start >= *end || map_end <= *start) {
-                            return Err(
-                                format!(
-                                    "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in protection domain '{}' @ {}",
-                                    map.mr,
-                                    map_start,
-                                    map_end,
-                                    name,
-                                    start,
-                                    end,
-                                    pd.name,
-                                    loc_string(&xml_sdf, map.text_pos.unwrap())
-                                )
-                            );
-                        }
-                    }
-                    checked_maps.push((&map.mr, map_start, map_end));
-                }
-                None => {
-                    return Err(format!(
-                        "Error: invalid memory region name '{}' on 'map' @ {}",
-                        map.mr,
-                        loc_string(&xml_sdf, pos)
-                    ))
-                }
-            };
+        check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
+        if let Some(vm) = &pd.virtual_machine {
+            check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
         }
     }
 
