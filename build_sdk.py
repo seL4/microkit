@@ -280,6 +280,21 @@ SUPPORTED_BOARDS = (
             "hello": Path("example/star64/hello")
         }
     ),
+    BoardInfo(
+        name="ariane",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "ariane",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        },
+        examples={
+            "hello": Path("example/ariane/hello")
+        }
+    ),
 )
 
 SUPPORTED_CONFIGS = (
