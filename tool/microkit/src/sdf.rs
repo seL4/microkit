@@ -725,8 +725,8 @@ impl SysMemoryRegion {
         let page_size = if let Some(xml_page_size) = node.attribute("page_size") {
             sdf_parse_number(xml_page_size, node)?
         } else {
-            // Default to the minimum page size
-            config.page_sizes()[0]
+            // Default to the largest page size that will not waste any memory.
+            config.optimal_page_size(size)
         };
 
         let page_size_valid = config.page_sizes().contains(&page_size);
