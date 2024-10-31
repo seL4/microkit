@@ -48,6 +48,7 @@ Please file an issue if additional packages are required.
 * xmllint
 * qemu-system-aarch64
 * qemu-system-riscv64
+* qemu-system-x86
 
 To build the documentation you also need
 * pandoc
@@ -68,7 +69,7 @@ On a Debian-like system you can do:
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
         python3.9 python3.9-venv \
-        qemu-system-arm qemu-system-misc \
+        qemu-system-arm qemu-system-misc qemu-system-x86 \
         gcc-riscv64-unknown-elf
     $ python3.9 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
@@ -210,8 +211,10 @@ The currently supported boards are:
 * maaxboard
 * odroidc2
 * odroidc4
+* odroidh2plus
 * qemu_virt_aarch64
 * qemu_virt_riscv64
+* qemu_virt_x86_64
 * rockpro64
 * star64
 * tqma8xqp1gb
