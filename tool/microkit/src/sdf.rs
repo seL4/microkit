@@ -103,7 +103,20 @@ pub struct SysMemoryRegion {
 }
 
 impl SysMemoryRegion {
-    pub fn page_bytes(&self) -> u64 {
+    /// Given the size of a memory region, returns the 'most optimal'
+    /// page size for the platform based on the alignment of the size.
+    pub fn optimal_page_size(&self, config: &Config) -> u64 {
+        let page_sizes = config.page_sizes();
+        for i in (0..page_sizes.len()).rev() {
+            if self.size % page_sizes[i] == 0 {
+                return page_sizes[i];
+            }
+        }
+
+        panic!("Internal error: size is not aligned to minimum page size");
+    }
+
+    pub fn page_size_bytes(&self) -> u64 {
         self.page_size as u64
     }
 }
@@ -752,8 +765,7 @@ impl SysMemoryRegion {
         let page_size = if let Some(xml_page_size) = node.attribute("page_size") {
             sdf_parse_number(xml_page_size, node)?
         } else {
-            // Default to the largest page size that will not waste any memory.
-            config.optimal_page_size(size)
+            config.page_sizes()[0]
         };
 
         let page_size_valid = config.page_sizes().contains(&page_size);
@@ -932,7 +944,7 @@ fn check_maps(
         let pos = map.text_pos.unwrap();
         match maybe_mr {
             Some(mr) => {
-                if map.vaddr % mr.page_size as u64 != 0 {
+                if map.vaddr % mr.page_size_bytes() != 0 {
                     return Err(format!(
                         "Error: invalid vaddr alignment on 'map' @ {}",
                         loc_string(xml_sdf, pos)
@@ -1365,6 +1377,51 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         if !found {
             println!("WARNING: unused memory region '{}'", mr.name);
+        }
+    }
+
+    // Optimise page size of MRs, if we can
+    for mr in &mut mrs {
+        // If the largest possible page size based on the MR's size is already
+        // set as its page size, skip it.
+        let mr_larget_page_size = mr.optimal_page_size(config);
+        if mr.page_size_bytes() == mr_larget_page_size {
+            continue;
+        }
+
+        // Get all the addresses that this MR will be mapped into
+        let mut addrs: Vec<_> = all_maps
+            .iter()
+            .filter_map(|&map| {
+                if map.mr == mr.name {
+                    Some(map.vaddr)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if let Some(paddr) = mr.phys_addr {
+            addrs.push(paddr);
+        }
+
+        // Get all page sizes larger than the MR's current one, sorted from
+        // largest to smallest
+        let larger_page_sizes: Vec<u64> = config
+            .page_sizes()
+            .into_iter()
+            .filter(|page_size| *page_size > mr.page_size_bytes())
+            .rev()
+            .collect();
+        // Go through potential page sizes and check if the alignment is valid
+        // on all addresses we're mapping the MR into.
+        for larger_page_size in larger_page_sizes {
+            if addrs.iter().any(|addr| addr % larger_page_size != 0) {
+                continue;
+            }
+
+            // Safe to increase page size
+            mr.page_size = larger_page_size.into();
+            mr.page_count = mr.size / mr.page_size_bytes();
         }
     }
 

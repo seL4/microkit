@@ -1481,7 +1481,7 @@ fn build_system(
         if let Some(mut phys_addr) = mr.phys_addr {
             for _ in 0..mr.page_count {
                 fixed_pages.push((phys_addr, mr));
-                phys_addr += mr.page_bytes();
+                phys_addr += mr.page_size_bytes();
             }
         }
     }
@@ -1648,7 +1648,7 @@ fn build_system(
                 let mut vaddr = map.vaddr;
                 for _ in 0..mr.page_count {
                     vaddrs.push((vaddr, mr.page_size));
-                    vaddr += mr.page_bytes();
+                    vaddr += mr.page_size_bytes();
                 }
             }
         }
@@ -1708,7 +1708,7 @@ fn build_system(
             let mut vaddr = map.vaddr;
             for _ in 0..mr.page_count {
                 vaddrs.push((vaddr, mr.page_size));
-                vaddr += mr.page_bytes();
+                vaddr += mr.page_size_bytes();
             }
         }
 
@@ -1946,7 +1946,7 @@ fn build_system(
                     rights,
                     attrs,
                     mr_pages[mr].len() as u64,
-                    mr.page_bytes(),
+                    mr.page_size_bytes(),
                 ));
 
                 for idx in 0..mr_pages[mr].len() {
@@ -2032,7 +2032,7 @@ fn build_system(
                 rights,
                 attrs,
                 mr_pages[mr].len() as u64,
-                mr.page_bytes(),
+                mr.page_size_bytes(),
             ));
 
             for idx in 0..mr_pages[mr].len() {

@@ -80,19 +80,6 @@ impl Config {
         }
     }
 
-    // Given the size of a memory region, returns the 'most optimal'
-    // page size for the platform based on the alignment of the size.
-    pub fn optimal_page_size(&self, size: u64) -> u64 {
-        let page_sizes = self.page_sizes();
-        for i in (0..page_sizes.len()).rev() {
-            if size % page_sizes[i] == 0 {
-                return page_sizes[i];
-            }
-        }
-
-        panic!("Internal error: size is not aligned to minimum page size");
-    }
-
     pub fn pd_stack_top(&self) -> u64 {
         self.user_top()
     }
