@@ -2596,6 +2596,22 @@ fn build_system(
                     tcb: pd_tcb_objs[pd_idx].cap_addr,
                 },
             ));
+            if let Some(pd_vm) = &pd.virtual_machine {
+                for (vm_idx, vm) in virtual_machines.iter().enumerate() {
+                    if pd_vm.name == vm.name {
+                        for vcpu_idx in 0..vm.vcpus.len() {
+                            system_invocations.push(Invocation::new(
+                                config,
+                                InvocationArgs::DomainSetSet {
+                                    domain_set: DOMAIN_CAP_ADDRESS,
+                                    domain: domain_id as u8,
+                                    tcb: vcpu_tcb_objs[vm_idx + vcpu_idx].cap_addr,
+                                },
+                            ));
+                        }
+                    }
+                }
+            }
         }
     }
 
