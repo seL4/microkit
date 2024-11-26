@@ -188,6 +188,16 @@ static char *riscv_fsr_to_string(seL4_Word fsr)
 }
 #endif
 
+#ifdef ARCH_x86_64
+static char *x86_64_fsr_to_string(seL4_Word fsr)
+{
+	switch (fsr) {
+	default:
+        return "TODO: implement x86_64_fsr_to_string";
+	}
+}
+#endif
+
 #ifdef ARCH_aarch64
 static char *ec_to_string(uintptr_t ec)
 {
@@ -792,6 +802,28 @@ static void aarch64_print_vm_fault()
 }
 #endif
 
+#ifdef ARCH_x86_64
+static void x86_64_print_vm_fault()
+{
+    seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
+    seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+    seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+    seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
+    puts("MON|ERROR: VMFault: ip=");
+    puthex64(ip);
+    puts("  fault_addr=");
+    puthex64(fault_addr);
+    puts("  fsr=");
+    puthex64(fsr);
+    puts("  ");
+    puts(is_instruction ? "(instruction fault)" : "(data fault)");
+    puts("\n");
+    puts("MON|ERROR: description of fault: ");
+    puts(x86_64_fsr_to_string(fsr));
+    puts("\n");
+}
+#endif
+
 static void monitor(void)
 {
     for (;;) {
@@ -911,6 +943,8 @@ static void monitor(void)
             aarch64_print_vm_fault();
 #elif defined(ARCH_riscv64)
             riscv_print_vm_fault();
+#elif defined(ARCH_x86_64)
+            x86_64_print_vm_fault();
 #else
 #error "Unknown architecture to print a VM fault for"
 #endif
