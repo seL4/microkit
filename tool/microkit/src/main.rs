@@ -385,7 +385,11 @@ impl<'a> InitSystem<'a> {
             let sz = size.unwrap();
             assert!(util::is_power_of_two(sz));
             api_size = sz.ilog2() as u64;
-            alloc_size = sz * SLOT_SIZE;
+            if object_type == ObjectType::CNode {
+                alloc_size = sz * SLOT_SIZE;
+            } else {
+                alloc_size = sz;
+            }
         } else {
             panic!("Internal error: invalid object type: {:?}", object_type);
         }
