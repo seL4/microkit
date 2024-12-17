@@ -792,6 +792,13 @@ static void aarch64_print_vm_fault()
 }
 #endif
 
+#ifdef ARCH_x86_64
+static void x86_64_print_vm_fault()
+{
+    puts("TODO: implement x86_64_print_vm_fault\n");
+}
+#endif
+
 static void monitor(void)
 {
     for (;;) {
@@ -911,6 +918,8 @@ static void monitor(void)
             aarch64_print_vm_fault();
 #elif defined(ARCH_riscv64)
             riscv_print_vm_fault();
+#elif defined(ARCH_x86_64)
+            x86_64_print_vm_fault();
 #else
 #error "Unknown architecture to print a VM fault for"
 #endif

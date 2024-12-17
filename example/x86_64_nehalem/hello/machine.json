@@ -1,0 +1,33 @@
+{
+    "memory": [
+        {
+            "base": 1048576,
+            "size": 2146299904
+        },
+        {
+            "base": 4294967296,
+            "size": 2147483648
+        }
+    ],
+    "kdevs": [
+        {
+            "name": "apic",
+            "base": 4276092928,
+            "size": 4096
+        },
+        {
+            "name": "ioapic.0",
+            "base": 4273995776,
+            "size": 4096
+        },
+        {
+            "name": "drhu.0",
+            "base": 4275634176,
+            "size": 4096
+        }
+    ],
+    "rmrrs": [],
+    "bootinfo": {
+        "numIOPTLevels": 3
+    }
+}

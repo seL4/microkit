@@ -102,6 +102,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [notification](#notification)
 * [interrupt](#irq)
 * [fault](#fault)
+* [ioport](#ioport)
 
 ## System {#system}
 
@@ -311,6 +312,10 @@ protection domain. The same applies for a virtual machine.
 This means that whenever a fault is caused by a child, it will be delivered to the parent PD instead of the system fault
 handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled.
 
+## I/O Ports {#ioport}
+
+I/O ports are mechanisms present on x86 hardware to access certain physical devices (e.g. PC serial ports) using the `in` and `out` CPU instructions. On seL4, I/O ports are used by invoking capabilities via the `seL4_X86_IOPort_*` functions. The capabilities must be explicity associated to the protection domain and are accessed by calling `microkit_ioport_cap`.
+
 # SDK {#sdk}
 
 Microkit is distributed as a software development kit (SDK).
@@ -377,11 +382,14 @@ The format of the system description is described in a subsequent chapter.
 Usage:
 
     microkit [-h] [-o OUTPUT] [-r REPORT] --board [BOARD] --config CONFIG
-             [--search-path [SEARCH_PATH ...]] system
+             [--search-path [SEARCH_PATH ...]]
+             [--x86-machine [MACHINE_FILE]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
 The search paths provided tell the tool where to find any program images specified in the system description file.
+
+The x86 machine file is a json file that describes certain properties of the target hardware. This file is mandatory for x86 targets. It may be produced by booting the [Microkit x86 machine dump](https://github.com/Neutrality-ch/microkit-x86-machine-dump) tool on the target board.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
@@ -439,6 +447,7 @@ If the protection domain has children it must also implement:
     seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
     void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
     void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
+    seL4_Word microkit_ioport_cap(seL4_Word id);
 
 
 ## `void init(void)`
@@ -616,6 +625,11 @@ response values will be placed into the `response` structure.
 
 The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
 
+## `seL4_Word microkit_ioport_cap(seL4_Word id)`
+
+This API is available only on X86. The API takes in an I/O port identifier and returns its
+associated capability, which can be provided to the `seL4_X86_IOPort_*` functions.
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -651,6 +665,7 @@ Additionally, it supports the following child elements:
 * `program_image`: (exactly one) Describes the program image for the protection domain.
 * `map`: (zero or more) Describes mapping of memory regions into the protection domain.
 * `irq`: (zero or more) Describes hardware interrupt associations.
+* `ioport`: (zero or more) Describes x86 I/O ports to be exposed to the protection domain.
 * `setvar`: (zero or more) Describes variable rewriting.
 * `protection_domain`: (zero or more) Describes a child protection domain.
 * `virtual_machine`: (zero or one) Describes a child virtual machine.
@@ -665,11 +680,33 @@ The `map` element has the following attributes:
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 
-The `irq` element has the following attributes:
+The `irq` element has the following attributes on ARM and RISC-V platforms:
 
 * `irq`: The hardware interrupt number.
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
+
+The `irq` element has the following attributes when registering X86_64 IOAPIC interrupts:
+
+* `id`: The channel identifier. Must be at least 0 and less than 63.
+* `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
+* `pin`: IOAPIC pin that generates the interrupt.
+* `level`: (optional) Whether the IRQ is level triggered (1) or edge triggered (0). Defaults to level (1).
+* `polarity`: (optional) Whether the line polarity is high (1) or low (0). Defaults to high (1).
+* `vector`: The IRQ vector number.
+
+The `irq` element has the following attributes when registering X86_64 MSI interrupts:
+
+* `id`: The channel identifier. Must be at least 0 and less than 63.
+* `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
+* `handle`: Value of the handle programmed into the data portion of the MSI.
+* `vector`: CPU vector to deliver the interrupt to.
+
+The `ioport` element has the following attributes:
+
+* `id`: The I/O port identifier. Must be at least 0 and less than 63.
+* `addr`: The base address of the I/O port.
+* `size`: The size in bytes of the I/O port region.
 
 The `setvar` element has the following attributes:
 
@@ -719,6 +756,11 @@ Below are the available page sizes for each architecture that Microkit supports.
 * 0x200000 (2MiB)
 
 #### RISC-V 64-bit
+
+* 0x1000 (4KiB)
+* 0x200000 (2MiB)
+
+#### X86 64-bit
 
 * 0x1000 (4KiB)
 * 0x200000 (2MiB)
@@ -785,6 +827,21 @@ The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x20000000
+
+## Odroid-H2+
+
+The HardKernel Odroid-H2+ is an X86_64 SBC based on the Intel J4115 processor. It should
+be noted that the Odroid-H2+ is no longer available for purchase but its successor, the
+Odroid-H3, is readily available at the time of writing.
+
+Microkit produces an ELF file that can be directly booted by a multiboot2 bootloader. When
+using GNU GRUB you can boot the image using this menu entry:
+
+```
+menuentry 'Microkit' {
+    multiboot2 /loader.img
+}
+```
 
 ## TQMa8XQP 1GB
 
@@ -891,6 +948,19 @@ QEMU will start the system image using its packaged version of OpenSBI.
 
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
+
+
+## QEMU virt (X86 64-bit)
+
+Support is available for the virtual X86_64 QEMU platform. This is a platform that is not based
+on any specific SoC or hardware platform and is intended for simulating systems for
+development or testing.
+
+You can use the `sim` shell script from the `example/qemu_virt_x86_64` directory to
+simulate a Microkit system.
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-i386.html).
 
 ## Pine64 ROCKPro64
 

@@ -6,6 +6,7 @@
 
 pub mod elf;
 pub mod loader;
+pub mod x86loader;
 pub mod sdf;
 pub mod sel4;
 pub mod util;
@@ -114,12 +115,23 @@ impl MemoryRegion {
         self.end - self.base
     }
 
-    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
+    // During the boot phase, the kernel creates all of the untyped regions
+    // based on the kernel virtual addresses, rather than the physical
+    // memory addresses. This has a subtle side affect in the process of
+    // creating untypeds as even though all the kernel virtual addresses are
+    // a constant offest of the corresponding physical address, overflow can
+    // occur when dealing with virtual addresses. This precisely occurs in
+    // this function, causing different regions depending on whether
+    // you use kernel virtual or physical addresses. In order to properly
+    // emulate the kernel booting process, we also have to emulate the interger
+    // overflow that can occur.
+    pub fn aligned_power_of_two_regions(&self, kernel_virtual_base: u64, max_bits: u64) -> Vec<MemoryRegion> {
         let mut regions = Vec::new();
-        let mut base = self.base;
+        let mut base = kernel_virtual_base + self.base;
         let mut bits;
-        while base != self.end {
-            let size = self.end - base;
+        let end = kernel_virtual_base + self.end;
+        while base != end {
+            let size = end - base;
             let size_bits = util::msb(size);
             if base == 0 {
                 bits = size_bits;
@@ -131,7 +143,14 @@ impl MemoryRegion {
                 bits = max_bits;
             }
             let sz = 1 << bits;
-            regions.push(MemoryRegion::new(base, base + sz));
+            let base_paddr = base - kernel_virtual_base;
+            // The seL4 kernel does not create untyped caps for memory regions
+            // smaller than seL4_MinUntypedBits since they wouldn't be large enough
+            // to be retyped into objects. This value is set to 4 on all
+            // architectures so it is hardcoded for now.
+            if size_bits >= 4 {
+                regions.push(MemoryRegion::new(base_paddr, base_paddr + sz));
+            }
             base += sz;
         }
 
@@ -206,10 +225,10 @@ impl DisjointMemoryRegion {
         self.check();
     }
 
-    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
+    pub fn aligned_power_of_two_regions(&self, kernel_virtual_base: u64, max_bits: u64) -> Vec<MemoryRegion> {
         let mut aligned_regions = Vec::new();
         for region in &self.regions {
-            aligned_regions.extend(region.aligned_power_of_two_regions(max_bits));
+            aligned_regions.extend(region.aligned_power_of_two_regions(kernel_virtual_base, max_bits));
         }
 
         aligned_regions
@@ -360,5 +379,13 @@ impl ObjectAllocator {
         }
 
         panic!("Can't alloc of size {}, count: {} - no space", size, count);
+    }
+}
+
+pub fn round_up(n: usize, x: usize) -> usize {
+    let (_d, m) = (n / x, n % x);
+    match m {
+        0 => n,
+        _ => n + x - m,
     }
 }
