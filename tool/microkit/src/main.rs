@@ -520,7 +520,6 @@ fn phys_mem_region_from_elf(elf: &ElfFile, alignment: u64) -> MemoryRegion {
 
 /// Determine the virtual memory regions for an ELF file with a given
 /// alignment.
-
 /// The returned region shall be extended (if necessary) so that the start
 /// and end are congruent with the specified alignment (usually a page size).
 fn virt_mem_regions_from_elf(elf: &ElfFile, alignment: u64) -> Vec<MemoryRegion> {

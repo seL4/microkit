@@ -4,12 +4,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Config, IrqTrigger, PageSize};
-use crate::util::str_to_bool;
-use crate::MAX_PDS;
-use std::path::{Path, PathBuf};
-
-///
 /// This module is responsible for parsing the System Description Format (SDF)
 /// which is based on XML.
 /// We do not use any fancy XML, and instead keep things as minimal and simple
@@ -22,7 +16,10 @@ use std::path::{Path, PathBuf};
 /// but few seem to be concerned with giving any introspection regarding the parsed
 /// XML. The roxmltree project allows us to work on a lower-level than something based
 /// on serde and so we can report proper user errors.
-///
+use crate::sel4::{Config, IrqTrigger, PageSize};
+use crate::util::str_to_bool;
+use crate::MAX_PDS;
+use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
