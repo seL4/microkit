@@ -86,6 +86,7 @@ seL4_IPCBuffer *__sel4_ipc_buffer;
 char _stack[4096];
 
 static char pd_names[MAX_PDS][MAX_NAME_LEN];
+seL4_Word pd_names_len;
 
 seL4_Word fault_ep;
 seL4_Word reply;
@@ -957,6 +958,21 @@ void main(seL4_BootInfo *bi)
     for (unsigned idx = 0; idx < system_invocation_count; idx++) {
         offset = perform_invocation(system_invocation_data, offset, idx);
     }
+
+#if CONFIG_DEBUG_BUILD
+    /*
+     * Assign PD names to each TCB with seL4, this helps debugging when an error
+     * message is printed by seL4 or if we dump the scheduler state.
+     * This is done specifically in the monitor rather than being prepared as an
+     * invocation like everything else because it is technically a separate system
+     * call and not an invocation.
+     * If we end up doing various different kinds of system calls we should add
+     * support in the tooling and make the monitor generic.
+     */
+    for (unsigned idx = 1; idx < pd_names_len + 1; idx++) {
+        seL4_DebugNameThread(tcbs[idx], pd_names[idx]);
+    }
+#endif
 
     puts("MON|INFO: completed system invocations\n");
 

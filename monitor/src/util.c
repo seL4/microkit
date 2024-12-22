@@ -86,3 +86,14 @@ sel4_strerror(seL4_Word err)
 
     return "<invalid seL4 error>";
 }
+
+char *strcpy(char *restrict dst, const char *restrict src)
+{
+    int i = 0;
+    while (src[i]) {
+        dst[i] = src[i];
+        i++;
+    }
+
+    return dst;
+}
