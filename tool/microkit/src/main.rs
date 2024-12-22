@@ -3571,6 +3571,10 @@ fn main() -> Result<(), String> {
         pd_names_bytes[start + PD_MAX_NAME_LENGTH - 1] = 0;
     }
     monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
+    monitor_elf.write_symbol(
+        "pd_names_len",
+        &system.protection_domains.len().to_le_bytes(),
+    )?;
 
     // Write out all the symbols for each PD
     pd_write_symbols(
