@@ -7,16 +7,14 @@
 
 #include "util.h"
 
-void
-putc(uint8_t ch)
+void putc(uint8_t ch)
 {
 #if defined(CONFIG_PRINTING)
     seL4_DebugPutChar(ch);
 #endif
 }
 
-void
-puts(const char *s)
+void puts(const char *s)
 {
     while (*s) {
         putc(*s);
@@ -24,14 +22,12 @@ puts(const char *s)
     }
 }
 
-static char
-hexchar(unsigned int v)
+static char hexchar(unsigned int v)
 {
     return v < 10 ? '0' + v : ('a' - 10) + v;
 }
 
-void
-puthex32(uint32_t val)
+void puthex32(uint32_t val)
 {
     char buffer[8 + 3];
     buffer[0] = '0';
@@ -44,8 +40,7 @@ puthex32(uint32_t val)
     puts(buffer);
 }
 
-void
-puthex64(uint64_t val)
+void puthex64(uint64_t val)
 {
     char buffer[16 + 3];
     buffer[0] = '0';
@@ -58,8 +53,7 @@ puthex64(uint64_t val)
     puts(buffer);
 }
 
-void
-fail(char *s)
+void fail(char *s)
 {
     puts("FAIL: ");
     puts(s);
@@ -67,21 +61,31 @@ fail(char *s)
     for (;;) {}
 }
 
-char*
-sel4_strerror(seL4_Word err)
+char *sel4_strerror(seL4_Word err)
 {
     switch (err) {
-        case seL4_NoError: return "seL4_NoError";
-        case seL4_InvalidArgument: return "seL4_InvalidArgument";
-        case seL4_InvalidCapability: return "seL4_InvalidCapability";
-        case seL4_IllegalOperation: return "seL4_IllegalOperation";
-        case seL4_RangeError: return "seL4_RangeError";
-        case seL4_AlignmentError: return "seL4_AlignmentError";
-        case seL4_FailedLookup: return "seL4_FailedLookup";
-        case seL4_TruncatedMessage: return "seL4_TruncatedMessage";
-        case seL4_DeleteFirst: return "seL4_DeleteFirst";
-        case seL4_RevokeFirst: return "seL4_RevokeFirst";
-        case seL4_NotEnoughMemory: return "seL4_NotEnoughMemory";
+    case seL4_NoError:
+        return "seL4_NoError";
+    case seL4_InvalidArgument:
+        return "seL4_InvalidArgument";
+    case seL4_InvalidCapability:
+        return "seL4_InvalidCapability";
+    case seL4_IllegalOperation:
+        return "seL4_IllegalOperation";
+    case seL4_RangeError:
+        return "seL4_RangeError";
+    case seL4_AlignmentError:
+        return "seL4_AlignmentError";
+    case seL4_FailedLookup:
+        return "seL4_FailedLookup";
+    case seL4_TruncatedMessage:
+        return "seL4_TruncatedMessage";
+    case seL4_DeleteFirst:
+        return "seL4_DeleteFirst";
+    case seL4_RevokeFirst:
+        return "seL4_RevokeFirst";
+    case seL4_NotEnoughMemory:
+        return "seL4_NotEnoughMemory";
     }
 
     return "<invalid seL4 error>";
