@@ -189,6 +189,8 @@ LICENSE.md
 LICENSES/$licence.txt
 doc/
 doc/microkit_user_manual.pdf
+example/
+example/$example/
 bin/
 bin/microkit
 board/

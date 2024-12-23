@@ -90,9 +90,9 @@ def main():
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
-        f"{release}/board/{args.board}/example/{args.example}"
+        f"{release}/example/{args.example}"
         if args.example_from_sdk
-        else f"{CWD.absolute()}/example/{args.board}/{args.example}"
+        else f"{CWD.absolute()}/example/{args.example}"
     )
 
     cmd = ["make", "-C", makefile_directory]
