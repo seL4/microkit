@@ -73,7 +73,6 @@ class BoardInfo:
     gcc_cpu: Optional[str]
     loader_link_address: int
     kernel_options: KERNEL_OPTIONS
-    examples: Dict[str, Path]
 
 
 @dataclass
@@ -96,9 +95,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "ethernet": Path("example/tqma8xqp1gb/ethernet")
-        }
     ),
     BoardInfo(
         name="zcu102",
@@ -113,9 +109,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/zcu102/hello")
-        }
     ),
     BoardInfo(
         name="maaxboard",
@@ -129,9 +122,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/maaxboard/hello")
-        }
     ),
     BoardInfo(
         name="imx8mm_evk",
@@ -145,9 +135,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "passive_server": Path("example/imx8mm_evk/passive_server")
-        }
     ),
     BoardInfo(
         name="imx8mp_evk",
@@ -161,9 +148,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/imx8mp_evk/hello")
-        }
     ),
     BoardInfo(
         name="imx8mq_evk",
@@ -177,9 +161,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/imx8mq_evk/hello")
-        }
     ),
     BoardInfo(
         name="odroidc2",
@@ -193,9 +174,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/odroidc2/hello")
-        }
     ),
     BoardInfo(
         name="odroidc4",
@@ -209,9 +187,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "timer": Path("example/odroidc4/timer")
-        }
     ),
     BoardInfo(
         name="qemu_virt_aarch64",
@@ -228,10 +203,6 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/qemu_virt_aarch64/hello"),
-            "hierarchy": Path("example/qemu_virt_aarch64/hierarchy")
-        }
     ),
     BoardInfo(
         name="qemu_virt_riscv64",
@@ -245,9 +216,6 @@ SUPPORTED_BOARDS = (
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
         },
-        examples={
-            "hello": Path("example/qemu_virt_riscv64/hello"),
-        }
     ),
     BoardInfo(
         name="rockpro64",
@@ -261,9 +229,6 @@ SUPPORTED_BOARDS = (
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
         },
-        examples={
-            "hello": Path("example/rockpro64/hello")
-        }
     ),
     BoardInfo(
         name="star64",
@@ -276,9 +241,6 @@ SUPPORTED_BOARDS = (
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
         },
-        examples={
-            "hello": Path("example/star64/hello")
-        }
     ),
 )
 
@@ -308,6 +270,15 @@ SUPPORTED_CONFIGS = (
         },
     ),
 )
+
+
+EXAMPLES = {
+    "hello": Path("example/hello"),
+    "ethernet": Path("example/ethernet"),
+    "passive_server": Path("example/passive_server"),
+    "hierarchy": Path("example/hierarchy"),
+    "timer": Path("example/timer"),
+}
 
 
 def tar_filter(tarinfo: TarInfo) -> TarInfo:
@@ -681,19 +652,20 @@ def main() -> None:
             build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config)
-        # Setup the examples
-        for example, example_path in board.examples.items():
-            include_dir = root_dir / "board" / board.name / "example" / example
-            source_dir = example_path
-            for p in source_dir.rglob("*"):
-                if not p.is_file():
-                    continue
-                rel = p.relative_to(source_dir)
-                dest = include_dir / rel
-                dest.parent.mkdir(exist_ok=True, parents=True)
-                dest.unlink(missing_ok=True)
-                copy(p, dest)
-                dest.chmod(0o744)
+
+    # Setup the examples
+    for example, example_path in EXAMPLES.items():
+        include_dir = root_dir / "example" / example
+        source_dir = example_path
+        for p in source_dir.rglob("*"):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(source_dir)
+            dest = include_dir / rel
+            dest.parent.mkdir(exist_ok=True, parents=True)
+            dest.unlink(missing_ok=True)
+            copy(p, dest)
+            dest.chmod(0o744)
 
     if not args.skip_tar:
         # At this point we create a tar.gz file

@@ -19,6 +19,10 @@ ifeq ($(strip $(MICROKIT_CONFIG)),)
 $(error MICROKIT_CONFIG must be specified)
 endif
 
+ifneq ($(MICROKIT_BOARD),tqma8xqp1gb)
+$(error Unsupported MICROKIT_BOARD given, only tqma8xqp1gb supported)
+endif
+
 TOOLCHAIN := aarch64-none-elf
 
 CPU := cortex-a35

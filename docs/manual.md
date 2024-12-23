@@ -331,7 +331,7 @@ Additionally, for each supported board configuration the following are provided:
 * `kernel.elf`
 * `monitor.elf`
 
-For some boards there are also examples provided in the `examples` directory.
+There are also examples provided in the `example` directory.
 
 The Microkit SDK does **not** provide, nor require, any specific build system.
 The user is free to build their system using whatever build system is deemed most appropriate for their specific use case.

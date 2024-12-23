@@ -19,7 +19,20 @@ ifeq ($(strip $(MICROKIT_CONFIG)),)
 $(error MICROKIT_CONFIG must be specified)
 endif
 
-TOOLCHAIN := riscv64-unknown-elf
+BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
+
+ARCH := ${shell grep 'CONFIG_SEL4_ARCH  ' $(BOARD_DIR)/include/kernel/gen_config.h | cut -d' ' -f4}
+
+ifeq ($(ARCH),aarch64)
+	TOOLCHAIN := aarch64-none-elf
+	# No specific AArch64 flags
+	CFLAGS_ARCH :=
+else ifeq ($(ARCH),riscv64)
+	TOOLCHAIN := riscv64-unknown-elf
+	CFLAGS_ARCH := -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
+else
+$(error Unsupported ARCH)
+endif
 
 CC := $(TOOLCHAIN)-gcc
 LD := $(TOOLCHAIN)-ld
@@ -28,10 +41,8 @@ MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 HELLO_OBJS := hello.o
 
-BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
-
 IMAGES := hello.elf
-CFLAGS := -mstrict-align -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
+CFLAGS := -mstrict-align -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
