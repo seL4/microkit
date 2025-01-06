@@ -416,7 +416,7 @@ impl ProtectionDomain {
             match config.arm_smc {
                 Some(smc_allowed) => {
                     if !smc_allowed {
-                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled for this platform".to_string()));
+                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string()));
                     }
                 }
                 None => {
