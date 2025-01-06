@@ -31,7 +31,7 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use util::{
     bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
-    struct_to_bytes,
+    monitor_serialise_u64_vec, struct_to_bytes,
 };
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
@@ -453,6 +453,7 @@ struct BuiltSystem {
     ntfn_caps: Vec<u64>,
     pd_elf_regions: Vec<Vec<Region>>,
     pd_setvar_values: Vec<Vec<u64>>,
+    pd_stack_addrs: Vec<u64>,
     kernel_objects: Vec<Object>,
     initial_task_virt_region: MemoryRegion,
     initial_task_phys_region: MemoryRegion,
@@ -1362,6 +1363,7 @@ fn build_system(
     // Here we create a memory region/mapping for the stack for each PD.
     // We allocate the stack at the highest possible virtual address that the
     // kernel allows us.
+    let mut pd_stack_addrs = Vec::with_capacity(system.protection_domains.len());
     for pd in &system.protection_domains {
         let stack_mr = SysMemoryRegion {
             name: format!("STACK:{}", pd.name),
@@ -1379,6 +1381,8 @@ fn build_system(
             cached: true,
             text_pos: None,
         };
+
+        pd_stack_addrs.push(stack_map.vaddr);
 
         extra_mrs.push(stack_mr);
         pd_extra_maps.get_mut(pd).unwrap().push(stack_map);
@@ -2865,6 +2869,7 @@ fn build_system(
         ntfn_caps: notification_caps,
         pd_elf_regions,
         pd_setvar_values,
+        pd_stack_addrs,
         kernel_objects,
         initial_task_phys_region,
         initial_task_virt_region,
@@ -3529,30 +3534,17 @@ fn main() -> Result<(), String> {
         &bootstrap_invocation_data,
     )?;
 
-    let mut tcb_cap_bytes = vec![0; (1 + built_system.tcb_caps.len()) * 8];
-    for (i, cap) in built_system.tcb_caps.iter().enumerate() {
-        let start = (i + 1) * 8;
-        let end = start + 8;
-        tcb_cap_bytes[start..end].copy_from_slice(&cap.to_le_bytes());
-    }
-    let mut sched_cap_bytes = vec![0; (1 + built_system.sched_caps.len()) * 8];
-    for (i, cap) in built_system.sched_caps.iter().enumerate() {
-        let start = (i + 1) * 8;
-        let end = start + 8;
-        sched_cap_bytes[start..end].copy_from_slice(&cap.to_le_bytes());
-    }
-    let mut ntfn_cap_bytes = vec![0; (1 + built_system.ntfn_caps.len()) * 8];
-    for (i, cap) in built_system.ntfn_caps.iter().enumerate() {
-        let start = (i + 1) * 8;
-        let end = start + 8;
-        ntfn_cap_bytes[start..end].copy_from_slice(&cap.to_le_bytes());
-    }
+    let tcb_cap_bytes = monitor_serialise_u64_vec(&built_system.tcb_caps);
+    let sched_cap_bytes = monitor_serialise_u64_vec(&built_system.sched_caps);
+    let ntfn_cap_bytes = monitor_serialise_u64_vec(&built_system.ntfn_caps);
+    let pd_stack_addrs_bytes = monitor_serialise_u64_vec(&built_system.pd_stack_addrs);
 
     monitor_elf.write_symbol("fault_ep", &built_system.fault_ep_cap_address.to_le_bytes())?;
     monitor_elf.write_symbol("reply", &built_system.reply_cap_address.to_le_bytes())?;
     monitor_elf.write_symbol("tcbs", &tcb_cap_bytes)?;
     monitor_elf.write_symbol("scheduling_contexts", &sched_cap_bytes)?;
     monitor_elf.write_symbol("notification_caps", &ntfn_cap_bytes)?;
+    monitor_elf.write_symbol("pd_stack_addrs", &pd_stack_addrs_bytes)?;
     // We do MAX_PDS + 1 due to the index that the monitor uses (the badge) starting at 1.
     let mut pd_names_bytes = vec![0; (MAX_PDS + 1) * PD_MAX_NAME_LENGTH];
     for (i, pd) in system.protection_domains.iter().enumerate() {

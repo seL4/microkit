@@ -94,6 +94,9 @@ seL4_Word tcbs[MAX_TCBS];
 seL4_Word scheduling_contexts[MAX_TCBS];
 seL4_Word notification_caps[MAX_TCBS];
 
+/* For reporting potential stack overflows, keep track of the stack regions for each PD. */
+seL4_Word pd_stack_addrs[MAX_PDS];
+
 struct region {
     uintptr_t paddr;
     uintptr_t size_bits;
@@ -915,6 +918,12 @@ static void monitor(void)
 #else
 #error "Unknown architecture to print a VM fault for"
 #endif
+
+            seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+            seL4_Word stack_addr = pd_stack_addrs[badge];
+            if (fault_addr < stack_addr && fault_addr >= stack_addr - 0x1000) {
+                puts("MON|ERROR: potential stack overflow, fault address within one page outside of stack region\n");
+            }
 
             break;
         }
