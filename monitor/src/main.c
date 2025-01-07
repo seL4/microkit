@@ -65,9 +65,9 @@
 #include "util.h"
 #include "debug.h"
 
+#define MAX_VMS 64
 #define MAX_PDS 64
 #define MAX_NAME_LEN 64
-#define MAX_TCBS 64
 
 #define MAX_UNTYPED_REGIONS 256
 
@@ -87,12 +87,15 @@ char _stack[4096];
 
 static char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;
+static char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
+seL4_Word vm_names_len;
 
 seL4_Word fault_ep;
 seL4_Word reply;
-seL4_Word tcbs[MAX_TCBS];
-seL4_Word scheduling_contexts[MAX_TCBS];
-seL4_Word notification_caps[MAX_TCBS];
+seL4_Word pd_tcbs[MAX_PDS];
+seL4_Word vm_tcbs[MAX_VMS];
+seL4_Word scheduling_contexts[MAX_PDS];
+seL4_Word notification_caps[MAX_PDS];
 
 /* For reporting potential stack overflows, keep track of the stack regions for each PD. */
 seL4_Word pd_stack_addrs[MAX_PDS];
@@ -806,7 +809,7 @@ static void monitor(void)
         tag = seL4_Recv(fault_ep, &badge, reply);
         label = seL4_MessageInfo_get_label(tag);
 
-        seL4_Word tcb_cap = tcbs[badge];
+        seL4_Word tcb_cap = pd_tcbs[badge];
 
         if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
             /* This is a request from our PD to become passive */
@@ -970,7 +973,7 @@ void main(seL4_BootInfo *bi)
 
 #if CONFIG_DEBUG_BUILD
     /*
-     * Assign PD names to each TCB with seL4, this helps debugging when an error
+     * Assign PD/VM names to each TCB with seL4, this helps debugging when an error
      * message is printed by seL4 or if we dump the scheduler state.
      * This is done specifically in the monitor rather than being prepared as an
      * invocation like everything else because it is technically a separate system
@@ -979,7 +982,10 @@ void main(seL4_BootInfo *bi)
      * support in the tooling and make the monitor generic.
      */
     for (unsigned idx = 1; idx < pd_names_len + 1; idx++) {
-        seL4_DebugNameThread(tcbs[idx], pd_names[idx]);
+        seL4_DebugNameThread(pd_tcbs[idx], pd_names[idx]);
+    }
+    for (unsigned idx = 1; idx < vm_names_len + 1; idx++) {
+        seL4_DebugNameThread(vm_tcbs[idx], vm_names[idx]);
     }
 #endif
 
