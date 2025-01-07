@@ -11,7 +11,7 @@ use elf::ElfFile;
 use loader::Loader;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
-    UntypedObject, MAX_PDS, PD_MAX_NAME_LENGTH,
+    UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
 };
 use sdf::{
     parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
@@ -31,7 +31,7 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use util::{
     bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
-    monitor_serialise_u64_vec, struct_to_bytes,
+    monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
@@ -448,7 +448,8 @@ struct BuiltSystem {
     fault_ep_cap_address: u64,
     reply_cap_address: u64,
     cap_lookup: HashMap<u64, String>,
-    tcb_caps: Vec<u64>,
+    pd_tcb_caps: Vec<u64>,
+    vm_tcb_caps: Vec<u64>,
     sched_caps: Vec<u64>,
     ntfn_caps: Vec<u64>,
     pd_elf_regions: Vec<Vec<Region>>,
@@ -2864,7 +2865,8 @@ fn build_system(
         fault_ep_cap_address: fault_ep_endpoint_object.cap_addr,
         reply_cap_address: reply_obj.cap_addr,
         cap_lookup: cap_address_names,
-        tcb_caps: tcb_caps[..system.protection_domains.len()].to_vec(),
+        pd_tcb_caps: tcb_caps[..system.protection_domains.len()].to_vec(),
+        vm_tcb_caps: tcb_caps[system.protection_domains.len()..].to_vec(),
         sched_caps: sched_context_caps,
         ntfn_caps: notification_caps,
         pd_elf_regions,
@@ -3534,37 +3536,41 @@ fn main() -> Result<(), String> {
         &bootstrap_invocation_data,
     )?;
 
-    let tcb_cap_bytes = monitor_serialise_u64_vec(&built_system.tcb_caps);
+    let pd_tcb_cap_bytes = monitor_serialise_u64_vec(&built_system.pd_tcb_caps);
+    let vm_tcb_cap_bytes = monitor_serialise_u64_vec(&built_system.vm_tcb_caps);
     let sched_cap_bytes = monitor_serialise_u64_vec(&built_system.sched_caps);
     let ntfn_cap_bytes = monitor_serialise_u64_vec(&built_system.ntfn_caps);
     let pd_stack_addrs_bytes = monitor_serialise_u64_vec(&built_system.pd_stack_addrs);
 
     monitor_elf.write_symbol("fault_ep", &built_system.fault_ep_cap_address.to_le_bytes())?;
     monitor_elf.write_symbol("reply", &built_system.reply_cap_address.to_le_bytes())?;
-    monitor_elf.write_symbol("tcbs", &tcb_cap_bytes)?;
+    monitor_elf.write_symbol("pd_tcbs", &pd_tcb_cap_bytes)?;
+    monitor_elf.write_symbol("vm_tcbs", &vm_tcb_cap_bytes)?;
     monitor_elf.write_symbol("scheduling_contexts", &sched_cap_bytes)?;
     monitor_elf.write_symbol("notification_caps", &ntfn_cap_bytes)?;
     monitor_elf.write_symbol("pd_stack_addrs", &pd_stack_addrs_bytes)?;
-    // We do MAX_PDS + 1 due to the index that the monitor uses (the badge) starting at 1.
-    let mut pd_names_bytes = vec![0; (MAX_PDS + 1) * PD_MAX_NAME_LENGTH];
-    for (i, pd) in system.protection_domains.iter().enumerate() {
-        // The monitor will index into the array of PD names based on the badge, which
-        // starts at 1 and hence we cannot use the 0th entry in the array.
-        let name = pd.name.as_bytes();
-        let start = (i + 1) * PD_MAX_NAME_LENGTH;
-        // Here instead of giving an error we simply take the minimum of the PD's name
-        // and how large of a name we can encode
-        let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
-        let end = start + name_length;
-        pd_names_bytes[start..end].copy_from_slice(&name[..name_length]);
-        // These bytes will be interpreted as a C string, so we must include
-        // a null-terminator.
-        pd_names_bytes[start + PD_MAX_NAME_LENGTH - 1] = 0;
-    }
-    monitor_elf.write_symbol("pd_names", &pd_names_bytes)?;
+    let pd_names = system
+        .protection_domains
+        .iter()
+        .map(|pd| &pd.name)
+        .collect();
+    monitor_elf.write_symbol(
+        "pd_names",
+        &monitor_serialise_names(pd_names, MAX_PDS, PD_MAX_NAME_LENGTH),
+    )?;
     monitor_elf.write_symbol(
         "pd_names_len",
         &system.protection_domains.len().to_le_bytes(),
+    )?;
+    let vm_names: Vec<&String> = system
+        .protection_domains
+        .iter()
+        .filter_map(|pd| pd.virtual_machine.as_ref().map(|vm| &vm.name))
+        .collect();
+    monitor_elf.write_symbol("vm_names_len", &vm_names.len().to_le_bytes())?;
+    monitor_elf.write_symbol(
+        "vm_names",
+        &monitor_serialise_names(vm_names, MAX_VMS, VM_MAX_NAME_LENGTH),
     )?;
 
     // Write out all the symbols for each PD

@@ -14,13 +14,15 @@ use sel4::BootInfo;
 use std::cmp::min;
 use std::fmt;
 
-// Note that this value is used in the monitor so should also be changed there
-// if this was to change.
+// Note that these values are used in the monitor so should also be changed there
+// if any of these were to change.
 pub const MAX_PDS: usize = 63;
+pub const MAX_VMS: usize = 63;
 // It should be noted that if you were to change the value of
-// the maximum PD name length, you would also have to change
+// the maximum PD/VM name length, you would also have to change
 // the monitor and libmicrokit.
 pub const PD_MAX_NAME_LENGTH: usize = 64;
+pub const VM_MAX_NAME_LENGTH: usize = 64;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct UntypedObject {
