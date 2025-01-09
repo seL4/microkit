@@ -85,9 +85,9 @@ seL4_IPCBuffer *__sel4_ipc_buffer;
 
 char _stack[4096];
 
-static char pd_names[MAX_PDS][MAX_NAME_LEN];
+char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;
-static char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
+char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
 seL4_Word vm_names_len;
 
 seL4_Word fault_ep;
