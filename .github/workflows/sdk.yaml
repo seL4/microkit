@@ -57,19 +57,19 @@ jobs:
       - name: Set version
         run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK (x86-64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --tool-target-triple="x86_64-unknown-linux-musl"
+        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-linux-x86-64 --tool-target-triple="x86_64-unknown-linux-musl"
       - name: Upload SDK (x86-64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64.tar.gz
       - name: Build SDK (ARM64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --tool-target-triple="aarch64-unknown-linux-musl"
+        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-linux-aarch64 --tool-target-triple="aarch64-unknown-linux-musl"
       - name: Upload SDK (ARM64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
   build_macos:
     name: Build SDK (macOS x86-64, ARM64)
     runs-on: macos-14
@@ -103,16 +103,16 @@ jobs:
       - name: Set version
         run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK (x86-64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --tool-target-triple=x86_64-apple-darwin
+        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-x86-64 --tool-target-triple=x86_64-apple-darwin
       - name: Upload SDK (x86-64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
       - name: Build SDK (ARM64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --tool-target-triple=aarch64-apple-darwin
+        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-aarch64 --tool-target-triple=aarch64-apple-darwin
       - name: Upload SDK (ARM64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}.tar.gz
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64.tar.gz
