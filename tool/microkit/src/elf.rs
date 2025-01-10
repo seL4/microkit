@@ -226,7 +226,7 @@ impl ElfFile {
         let mut symtab_shent: Option<&ElfSectionHeader64> = None;
         let mut shstrtab_shent: Option<&ElfSectionHeader64> = None;
         for i in 0..hdr.shnum {
-            let shent_start = hdr.shoff + (i * hdr.shentsize) as u64;
+            let shent_start = hdr.shoff + (i as u64 * hdr.shentsize as u64);
             let shent_end = shent_start + hdr.shentsize as u64;
             let shent_bytes = &bytes[shent_start as usize..shent_end as usize];
 
