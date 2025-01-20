@@ -208,13 +208,14 @@ pub fn monitor_serialise_names(
         let name_bytes = name.as_bytes();
         let start = (i + 1) * max_name_len;
         // Here instead of giving an error we simply take the minimum of the name
-        // and how large of a name we can encode
-        let name_length = std::cmp::min(name_bytes.len(), max_name_len);
+        // and how large of a name we can encode. The name length is one less than
+        // the maximum since we still have to add the null terminator.
+        let name_length = std::cmp::min(name_bytes.len(), max_name_len - 1);
         let end = start + name_length;
         names_bytes[start..end].copy_from_slice(&name_bytes[..name_length]);
         // These bytes will be interpreted as a C string, so we must include
         // a null-terminator.
-        names_bytes[start + max_name_len - 1] = 0;
+        names_bytes[end] = 0;
     }
 
     names_bytes

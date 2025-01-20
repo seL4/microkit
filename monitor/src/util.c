@@ -98,6 +98,7 @@ char *strcpy(char *restrict dst, const char *restrict src)
         dst[i] = src[i];
         i++;
     }
+    dst[i] = '\0';
 
     return dst;
 }
