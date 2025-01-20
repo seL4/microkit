@@ -123,9 +123,6 @@ SUPPORTED_BOARDS = (
             "KernelArmVtimerUpdateVOffset": False,
             "KernelMaxNumNodes": "4",
         },
-        examples={
-            "hello": Path("example/maaxboard/hello")
-        }
     ),
     BoardInfo(
         name="maaxboard_4_cores",
@@ -167,9 +164,6 @@ SUPPORTED_BOARDS = (
             "KernelArmVtimerUpdateVOffset": False,
             "KernelMaxNumNodes": "4",
         },
-        examples={
-            "passive_server": Path("example/imx8mm_evk/passive_server")
-        }
     ),
     BoardInfo(
         name="imx8mp_evk",
@@ -223,9 +217,6 @@ SUPPORTED_BOARDS = (
             "KernelArmVtimerUpdateVOffset": False,
             "KernelMaxNumNodes": "4",
         },
-        examples={
-            "timer": Path("example/odroidc4/timer")
-        }
     ),
     BoardInfo(
         name="odroidc4_4_cores",
