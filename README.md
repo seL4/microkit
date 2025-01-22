@@ -32,8 +32,6 @@ The remainder of this README is for Microkit developers.
 Building the Microkit SDK is supported on Linux (x86_64) and macOS (Apple Silicon/Intel).
 
 This section attempts to list the packages or external development tools which are required during development.
-At this stage it may be incomplete.
-Please file an issue if additional packages are required.
 
 * Rust and Cargo
 * git
@@ -42,7 +40,7 @@ Please file an issue if additional packages are required.
 * python3.9-venv
 * cmake
 * ninja-build
-* ARM GCC compiler for none-elf; version 12.2.1 20221205
+* ARM GCC compiler for none-elf; version 12.2.Rel1
 * RISC-V GCC compiler for unknown-elf; version 13.2.0
 * device tree compiler
 * xmllint
