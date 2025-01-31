@@ -396,6 +396,16 @@ The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
 
+# Language Support
+
+There are native APIs for C/C++ and Rust.
+
+[libmicrokit](#libmicrokit) exports a C API and so can be used in any language
+that supports C FFI.
+
+For Rust, native bindings exist but are not included in the SDK itself. They are
+available at [rust-sel4](https://github.com/seL4/rust-sel4).
+
 # libmicrokit {#libmicrokit}
 
 All program images should link against `libmicrokit.a`.
