@@ -5,6 +5,8 @@ Source: http://sel4.systems
 
 Files:
   tool/microkit/Cargo.lock
+  example/rust/Cargo.lock
+  example/rust/support/*.json
   flake.lock
   CHANGES.md
   VERSION

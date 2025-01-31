@@ -1,0 +1,18 @@
+#
+# Copyright 2025, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+#
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-2-Clause"
+
+[[bin]]
+name = "hello"
+path = "hello.rs"
+
+[dependencies]
+sel4-microkit = { git = "https://github.com/seL4/rust-sel4" }
