@@ -588,6 +588,7 @@ def main() -> None:
     for arch in KernelArch:
         arch_str = arch.name.lower()
         parser.add_argument(f"--toolchain-prefix-{arch_str}", default=arch.c_toolchain(), help=f"C toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
+    parser.add_argument("--experimental-domain-support", action="store_true", help="Enable experimental support for seL4's domain scheduler")
 
     args = parser.parse_args()
 
@@ -617,6 +618,11 @@ def main() -> None:
         selected_configs = [config for config in SUPPORTED_CONFIGS if config.name in selected_config_names]
     else:
         selected_configs = SUPPORTED_CONFIGS
+
+    if args.experimental_domain_support:
+        for config in selected_configs:
+            config.kernel_options["KernelNumDomains"] = 256
+            config.kernel_options["KernelDomainSchedule"] = Path("domain_schedule.c")
 
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
