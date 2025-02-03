@@ -1325,8 +1325,43 @@ fn build_system(
     );
 
     init_system.reserve(invocation_table_allocations);
+    let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
 
-    // 3.1 Work out how many regular (non-fixed) page objects are required
+    // 3.1 Work out how many fixed page objects are required
+
+    // First we need to find all the requested pages and sorted them
+    let mut fixed_pages = Vec::new();
+    for mr in &all_mrs {
+        if let Some(mut phys_addr) = mr.phys_addr {
+            mr_pages.insert(mr, vec![]);
+            for _ in 0..mr.page_count {
+                fixed_pages.push((phys_addr, mr));
+                phys_addr += mr.page_size_bytes();
+            }
+        }
+    }
+
+    // Sort based on the starting physical address
+    fixed_pages.sort_by_key(|p| p.0);
+
+    // FIXME: At this point we can recombine them into
+    // groups to optimize allocation
+    for (phys_addr, mr) in fixed_pages {
+        let obj_type = match mr.page_size {
+            PageSize::Small => ObjectType::SmallPage,
+            PageSize::Large => ObjectType::LargePage,
+        };
+
+        let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
+        let name = format!(
+            "Page({} {}): MR={} @ {:x}",
+            page_size_human, page_size_label, mr.name, phys_addr
+        );
+        let page = init_system.allocate_fixed_object(phys_addr, obj_type, name);
+        mr_pages.get_mut(mr).unwrap().push(page);
+    }
+
+    // 3.2 Work out how many regular (non-fixed) page objects are required
     let mut small_page_names = Vec::new();
     let mut large_page_names = Vec::new();
 
@@ -1365,16 +1400,14 @@ fn build_system(
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
 
-    let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
-
     let mut page_small_idx = ipc_buffer_objs.len();
     let mut page_large_idx = 0;
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
-            mr_pages.insert(mr, vec![]);
             continue;
         }
+
         let idx = match mr.page_size {
             PageSize::Small => page_small_idx,
             PageSize::Large => page_large_idx,
@@ -1388,39 +1421,6 @@ fn build_system(
             PageSize::Small => page_small_idx += mr.page_count as usize,
             PageSize::Large => page_large_idx += mr.page_count as usize,
         }
-    }
-
-    // 3.2 Now allocate all the fixed MRs
-
-    // First we need to find all the requested pages and sorted them
-    let mut fixed_pages = Vec::new();
-    for mr in &all_mrs {
-        if let Some(mut phys_addr) = mr.phys_addr {
-            for _ in 0..mr.page_count {
-                fixed_pages.push((phys_addr, mr));
-                phys_addr += mr.page_size_bytes();
-            }
-        }
-    }
-
-    // Sort based on the starting physical address
-    fixed_pages.sort_by_key(|p| p.0);
-
-    // FIXME: At this point we can recombine them into
-    // groups to optimize allocation
-    for (phys_addr, mr) in fixed_pages {
-        let obj_type = match mr.page_size {
-            PageSize::Small => ObjectType::SmallPage,
-            PageSize::Large => ObjectType::LargePage,
-        };
-
-        let (page_size_human, page_size_label) = util::human_size_strict(mr.page_size as u64);
-        let name = format!(
-            "Page({} {}): MR={} @ {:x}",
-            page_size_human, page_size_label, mr.name, phys_addr
-        );
-        let page = init_system.allocate_fixed_object(phys_addr, obj_type, name);
-        mr_pages.get_mut(mr).unwrap().push(page);
     }
 
     let virtual_machines: Vec<&VirtualMachine> = system
