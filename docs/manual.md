@@ -981,6 +981,64 @@ If you are booting from U-Boot, use the following command to start the system im
 Note that the OpenSBI version from the CVA6 SDK at the time of writing has issues when
 booting. It is recommended to use the mainline OpenSBI.
 
+## Cheshire
+
+Support is available for [Cheshire](https://github.com/pulp-platform/cheshire).
+It is an SoC design based on the CVA6 core, implementing a 64-bit RISC-V CPU.
+
+Microkit outputs a raw binary for this device. Several steps are required in order to boot.
+
+A custom version of OpenSBI is required. It can be found
+[here](https://github.com/pulp-platform/opensbi/tree/cheshire).
+Build the firmware payload using platform `fpga/cheshire`.
+
+### Using U-Boot
+
+With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-boot:
+
+    => go 0x90000000
+
+### Raw systerm with no bootloader
+
+Without any firmware present on the SD card, it is still possible to boot Cheshire with a Microkit system.
+
+Using a GDB prompt via openOCD:
+
+1. Reset board
+    > monitor reset halt
+
+2. Load a device tree blob (DTS available in Cheshire repo or seL4) to memory and set the a0 and a1 registers to point at it:
+
+    > restore /path/to/cheshire.dtb binary 0xa0000000
+
+(tell OpenSBI where DTB is)
+
+    > set $a0=0xa0000000
+
+(tell OpenSBI that the default hart is #0)
+
+    > set $a1=0
+
+3. Load OpenSBI
+
+    > load /path/to/opensbi/fw_payload.elf
+
+4. Allow OpenSBI to boot, and interrupt it once the line `Test payload running` is emitted on serial.
+
+    > continue
+
+(wait for output)
+
+    > (Ctrl+C)
+
+5. Load Microkit image and execute
+
+    > restore /path/to/loader.img binary 0x90000000
+
+(execute)
+
+    > continue
+
 ## Adding Platform Support
 
 The following section is a guide for adding support for a new platform to Microkit.

@@ -254,6 +254,18 @@ SUPPORTED_BOARDS = (
             "KernelRiscvExtF": True,
         },
     ),
+    BoardInfo(
+        name="cheshire",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "cheshire",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        },
+    ),
 )
 
 SUPPORTED_CONFIGS = (
