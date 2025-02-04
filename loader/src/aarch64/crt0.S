@@ -43,6 +43,13 @@ fixup_image_base:
     cmp     x0, x1
     beq     image_ok
 
+    /* Log that we are being relocated */
+    bl log_relocation
+
+    /* Restore x0 and x1 */
+    ldr     x0, =LINK_ADDRESS
+    adr     x1, _start
+
     /* Sanity check: We don't want to overwrite ourselves! We assume that
      * everything between _start (src_start) and _bss_end (src_end) is important (i.e.
      * something that might be run while relocating) but allow overlap for
@@ -52,11 +59,11 @@ fixup_image_base:
     add     x2, x2, #:lo12:_bss_end
 
     /* The loader_data is directly after _bss_end, with the first
-     * value being the loader_data struct. The first field of this
-     * struct is the size of the loader_data region, so we add
-     * this to _bss_end to get the real end of the image
+     * value being the loader_data struct. The second field of
+     * this struct is the size of the loader_data region, so we
+     * add this to _bss_end to get the real end of the image
      */
-    ldr     x3, [x2]
+    ldr     x3, [x2, #+8]
     add     x2, x2, x3
     sub     x2, x2, x1
 

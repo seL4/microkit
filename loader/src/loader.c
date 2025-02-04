@@ -58,8 +58,8 @@ struct region {
 };
 
 struct loader_data {
-    uintptr_t size;
     uintptr_t magic;
+    uintptr_t size;
     uintptr_t flags;
     uintptr_t kernel_entry;
     uintptr_t ui_p_reg_start;
@@ -745,6 +745,15 @@ static inline void enable_mmu(void)
     asm volatile("fence.i" ::: "memory");
 }
 #endif
+
+void log_relocation(uint64_t reloc_addr, uint64_t curr_addr)
+{
+    puts("LDR|INFO: loader is being relocated. Currently at: ");
+    puthex64(curr_addr);
+    puts(". Moving to: ");
+    puthex64(reloc_addr);
+    puts(".\n");
+}
 
 int main(void)
 {
