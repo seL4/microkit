@@ -108,8 +108,8 @@ struct LoaderRegion64 {
 
 #[repr(C)]
 struct LoaderHeader64 {
-    size: u64,
     magic: u64,
+    size: u64,
     flags: u64,
     kernel_entry: u64,
     ui_p_reg_start: u64,
@@ -298,8 +298,8 @@ impl<'a> Loader<'a> {
             });
 
         let header = LoaderHeader64 {
-            size,
             magic,
+            size,
             flags,
             kernel_entry,
             ui_p_reg_start,

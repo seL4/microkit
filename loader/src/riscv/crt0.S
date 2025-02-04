@@ -113,6 +113,13 @@ fixup_image_base:
   la a1, _start
   beq a0, a1, image_ok
 
+  /* Log that we are being relocated */
+  jal log_relocation
+
+  /* Restore a0 and a1 */
+  li a0, LINK_ADDRESS
+  la a1, _start
+
   /* Sanity check: We don't want to overwrite ourselves! We assume that
    * everything between _start (src_start) and _bss_end (src_end) is important (i.e.
    * something that might be run while relocating) but allow overlap for
@@ -121,7 +128,7 @@ fixup_image_base:
   la a2, _bss_end
 
    /* The loader_data is directly after _bss_end, with the first
-   * value being the loader_data struct. The first field of this
+   * value being the loader_data struct. The second field of this
    * struct is the size of the loader_data region, so we add
    * this to _bss_end to get the real end of the image
    */
