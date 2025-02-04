@@ -902,6 +902,25 @@ QEMU will start the system image using its packaged version of OpenSBI.
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
 
+## Raspberry Pi 4B
+
+Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
+Rasberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
+If you require more than 1GB, please file an issue or pull request to add support for
+models with larger amounts of memory.
+
+For initial board setup, please see the instructions on the [seL4 website]
+(https://docs.sel4.systems/Hardware/Rpi4.html).
+
+When getting into the U-Boot console you want to load the Microkit binary image to
+address 0x10000000 and then run `go 0x10000000`.
+
+For example, if you were to load the image via the MMC you would run the following
+U-Boot commands:
+
+     => fatload mmc 0 0x10000000 <SYSTEM IMAGE>
+     => go 0x10000000
+
 ## Pine64 ROCKPro64
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:

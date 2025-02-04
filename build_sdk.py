@@ -218,6 +218,20 @@ SUPPORTED_BOARDS = (
         },
     ),
     BoardInfo(
+        name="rpi4b_1gb",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a72",
+        loader_link_address=0x10000000,
+        kernel_options={
+            "KernelPlatform": "bcm2711",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "RPI4_MEMORY": 1024
+        },
+    ),
+    BoardInfo(
         name="rockpro64",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
