@@ -2846,7 +2846,14 @@ fn build_system(
             pd.setvars
                 .iter()
                 .map(|setvar| match &setvar.kind {
-                    sdf::SysSetVarKind::Size { mr } => system.memory_regions.iter().find(|m| m.name == *mr).unwrap().size,
+                    sdf::SysSetVarKind::Size { mr } => {
+                        system
+                            .memory_regions
+                            .iter()
+                            .find(|m| m.name == *mr)
+                            .unwrap()
+                            .size
+                    }
                     sdf::SysSetVarKind::Vaddr { address } => *address,
                     sdf::SysSetVarKind::Paddr { region } => {
                         let mr = system
