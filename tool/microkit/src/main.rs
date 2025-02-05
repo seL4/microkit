@@ -739,7 +739,14 @@ fn get_arch_n_paging(config: &Config, region: MemoryRegion) -> u64 {
             const PD_INDEX_OFFSET: u64 = PT_INDEX_OFFSET + 9;
             const PUD_INDEX_OFFSET: u64 = PD_INDEX_OFFSET + 9;
 
-            get_n_paging(region, PUD_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
+            if config.aarch64_vspace_s2_start_l1() {
+                get_n_paging(region, PUD_INDEX_OFFSET) + get_n_paging(region, PD_INDEX_OFFSET)
+            } else {
+                const PGD_INDEX_OFFSET: u64 = PUD_INDEX_OFFSET + 9;
+                get_n_paging(region, PGD_INDEX_OFFSET)
+                    + get_n_paging(region, PUD_INDEX_OFFSET)
+                    + get_n_paging(region, PD_INDEX_OFFSET)
+            }
         }
         Arch::Riscv64 => match config.riscv_pt_levels.unwrap() {
             RiscvVirtualMemory::Sv39 => {
@@ -843,13 +850,13 @@ fn emulate_kernel_boot(
         Arch::Riscv64 => 38,
     };
     let device_regions: Vec<MemoryRegion> = [
-        reserved_region.aligned_power_of_two_regions(max_bits),
-        device_memory.aligned_power_of_two_regions(max_bits),
+        reserved_region.aligned_power_of_two_regions(config, max_bits),
+        device_memory.aligned_power_of_two_regions(config, max_bits),
     ]
     .concat();
     let normal_regions: Vec<MemoryRegion> = [
-        boot_region.aligned_power_of_two_regions(max_bits),
-        normal_memory.aligned_power_of_two_regions(max_bits),
+        boot_region.aligned_power_of_two_regions(config, max_bits),
+        normal_memory.aligned_power_of_two_regions(config, max_bits),
     ]
     .concat();
     let mut untyped_objects = Vec::new();
@@ -1660,7 +1667,7 @@ fn build_system(
         for (vaddr, page_size) in vaddrs {
             match config.arch {
                 Arch::Aarch64 => {
-                    if !config.hypervisor && config.arm_pa_size_bits.unwrap() != 40 {
+                    if !config.aarch64_vspace_s2_start_l1() {
                         upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
                     }
                 }
@@ -1718,7 +1725,7 @@ fn build_system(
 
         for (vaddr, page_size) in vaddrs {
             assert!(config.hypervisor);
-            if config.arm_pa_size_bits.unwrap() != 40 {
+            if !config.aarch64_vspace_s2_start_l1() {
                 upper_directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9 + 9));
             }
             directory_vaddrs.insert(util::mask_bits(vaddr, 12 + 9 + 9));
@@ -3343,10 +3350,6 @@ fn main() -> Result<(), String> {
         assert!(
             kernel_config.hypervisor,
             "Microkit tool expects a kernel with hypervisor mode enabled on AArch64."
-        );
-        assert!(
-            kernel_config.arm_pa_size_bits.unwrap() == 40,
-            "Microkit tool has assumptions about the ARM physical address size bits"
         );
     }
 

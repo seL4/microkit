@@ -10,7 +10,7 @@ pub mod sdf;
 pub mod sel4;
 pub mod util;
 
-use sel4::BootInfo;
+use sel4::{BootInfo, Config};
 use std::cmp::min;
 use std::fmt;
 
@@ -116,12 +116,27 @@ impl MemoryRegion {
         self.end - self.base
     }
 
-    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
+    pub fn aligned_power_of_two_regions(
+        &self,
+        config: &Config,
+        max_bits: u64,
+    ) -> Vec<MemoryRegion> {
+        // During the boot phase, the kernel creates all of the untyped regions
+        // based on the kernel virtual addresses, rather than the physical
+        // memory addresses. This has a subtle side affect in the process of
+        // creating untypeds as even though all the kernel virtual addresses are
+        // a constant offest of the corresponding physical address, overflow can
+        // occur when dealing with virtual addresses. This precisely occurs in
+        // this function, causing different regions depending on whether
+        // you use kernel virtual or physical addresses. In order to properly
+        // emulate the kernel booting process, we also have to emulate the unsigned interger
+        // overflow that can occur.
         let mut regions = Vec::new();
-        let mut base = self.base;
+        let mut base = config.paddr_to_kernel_vaddr(self.base);
+        let end = config.paddr_to_kernel_vaddr(self.end);
         let mut bits;
-        while base != self.end {
-            let size = self.end - base;
+        while base != end {
+            let size = end.wrapping_sub(base);
             let size_bits = util::msb(size);
             if base == 0 {
                 bits = size_bits;
@@ -133,8 +148,10 @@ impl MemoryRegion {
                 bits = max_bits;
             }
             let sz = 1 << bits;
-            regions.push(MemoryRegion::new(base, base + sz));
-            base += sz;
+            let base_paddr = config.kernel_vaddr_to_paddr(base);
+            let end_paddr = config.kernel_vaddr_to_paddr(base.wrapping_add(sz));
+            regions.push(MemoryRegion::new(base_paddr, end_paddr));
+            base = base.wrapping_add(sz);
         }
 
         regions
@@ -208,10 +225,14 @@ impl DisjointMemoryRegion {
         self.check();
     }
 
-    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
+    pub fn aligned_power_of_two_regions(
+        &self,
+        config: &Config,
+        max_bits: u64,
+    ) -> Vec<MemoryRegion> {
         let mut aligned_regions = Vec::new();
         for region in &self.regions {
-            aligned_regions.extend(region.aligned_power_of_two_regions(max_bits));
+            aligned_regions.extend(region.aligned_power_of_two_regions(config, max_bits));
         }
 
         aligned_regions

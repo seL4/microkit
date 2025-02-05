@@ -74,6 +74,19 @@ impl Config {
         }
     }
 
+    pub fn virtual_base(&self) -> u64 {
+        // These match the PPTR_BASE define in the kernel source.
+        match self.arch {
+            Arch::Aarch64 => match self.hypervisor {
+                true => 0x0000008000000000,
+                false => 0xffffff8000000000,
+            },
+            Arch::Riscv64 => match self.riscv_pt_levels.unwrap() {
+                RiscvVirtualMemory::Sv39 => 0xffffffc000000000,
+            },
+        }
+    }
+
     pub fn page_sizes(&self) -> [u64; 2] {
         match self.arch {
             Arch::Aarch64 | Arch::Riscv64 => [0x1000, 0x200_000],
@@ -104,6 +117,21 @@ impl Config {
     /// in a VSpace.
     pub fn vm_map_max_vaddr(&self) -> u64 {
         self.user_top()
+    }
+
+    pub fn paddr_to_kernel_vaddr(&self, paddr: u64) -> u64 {
+        paddr.wrapping_add(self.virtual_base())
+    }
+
+    pub fn kernel_vaddr_to_paddr(&self, vaddr: u64) -> u64 {
+        vaddr.wrapping_sub(self.virtual_base())
+    }
+
+    pub fn aarch64_vspace_s2_start_l1(&self) -> bool {
+        match self.arch {
+            Arch::Aarch64 => self.hypervisor && self.arm_pa_size_bits.unwrap() == 40,
+            _ => panic!("internal error"),
+        }
     }
 }
 
