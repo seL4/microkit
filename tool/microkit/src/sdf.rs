@@ -127,6 +127,10 @@ pub struct SysIrq {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum SysSetVarKind {
+    // For size we do not store the size since when we parse mappings
+    // we do not have access to the memory region yet. The size is resolved
+    // when we actually need to perform the setvar.
+    Size { mr: String },
     Vaddr { address: u64 },
     Paddr { region: String },
 }
@@ -246,6 +250,7 @@ impl SysMap {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
         if allow_setvar {
             attrs.push("setvar_vaddr");
+            attrs.push("setvar_size");
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
@@ -512,6 +517,24 @@ impl ProtectionDomain {
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             kind: SysSetVarKind::Vaddr { address: map.vaddr },
+                        });
+                    }
+
+                    if let Some(setvar_size) = child.attribute("setvar_size") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_size == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_size),
+                                ));
+                            }
+                        }
+
+                        setvars.push(SysSetVar {
+                            symbol: setvar_size.to_string(),
+                            kind: SysSetVarKind::Size { mr: map.mr.clone() },
                         });
                     }
 
