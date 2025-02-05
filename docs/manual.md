@@ -674,6 +674,7 @@ The `map` element has the following attributes:
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute), with the exception of a write-only mapping (just `w`).
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
+* `setvar_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the memory region.
 
 The `irq` element has the following attributes:
 
