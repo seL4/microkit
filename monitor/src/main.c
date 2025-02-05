@@ -329,6 +329,104 @@ static char *data_abort_dfsc_to_string(uintptr_t dfsc)
 }
 #endif
 
+/* UBSAN decoding related functionality */
+#define UBSAN_ARM64_BRK_IMM 0x5500
+#define UBSAN_ARM64_BRK_MASK 0x00ff
+#define ESR_COMMENT_MASK ((1 << 16) - 1)
+#define ARM64_BRK_EC 60
+
+/*
+ * ABI defined by Clang's UBSAN enum SanitizerHandler:
+ * https://github.com/llvm/llvm-project/blob/release/16.x/clang/lib/CodeGen/CodeGenFunction.h#L113
+ */
+enum UBSAN_CHECKS {
+    UBSAN_ADD_OVERFLOW,
+    UBSAN_BUILTIN_UNREACHABLE,
+    UBSAN_CFI_CHECK_FAIL,
+    UBSAN_DIVREM_OVERFLOW,
+    UBSAN_DYNAMIC_TYPE_CACHE_MISS,
+    UBSAN_FLOAT_CAST_OVERFLOW,
+    UBSAN_FUNCTION_TYPE_MISMATCH,
+    UBSAN_IMPLICIT_CONVERSION,
+    UBSAN_INVALID_BUILTIN,
+    UBSAN_INVALID_OBJC_CAST,
+    UBSAN_LOAD_INVALID_VALUE,
+    UBSAN_MISSING_RETURN,
+    UBSAN_MUL_OVERFLOW,
+    UBSAN_NEGATE_OVERFLOW,
+    UBSAN_NULLABILITY_ARG,
+    UBSAN_NULLABILITY_RETURN,
+    UBSAN_NONNULL_ARG,
+    UBSAN_NONNULL_RETURN,
+    UBSAN_OUT_OF_BOUNDS,
+    UBSAN_POINTER_OVERFLOW,
+    UBSAN_SHIFT_OUT_OF_BOUNDS,
+    UBSAN_SUB_OVERFLOW,
+    UBSAN_TYPE_MISMATCH,
+    UBSAN_ALIGNMENT_ASSUMPTION,
+    UBSAN_VLA_BOUND_NOT_POSITIVE,
+};
+
+#ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
+static char *usban_code_to_string(seL4_Word code)
+{
+    switch (code) {
+    case UBSAN_ADD_OVERFLOW:
+        return "add overflow";
+    case UBSAN_BUILTIN_UNREACHABLE:
+        return "builtin unreachable";
+    case UBSAN_CFI_CHECK_FAIL:
+        return "control-flow-integrity check fail";
+    case UBSAN_DIVREM_OVERFLOW:
+        return "division remainder overflow";
+    case UBSAN_DYNAMIC_TYPE_CACHE_MISS:
+        return "dynamic type cache miss";
+    case UBSAN_FLOAT_CAST_OVERFLOW:
+        return "float case overflow";
+    case UBSAN_FUNCTION_TYPE_MISMATCH:
+        return "function type mismatch";
+    case UBSAN_IMPLICIT_CONVERSION:
+        return "implicit conversion";
+    case UBSAN_INVALID_BUILTIN:
+        return "invalid builtin";
+    case UBSAN_INVALID_OBJC_CAST:
+        return "invalid objc cast";
+    case UBSAN_LOAD_INVALID_VALUE:
+        return "load invalid value";
+    case UBSAN_MISSING_RETURN:
+        return "missing return";
+    case UBSAN_MUL_OVERFLOW:
+        return "multiplication overflow";
+    case UBSAN_NEGATE_OVERFLOW:
+        return "negate overlfow";
+    case UBSAN_NULLABILITY_ARG:
+        return "nullability argument";
+    case UBSAN_NULLABILITY_RETURN:
+        return "nullability return";
+    case UBSAN_NONNULL_ARG:
+        return "non-null argument";
+    case UBSAN_NONNULL_RETURN:
+        return "non-null return";
+    case UBSAN_OUT_OF_BOUNDS:
+        return "out of bounds access";
+    case UBSAN_POINTER_OVERFLOW:
+        return "pointer overflow";
+    case UBSAN_SHIFT_OUT_OF_BOUNDS:
+        return "shift out of bounds";
+    case UBSAN_SUB_OVERFLOW:
+        return "subtraction overflow";
+    case UBSAN_TYPE_MISMATCH:
+        return "type mismatch";
+    case UBSAN_ALIGNMENT_ASSUMPTION:
+        return "alignment assumption";
+    case UBSAN_VLA_BOUND_NOT_POSITIVE:
+        return "variable-length-array bound not positive";
+    default:
+        return "unknown reason";
+    }
+}
+#endif
+
 static void check_untypeds_match(seL4_BootInfo *bi)
 {
     /* Check that untypeds list generate from build matches the kernel */
@@ -930,8 +1028,31 @@ static void monitor(void)
 
             break;
         }
+#ifdef CONFIG_ARM_HYPERVISOR_SUPPORT
+        case seL4_Fault_VCPUFault: {
+            seL4_Word esr = seL4_GetMR(seL4_VCPUFault_HSR);
+            seL4_Word ec = esr >> 26;
+
+            puts("MON|ERROR: received vCPU fault with ESR: ");
+            puthex64(esr);
+            puts("\n");
+
+            seL4_Word esr_comment = esr & ESR_COMMENT_MASK;
+            if (ec == ARM64_BRK_EC && ((esr_comment & ~UBSAN_ARM64_BRK_MASK) == UBSAN_ARM64_BRK_IMM)) {
+                /* We likely have a UBSAN check going off from a brk instruction */
+                seL4_Word ubsan_code = esr_comment & UBSAN_ARM64_BRK_MASK;
+                puts("MON|ERROR: potential undefined behaviour detected by UBSAN for: '");
+                puts(usban_code_to_string(ubsan_code));
+                puts("'\n");
+            } else {
+                puts("MON|ERROR: Unknown vCPU fault\n");
+            }
+            break;
+        }
+#endif
         default:
-            puts("Unknown fault\n");
+            puts("MON|ERROR: Unknown fault\n");
+            puthex64(label);
             break;
         }
     }
