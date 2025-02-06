@@ -910,8 +910,8 @@ Rasberry Pi 4B that have different amounts of RAM, we target the 1GB model in Mi
 If you require more than 1GB, please file an issue or pull request to add support for
 models with larger amounts of memory.
 
-For initial board setup, please see the instructions on the [seL4 website]
-(https://docs.sel4.systems/Hardware/Rpi4.html).
+For initial board setup, please see the instructions on the
+[seL4 website](https://docs.sel4.systems/Hardware/Rpi4.html).
 
 When getting into the U-Boot console you want to load the Microkit binary image to
 address 0x10000000 and then run `go 0x10000000`.
