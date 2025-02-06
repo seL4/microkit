@@ -19,8 +19,8 @@ use sdf::{
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
-    InvocationArgs, Object, ObjectType, PageSize, Rights, Riscv64Regs, RiscvVirtualMemory,
-    RiscvVmAttributes,
+    InvocationArgs, Object, ObjectType, PageSize, PlatformConfig, Rights, Riscv64Regs,
+    RiscvVirtualMemory, RiscvVmAttributes,
 };
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -30,7 +30,7 @@ use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use util::{
-    bytes_to_struct, comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
+    comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
     monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
 
@@ -566,88 +566,6 @@ struct KernelPartialBootInfo {
     boot_region: MemoryRegion,
 }
 
-// Corresponds to kernel_frame_t in the kernel
-#[repr(C)]
-struct KernelFrameRiscv64 {
-    pub paddr: u64,
-    pub pptr: u64,
-    pub user_accessible: i32,
-}
-
-#[repr(C)]
-struct KernelFrameAarch64 {
-    pub paddr: u64,
-    pub pptr: u64,
-    pub execute_never: i32,
-    pub user_accessible: i32,
-}
-
-fn kernel_device_addrs(config: &Config, kernel_elf: &ElfFile) -> Vec<u64> {
-    assert!(config.word_size == 64, "Unsupported word-size");
-
-    let mut kernel_devices = Vec::new();
-    let (vaddr, size) = kernel_elf
-        .find_symbol("kernel_device_frames")
-        .expect("Could not find 'kernel_device_frames' symbol");
-    let kernel_frame_bytes = kernel_elf.get_data(vaddr, size).unwrap();
-    let kernel_frame_size = match config.arch {
-        Arch::Aarch64 => size_of::<KernelFrameAarch64>(),
-        Arch::Riscv64 => size_of::<KernelFrameRiscv64>(),
-    };
-    let mut offset: usize = 0;
-    while offset < size as usize {
-        let (user_accessible, paddr) = unsafe {
-            match config.arch {
-                Arch::Aarch64 => {
-                    let frame = bytes_to_struct::<KernelFrameAarch64>(
-                        &kernel_frame_bytes[offset..offset + kernel_frame_size],
-                    );
-                    (frame.user_accessible, frame.paddr)
-                }
-                Arch::Riscv64 => {
-                    let frame = bytes_to_struct::<KernelFrameRiscv64>(
-                        &kernel_frame_bytes[offset..offset + kernel_frame_size],
-                    );
-                    (frame.user_accessible, frame.paddr)
-                }
-            }
-        };
-        if user_accessible == 0 {
-            kernel_devices.push(paddr);
-        }
-        offset += kernel_frame_size;
-    }
-
-    kernel_devices
-}
-
-// Corresponds to p_region_t in the kernel
-#[repr(C)]
-struct KernelRegion64 {
-    start: u64,
-    end: u64,
-}
-
-fn kernel_phys_mem(kernel_config: &Config, kernel_elf: &ElfFile) -> Vec<(u64, u64)> {
-    assert!(kernel_config.word_size == 64, "Unsupported word-size");
-    let mut phys_mem = Vec::new();
-    let (vaddr, size) = kernel_elf
-        .find_symbol("avail_p_regs")
-        .expect("Could not find 'avail_p_regs' symbol");
-    let p_region_bytes = kernel_elf.get_data(vaddr, size).unwrap();
-    let p_region_size = size_of::<KernelRegion64>();
-    let mut offset: usize = 0;
-    while offset < size as usize {
-        let p_region = unsafe {
-            bytes_to_struct::<KernelRegion64>(&p_region_bytes[offset..offset + p_region_size])
-        };
-        phys_mem.push((p_region.start, p_region.end));
-        offset += p_region_size;
-    }
-
-    phys_mem
-}
-
 fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
     let segments = kernel_elf.loadable_segments();
     let base = segments[0].phys_addr;
@@ -683,23 +601,11 @@ fn kernel_partial_boot(kernel_config: &Config, kernel_elf: &ElfFile) -> KernelPa
     let mut device_memory = DisjointMemoryRegion::default();
     let mut normal_memory = DisjointMemoryRegion::default();
 
-    // Start by allocating the entire physical address space
-    // as device memory.
-    device_memory.insert_region(0, kernel_config.paddr_user_device_top);
-
-    // Next, remove all the kernel devices.
-    // NOTE: There is an assumption each kernel device is one frame
-    // in size only. It's possible this assumption could break in the
-    // future.
-    for paddr in kernel_device_addrs(kernel_config, kernel_elf) {
-        device_memory.remove_region(paddr, paddr + kernel_config.kernel_frame_size);
+    for r in &kernel_config.device_regions {
+        device_memory.insert_region(r.start, r.end);
     }
-
-    // Remove all the actual physical memory from the device regions
-    // but add it all to the actual normal memory regions
-    for (start, end) in kernel_phys_mem(kernel_config, kernel_elf) {
-        device_memory.remove_region(start, end);
-        normal_memory.insert_region(start, end);
+    for r in &kernel_config.normal_regions {
+        normal_memory.insert_region(r.start, r.end);
     }
 
     // Remove the kernel image itself
@@ -3235,6 +3141,12 @@ fn main() -> Result<(), String> {
         .join(args.config)
         .join("include/kernel/gen_config.json");
 
+    let kernel_platform_config_path = sdk_dir
+        .join("board")
+        .join(args.board)
+        .join(args.config)
+        .join("platform_gen.json");
+
     let invocations_all_path = sdk_dir
         .join("board")
         .join(args.board)
@@ -3276,6 +3188,13 @@ fn main() -> Result<(), String> {
         );
         std::process::exit(1);
     }
+    if !kernel_platform_config_path.exists() {
+        eprintln!(
+            "Error: kernel platform configuration file '{}' does not exist",
+            kernel_platform_config_path.display()
+        );
+        std::process::exit(1);
+    }
     if !invocations_all_path.exists() {
         eprintln!(
             "Error: invocations JSON file '{}' does not exist",
@@ -3297,6 +3216,9 @@ fn main() -> Result<(), String> {
 
     let kernel_config_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
+    let kernel_platform_config: PlatformConfig =
+        serde_json::from_str(&fs::read_to_string(kernel_platform_config_path).unwrap()).unwrap();
 
     let invocations_labels: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
@@ -3352,6 +3274,8 @@ fn main() -> Result<(), String> {
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
         invocations_labels,
+        device_regions: kernel_platform_config.devices,
+        normal_regions: kernel_platform_config.memory,
     };
 
     if let Arch::Aarch64 = kernel_config.arch {

@@ -459,6 +459,12 @@ def build_sel4(
             copy(p, dest)
             dest.chmod(0o744)
 
+    platform_gen = sel4_build_dir / "gen_headers" / "plat" / "machine" / "platform_gen.json"
+    dest = root_dir / "board" / board.name / config.name / "platform_gen.json"
+    dest.unlink(missing_ok=True)
+    copy(platform_gen, dest)
+    dest.chmod(0o744)
+
     gen_config_path = sel4_install_dir / "libsel4/include/kernel/gen_config.json"
     with open(gen_config_path, "r") as f:
         gen_config = json.load(f)

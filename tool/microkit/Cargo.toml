@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 roxmltree = "0.19.0"
-serde = "1.0.203"
+serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 
 [profile.release]
