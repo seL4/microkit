@@ -5,6 +5,7 @@
 //
 
 use crate::UntypedObject;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 
@@ -16,6 +17,18 @@ pub struct BootInfo {
     pub page_cap_count: u64,
     pub untyped_objects: Vec<UntypedObject>,
     pub first_available_cap: u64,
+}
+
+#[derive(Deserialize)]
+pub struct PlatformConfigRegion {
+    pub start: u64,
+    pub end: u64,
+}
+
+#[derive(Deserialize)]
+pub struct PlatformConfig {
+    pub devices: Vec<PlatformConfigRegion>,
+    pub memory: Vec<PlatformConfigRegion>,
 }
 
 /// Represents an allocated kernel object.
@@ -57,6 +70,8 @@ pub struct Config {
     /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
     pub invocations_labels: serde_json::Value,
+    pub device_regions: Vec<PlatformConfigRegion>,
+    pub normal_regions: Vec<PlatformConfigRegion>,
 }
 
 impl Config {
