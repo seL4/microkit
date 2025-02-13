@@ -32,8 +32,8 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
 #elif defined(BOARD_qemu_virt_aarch64)
-#define GICD_BASE 0x8010000UL
-#define GICC_BASE 0x8020000UL
+#define GICD_BASE 0x8000000UL
+#define GICC_BASE 0x8010000UL
 #endif
 
 #define REGION_TYPE_DATA 1
@@ -620,7 +620,7 @@ static void configure_gicv2(void)
      * must be set appropriately. Only interrupts with priorities less
      * than this mask will interrupt the CPU.
      *
-     * seL4 (effectively) sets intererupts to priority 0x80, so it is
+     * seL4 (effectively) sets interrupts to priority 0x80, so it is
      * important to make sure this is greater than 0x80.
      */
     *((volatile uint32_t *)(GICC_BASE + 0x4)) = 0xf0;
