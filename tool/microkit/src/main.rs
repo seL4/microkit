@@ -54,7 +54,8 @@ const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
 const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
-const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
+const BASE_PD_VSPACE_CAP: u64 = BASE_PD_TCB_CAP + 64;
+const BASE_VM_TCB_CAP: u64 = BASE_PD_VSPACE_CAP + 64;
 const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
@@ -2206,6 +2207,33 @@ fn build_system(
                             badge: 0,
                         },
                     ));
+                }
+            }
+        }
+    }
+
+    // Mint access to the child VSpace in the CSpace of root PDs
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+            // Check if we are dealing with a child PD
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                // Check that the current PD is the parent of the child
+                if parent_idx == pd_idx {
+                    let cap_idx = BASE_PD_VSPACE_CAP + maybe_child_pd.id.unwrap();
+                    assert!(cap_idx < PD_CAP_SIZE);
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: cnode_objs[pd_idx].cap_addr,
+                            dest_index: cap_idx,
+                            dest_depth: PD_CAP_BITS,
+                            src_root: root_cnode_cap,
+                            src_obj: vspace_objs[maybe_child_idx].cap_addr,
+                            src_depth: config.cap_address_bits,
+                            rights: Rights::All as u64,
+                            badge: 0
+                        }
+                    ))
                 }
             }
         }
