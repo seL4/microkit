@@ -31,6 +31,24 @@ pub struct PlatformConfig {
     pub memory: Vec<PlatformConfigRegion>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum MicrokitConfig {
+    Debug,
+    Benchmark,
+    Release,
+}
+
+impl MicrokitConfig {
+    pub fn from_str(string: &str) -> Self {
+        match string {
+            "debug" => MicrokitConfig::Debug,
+            "release" => MicrokitConfig::Release,
+            "benchmark" => MicrokitConfig::Benchmark,
+            _ => panic!("Invalid microkit configuration provided!"),
+        }
+    }
+}
+
 /// Represents an allocated kernel object.
 ///
 /// Kernel objects can have multiple caps (and caps can have multiple addresses).
@@ -59,7 +77,7 @@ pub struct Config {
     pub cap_address_bits: u64,
     pub fan_out_limit: u64,
     pub hypervisor: bool,
-    pub benchmark: bool,
+    pub microkit_config: MicrokitConfig,
     pub fpu: bool,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,

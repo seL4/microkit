@@ -20,8 +20,8 @@ use sdf::{
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
-    InvocationArgs, Object, ObjectType, PageSize, PlatformConfig, Rights, Riscv64Regs,
-    RiscvVirtualMemory, RiscvVmAttributes,
+    InvocationArgs, MicrokitConfig, Object, ObjectType, PageSize, PlatformConfig, Rights,
+    Riscv64Regs, RiscvVirtualMemory, RiscvVmAttributes,
 };
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -2231,8 +2231,8 @@ fn build_system(
                             src_obj: vspace_objs[maybe_child_idx].cap_addr,
                             src_depth: config.cap_address_bits,
                             rights: Rights::All as u64,
-                            badge: 0
-                        }
+                            badge: 0,
+                        },
                     ))
                 }
             }
@@ -2587,7 +2587,7 @@ fn build_system(
 
     // In the benchmark configuration, we allow PDs to access their own TCB.
     // This is necessary for accessing kernel's benchmark API.
-    if config.benchmark {
+    if config.microkit_config == MicrokitConfig::Benchmark {
         let mut tcb_cap_copy_invocation = Invocation::new(
             config,
             InvocationArgs::CnodeCopy {
@@ -3302,7 +3302,7 @@ fn main() -> Result<(), String> {
         cap_address_bits: 64,
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
         hypervisor,
-        benchmark: args.config == "benchmark",
+        microkit_config: MicrokitConfig::from_str(args.config),
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
         arm_pa_size_bits,
         arm_smc,
