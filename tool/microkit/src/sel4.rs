@@ -212,7 +212,10 @@ impl ObjectType {
     pub fn fixed_size_bits(self, config: &Config) -> Option<u64> {
         match self {
             ObjectType::Tcb => match config.arch {
-                Arch::Aarch64 => Some(11),
+                Arch::Aarch64 => match config.microkit_config {
+                    MicrokitConfig::Debug => Some(12),
+                    _ => Some(11),
+                },
                 Arch::Riscv64 => match config.fpu {
                     true => Some(11),
                     false => Some(10),
