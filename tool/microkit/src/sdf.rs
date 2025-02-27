@@ -749,8 +749,8 @@ impl VirtualMachine {
                         }
                     }
 
-                    let cpu = if let Some(xml_cpu) = node.attribute("cpu") {
-                        sdf_parse_number(xml_cpu, node)?
+                    let cpu = if let Some(xml_cpu) = child.attribute("cpu") {
+                        sdf_parse_number(xml_cpu, &child)?
                     } else {
                         // Default to CPU 0, the boot CPU
                         0
