@@ -10,7 +10,7 @@ pub mod sdf;
 pub mod sel4;
 pub mod util;
 
-use sel4::{BootInfo, Config};
+use sel4::Config;
 use std::cmp::min;
 use std::fmt;
 
@@ -288,6 +288,7 @@ impl DisjointMemoryRegion {
 pub struct KernelAllocation {
     pub untyped_cap_address: u64, // FIXME: possibly this is an object, not an int?
     pub phys_addr: u64,
+    pub size: u64,
 }
 
 pub struct UntypedAllocator {
@@ -343,16 +344,12 @@ pub struct ObjectAllocator {
 }
 
 impl ObjectAllocator {
-    pub fn new(kernel_boot_info: &BootInfo) -> ObjectAllocator {
-        let mut untyped = Vec::new();
-        for ut in kernel_boot_info.untyped_objects.iter() {
-            if ut.is_device {
-                // Kernel allocator can only allocate out of normal memory
-                // device memory can't be used for kernel objects
-                continue;
-            }
-            untyped.push(UntypedAllocator::new(*ut, 0, vec![]));
-        }
+    pub fn new(untyped_pool: Vec<&UntypedObject>) -> ObjectAllocator {
+        let mut untyped: Vec<UntypedAllocator> = untyped_pool
+            .into_iter()
+            .map(|ut| UntypedAllocator::new(*ut, 0, vec![]))
+            .collect();
+        untyped.sort_by(|a, b| a.untyped_object.base().cmp(&b.untyped_object.base()));
 
         ObjectAllocator {
             allocation_idx: 0,
@@ -367,15 +364,17 @@ impl ObjectAllocator {
     pub fn alloc_n(&mut self, size: u64, count: u64) -> KernelAllocation {
         assert!(util::is_power_of_two(size));
         assert!(count > 0);
+        let mem_size = count * size;
         for ut in &mut self.untyped {
             // See if this fits
             let start = util::round_up(ut.base() + ut.allocation_point, size);
-            if start + (count * size) <= ut.end() {
-                ut.allocation_point = (start - ut.base()) + (count * size);
+            if start + mem_size <= ut.end() {
+                ut.allocation_point = (start - ut.base()) + mem_size;
                 self.allocation_idx += 1;
                 let allocation = KernelAllocation {
                     untyped_cap_address: ut.untyped_object.cap,
                     phys_addr: start,
+                    size: mem_size,
                 };
                 ut.allocations.push(allocation);
                 return allocation;
@@ -383,5 +382,98 @@ impl ObjectAllocator {
         }
 
         panic!("Can't alloc of size {}, count: {} - no space", size, count);
+    }
+
+    pub fn reserve(&mut self, alloc: (&UntypedObject, u64)) {
+        for ut in &mut self.untyped {
+            if *alloc.0 == ut.untyped_object {
+                if ut.base() <= alloc.1 && alloc.1 <= ut.end() {
+                    ut.allocation_point = alloc.1 - ut.base();
+                    return;
+                } else {
+                    panic!(
+                        "Allocation {:?} ({:x}) not in untyped region {:?}",
+                        alloc.0, alloc.1, ut.untyped_object
+                    );
+                }
+            }
+        }
+
+        panic!(
+            "Allocation {:?} ({:x}) not in any device untyped",
+            alloc.0, alloc.1
+        );
+    }
+
+    pub fn find_fixed(
+        &mut self,
+        phys_addr: u64,
+        size: u64,
+    ) -> Option<(Option<Vec<KernelAllocation>>, KernelAllocation)> {
+        for ut in &mut self.untyped {
+            /* Find the right untyped */
+            if phys_addr >= ut.base() && phys_addr < ut.end() {
+                if phys_addr < ut.base() + ut.allocation_point {
+                    panic!("Error: physical address {:x} is below watermark", phys_addr);
+                }
+
+                let space_left = ut.end() - (ut.base() + ut.allocation_point);
+                if space_left < size {
+                    panic!(
+                        "Error: allocation for physical address {:x}
+                            is too large ({:x}) for untyped",
+                        phys_addr, size
+                    );
+                }
+
+                let mut watermark = ut.base() + ut.allocation_point;
+                let mut allocations: Option<Vec<KernelAllocation>>;
+
+                if phys_addr != watermark {
+                    allocations = Some(Vec::new());
+                    /* If the watermark isn't at the right place, we need to pad */
+                    let mut padding_required = phys_addr - watermark;
+                    // We are restricted in how much we can pad:
+                    // 1: Untyped objects must be power-of-two sized.
+                    // 2: Untyped objects must be aligned to their size.
+                    let mut padding_sizes = Vec::new();
+                    // We have two potential approaches for how we pad.
+                    // 1: Use largest objects possible respecting alignment
+                    // and size restrictions.
+                    // 2: Use a fixed size object multiple times. This will
+                    // create more objects, but as same sized objects can be
+                    // create in a batch, required fewer invocations.
+                    // For now we choose #1
+                    while padding_required > 0 {
+                        let wm_lsb = util::lsb(watermark);
+                        let sz_msb = util::msb(padding_required);
+                        let pad_object_size = 1 << min(wm_lsb, sz_msb);
+                        padding_sizes.push(pad_object_size);
+
+                        allocations.as_mut().unwrap().push(KernelAllocation {
+                            untyped_cap_address: ut.untyped_object.cap,
+                            phys_addr: watermark,
+                            size: pad_object_size,
+                        });
+
+                        watermark += pad_object_size;
+                        padding_required -= pad_object_size;
+                    }
+                } else {
+                    allocations = None;
+                }
+
+                let obj = KernelAllocation {
+                    untyped_cap_address: ut.untyped_object.cap,
+                    phys_addr: watermark,
+                    size,
+                };
+
+                ut.allocation_point = (watermark + size) - ut.base();
+                return Some((allocations, obj));
+            }
+        }
+
+        None
     }
 }

@@ -116,35 +116,15 @@ impl MonitorConfig {
     }
 }
 
-#[derive(Debug)]
-struct FixedUntypedAlloc {
-    ut: UntypedObject,
-    watermark: u64,
-}
-
-impl FixedUntypedAlloc {
-    pub fn new(ut: UntypedObject) -> FixedUntypedAlloc {
-        FixedUntypedAlloc {
-            ut,
-            watermark: ut.base(),
-        }
-    }
-
-    pub fn contains(&self, addr: u64) -> bool {
-        self.ut.base() <= addr && addr < self.ut.end()
-    }
-}
-
 struct InitSystem<'a> {
     config: &'a Config,
     cnode_cap: u64,
     cnode_mask: u64,
-    kao: &'a mut ObjectAllocator,
     invocations: &'a mut Vec<Invocation>,
     cap_slot: u64,
     last_fixed_address: u64,
-    normal_untyped: Vec<FixedUntypedAlloc>,
-    device_untyped: Vec<FixedUntypedAlloc>,
+    normal_untyped: &'a mut ObjectAllocator,
+    device_untyped: &'a mut ObjectAllocator,
     cap_address_names: &'a mut HashMap<u64, String>,
     objects: Vec<Object>,
 }
@@ -156,42 +136,15 @@ impl<'a> InitSystem<'a> {
         cnode_cap: u64,
         cnode_mask: u64,
         first_available_cap_slot: u64,
-        kernel_object_allocator: &'a mut ObjectAllocator,
-        kernel_boot_info: &'a BootInfo,
+        normal_untyped: &'a mut ObjectAllocator,
+        device_untyped: &'a mut ObjectAllocator,
         invocations: &'a mut Vec<Invocation>,
         cap_address_names: &'a mut HashMap<u64, String>,
     ) -> InitSystem<'a> {
-        let mut device_untyped: Vec<FixedUntypedAlloc> = kernel_boot_info
-            .untyped_objects
-            .iter()
-            .filter_map(|ut| {
-                if ut.is_device {
-                    Some(FixedUntypedAlloc::new(*ut))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        device_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
-
-        let mut normal_untyped: Vec<FixedUntypedAlloc> = kernel_boot_info
-            .untyped_objects
-            .iter()
-            .filter_map(|ut| {
-                if !ut.is_device {
-                    Some(FixedUntypedAlloc::new(*ut))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        normal_untyped.sort_by(|a, b| a.ut.base().cmp(&b.ut.base()));
-
         InitSystem {
             config,
             cnode_cap,
             cnode_mask,
-            kao: kernel_object_allocator,
             invocations,
             cap_slot: first_available_cap_slot,
             last_fixed_address: 0,
@@ -203,29 +156,8 @@ impl<'a> InitSystem<'a> {
     }
 
     pub fn reserve(&mut self, allocations: Vec<(&UntypedObject, u64)>) {
-        for (alloc_ut, alloc_phys_addr) in allocations {
-            let mut found = false;
-            for fut in &mut self.device_untyped {
-                if *alloc_ut == fut.ut {
-                    if fut.ut.base() <= alloc_phys_addr && alloc_phys_addr <= fut.ut.end() {
-                        fut.watermark = alloc_phys_addr;
-                        found = true;
-                        break;
-                    } else {
-                        panic!(
-                            "Allocation {:?} ({:x}) not in untyped region {:?}",
-                            alloc_ut, alloc_phys_addr, fut.ut.region
-                        );
-                    }
-                }
-            }
-
-            if !found {
-                panic!(
-                    "Allocation {:?} ({:x}) not in any device untyped",
-                    alloc_ut, alloc_phys_addr
-                );
-            }
+        for alloc in allocations {
+            self.device_untyped.reserve(alloc);
         }
     }
 
@@ -240,25 +172,19 @@ impl<'a> InitSystem<'a> {
         assert!(object_type.fixed_size(self.config).is_some());
 
         let alloc_size = object_type.fixed_size(self.config).unwrap();
+
         // Find an untyped that contains the given address, it may be in device
         // memory
-        let device_fut: Option<&mut FixedUntypedAlloc> = self
-            .device_untyped
-            .iter_mut()
-            .find(|fut| fut.contains(phys_address));
-
-        let normal_fut: Option<&mut FixedUntypedAlloc> = self
-            .normal_untyped
-            .iter_mut()
-            .find(|fut| fut.contains(phys_address));
+        let device_ut = self.device_untyped.find_fixed(phys_address, alloc_size);
+        let normal_ut = self.normal_untyped.find_fixed(phys_address, alloc_size);
 
         // We should never have found the physical address in both device and normal untyped
-        assert!(!(device_fut.is_some() && normal_fut.is_some()));
+        assert!(!(device_ut.is_some() && normal_ut.is_some()));
 
-        let fut = if let Some(fut) = device_fut {
-            fut
-        } else if let Some(fut) = normal_fut {
-            fut
+        let (padding, ut) = if let Some(x) = device_ut {
+            x
+        } else if let Some(x) = normal_ut {
+            x
         } else {
             panic!(
                 "Error: physical address {:x} not in any device untyped",
@@ -266,60 +192,14 @@ impl<'a> InitSystem<'a> {
             )
         };
 
-        let space_left = fut.ut.region.end - fut.watermark;
-        if space_left < alloc_size {
-            for ut in &self.device_untyped {
-                let space_left = ut.ut.region.end - ut.watermark;
-                println!(
-                    "ut [0x{:x}..0x{:x}], space left: 0x{:x}",
-                    ut.ut.region.base, ut.ut.region.end, space_left
-                );
-            }
-            panic!(
-                "Error: allocation for physical address {:x} is too large ({:x}) for untyped",
-                phys_address, alloc_size
-            );
-        }
-
-        if phys_address < fut.watermark {
-            panic!(
-                "Error: physical address {:x} is below watermark",
-                phys_address
-            );
-        }
-
-        if fut.watermark != phys_address {
-            // If the watermark isn't at the right spot, then we need to
-            // create padding objects until it is.
-            let mut padding_required = phys_address - fut.watermark;
-            // We are restricted in how much we can pad:
-            // 1: Untyped objects must be power-of-two sized.
-            // 2: Untyped objects must be aligned to their size.
-            let mut padding_sizes = Vec::new();
-            // We have two potential approaches for how we pad.
-            // 1: Use largest objects possible respecting alignment
-            // and size restrictions.
-            // 2: Use a fixed size object multiple times. This will
-            // create more objects, but as same sized objects can be
-            // create in a batch, required fewer invocations.
-            // For now we choose #1
-            let mut wm = fut.watermark;
-            while padding_required > 0 {
-                let wm_lsb = util::lsb(wm);
-                let sz_msb = util::msb(padding_required);
-                let pad_obejct_size = 1 << min(wm_lsb, sz_msb);
-                padding_sizes.push(pad_obejct_size);
-                wm += pad_obejct_size;
-                padding_required -= pad_obejct_size;
-            }
-
-            for sz in padding_sizes {
+        if let Some(padding_unwrapped) = padding {
+            for pad_ut in padding_unwrapped {
                 self.invocations.push(Invocation::new(
                     self.config,
                     InvocationArgs::UntypedRetype {
-                        untyped: fut.ut.cap,
+                        untyped: pad_ut.untyped_cap_address,
                         object_type: ObjectType::Untyped,
-                        size_bits: sz.ilog2() as u64,
+                        size_bits: pad_ut.size.ilog2() as u64,
                         root: self.cnode_cap,
                         node_index: 1,
                         node_depth: 1,
@@ -336,7 +216,7 @@ impl<'a> InitSystem<'a> {
         self.invocations.push(Invocation::new(
             self.config,
             InvocationArgs::UntypedRetype {
-                untyped: fut.ut.cap,
+                untyped: ut.untyped_cap_address,
                 object_type,
                 size_bits: 0,
                 root: self.cnode_cap,
@@ -347,7 +227,6 @@ impl<'a> InitSystem<'a> {
             },
         ));
 
-        fut.watermark = phys_address + alloc_size;
         self.last_fixed_address = phys_address + alloc_size;
         let cap_addr = self.cnode_mask | object_cap;
         let kernel_object = Object {
@@ -390,7 +269,7 @@ impl<'a> InitSystem<'a> {
             panic!("Internal error: invalid object type: {:?}", object_type);
         }
 
-        let allocation = self.kao.alloc_n(alloc_size, count);
+        let allocation = self.normal_untyped.alloc_n(alloc_size, count);
         let base_cap_slot = self.cap_slot;
         self.cap_slot += count;
 
@@ -885,7 +764,21 @@ fn build_system(
     }
 
     // The kernel boot info allows us to create an allocator for kernel objects
-    let mut kao = ObjectAllocator::new(&kernel_boot_info);
+    let mut kao = ObjectAllocator::new(
+        kernel_boot_info
+            .untyped_objects
+            .iter()
+            .filter(|ut| !ut.is_device)
+            .collect::<Vec<_>>(),
+    );
+
+    let mut kad = ObjectAllocator::new(
+        kernel_boot_info
+            .untyped_objects
+            .iter()
+            .filter(|ut| ut.is_device)
+            .collect::<Vec<_>>(),
+    );
 
     // 2. Now that the available resources are known it is possible to proceed with the
     // monitor task boot strap.
@@ -1319,7 +1212,7 @@ fn build_system(
         system_cap_address_mask,
         cap_slot,
         &mut kao,
-        &kernel_boot_info,
+        &mut kad,
         &mut system_invocations,
         &mut cap_address_names,
     );
