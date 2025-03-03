@@ -777,7 +777,7 @@ impl Invocation {
         assert!(extra_caps < 8);
         assert!(length < 0x80);
 
-        label << 12 | caps << 9 | extra_caps << 7 | length
+        (label << 12) | (caps << 9) | (extra_caps << 7) | length
     }
 
     fn fmt_field(field_name: &'static str, value: u64) -> String {
