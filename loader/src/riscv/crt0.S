@@ -103,6 +103,71 @@ hsm_switch_hart:
   mv a0, s0 /* restore a0 to hold hart ID passed by OpenSBI */
   j spin_hart /* Spin any hart that isn't FIRST_HART_ID since we only support single-core right now. */
 
+fixup_image_base:
+  /* Save the return address */
+  addi sp, sp, -0x8
+  sd ra, (sp)
+
+  /* Check if we are already in the right place */
+  li a0, LINK_ADDRESS
+  la a1, _start
+  beq a0, a1, image_ok
+
+  /* Sanity check: We don't want to overwrite ourselves! We assume that
+   * everything between _start (src_start) and _bss_end (src_end) is important (i.e.
+   * something that might be run while relocating) but allow overlap for
+   * things after _bss_end i.e. the loader_data.
+   */
+  la a2, _bss_end
+
+   /* The loader_data is directly after _bss_end, with the first
+   * value being the loader_data struct. The first field of this
+   * struct is the size of the loader_data region, so we add
+   * this to _bss_end to get the real end of the image
+   */
+  ld a3, 8(a2)
+  add a2, a2, a3
+  sub a2, a2, a1
+
+  la a3, _bss_end
+  add a4, a0, a2
+
+  /* At this point:
+   *      a0: dst_start (LINK_ADDRESS)
+   *      a1: src_start (_start)
+   *      a2: image_size
+   *      a3: src_end (_bss_end)
+   *      a4: dst_end (LINK_ADDRESS + image_size)
+   */
+
+  /* check: if (dst_end >= src_start && dst_end < src_end) { abort } */
+  blt a4, a1, 1f
+  bge a4, a3, 1f
+  j cant_reloc
+
+1:
+
+  /* check: if (dst_start >= src_start && dest_start < src_end) { abort } */
+  blt a0, a1, 2f
+  bge a0, a3, 2f
+
+cant_reloc:
+  j abort
+
+2:
+  /* a0 = desired image base */
+  /* a1 = current image base */
+  /* a2 = image size */
+  jal memmove
+  j 1f
+
+image_ok:
+  li a0, 1
+
+1:
+  ld ra, (sp)
+  addi sp, sp, 0x8
+  ret
 
 _start1: /* a0 must hold current hard ID passed by bootloader */
          /* a1 must hold dtb address passed by bootloader */
@@ -113,6 +178,27 @@ _start1: /* a0 must hold current hard ID passed by bootloader */
 .option pop
 
   la sp, (_stack + STACK_SIZE)
+
+  /* save the parameters passed */
+  mv s0, a0 /* preserve a0 (hart id) in s0 */
+  mv s2, a1 /* preserve a1 (dtb) in s2 */
+
+  /* May not have been loaded in the right location.
+   * Try and mve ourselves so we're in the right place
+   */
+  jal fixup_image_base
+
+  /* Check if we were relocated. If not, just jump straight to main */
+  li a1, 1
+  beq a0, a1, 1f
+
+  /* Restore arguments and go back to _start of the relocated image */
+  mv s2, a0
+  mv a0, s0 /* restore a0 to hold hart ID passed by the boot loader */
+  mv a1, s2 /* restore a1 to hold dtb address passed by the boot loader */
+  jr s2
+
+1:
   la s0, main
   jr s0
 
