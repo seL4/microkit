@@ -208,7 +208,7 @@ SUPPORTED_BOARDS = (
         name="qemu_virt_riscv64",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
-        loader_link_address=0x80200000,
+        loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "qemu-riscv-virt",
             "KernelIsMCS": True,
