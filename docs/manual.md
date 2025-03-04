@@ -784,6 +784,54 @@ A custom version of OpenSBI is required. It can be found
 [here](https://github.com/pulp-platform/opensbi/tree/cheshire).
 Build the firmware payload using platform `fpga/cheshire`.
 
+### Using U-Boot
+
+With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-boot:
+
+    => go 0x90000000
+
+### Raw systerm with no bootloader
+
+Without any firmware present on the SD card, it is still possible to boot Cheshire with a Microkit system.
+
+Using a GDB prompt via openOCD:
+
+1. Reset board
+
+    => monitor reset halt
+
+2. Load a device tree blob (DTS available in Cheshire repo or seL4) to memory and set the a0 and a1 registers to point at it:
+
+    > restore /path/to/cheshire.dtb binary 0xa0000000
+
+(tell OpenSBI where DTB is)
+
+    > set $a0=0xa0000000
+
+(tell OpenSBI that the default hart is #0)
+
+    > set $a1=0
+
+3. Load OpenSBI
+
+    > load /path/to/opensbi/fw_payload.elf
+
+4. Allow OpenSBI to boot, and interrupt it once the line `Test payload running` is emitted on serial.
+
+    > continue
+
+(wait for output)
+
+    > (Ctrl+C)
+
+5. Load Microkit image and execute
+
+    > restore /path/to/loader.img binary 0x90000000
+
+(execute)
+
+    > continue
+
 ## i.MX8MM-EVK
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
@@ -980,10 +1028,6 @@ When debugging is enabled the kernel will use the same UART as U-Boot.
 
 ## ZCU102
 
-Initial support is available for the Xilinx ZCU102.
-
-**FIXME:** Additional documentation required here.
-
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
@@ -1011,53 +1055,6 @@ You can see that when using the `go` command, U-Boot is
 
 To avoid this behaviour, the call to `armv8_switch_to_el1` should be replaced with
 `armv8_switch_to_el2` in this `do_go_exec` function.
-
-### Using U-Boot
-
-With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-boot:
-
-    => go 0x90000000
-
-### Raw systerm with no bootloader
-
-Without any firmware present on the SD card, it is still possible to boot Cheshire with a Microkit system.
-
-Using a GDB prompt via openOCD:
-
-1. Reset board
-    > monitor reset halt
-
-2. Load a device tree blob (DTS available in Cheshire repo or seL4) to memory and set the a0 and a1 registers to point at it:
-
-    > restore /path/to/cheshire.dtb binary 0xa0000000
-
-(tell OpenSBI where DTB is)
-
-    > set $a0=0xa0000000
-
-(tell OpenSBI that the default hart is #0)
-
-    > set $a1=0
-
-3. Load OpenSBI
-
-    > load /path/to/opensbi/fw_payload.elf
-
-4. Allow OpenSBI to boot, and interrupt it once the line `Test payload running` is emitted on serial.
-
-    > continue
-
-(wait for output)
-
-    > (Ctrl+C)
-
-5. Load Microkit image and execute
-
-    > restore /path/to/loader.img binary 0x90000000
-
-(execute)
-
-    > continue
 
 ## Adding Platform Support
 
