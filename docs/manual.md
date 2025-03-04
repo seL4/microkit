@@ -1139,3 +1139,121 @@ Based on experience with the system and the types of systems being built it is p
 The limitation on the number of channels for a protection domain is based on the size of the notification word in seL4.
 Changing this to be larger than 64 would most likely require changes to seL4. The reason for why the limit is not a
 power of two is due to part of the notification word being for internal libmicrokit use.
+
+# Internals
+
+The following section describes internal details for how the Microkit works
+and all the components of Microkit. As a user of Microkit, it is not necessary
+know this information, however, there is no harm in having a greater
+understanding of the tools that you are using.
+
+![Microkit flow](docs/assets/microkit_flow.pdf)
+
+The diagram above aims to show the general flow of a Microkit system from
+build-time to run-time.
+
+The user provides the SDF (System Description File) and the ELFs that
+correspond to PD program images to the Microkit tool which is responsible to
+for packaging everything together into a single bootable image for the target
+platform.
+
+This final image contains a couple different things:
+
+* the Microkit loader
+* seL4
+* the Monitor (and associated invocation data)
+* the images for all the user's PDs
+
+When booting the image, the Microkit loader starts, jumps to the kernel, which
+starts the monitor, which then sets up the entire system and starts all the PDs.
+
+Now, we will go into a bit more detail about each of these stages of the
+booting process as well as what exactly the Microkit tool is doing.
+
+## Loader
+
+The loader starts first, it has two main jobs:
+
+1. Unpack all the parts of the system (kernel, monitor, PD images, etc) into
+   their expected locations within main memory.
+2. Finish initialising the hardware such that the rest of the system can start.
+
+Unpacking the system image is fairly straight-forward, as all the information
+about what parts of the system image need to go where is figured out by the
+tool and embedded into the loader at build-time so when it starts it just goe
+through an array and copies data into the right locations.
+
+Before the Microkit loader starts, there would most likely have been some other
+bootloader such as U-Boot or firmware on the target that did its own hardware
+initialisation before starting Microkit.
+
+However, there are certain things that seL4 expects to be initialised
+that will not be done by a previous booting stage, such as:
+
+* changing to the right exception level
+* enabling the MMU (seL4 expects the MMU to be on when it starts)
+* interrupt controller setup
+
+Once this is all completed, the loader jumps to seL4 which starts executing.
+The loader will never be executed again.
+
+## Monitor
+
+Once the kernel has done its own initialisation, it will begin the
+'initial task'. On seL4, this is a thread that contains all the initial
+capabilities to resources that are used to setup the rest of the system.
+
+Within a Microkit environment, we call the initial task the 'monitor'.
+
+The monitor has two main jobs:
+
+1. Setup all system resources (memory regions, channels, interrupts) and start
+   the user's protection domains.
+2. Receive any faults caused by protection domains crashing or causing
+   exceptions.
+
+At build-time, the Microkit tool embeds all the system calls that the monitor
+needs to make in order to setup the user's system. More details about *how*
+this is done is in the section on the Microkit tool below. But from the
+monitor's perspective, it just iterates over an array of system calls to make
+and performs each one.
+
+After the system has been setup, the monitor goes to sleep and waits for any
+faults from protection domains. On debug mode, this results in a message about
+which PD caused an exception and details on the PD's state at the time of the fault.
+
+Other than printing fault details, the monitor does not do anything to handle
+the fault, it will simply go back to sleep waiting for any other faults.
+
+## libmicrokit
+
+Unlike the previous sections, libmicrokit is not its own program but it is worth
+a mention since it makes up the core of each protection domain in a system.
+
+When each PD starts, we enter libmicrokit's starting point which does some initial
+setup and calls the `init` entry point specified by the user. Once that completes,
+the PD will enter libmicrokit's event handler which sleeps until it receives events.
+
+These events could be notifies (from other PDs or from an interrupt), PPCs, and faults.
+For each event, the appropriate user-specified entry point is called and then when it
+returns the PD goes back to sleep, waiting on any more events.
+
+## Microkit tool
+
+The Microkit tool's ultimate job is to take in the description of the user's system,
+the SDF, and convert into an seL4 system that boots and executes.
+
+There are obvious steps such as parsing the SDF and PD ELFs but the majority of
+the work done by the tool is converting the system description into a list of
+seL4 system calls that need to happen.
+
+In order to do this however, the Microkit tool needs to perform o a decent amount of
+'emulation' to know exactly what system calls and with which arguments to make.
+This requires keeping track of what memory is allocated and where, the layout of
+each capability space, what the initial untypeds list will look like, etc.
+
+While this is non-trivial to do, it comes with the useful property that if the tool
+produces a valid image, there should be no errors upon initialising the system
+If there are any errors with configuring the system (e.g running out of memory),
+they will be caught at build-time. This can only reasonably be done due to the
+static-architecture of Microkit systems.
