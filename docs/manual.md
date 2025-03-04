@@ -1147,7 +1147,7 @@ and all the components of Microkit. As a user of Microkit, it is not necessary
 know this information, however, there is no harm in having a greater
 understanding of the tools that you are using.
 
-![Microkit flow](docs/assets/microkit_flow.pdf)
+![Microkit flow](assets/microkit_flow.pdf)
 
 The diagram above aims to show the general flow of a Microkit system from
 build-time to run-time.

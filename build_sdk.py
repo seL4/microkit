@@ -513,8 +513,8 @@ def build_elf_component(
 def build_doc(root_dir: Path):
     output = root_dir / "doc" / "microkit_user_manual.pdf"
 
-    environ["TEXINPUTS"] = "docs/style:"
-    r = system(f'pandoc docs/manual.md -o {output}')
+    environ["TEXINPUTS"] = "style:"
+    r = system(f'cd docs && pandoc manual.md -o ../{output}')
     assert r == 0
 
 
