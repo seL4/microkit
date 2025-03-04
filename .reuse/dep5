@@ -10,6 +10,8 @@ Files:
   flake.lock
   CHANGES.md
   VERSION
+  docs/assets/microkit_flow.svg
+  docs/assets/microkit_flow.pdf
 Copyright: 2024, UNSW
 License: BSD-2-Clause
 
