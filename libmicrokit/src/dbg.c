@@ -8,8 +8,7 @@
 #define __thread
 #include <sel4/sel4.h>
 
-void
-microkit_dbg_putc(int c)
+void microkit_dbg_putc(int c)
 {
 #if defined(CONFIG_PRINTING)
     seL4_DebugPutChar(c);
@@ -18,8 +17,7 @@ microkit_dbg_putc(int c)
 
 
 
-void
-microkit_dbg_puts(const char *s)
+void microkit_dbg_puts(const char *s)
 {
     while (*s) {
         microkit_dbg_putc(*s);
@@ -27,8 +25,7 @@ microkit_dbg_puts(const char *s)
     }
 }
 
-void
-microkit_dbg_put8(seL4_Uint8 x)
+void microkit_dbg_put8(seL4_Uint8 x)
 {
     char tmp[4];
     unsigned i = 3;
@@ -41,8 +38,7 @@ microkit_dbg_put8(seL4_Uint8 x)
     microkit_dbg_puts(&tmp[i]);
 }
 
-void
-__assert_fail(const char  *str, const char *file, int line, const char *function)
+void __assert_fail(const char  *str, const char *file, int line, const char *function)
 {
     microkit_dbg_puts("assert failed: ");
     microkit_dbg_puts(str);
