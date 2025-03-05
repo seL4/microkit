@@ -2820,19 +2820,19 @@ fn write_report<W: std::io::Write>(
     Ok(())
 }
 
-fn print_usage(available_boards: &[String]) {
-    println!("usage: microkit [-h] [-o OUTPUT] [-r REPORT] --board {{{}}} --config CONFIG [--search-path [SEARCH_PATH ...]] system", available_boards.join(","))
+fn print_usage() {
+    println!("usage: microkit [-h] [-o OUTPUT] [-r REPORT] --board BOARD --config CONFIG [--search-path [SEARCH_PATH ...]] system")
 }
 
 fn print_help(available_boards: &[String]) {
-    print_usage(available_boards);
+    print_usage();
     println!("\npositional arguments:");
     println!("  system");
     println!("\noptions:");
     println!("  -h, --help, show this help message and exit");
     println!("  -o, --output OUTPUT");
     println!("  -r, --report REPORT");
-    println!("  --board {{{}}}", available_boards.join(","));
+    println!("  --board {}", available_boards.join("\n          "));
     println!("  --config CONFIG");
     println!("  --search-path [SEARCH_PATH ...]");
 }
@@ -2858,7 +2858,7 @@ impl<'a> Args<'a> {
         let mut config = None;
 
         if args.len() <= 1 {
-            print_usage(available_boards);
+            print_usage();
             std::process::exit(1);
         }
 
@@ -2931,7 +2931,7 @@ impl<'a> Args<'a> {
         }
 
         if !unknown.is_empty() {
-            print_usage(available_boards);
+            print_usage();
             eprintln!(
                 "microkit: error: unrecognised arguments: {}",
                 unknown.join(" ")
@@ -2951,7 +2951,7 @@ impl<'a> Args<'a> {
         }
 
         if !missing_args.is_empty() {
-            print_usage(available_boards);
+            print_usage();
             eprintln!(
                 "microkit: error: the following arguments are required: {}",
                 missing_args.join(", ")
@@ -3012,6 +3012,7 @@ fn main() -> Result<(), String> {
             available_boards.push(path.file_name().unwrap().to_str().unwrap().to_string());
         }
     }
+    available_boards.sort();
 
     let env_args: Vec<_> = std::env::args().collect();
     let args = Args::parse(&env_args, &available_boards);
