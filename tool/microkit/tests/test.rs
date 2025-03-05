@@ -26,6 +26,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: vec![],
     normal_regions: vec![],
+    domain_scheduler: false,
 };
 
 fn check_error(test_name: &str, expected_err: &str) {
