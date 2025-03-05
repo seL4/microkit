@@ -137,14 +137,15 @@ relocate:
   sub a2, a2, a1
 
   la a3, _bss_end
-  add a4, a0, a2
+  sub a5, a3, a1
+  add a4, a0, a5
 
   /* At this point:
    *      a0: dst_start (LINK_ADDRESS)
    *      a1: src_start (_start)
    *      a2: image_size
    *      a3: src_end (_bss_end)
-   *      a4: dst_end (LINK_ADDRESS + image_size)
+   *      a4: dst_end (LINK_ADDRESS + (_bss_end - _start))
    */
 
   /* check: if (dst_end >= src_start && dst_end < src_end) { abort } */

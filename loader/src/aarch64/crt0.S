@@ -70,14 +70,15 @@ relocate:
     adrp x3, _bss_end
     add x3, x3, #:lo12:_bss_end
 
-    add x4, x0, x2 /* dst_end */
+    sub x5, x3, x1
+    add x4, x0, x5 /* dst_end */
 
     /* At this point:
-     *      x0: dst_start (LINK_ADDRESS)
-     *      x1: src_start (_start)
+     *      x0: dst_code_start (LINK_ADDRESS)
+     *      x1: src_code_start (_start)
      *      x2: image_size
-     *      x3: src_end (_bss_end)
-     *      x4: dst_end (LINK_ADDRESS + image_size)
+     *      x3: src_code_end (_bss_end)
+     *      x4: dst_code_end (LINK_ADDRESS + (_bss_end - _start))
      */
 
     /* check: if (dst_end >= src_start && dst_end < src_end) { abort } */
