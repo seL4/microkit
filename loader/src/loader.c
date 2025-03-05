@@ -10,10 +10,8 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 #if UINTPTR_MAX == 0xffffffffUL
 #define WORD_SIZE 32
-#define BYTE_PER_WORD 4
 #else
 #define WORD_SIZE 64
-#define BYTE_PER_WORD 8
 #endif
 
 #if WORD_SIZE == 32
@@ -84,68 +82,15 @@ typedef void (*sel4_entry)(
     uintptr_t extra_device_size
 );
 
-
-void *memcpy(void *restrict dest, const void *restrict src, size_t n)
+static void *memcpy(void *dst, const void *src, size_t sz)
 {
-    unsigned char *d = (unsigned char *)dest;
-    const unsigned char *s = (const unsigned char *)src;
-
-    /* For ARM, we also need to consider if src is aligned.           *
-     * There are two cases: (1) If rs == 0 and rd == 0, dest          *
-     * and src are copy_unit-aligned. (2) If (rs == rd && rs != 0),   *
-     * src and dest can be made copy_unit-aligned by copying rs bytes *
-     * first. (1) is a special case of (2).                           */
-
-    size_t copy_unit = BYTE_PER_WORD;
-    while (1) {
-        int rs = (uintptr_t)s % copy_unit;
-        int rd = (uintptr_t)d % copy_unit;
-        if (rs == rd) {
-            break;
-        }
-        if (copy_unit == 1) {
-            break;
-        }
-        copy_unit >>= 1;
+    char *dst_ = dst;
+    const char *src_ = src;
+    while (sz-- > 0) {
+        *dst_++ = *src_++;
     }
 
-#ifdef HAS_MAY_ALIAS
-    /* copy byte by byte until copy-unit aligned */
-    for (; (uintptr_t)d % copy_unit != 0 && n > 0; d++, s++, n--) {
-        *d = *s;
-    }
-    /* copy unit by unit as long as we can */
-    for (; n > copy_unit - 1; n -= copy_unit, s += copy_unit, d += copy_unit) {
-        switch (copy_unit) {
-        case 8:
-            *(uint64_t *)d = *(const uint64_t *)s;
-            break;
-        case 4:
-            *(uint32_t *)d = *(const uint32_t *)s;
-            break;
-        case 2:
-            *(uint16_t *)d = *(const uint16_t *)s;
-            break;
-        case 1:
-            *(uint8_t *)d = *(const uint8_t *)s;
-            break;
-        default:
-            printf("Invalid copy unit %ld\n", copy_unit);
-            abort();
-        }
-    }
-    /* copy any remainder byte by byte */
-    for (; n > 0; d++, s++, n--) {
-        *d = *s;
-    }
-#else
-    size_t i;
-    for (i = 0; i < n; i++) {
-        d[i] = s[i];
-    }
-#endif
-
-    return dest;
+    return dst;
 }
 
 void *memmove(void *restrict dest, const void *restrict src, size_t n)
@@ -536,13 +481,6 @@ static char *ec_to_string(uintptr_t ec)
 }
 #endif
 
-void abort(void)
-{
-    puts("abort() was called. This means relocation failed. \n");
-
-    while (1);
-}
-
 /*
  * Print out the loader data structure.
  *
@@ -746,13 +684,19 @@ static inline void enable_mmu(void)
 }
 #endif
 
-void log_relocation(uint64_t reloc_addr, uint64_t curr_addr)
+void relocation_failed(void)
 {
-    puts("LDR|INFO: loader is being relocated. Currently at: ");
+    puts("LDR|ERROR: relocation failed, loader destination would overlap current loader location\n");
+    while (1);
+}
+
+void relocation_log(uint64_t reloc_addr, uint64_t curr_addr)
+{
+    puts("LDR|INFO: relocating from ");
     puthex64(curr_addr);
-    puts(". Moving to: ");
+    puts(" to ");
     puthex64(reloc_addr);
-    puts(".\n");
+    puts("\n");
 }
 
 int main(void)
