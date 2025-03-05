@@ -1,6 +1,139 @@
 # Revision History for Microkit
 
-## Release 1.4.1-dev
+## Release 2.0.0
+
+This release contains various bug fixes, quality-of-life changes, features, and
+new board support.
+
+This is a major version bump due to a breaking change. Below the release notes,
+there is a section on how to upgrade from Microkit 1.4.1.
+
+### Features
+
+* Add support for virtual machines with multiple vCPUs.
+* Add support for ARM platforms to use SMC forwarding.
+    * Note that this requires a kernel option to be set that right now is not
+      set by default on any ARM platforms in Microkit.
+* Allow tool to target Linux AArch64 hosts, also available as a pre-built SDK
+  starting in this release.
+* Increase max PD name length to 64 characters (from 16).
+* Add Nix flake for Nix users who want to build from source and not depend on
+  the pre-built SDK.
+* Allow specifying whether a channel end can notify the other.
+* Memory Regions now default to the largest possible page size for the MR's size
+  and alignment of virtual addresses of its mappings.
+    * This is transparent to users, but can lead to improved performance and
+      memory usage.
+* Utilise kernel API for naming threads in debug mode.
+    * Helps debugging any kernel error prints in certain cases.
+* Monitor fault handling now prints if a virtual memory exception was likely due
+  to a PD stack overflow.
+* Monitor fault handling now decodes user-exceptions likely caused by LLVM's
+  UBSAN and prints appropriate debug output (only on AArch64).
+* Add `setvar_size` attribute for MR mappings, similar to `setvar_vaddr`.
+* Add a new 'Internals' section in the manual to document how the Microkit
+  actually works.
+* libmicrokit APIs for notifying, IRQ acking and performing PPCs now print
+  errors when an invalid channel is used in debug mode.
+    * Previously this lead to a kernel error print that was not that useful from
+      within a Microkit environment.
+* System images are now relocatable.
+    * Previously they required loading at particular address within physical
+      memory, the Microkit loader will now relocate itself if loaded at a
+      different range of physical memory. This can make the boot-loading process
+      of Microkit images less fragile.
+
+### Bug fixes
+
+* Allow mapping in 'null' page. Necessary for virtual machines with guest memory
+  that starts at guest physical address zero.
+* More error checking for invalid mappings (e.g virtual address outside of valid
+  range).
+* Re-add warning for unused memory regions.
+    * This is a bug fix since it used to be part of the tool before it was rewritten.
+* Actually enforce the PPC priority rule that PPC is only allowed to PDs of higher
+  priority.
+    * Note that to fix this in the tool, we had to introduce a breaking change
+      in the SDF. See upgrade notes for details.
+* Fix a bug with kernel boot emulation that would sometimes occur when using
+  the release mode of the kernel.
+* Fix the GIC device addresses the loader was using for QEMU during
+  initialisation.
+* Fixed a bug preventing allocating a MR at certain fixed physical addresses.
+* Better error reporting when allocation of a memory region fails.
+* Fix allocation of Scheduling Context objects, previously we were allocating
+  more than necessary.
+
+### Board support
+
+* i.MX8MP-EVK
+* Pine64 RockPro64
+* Ariane (aka CVA6)
+* Cheshire
+* Raspberry Pi 4B
+
+### Upgrade notes
+
+There is a single breaking change in this release, it affects any
+System Description Files (SDF) that make use of channels with PPCs.
+
+This was done for two reasons:
+
+1. It allows the tool to statically check and enforce the existing rule that a
+   PD that performs a PPC must be lower priority that the PD it is calling into.
+2. It allows finer granularity on the channel ends. For example, previously
+   all channels allowed notifies either way, now that decision is up to the
+   user. The default behaviour remains the same, both ends are allowed to
+   notify each other.
+
+To upgrade, follow these steps:
+
+1. Remove the `pp` attribute from any PDs that have it.
+2. Go to each channel with the PD that had the `pp` attribute. Set `pp="true"`
+   on the end of the channel for the PD that is *performing* the PPC.
+
+Below is an example of the upgrading a system that utilises PPCs.
+
+From Microkit 1.4.1:
+```xml
+<protection_domain name="server" priority="254" pp="true">
+    <program_image path="server.elf" />
+</protection_domain>
+<protection_domain name="client" priority="1">
+    <program_image path="client.elf" />
+</protection_domain>
+<channel>
+    <end pd="server" />
+    <end pd="client" />
+</channel>
+```
+
+To Microkit 2.0.0:
+```xml
+<protection_domain name="server" priority="254">
+    <program_image path="server.elf" />
+</protection_domain>
+<protection_domain name="client" priority="1">
+    <program_image path="client.elf" />
+</protection_domain>
+<channel>
+    <end pd="server" />
+    <end pd="client" pp="true" />
+</channel>
+```
+
+Depending on your use-case you may also want to specify what end is allowed
+to notify as well. For example, if the only communication between `server`
+and `client` was PPC, you may want the channel to be the following:
+```xml
+<channel>
+    <end pd="server" notify="false" />
+    <end pd="client" notify="false" pp="true" />
+</channel>
+```
+
+You can find all the details in the
+[channel section of the manual](https://github.com/seL4/microkit/blob/2.0.0/docs/manual.md#channel).
 
 ## Release 1.4.1
 
