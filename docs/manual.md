@@ -131,11 +131,17 @@ A process on a typical operating system will have a `main` function which is inv
 When the `main` function returns the process is destroyed.
 
 By comparison a protection domain has up to four entry points:
+
 * `init`, `notified` which are required.
 * `protected` which is optional.
 *  `fault` which is required if the PD has children.
 
 When a Microkit system is booted, all PDs in the system execute the `init` entry point.
+
+A PD will not execute any other entry point until `init` has finished.
+
+If a PD is currently executing an entry point, it will not execute any other entry point
+until the current entry point has finished.
 
 The `notified` entry point will be invoked whenever the protection domain receives a *notification* on a *channel*.
 The `protected` entry point is invoked when a PD's *protected procedure* is called by another PD.
@@ -163,7 +169,7 @@ The PD has a number of scheduling attributes that are configured in the system d
 The budget and period bound the fraction of CPU time that a PD can consume.
 Specifically, the **budget** specifies the amount of time for which the PD is allowed to execute.
 Once the PD has consumed its budget, it is no longer runnable until the budget is replenished; replenishment happens once every **period** and resets the budget to its initial value.
-This means that the maximum fraction of CPU time the PD can consume is budget/period.
+This means that the maximum fraction of CPU time the PD can consume is $\frac{budget}{period}$.
 
 The budget cannot be larger than the period.
 A budget that equals the period (aka. a "full" budget) behaves like a traditional time slice: After executing for a full period, the PD is preempted and put at the end of the scheduling queue of its priority. In other words, PDs with equal priorities and full budgets are scheduled round-robin with a time slice defined by the period.
@@ -171,9 +177,9 @@ A budget that equals the period (aka. a "full" budget) behaves like a traditiona
 The **priority** determines which of the runnable PDs to schedule. A PD is runnable if one of its entry points has been invoked and it has budget remaining in the current period.
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
-The **passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
+**Passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
 
-## Virtual Machine {#vm}
+## Virtual Machines {#vm}
 
 A *virtual machine* (VM) is a runtime abstraction for running guest operating systems in Microkit. It is similar
 to a protection domain in that it provides a thread of control that executes within an isolated virtual address space.
@@ -241,7 +247,7 @@ Similarly, **B** can refer to **A** via the channel identifier **42**.
 
 The system supports a maximum of 63 channels and interrupts per protection domain.
 
-### Protected procedure {#pp}
+### Protected procedures {#pp}
 
 A protection domain may provide a *protected procedure* (PP) which can be invoked from another protection domain.
 Up to 64 words of data may be passed as arguments when calling a protected procedure.
@@ -271,10 +277,10 @@ A *message* structure is returned from this function.
 When a PD's protected procedure is invoked, the `protected` entry point is invoked with the channel identifier and message structure passed as arguments.
 The `protected` entry point must return a message structure.
 
-### Notification {#notification}
+### Notifications {#notification}
 
 A notification is a (binary) semaphore-like synchronisation mechanism.
-A PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
+For example, a PD can *notify* another PD to indicate availability of data in a shared memory region if they share a channel.
 
 To notify another PD, a PD calls `microkit_notify`, passing the channel identifier.
 When a PD receives a notification, the `notified` entry point is invoked with the appropriate channel identifier passed as an argument.
@@ -285,7 +291,12 @@ Unlike protected procedures, notifications can be sent in either direction on a 
 If a PD notifies another PD, that PD will become scheduled to run (if it is not already), but the current PD does **not** block.
 Of course, if the notified PD has a higher priority than the current PD, then the current PD will be preempted (but not blocked) by the other PD.
 
-## Interrupt {#irq}
+Depending on the scheduling, one PD could notify another multiple times without it being scheduled, resulting
+in a single execution of the `notified` entry point. For example, if PD A notifies PD B three times on the
+same channel without PD B ever executing, once PD B is scheduled it would only see one notification and hence
+only enter `notified` once for that channel.
+
+## Interrupts {#irq}
 
 Hardware interrupts can be used to notify a protection domain.
 The system description specifies if a protection domain receives notifications for any hardware interrupt sources.
@@ -299,17 +310,21 @@ Microkit does not provides timers, nor any *sleep* API.
 After initialisation, activity in the system is initiated by an interrupt causing a `notified` entry point to be invoked.
 That notified function may in turn notify or call other protection domains that cause other system activity, but eventually all activity indirectly initiated from that interrupt will complete, at which point the system is inactive again until another interrupt occurs.
 
-## Fault {#fault}
+## Faults {#fault}
 
 Faults such as an invalid memory access or illegal instruction are delivered to the seL4 kernel which then forwards them to
-a designated 'fault handler'. By default, all faults caused by protection domains go to the system fault handler which simply prints out
-details about the fault in a debug configuration.
+a designated 'fault handler'. By default, all faults caused by protection domains go to the system fault handler which
+simply prints out details about the fault in a debug configuration.
 
 When a protection domain is a child of another protection domain, the designated fault handler for the child is the parent
 protection domain. The same applies for a virtual machine.
 
 This means that whenever a fault is caused by a child, it will be delivered to the parent PD instead of the system fault
 handler via the `fault` entry point. It is then up to the parent to decide how the fault is handled.
+
+The default system fault handler (aka the monitor) has the highest priority and so will
+execute and handle faults immediately after they occur. For child PDs that have their faults
+delivered to another PD, the fault being handled depends on when the parent PD is scheduled.
 
 # SDK {#sdk}
 
