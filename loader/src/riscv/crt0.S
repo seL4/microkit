@@ -103,7 +103,7 @@ hsm_switch_hart:
   mv a0, s0 /* restore a0 to hold hart ID passed by OpenSBI */
   j spin_hart /* Spin any hart that isn't FIRST_HART_ID since we only support single-core right now. */
 
-fixup_image_base:
+relocate:
   /* Save the return address */
   addi sp, sp, -0x8
   sd ra, (sp)
@@ -114,7 +114,7 @@ fixup_image_base:
   beq a0, a1, image_ok
 
   /* Log that we are being relocated */
-  jal log_relocation
+  jal relocation_log
 
   /* Restore a0 and a1 */
   li a0, LINK_ADDRESS
@@ -159,7 +159,7 @@ fixup_image_base:
   bge a0, a3, 2f
 
 cant_reloc:
-  j abort
+  j relocation_failed
 
 2:
   /* a0 = desired image base */
@@ -191,19 +191,19 @@ _start1: /* a0 must hold current hard ID passed by bootloader */
   mv s2, a1 /* preserve a1 (dtb) in s2 */
 
   /* May not have been loaded in the right location.
-   * Try and mve ourselves so we're in the right place
+   * Try and move ourselves so we're in the right place
    */
-  jal fixup_image_base
+  jal relocate
 
   /* Check if we were relocated. If not, just jump straight to main */
   li a1, 1
   beq a0, a1, 1f
 
   /* Restore arguments and go back to _start of the relocated image */
-  mv s2, a0
+  mv s3, a0
   mv a0, s0 /* restore a0 to hold hart ID passed by the boot loader */
   mv a1, s2 /* restore a1 to hold dtb address passed by the boot loader */
-  jr s2
+  jr s3
 
 1:
   la s0, main

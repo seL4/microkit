@@ -26,15 +26,15 @@ master:
     /* May not have been loaded in the right location.
      * Try and move ourselves so we're in the right place
      */
-    bl      fixup_image_base
+    bl     relocate
     cmp     x0, #1
     beq     1f
-    /* Otherwise, jump to the start of the new elf-loader */
+    /* Otherwise, jump to the start of the new loader */
     br      x0
 1:
     b       main
 
-fixup_image_base:
+relocate:
     stp     x29, x30, [sp, #-16]!
     mov     x29, sp
     /* Check if the image is already at the correct location */
@@ -44,7 +44,7 @@ fixup_image_base:
     beq     image_ok
 
     /* Log that we are being relocated */
-    bl log_relocation
+    bl relocation_log
 
     /* Restore x0 and x1 */
     ldr     x0, =LINK_ADDRESS
@@ -97,7 +97,7 @@ fixup_image_base:
     cmp     x0, x3
     bge     2f
 cant_reloc:
-    b abort
+    b relocation_failed
 
 2:
     /* x0 = desired image base */
