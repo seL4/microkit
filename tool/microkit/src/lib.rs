@@ -339,8 +339,18 @@ impl UntypedAllocator {
 /// It is critical that invocations are generated in the same order
 /// as the allocations are made.
 pub struct ObjectAllocator {
+    pub init_capacity: u64,
     allocation_idx: u64,
-    untyped: Vec<UntypedAllocator>,
+    pub untyped: Vec<UntypedAllocator>,
+}
+
+/// First entry is potential padding, then the actual allocation is the second
+/// entry.
+type FixedAllocation = (Option<Vec<KernelAllocation>>, KernelAllocation);
+
+pub enum FindFixedError {
+    AlreadyAllocated,
+    TooLarge,
 }
 
 impl ObjectAllocator {
@@ -351,17 +361,44 @@ impl ObjectAllocator {
             .collect();
         untyped.sort_by(|a, b| a.untyped_object.base().cmp(&b.untyped_object.base()));
 
+        let mut capacity = 0;
+        for ut in &untyped {
+            capacity += ut.end() - (ut.base() + ut.allocation_point);
+        }
+
         ObjectAllocator {
+            init_capacity: capacity,
             allocation_idx: 0,
             untyped,
         }
     }
 
-    pub fn alloc(&mut self, size: u64) -> KernelAllocation {
+    pub fn capacity(&self) -> u64 {
+        let mut capacity = 0;
+        for ut in &self.untyped {
+            capacity += ut.end() - (ut.base() + ut.allocation_point);
+        }
+
+        capacity
+    }
+
+    pub fn max_alloc_size(&self) -> u64 {
+        let mut largest_capacity = 0;
+        for ut in &self.untyped {
+            let ut_capacity = ut.end() - (ut.base() + ut.allocation_point);
+            if ut_capacity > largest_capacity {
+                largest_capacity = ut_capacity;
+            }
+        }
+
+        largest_capacity
+    }
+
+    pub fn alloc(&mut self, size: u64) -> Option<KernelAllocation> {
         self.alloc_n(size, 1)
     }
 
-    pub fn alloc_n(&mut self, size: u64, count: u64) -> KernelAllocation {
+    pub fn alloc_n(&mut self, size: u64, count: u64) -> Option<KernelAllocation> {
         assert!(util::is_power_of_two(size));
         assert!(count > 0);
         let mem_size = count * size;
@@ -377,11 +414,11 @@ impl ObjectAllocator {
                     size: mem_size,
                 };
                 ut.allocations.push(allocation);
-                return allocation;
+                return Some(allocation);
             }
         }
 
-        panic!("Can't alloc of size {}, count: {} - no space", size, count);
+        None
     }
 
     pub fn reserve(&mut self, alloc: (&UntypedObject, u64)) {
@@ -409,21 +446,17 @@ impl ObjectAllocator {
         &mut self,
         phys_addr: u64,
         size: u64,
-    ) -> Option<(Option<Vec<KernelAllocation>>, KernelAllocation)> {
+    ) -> Result<Option<FixedAllocation>, FindFixedError> {
         for ut in &mut self.untyped {
             /* Find the right untyped */
             if phys_addr >= ut.base() && phys_addr < ut.end() {
                 if phys_addr < ut.base() + ut.allocation_point {
-                    panic!("Error: physical address {:x} is below watermark", phys_addr);
+                    return Err(FindFixedError::AlreadyAllocated);
                 }
 
                 let space_left = ut.end() - (ut.base() + ut.allocation_point);
                 if space_left < size {
-                    panic!(
-                        "Error: allocation for physical address {:x}
-                            is too large ({:x}) for untyped",
-                        phys_addr, size
-                    );
+                    return Err(FindFixedError::TooLarge);
                 }
 
                 let mut watermark = ut.base() + ut.allocation_point;
@@ -470,10 +503,10 @@ impl ObjectAllocator {
                 };
 
                 ut.allocation_point = (watermark + size) - ut.base();
-                return Some((allocations, obj));
+                return Ok(Some((allocations, obj)));
             }
         }
 
-        None
+        Ok(None)
     }
 }

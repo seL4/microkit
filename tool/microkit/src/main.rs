@@ -10,8 +10,9 @@
 use elf::ElfFile;
 use loader::Loader;
 use microkit_tool::{
-    elf, loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
-    UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
+    elf, loader, sdf, sel4, util, DisjointMemoryRegion, FindFixedError, MemoryRegion,
+    ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH,
+    VM_MAX_NAME_LENGTH,
 };
 use sdf::{
     parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
@@ -30,7 +31,7 @@ use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use util::{
-    comma_sep_u64, comma_sep_usize, json_str, json_str_as_bool, json_str_as_u64,
+    comma_sep_u64, comma_sep_usize, human_size_strict, json_str, json_str_as_bool, json_str_as_u64,
     monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
 
@@ -173,10 +174,22 @@ impl<'a> InitSystem<'a> {
 
         let alloc_size = object_type.fixed_size(self.config).unwrap();
 
-        // Find an untyped that contains the given address, it may be in device
-        // memory
-        let device_ut = self.device_untyped.find_fixed(phys_address, alloc_size);
-        let normal_ut = self.normal_untyped.find_fixed(phys_address, alloc_size);
+        // Find an untyped that contains the given address, it could either be
+        // in device memory or normal memory.
+        let device_ut = self.device_untyped.find_fixed(phys_address, alloc_size).unwrap_or_else(|err| {
+            match err {
+                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{}' at 0x{:x} from reserved region, pick another physical address", name, phys_address),
+                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{}' for this physical address 0x{:x}", name, phys_address),
+            }
+            std::process::exit(1);
+        });
+        let normal_ut = self.normal_untyped.find_fixed(phys_address, alloc_size).unwrap_or_else(|err| {
+            match err {
+                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{}' at 0x{:x} from reserved region, pick another physical address", name, phys_address),
+                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{}' for this physical address 0x{:x}", name, phys_address),
+            }
+            std::process::exit(1);
+        });
 
         // We should never have found the physical address in both device and normal untyped
         assert!(!(device_ut.is_some() && normal_ut.is_some()));
@@ -186,10 +199,19 @@ impl<'a> InitSystem<'a> {
         } else if let Some(x) = normal_ut {
             x
         } else {
-            panic!(
-                "Error: physical address {:x} not in any device untyped",
+            eprintln!(
+                "ERROR: physical address 0x{:x} not in any valid region, below are the valid ranges of memory to be allocated from:",
                 phys_address
-            )
+            );
+            eprintln!("valid ranges outside of main memory:");
+            for ut in &self.device_untyped.untyped {
+                eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
+            }
+            eprintln!("valid ranges within main memory:");
+            for ut in &self.normal_untyped.untyped {
+                eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
+            }
+            std::process::exit(1);
         };
 
         if let Some(padding_unwrapped) = padding {
@@ -273,7 +295,18 @@ impl<'a> InitSystem<'a> {
             panic!("Internal error: invalid object type: {:?}", object_type);
         }
 
-        let allocation = self.normal_untyped.alloc_n(alloc_size, count);
+        let allocation = self.normal_untyped
+                             .alloc_n(alloc_size, count)
+                             .unwrap_or_else(|| {
+                                    let (human_size, human_size_label) = human_size_strict(alloc_size * count);
+                                    let (human_max_alloc, human_max_alloc_label) = human_size_strict(self.normal_untyped.max_alloc_size());
+                                    eprintln!("ERROR: failed to allocate objects for '{}' of object type '{}'", names[0], object_type.to_str());
+                                    if alloc_size * count > self.normal_untyped.max_alloc_size() {
+                                        eprintln!("ERROR: allocation size ({} {}) is greater than current maximum size for a single allocation ({} {})", human_size, human_size_label, human_max_alloc, human_max_alloc_label);
+                                    }
+                                    std::process::exit(1);
+                                }
+                             );
         let base_cap_slot = self.cap_slot;
         self.cap_slot += count;
 
@@ -846,13 +879,17 @@ fn build_system(
     //  slot 0: the existing init cnode
     //  slot 1: our main system cnode
     let root_cnode_bits = 1;
-    let root_cnode_allocation = kao.alloc((1 << root_cnode_bits) * (1 << SLOT_BITS));
+    let root_cnode_allocation = kao
+        .alloc((1 << root_cnode_bits) * (1 << SLOT_BITS))
+        .unwrap_or_else(|| panic!("Internal error: failed to allocate root CNode"));
     let root_cnode_cap = kernel_boot_info.first_available_cap;
     cap_address_names.insert(root_cnode_cap, "CNode: root".to_string());
 
     // 2.1.2: Allocate the *system* CNode. It is the cnodes that
     // will have enough slots for all required caps.
-    let system_cnode_allocation = kao.alloc(system_cnode_size * (1 << SLOT_BITS));
+    let system_cnode_allocation = kao
+        .alloc(system_cnode_size * (1 << SLOT_BITS))
+        .unwrap_or_else(|| panic!("Internal erorr: failed to allocate system CNode"));
     let system_cnode_cap = kernel_boot_info.first_available_cap + 1;
     cap_address_names.insert(system_cnode_cap, "CNode: system".to_string());
 
@@ -1031,7 +1068,9 @@ fn build_system(
     let page_table_size = ObjectType::PageTable.fixed_size(config).unwrap();
     let page_tables_required =
         util::round_up(invocation_table_size, large_page_size) / large_page_size;
-    let page_table_allocation = kao.alloc_n(page_table_size, page_tables_required);
+    let page_table_allocation = kao
+        .alloc_n(page_table_size, page_tables_required)
+        .unwrap_or_else(|| panic!("Internal error: failed to allocate page tables"));
     let base_page_table_cap = cap_slot;
 
     for pta in base_page_table_cap..base_page_table_cap + page_tables_required {
