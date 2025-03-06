@@ -374,7 +374,7 @@ and is intended to be removed once [RFC-16 is implemented](https://github.com/se
 
 ## System Requirements
 
-The Microkit tool requires Linux (x86-64), macOS (x86-64 or AArch64).
+The Microkit tool requires Linux (x86-64 or AArch64), macOS (x86-64 or AArch64).
 
 On Linux, the Microkit tool is statically linked and should run on any distribution.
 
