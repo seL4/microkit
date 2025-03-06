@@ -102,10 +102,7 @@ pub fn human_size_strict(size: u64) -> (String, &'static str) {
                 let (d_count, extra) = divmod(size, base);
                 count = d_count;
                 if extra != 0 {
-                    panic!(
-                        "size 0x{:x} is not a multiple of standard power-of-two",
-                        size
-                    );
+                    return (format!("{:.2}", size as f64 / base as f64), label);
                 }
             } else {
                 count = size;
