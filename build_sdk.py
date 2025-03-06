@@ -346,7 +346,13 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
 def get_tool_target_triple() -> str:
     host_system = host_platform.system()
     if host_system == "Linux":
-        return "x86_64-unknown-linux-musl"
+        host_arch = host_platform.machine()
+        if host_arch == "x86_64":
+            return "x86_64-unknown-linux-musl"
+        elif host_arch == "aarch64":
+            return "aarch64-unknown-linux-musl"
+        else:
+            raise Exception(f"Unexpected Linux architecture: {host_arch}")
     elif host_system == "Darwin":
         host_arch = host_platform.machine()
         if host_arch == "x86_64":
