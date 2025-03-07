@@ -891,6 +891,14 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x20000000
 
+## SiFive Premier P550
+
+The SiFive Premier P550 is a development board based on the ESWIN EIC7700X system-on-chip.
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x90000000
+
 ## QEMU virt (AArch64)
 
 Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based

@@ -245,6 +245,18 @@ SUPPORTED_BOARDS = (
         },
     ),
     BoardInfo(
+        name="hifive_p550",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelIsMCS": True,
+            "KernelPlatform": "p550",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        },
+    ),
+    BoardInfo(
         name="star64",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
