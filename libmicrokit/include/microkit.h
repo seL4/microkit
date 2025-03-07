@@ -78,7 +78,7 @@ static inline void microkit_internal_crash(seL4_Error err)
 
 static inline void microkit_notify(microkit_channel ch)
 {
-    if ((microkit_notifications & (1 << ch)) == 0) {
+    if ((microkit_notifications & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_notify: invalid channel given '");
         microkit_dbg_put8((seL4_Uint8)ch);
@@ -90,7 +90,7 @@ static inline void microkit_notify(microkit_channel ch)
 
 static inline void microkit_irq_ack(microkit_channel ch)
 {
-    if ((microkit_irqs & (1 << ch)) == 0) {
+    if ((microkit_irqs & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_irq_ack: invalid channel given '");
         microkit_dbg_put8((seL4_Uint8)ch);
@@ -131,7 +131,7 @@ static inline void microkit_pd_stop(microkit_child pd)
 
 static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
 {
-    if ((microkit_pps & (1 << ch)) == 0) {
+    if ((microkit_pps & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_ppcall: invalid channel given '");
         microkit_dbg_put8((seL4_Uint8)ch);
@@ -255,7 +255,7 @@ static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMC
 
 static inline void microkit_deferred_notify(microkit_channel ch)
 {
-    if ((microkit_notifications & (1 << ch)) == 0) {
+    if ((microkit_notifications & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_deferred_notify: invalid channel given '");
         microkit_dbg_put8((seL4_Uint8)ch);
@@ -269,7 +269,7 @@ static inline void microkit_deferred_notify(microkit_channel ch)
 
 static inline void microkit_deferred_irq_ack(microkit_channel ch)
 {
-    if ((microkit_irqs & (1 << ch)) == 0) {
+    if ((microkit_irqs & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_deferred_irq_ack: invalid channel given '");
         microkit_dbg_put8((seL4_Uint8)ch);
