@@ -86,6 +86,8 @@ The [Board Support Packages](#bsps) chapter describes each of the board support 
 
 The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of in Microkit.
 
+The [Internals](#rationale) chapter documents some of the internal details for how Microkit works.
+
 # Concepts {#concepts}
 
 This chapter describes the key concepts provided by Microkit.
