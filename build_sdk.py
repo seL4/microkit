@@ -533,7 +533,7 @@ def build_lib_component(
 ) -> None:
     """Build a specific library component.
 
-    Right now this is just libsel4.a
+    Right now this is just libmicrokit.a
     """
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
