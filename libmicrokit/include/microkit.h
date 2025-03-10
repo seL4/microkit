@@ -28,6 +28,7 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_VCPU_CAP 330
 
 #define MICROKIT_MAX_CHANNELS 62
+#define MICROKIT_MAX_CHANNEL_ID (MICROKIT_MAX_CHANNELS - 1)
 #define MICROKIT_PD_NAME_LENGTH 64
 
 /* User provided functions */
@@ -63,6 +64,11 @@ void microkit_dbg_puts(const char *s);
  */
 void microkit_dbg_put8(seL4_Uint8 x);
 
+/*
+ * Output the decimal representation of an 32-bit integer to the debug console.
+ */
+void microkit_dbg_put32(seL4_Uint32 x);
+
 static inline void microkit_internal_crash(seL4_Error err)
 {
     /*
@@ -78,10 +84,10 @@ static inline void microkit_internal_crash(seL4_Error err)
 
 static inline void microkit_notify(microkit_channel ch)
 {
-    if ((microkit_notifications & (1ULL << ch)) == 0) {
+    if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_notifications & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_notify: invalid channel given '");
-        microkit_dbg_put8((seL4_Uint8)ch);
+        microkit_dbg_put32(ch);
         microkit_dbg_puts("'\n");
         return;
     }
@@ -90,10 +96,10 @@ static inline void microkit_notify(microkit_channel ch)
 
 static inline void microkit_irq_ack(microkit_channel ch)
 {
-    if ((microkit_irqs & (1ULL << ch)) == 0) {
+    if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_irqs & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_irq_ack: invalid channel given '");
-        microkit_dbg_put8((seL4_Uint8)ch);
+        microkit_dbg_put32(ch);
         microkit_dbg_puts("'\n");
         return;
     }
@@ -131,10 +137,10 @@ static inline void microkit_pd_stop(microkit_child pd)
 
 static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
 {
-    if ((microkit_pps & (1ULL << ch)) == 0) {
+    if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_pps & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_ppcall: invalid channel given '");
-        microkit_dbg_put8((seL4_Uint8)ch);
+        microkit_dbg_put32(ch);
         microkit_dbg_puts("'\n");
         return seL4_MessageInfo_new(0, 0, 0, 0);
     }
@@ -255,10 +261,10 @@ static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMC
 
 static inline void microkit_deferred_notify(microkit_channel ch)
 {
-    if ((microkit_notifications & (1ULL << ch)) == 0) {
+    if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_notifications & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_deferred_notify: invalid channel given '");
-        microkit_dbg_put8((seL4_Uint8)ch);
+        microkit_dbg_put32(ch);
         microkit_dbg_puts("'\n");
         return;
     }
@@ -269,10 +275,10 @@ static inline void microkit_deferred_notify(microkit_channel ch)
 
 static inline void microkit_deferred_irq_ack(microkit_channel ch)
 {
-    if ((microkit_irqs & (1ULL << ch)) == 0) {
+    if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_irqs & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_deferred_irq_ack: invalid channel given '");
-        microkit_dbg_put8((seL4_Uint8)ch);
+        microkit_dbg_put32(ch);
         microkit_dbg_puts("'\n");
         return;
     }

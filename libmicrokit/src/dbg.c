@@ -38,6 +38,19 @@ void microkit_dbg_put8(seL4_Uint8 x)
     microkit_dbg_puts(&tmp[i]);
 }
 
+void microkit_dbg_put32(seL4_Uint32 x)
+{
+    char tmp[11];
+    unsigned i = 10;
+    tmp[10] = 0;
+    do {
+        seL4_Uint8 c = x % 10;
+        tmp[--i] = '0' + c;
+        x /= 10;
+    } while (x);
+    microkit_dbg_puts(&tmp[i]);
+}
+
 void __assert_fail(const char  *str, const char *file, int line, const char *function)
 {
     microkit_dbg_puts("assert failed: ");
