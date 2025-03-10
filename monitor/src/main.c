@@ -122,7 +122,7 @@ struct untyped_info untyped_info;
 
 void dump_untyped_info()
 {
-    puts("\nUntyped Info Memory Ranges\n");
+    puts("\nUntyped Info Expected Memory Ranges\n");
     seL4_Word start = untyped_info.regions[0].paddr;
     seL4_Word end = start + (1ULL << untyped_info.regions[0].size_bits);
     seL4_Word is_device = untyped_info.regions[0].is_device;
@@ -427,7 +427,7 @@ static char *usban_code_to_string(seL4_Word code)
 }
 #endif
 
-static void check_untypeds_match(seL4_BootInfo *bi)
+static bool check_untypeds_match(seL4_BootInfo *bi)
 {
     /* Check that untypeds list generate from build matches the kernel */
     if (untyped_info.cap_start != bi->untyped.start) {
@@ -436,7 +436,8 @@ static void check_untypeds_match(seL4_BootInfo *bi)
         puts("  boot info cap start: ");
         puthex32(bi->untyped.start);
         puts("\n");
-        fail("cap start mismatch");
+        puts("cap start mismatch");
+        return false;
     }
 
     if (untyped_info.cap_end != bi->untyped.end) {
@@ -445,7 +446,8 @@ static void check_untypeds_match(seL4_BootInfo *bi)
         puts("  boot info cap end: ");
         puthex32(bi->untyped.end);
         puts("\n");
-        fail("cap end mismatch");
+        puts("cap end mismatch");
+        return false;
     }
 
     for (unsigned i = 0; i < untyped_info.cap_end - untyped_info.cap_start; i++) {
@@ -457,7 +459,8 @@ static void check_untypeds_match(seL4_BootInfo *bi)
             puts("  boot info paddr: ");
             puthex64(bi->untypedList[i].paddr);
             puts("\n");
-            fail("paddr mismatch");
+            puts("paddr mismatch");
+            return false;
         }
         if (untyped_info.regions[i].size_bits != bi->untypedList[i].sizeBits) {
             puts("MON|ERROR: size_bits mismatch for untyped region: ");
@@ -467,7 +470,8 @@ static void check_untypeds_match(seL4_BootInfo *bi)
             puts("  boot info size_bits: ");
             puthex32(bi->untypedList[i].sizeBits);
             puts("\n");
-            fail("size_bits mismatch");
+            puts("size_bits mismatch");
+            return false;
         }
         if (untyped_info.regions[i].is_device != bi->untypedList[i].isDevice) {
             puts("MON|ERROR: is_device mismatch for untyped region: ");
@@ -477,11 +481,14 @@ static void check_untypeds_match(seL4_BootInfo *bi)
             puts("  boot info is_device: ");
             puthex32(bi->untypedList[i].isDevice);
             puts("\n");
-            fail("is_device mismatch");
+            puts("is_device mismatch");
+            return false;
         }
     }
 
     puts("MON|INFO: bootinfo untyped list matches expected list\n");
+
+    return true;
 }
 
 static unsigned perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
@@ -1063,15 +1070,14 @@ void main(seL4_BootInfo *bi)
     __sel4_ipc_buffer = bi->ipcBuffer;
     puts("MON|INFO: Microkit Bootstrap\n");
 
-#if 0
-    /* This can be useful to enable during new platform bring up
-     * if there are problems
-     */
-    dump_bootinfo(bi);
-    dump_untyped_info();
-#endif
-
-    check_untypeds_match(bi);
+    if (!check_untypeds_match(bi)) {
+        /* This can be useful to enable during new platform bring up
+         * if there are problems
+         */
+        dump_bootinfo(bi);
+        dump_untyped_info();
+        fail("MON|ERROR: found mismatch between boot info and untyped info");
+    }
 
     puts("MON|INFO: Number of bootstrap invocations: ");
     puthex32(bootstrap_invocation_count);

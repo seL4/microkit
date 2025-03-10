@@ -11,8 +11,7 @@
 #include "util.h"
 #include "debug.h"
 
-void
-dump_bootinfo(seL4_BootInfo *bi)
+void dump_bootinfo(seL4_BootInfo *bi)
 {
     unsigned i;
 
@@ -125,7 +124,7 @@ dump_bootinfo(seL4_BootInfo *bi)
        memory used for kernel and rootserver.
     */
 #if 1
-    puts("\nUntyped Memory Ranges\n");
+    puts("\nBoot Info Untyped Memory Ranges\n");
     seL4_Word start = bi->untypedList[0].paddr;
     seL4_Word end = start + (1ULL << bi->untypedList[0].sizeBits);
     seL4_Word is_device = bi->untypedList[0].isDevice;
