@@ -44,9 +44,9 @@ jobs:
             texlive-latex-base texlive-latex-recommended \
             texlive-fonts-recommended texlive-fonts-extra \
             libxml2-utils \
-            python3.9 python3-pip python3.9-venv \
+            python3.12 python3-pip python3.12-venv \
             qemu-system-arm qemu-system-misc
-          python3.9 -m venv pyenv
+            python3.12 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
       - name: Install AArch64 GCC toolchain
@@ -91,8 +91,8 @@ jobs:
           rustup target add aarch64-apple-darwin
           brew tap riscv-software-src/riscv
           brew install riscv-tools
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
-          python3.9 -m venv pyenv
+          brew install pandoc cmake dtc ninja qemu libxml2 python@3.12 coreutils texlive qemu
+          python3.12 -m venv pyenv
           ./pyenv/bin/pip install --upgrade pip setuptools wheel
           ./pyenv/bin/pip install -r requirements.txt
       - name: Install AArch64 GCC toolchain

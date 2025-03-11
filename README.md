@@ -37,8 +37,8 @@ This section attempts to list the packages or external development tools which a
 * Rust and Cargo
 * git
 * make
-* python3.9
-* python3.9-venv
+* python3.12
+* python3.12-venv
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.Rel1
@@ -66,20 +66,20 @@ On a Debian-like system you can do:
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
-        python3.9 python3.9-venv \
+        python3.12 python3.12-venv \
         qemu-system-arm qemu-system-misc \
         gcc-riscv64-unknown-elf
-    $ python3.9 -m venv pyenv
+    $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
-If you do not have Python 3.9 available, you can get it via the
+If you do not have Python 3.12 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
 To use this:
 
     $ sudo add-apt-repository ppa:deadsnakes/ppa
     $ sudo apt update
-    $ sudo apt install python3.9 python3.9-venv
+    $ sudo apt install python3.12 python3.12-venv
 
 The ARM toolchain is available from:
 
@@ -97,8 +97,8 @@ On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
     $ curl https://sh.rustup.rs -sSf | sh
     $ brew tap riscv-software-src/riscv
     $ brew install riscv-tools
-    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
-    $ python3.9 -m venv pyenv
+    $ brew install pandoc cmake dtc ninja libxml2 python@3.12 coreutils texlive qemu
+    $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
 
