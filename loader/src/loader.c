@@ -203,12 +203,6 @@ static void putc(uint8_t ch)
 
 static void putc(uint8_t ch)
 {
-    if (ch == '\n') {
-        // ensure FIFO has space
-        while (!(*UART_REG(STAT) & STAT_TDRE)) { }
-        *UART_REG(TRANSMIT) = '\r';
-    }
-
     // ensure FIFO has space
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
@@ -299,6 +293,9 @@ static void puts(const char *s)
 {
 #if PRINTING
     while (*s) {
+        if (*s == '\n') {
+            putc('\r');
+        }
         putc(*s);
         s++;
     }
