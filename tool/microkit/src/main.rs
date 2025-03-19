@@ -15,8 +15,8 @@ use microkit_tool::{
     VM_MAX_NAME_LENGTH,
 };
 use sdf::{
-    parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
-    VirtualMachine,
+    parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SysMemoryRegionKind,
+    SystemDescription, VirtualMachine,
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
@@ -1212,6 +1212,7 @@ fn build_system(
                 page_count: aligned_size / PageSize::Small as u64,
                 phys_addr: Some(phys_addr_next),
                 text_pos: None,
+                kind: SysMemoryRegionKind::Elf,
             };
             phys_addr_next += aligned_size;
 
@@ -1248,6 +1249,7 @@ fn build_system(
             page_count: pd.stack_size / PageSize::Small as u64,
             phys_addr: None,
             text_pos: None,
+            kind: SysMemoryRegionKind::Stack,
         };
 
         let stack_map = SysMap {
@@ -1753,6 +1755,45 @@ fn build_system(
         },
     );
     system_invocations.push(asid_invocation);
+
+    // Check that the user has not created any maps that clash with our extra maps
+    for pd in &system.protection_domains {
+        let curr_pd_extra_maps = &pd_extra_maps[pd];
+        for pd_map in &pd.maps {
+            for extra_map in curr_pd_extra_maps {
+                let mr = all_mr_by_name[pd_map.mr.as_str()];
+                let base = pd_map.vaddr;
+                let end = base + mr.size;
+                let extra_mr = all_mr_by_name[extra_map.mr.as_str()];
+                let extra_map_base = extra_map.vaddr;
+                let extra_map_end = extra_map_base + extra_mr.size;
+                if !(base >= extra_map_end || end <= extra_map_base) {
+                    eprintln!("ERROR: PD '{}' contains overlapping map, mapping for '{}' [0x{:x}..0x{:x}) overlaps with mapping for '{}' [0x{:x}..0x{:x})",
+                              pd.name, pd_map.mr, base, end, extra_map.mr, extra_map_base, extra_map_end);
+                    match extra_mr.kind {
+                        SysMemoryRegionKind::Elf => {
+                            eprintln!(
+                                "ERROR: mapping for '{}' would overlap with the ELF for PD '{}'",
+                                pd_map.mr, pd.name
+                            );
+                        }
+                        SysMemoryRegionKind::Stack => {
+                            eprintln!(
+                                "ERROR: mapping for '{}' would overlap with stack region or PD '{}'",
+                                pd_map.mr, pd.name
+                            );
+                        }
+                        SysMemoryRegionKind::User => {
+                            // This is not expected because there should not be any 'User' kind of MRs
+                            // in the extra maps list.
+                            panic!("internal error: did not expect to encounter user defined MR in this case");
+                        }
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
 
     // Create copies of all caps required via minting.
 

@@ -90,6 +90,13 @@ pub struct SysMap {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum SysMemoryRegionKind {
+    User,
+    Elf,
+    Stack,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SysMemoryRegion {
     pub name: String,
     pub size: u64,
@@ -97,6 +104,10 @@ pub struct SysMemoryRegion {
     pub page_count: u64,
     pub phys_addr: Option<u64>,
     pub text_pos: Option<roxmltree::TextPos>,
+    /// For error reporting is useful to know whether the MR was created
+    /// due to the user's SDF or created by the tool for setting up the
+    /// stack, ELF, etc.
+    pub kind: SysMemoryRegionKind,
 }
 
 impl SysMemoryRegion {
@@ -837,6 +848,7 @@ impl SysMemoryRegion {
             page_count,
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            kind: SysMemoryRegionKind::User,
         })
     }
 }
