@@ -1,5 +1,16 @@
 # Revision History for Microkit
 
+## Release 2.0.1
+
+This release contains various bug fixes. It does not include any new features.
+
+* Fixed a regression introduced in 2.0.0 when using channel numbers greater than 32.
+* Fixed building SDK on Linux AArch64 hosts.
+* Fixed loader output to always output return character before newline.
+* Report error when user-specified PD mappings overlap with it's own ELF
+  or stack region.
+* Included kernel bug-fix that prevented Raspberry Pi 4B booting correctly.
+
 ## Release 2.0.0
 
 This release contains various bug fixes, quality-of-life changes, features, and
