@@ -26,7 +26,6 @@ import json
 from typing import Any, Dict, Union, List, Tuple, Optional
 
 NAME = "microkit"
-VERSION = "2.0.0"
 
 ENV_BIN_DIR = Path(executable).parent
 
@@ -590,7 +589,11 @@ def main() -> None:
     parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
-    parser.add_argument("--version", default=VERSION, help="SDK version")
+    # Read from the version file as unless someone has specified
+    # a version, that is the source of truth
+    with open("VERSION", "r") as f:
+        default_version = f.read().strip()
+    parser.add_argument("--version", default=default_version, help="SDK version")
     for arch in KernelArch:
         arch_str = arch.name.lower()
         parser.add_argument(f"--toolchain-prefix-{arch_str}", default=arch.c_toolchain(), help=f"C toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
