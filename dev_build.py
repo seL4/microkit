@@ -28,7 +28,7 @@ def find_releases():
         releases.append(f)
 
     def release_sort_key(rel):
-        ver_str = rel.name.split("-")[-1]
+        ver_str = rel.name.split("-")[2]
         ver = tuple(int(x) for x in ver_str.split("."))
         return ver
 
