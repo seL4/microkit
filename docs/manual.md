@@ -1044,6 +1044,17 @@ Rather than typing these each time you can create a U-Boot script:
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
+## Ultra96V2
+
+To run the built image on the board, you have to use properly patched U-Boot - please see the section for ZCU102, for the details.
+
+You have to load the binary file into memory and run it:
+```
+ZynqMP> tftpboot 0x40000000 loader.img
+...
+ZynqMP> go 0x40000000
+```
+
 ## ZCU102
 
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.

@@ -196,6 +196,21 @@ SUPPORTED_BOARDS = (
         },
     ),
     BoardInfo(
+        name="ultra96v2",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options={
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "ultra96v2",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
+        },
+    ),
+    BoardInfo(
         name="qemu_virt_aarch64",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",

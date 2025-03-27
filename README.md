@@ -220,6 +220,7 @@ The currently supported boards are:
 * rpi4b_1gb
 * star64
 * tqma8xqp1gb
+* ultra96v2
 * zcu102
 
 The currently supported configurations are:
