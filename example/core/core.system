@@ -1,24 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
- Copyright 2021, Breakaway Consulting Pty. Ltd.
-
- SPDX-License-Identifier: BSD-2-Clause
--->
 <system>
     <memory_region name="uart" size="0x1_000" phys_addr="0x9_000_000"/>
+    <memory_region name="buffer" size="0x1000"/>
 
     <protection_domain name="pd1" priority="254" smc="true">
-        <program_image path="pd1.elf" />
+        <program_image path="pd1.elf"/>
         <map mr="uart" vaddr="0x2000000" perms="rw" cached="false" setvar_vaddr="uart_base_vaddr"/>
-        <irq irq="33" id="1" />
+        <map mr="buffer" vaddr="0x4000000" perms="rw" setvar_vaddr="buffer_vaddr"/>
+        <irq irq="33" id="1"/>
     </protection_domain>
 
-    <protection_domain name="pd2" priority="254" smc="true">
-        <program_image path="pd2.elf" />
+    <protection_domain name="pd2" priority="253" smc="true">
+        <program_image path="pd2.elf"/>
+        <map mr="uart" vaddr="0x2000000" perms="rw" cached="false" setvar_vaddr="uart_base_vaddr"/>
+        <map mr="buffer" vaddr="0x4000000" perms="r" setvar_vaddr="buffer_vaddr"/>
     </protection_domain>
 
     <channel>
-        <end pd="pd2" id="1" />
-        <end pd="pd1" id="2" />
+        <end pd="pd2" id="1"/>
+        <end pd="pd1" id="2"/>
     </channel>
 </system>

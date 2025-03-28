@@ -3,10 +3,9 @@
 #include <microkit.h>
 #include "uart.h"
 
+#define PSCI_VERSION_FID 0x84000000
 #define PSCI_CPU_OFF 0x84000002
 #define PSCI_CPU_ON 0xC4000003
-
-#define PSCI_VERSION_FID 0x84000000
 
 int current_cpu = 0;
 
@@ -18,7 +17,7 @@ static void migrate_cpu() {
 
     seL4_SchedControl_ConfigureFlags(
         BASE_SCHED_CONTROL_CAP + new_cpu,
-        BASE_SCHED_CONTEXT_CAP,
+        BASE_SCHED_CONTEXT_CAP + 1,
         microkit_pd_period,
         microkit_pd_budget,
         microkit_pd_extra_refills,
@@ -35,13 +34,17 @@ static void turn_off_cpu() {
     microkit_arm_smc_call(&args, &response);
 }
 
-static void turn_on_cpu(seL4_Word entry) {
+static void awaken_entry() {
+    microkit_dbg_puts("A CPU core has re-awakened!\n");
+}
+
+static void turn_on_cpu(uint8_t core) {
     seL4_ARM_SMCContext args = {0};
     seL4_ARM_SMCContext response = {0};
     args.x0 = PSCI_CPU_ON;
-    args.x1 = 3;                    /* target CPU id (for example, core 3) */
-    args.x2 = entry;                /* entry point */
-    args.x3 = 0;                    /* context id (unused here) */
+    args.x1 = core;                         /* target CPU id (for example, core 3) */
+    args.x2 = (seL4_Word) awaken_entry;     /* entry point */
+    args.x3 = 0;                            /* context id (unused here) */
 
     microkit_arm_smc_call(&args, &response);
 
