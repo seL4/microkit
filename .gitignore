@@ -10,7 +10,7 @@ build/
 env/
 pyenv/
 release/
-example/*.log
+example/**/*.log
 tmp_build/
 target/
 *.orig
