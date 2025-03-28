@@ -7,8 +7,8 @@
 <system>
     <memory_region name="uart" size="0x1_000" phys_addr="0x9_000_000"/>
 
-    <protection_domain name="hello" priority="254" smc="true">
-        <program_image path="hello.elf" />
+    <protection_domain name="pd1" priority="254" smc="true">
+        <program_image path="pd1.elf" />
         <map mr="uart" vaddr="0x2000000" perms="rw" cached="false" setvar_vaddr="uart_base_vaddr"/>
         <irq irq="33" id="1" />
     </protection_domain>
@@ -19,6 +19,6 @@
 
     <channel>
         <end pd="pd2" id="1" />
-        <end pd="hello" id="2" />
+        <end pd="pd1" id="2" />
     </channel>
 </system>

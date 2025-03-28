@@ -2,7 +2,7 @@
 
 /* Definitions for the PL011 UART. Adjust the base address as required. */
 #define UART_IRQ_CH 1
-#define PD_2_CH 2
+#define PD2_CHANNEL 2
 
 void init(void) {
     microkit_dbg_puts("[PD 1]: Hello World!\n");
@@ -25,7 +25,7 @@ void notified(microkit_channel ch) {
             print_psci_version();
         } else if (c == 'n') {
             microkit_dbg_puts("Notifying PD 2\n");
-            microkit_notify(PD_2_CH);
+            microkit_notify(PD2_CHANNEL);
         } else if (c == 'r') {
             turn_on_cpu((seL4_Word) init);
         } else if (c == 's') {

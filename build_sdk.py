@@ -362,6 +362,7 @@ EXAMPLES = {
     "passive_server": Path("example/passive_server"),
     "hierarchy": Path("example/hierarchy"),
     "timer": Path("example/timer"),
+    "core": Path("example/core"),
 }
 
 
