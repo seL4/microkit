@@ -35,6 +35,12 @@ seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 extern const void (*const __init_array_start [])(void);
 extern const void (*const __init_array_end [])(void);
 
+seL4_Word microkit_pd_period;
+seL4_Word microkit_pd_budget;
+seL4_Word microkit_pd_extra_refills;
+seL4_Word microkit_pd_badge;
+seL4_Word microkit_pd_flags;
+
 __attribute__((weak)) microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     microkit_dbg_puts(microkit_name);

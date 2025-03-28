@@ -49,12 +49,14 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const TCB_CAP_IDX: u64 = 6;
 const SMC_CAP_IDX: u64 = 7;
 
-const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
-const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
-const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
-const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
-const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
-const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
+const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10; // 10
+const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64; // 10 + 64 = 74
+const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64; // 74 + 64 = 138
+const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64; // 138 + 64 = 202
+const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64; // 202 + 64 = 266
+const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64; // 266 + 64 = 330
+const BASE_SCHED_CONTEXT_CAP: u64 = BASE_VCPU_CAP + 64; // 330 + 64 = 394
+const BASE_SCHED_CONTROL_CAP: u64 = BASE_SCHED_CONTEXT_CAP + 64; // 394 + 64 = 458
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -471,6 +473,12 @@ pub fn pd_write_symbols(
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         elf.write_symbol("microkit_name", &name[..name_length])?;
         elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
+
+        elf.write_symbol("microkit_pd_period", &pd.period.to_le_bytes())?;
+        elf.write_symbol("microkit_pd_budget", &pd.budget.to_le_bytes())?;
+        elf.write_symbol("microkit_pd_extra_refills", &0u64.to_le_bytes())?;
+        elf.write_symbol("microkit_pd_badge", &(0x100 + i as u64).to_le_bytes())?;
+        elf.write_symbol("microkit_pd_flags", &0u64.to_le_bytes())?;
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
             let value = pd_setvar_values[i][setvar_idx];
@@ -2523,6 +2531,38 @@ fn build_system(
             },
         ));
     }
+
+    // Grant the sched context cap to each PD via cnode copy
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        system_invocations.push(Invocation::new(
+            config,
+            InvocationArgs::CnodeCopy {
+                cnode: cnode_objs[pd_idx].cap_addr,
+                dest_index: BASE_SCHED_CONTEXT_CAP + pd_idx as u64,
+                dest_depth: PD_CAP_BITS,
+                src_root: root_cnode_cap,
+                src_obj: pd_sched_context_objs[pd_idx].cap_addr,
+                src_depth: config.cap_address_bits,
+                rights: Rights::All as u64,
+            },
+        ));
+
+        for cpu_id in 0..config.cores {
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::CnodeCopy {
+                    cnode: cnode_objs[pd_idx].cap_addr,
+                    dest_index: BASE_SCHED_CONTROL_CAP + cpu_id,
+                    dest_depth: PD_CAP_BITS,
+                    src_root: root_cnode_cap,
+                    src_obj: kernel_boot_info.sched_control_cap + cpu_id,
+                    src_depth: config.cap_address_bits,
+                    rights: Rights::All as u64,
+                },
+            ));
+        }
+    }
+
     for (vm_idx, vm) in virtual_machines.iter().enumerate() {
         for (vcpu_idx, vcpu) in vm.vcpus.iter().enumerate() {
             let idx = vm_idx + vcpu_idx;
@@ -2600,6 +2640,28 @@ fn build_system(
             },
         );
         system_invocations.push(tcb_cap_copy_invocation);
+    } else {
+        // Give all PDs access to all other PDs' TCBs
+        for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+            let cnode_obj = &cnode_objs[pd_idx];
+
+            // For each PD, copy all other PDs' TCBs into its CSpace
+            for (other_pd_idx, _) in system.protection_domains.iter().enumerate() {
+                let cap_idx = BASE_PD_TCB_CAP + other_pd_idx as u64; // Using BASE_PD_TCB_CAP as starting index
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeCopy {
+                        cnode: cnode_obj.cap_addr,
+                        dest_index: cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: pd_tcb_objs[other_pd_idx].cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64,
+                    },
+                ));
+            }
+        }
     }
 
     // Set VSpace and CSpace

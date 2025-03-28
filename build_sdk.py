@@ -247,6 +247,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
             "KernelMaxNumNodes": "4",
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
