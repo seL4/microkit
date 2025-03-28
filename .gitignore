@@ -10,7 +10,9 @@ build/
 env/
 pyenv/
 release/
+example/*.log
 tmp_build/
 target/
 *.orig
 .DS_Store
+.vscode/
