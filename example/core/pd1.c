@@ -23,13 +23,6 @@ void notified(microkit_channel ch) {
     case 'm':
         microkit_notify(PD2_CHANNEL);
         break;
-    case 'd':
-        microkit_dbg_puts("[PD 1]: Received interrupt and is turning off core #");
-        print_num(current_cpu);
-        microkit_dbg_puts("\n");
-
-        turn_off_cpu();
-        break;
     case 'p':
         print_psci_version();
         break;
@@ -37,7 +30,9 @@ void notified(microkit_channel ch) {
         microkit_notify(PD2_CHANNEL);
         break;
     case 's':
+        microkit_dbg_puts("=== THE FOLLOWING DUMP IS FOR PROTECTION DOMAINS RUNNING ON PD1's CORE ===\n");
         seL4_DebugDumpScheduler();
+        microkit_notify(PD2_CHANNEL);
         break;
     }
 

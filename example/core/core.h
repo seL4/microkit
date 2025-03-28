@@ -11,7 +11,7 @@ int current_cpu = 0;
 
 static void migrate_cpu() {
     int new_cpu = ++current_cpu % 4;
-    microkit_dbg_puts("migrating to CPU ");
+    microkit_dbg_puts("Migrating PD2 to CPU ");
     print_num(new_cpu);
     microkit_dbg_puts("\n");
 
