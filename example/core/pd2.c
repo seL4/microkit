@@ -15,19 +15,19 @@ void notified(microkit_channel ch) {
     }
 
     switch (((char *) buffer_vaddr)[0]) {
-    case 'm':
-        migrate_cpu();
-        break;
-    case 'x':
-        microkit_dbg_puts("[PD 2]: Received notification from PD 1 and is turning off core #");
-        print_num(current_cpu);
-        microkit_dbg_puts("\n");
-        
-        turn_off_cpu();
-        break;
     case 's':
         microkit_dbg_puts("\n=== THE FOLLOWING DUMP IS FOR PROTECTION DOMAINS RUNNING ON [PD 2]'s CORE ===\n");
         seL4_DebugDumpScheduler();
+        break;
+    case 'n':
+        core_migrate(1);
+        break;
+    case 'x':
+        microkit_dbg_puts("[PD 2]: Turning off core #");
+        print_num(current_cpu);
+        microkit_dbg_puts("\n");
+        
+        core_off();
         break;
     }
 }
