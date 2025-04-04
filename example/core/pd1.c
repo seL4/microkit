@@ -25,19 +25,23 @@ void notified(microkit_channel ch) {
             "h: help\n"
             "p: print psci version\n"
             "i: view the status of core #0\n"
-            "s: core dump\n"
+            "d: core dump\n"
             "m: migrate pd1\n"
             "n: migrate pd2\n"
             "x: turn off pd2's core\n"
+            "s: put pd2's core in standby\n"
             "y: turn on pd2's core\n"
         );    
         break;
     case 'p':
         print_psci_version();
         break;
-    case 's':
+    case 'd':
         microkit_dbg_puts("=== THE FOLLOWING DUMP IS FOR PROTECTION DOMAINS RUNNING ON PD1's CORE ===\n");
         seL4_DebugDumpScheduler();
+        microkit_notify(PD2_CHANNEL);
+        break;
+    case 's':
         microkit_notify(PD2_CHANNEL);
         break;
     case 'm':

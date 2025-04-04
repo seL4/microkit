@@ -15,7 +15,7 @@ void notified(microkit_channel ch) {
     }
 
     switch (((char *) buffer_vaddr)[0]) {
-    case 's':
+    case 'd':
         microkit_dbg_puts("\n=== THE FOLLOWING DUMP IS FOR PROTECTION DOMAINS RUNNING ON [PD 2]'s CORE ===\n");
         seL4_DebugDumpScheduler();
         break;
@@ -28,6 +28,9 @@ void notified(microkit_channel ch) {
         microkit_dbg_puts("\n");
         
         core_off();
+        break;
+    case 's':
+        core_standby();
         break;
     }
 }

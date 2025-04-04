@@ -4,6 +4,7 @@
 #include "uart.h"
 
 #define PSCI_VERSION_FID 0x84000000
+#define PSCI_CPU_SUSPEND 0x84000001
 #define PSCI_CPU_OFF 0x84000002
 
 #ifdef ARCH_aarch64
@@ -41,11 +42,8 @@ static void print_psci_version() {
 }
 
 static void core_status(int core) {
-    seL4_ARM_SMCContext args = {0};
+    seL4_ARM_SMCContext args = {.x0 = PSCI_AFFINITY_INFO, .x1 = core};
     seL4_ARM_SMCContext response = {0};
-    args.x0 = PSCI_AFFINITY_INFO;
-    args.x1 = core;                     /* target CPU id (for example, core 3) */
-    args.x2 = 0;                        /* lowest affinity level */
 
     microkit_arm_smc_call(&args, &response);
 
@@ -91,17 +89,42 @@ static void core_off() {
     }
 }
 
+/**
+ * Suspend a CPU core to a low "standby" power state
+ */
+static void core_standby() {
+    seL4_ARM_SMCContext args = {.x0 = PSCI_CPU_SUSPEND, .x1 = 0};
+    seL4_ARM_SMCContext response = {0};
+    
+    microkit_arm_smc_call(&args, &response);
+    
+    /* Print status message based on response */
+    switch (response.x0) {
+    case PSCI_SUCCESS:
+        microkit_dbg_puts("CPU suspend successful (returned from suspend).\n");
+        break;
+    case PSCI_E_INVALID_PARAMETERS:
+        microkit_dbg_puts("CPU suspend failed: invalid parameters.\n");
+        break;
+    case PSCI_E_DENIED:
+        microkit_dbg_puts("CPU suspend request was denied.\n");
+        break;
+    case PSCI_E_INVALID_ADDRESS:
+        microkit_dbg_puts("CPU suspend failed: invalid entry point address.\n");
+        break;
+    default:
+        microkit_dbg_puts("CPU suspend: unexpected response code.\n");
+        break;
+    }
+}
+
 static void awaken_entry() {
     microkit_dbg_puts("A CPU core has re-awakened!\n");
 }
 
 static void core_on(uint8_t core) {
-    seL4_ARM_SMCContext args = {0};
+    seL4_ARM_SMCContext args = {.x0 = PSCI_CPU_ON, .x1 = core, .x2 = (seL4_Word) awaken_entry};
     seL4_ARM_SMCContext response = {0};
-    args.x0 = PSCI_CPU_ON;
-    args.x1 = core;                         /* target CPU id (for example, core 3) */
-    args.x2 = (seL4_Word) awaken_entry;     /* entry point */
-    args.x3 = 0;                            /* context id (unused here) */
 
     microkit_arm_smc_call(&args, &response);
 
