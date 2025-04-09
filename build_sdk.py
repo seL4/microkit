@@ -93,6 +93,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -107,6 +108,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -120,6 +122,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -133,6 +136,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -146,6 +150,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -159,6 +164,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -172,6 +178,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -185,6 +192,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -201,6 +209,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmExportPTMRUser": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -227,7 +236,8 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
-            "RPI4_MEMORY": 1024
+            "RPI4_MEMORY": 1024,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
@@ -241,6 +251,7 @@ SUPPORTED_BOARDS = (
             "KernelArmExportPCNTUser": True,
             "KernelArmHypervisorSupport": True,
             "KernelArmVtimerUpdateVOffset": False,
+            "KernelAllowSMCCalls": True,
         },
     ),
     BoardInfo(
