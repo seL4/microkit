@@ -635,13 +635,14 @@ The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source c
 
 ## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
 
-This API is available only on ARM and only when seL4 has been configured to enable the
-`KernelAllowSMCCalls` option.
-
 The API takes in arguments for a Secure Monitor Call which will be performed by seL4. Any
 response values will be placed into the `response` structure.
 
 The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
+
+Note that this API is only available when the PD making the call has been configured to
+have SMC enabled in the SDF. Note that when the kernel makes the actual SMC, it cannot
+pre-empt the Secure Monito rand therefore any kernel WCET properties are no longer guaranted.
 
 # System Description File {#sysdesc}
 
@@ -671,7 +672,7 @@ It supports the following attributes:
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
-* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform. Only available when the kernel has been configured with `KernelAllowSMCCalls`. Defaults to false.
+* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 
 Additionally, it supports the following child elements:
 
