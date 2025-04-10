@@ -642,7 +642,7 @@ The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
 
 Note that this API is only available when the PD making the call has been configured to
 have SMC enabled in the SDF. Note that when the kernel makes the actual SMC, it cannot
-pre-empt the Secure Monito rand therefore any kernel WCET properties are no longer guaranted.
+pre-empt the Secure Monitor and therefore any kernel WCET properties are no longer guaranted.
 
 # System Description File {#sysdesc}
 
