@@ -45,7 +45,7 @@
         };
 
         # pyfdt is not officially supported in Nix so we compile it ourselves
-        pyfdt = with pkgs.python311Packages;
+        pyfdt = with pkgs.python312Packages;
           buildPythonPackage rec {
             pname = "pyfdt";
             version = "0.3";
@@ -64,7 +64,7 @@
             };
           };
 
-        pythonTool = pkgs.python311.withPackages (ps: [
+        pythonTool = pkgs.python312.withPackages (ps: [
           ps.mypy
           ps.black
           ps.flake8
