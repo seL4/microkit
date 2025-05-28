@@ -642,7 +642,7 @@ The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
 
 Note that this API is only available when the PD making the call has been configured to
 have SMC enabled in the SDF. Note that when the kernel makes the actual SMC, it cannot
-pre-empt the Secure Monitor and therefore any kernel WCET properties are no longer guaranted.
+pre-empt the Secure Monitor and therefore any kernel WCET properties are no longer guaranteed.
 
 # System Description File {#sysdesc}
 
@@ -721,7 +721,7 @@ Additionally, it supports the following child elements:
 * `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
-The `vcpu` element has a single `id` attribute defining the identifier used for the virutal machine's vCPU.
+The `vcpu` element has a single `id` attribute defining the identifier used for the virtual machine's vCPU.
 
 The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
 
@@ -941,7 +941,7 @@ You can find more about the QEMU virt platform in the
 ## Raspberry Pi 4B
 
 Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
-Rasberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
+Raspberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
 If you require more than 1GB, please file an issue or pull request to add support for
 models with larger amounts of memory.
 

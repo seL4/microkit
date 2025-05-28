@@ -667,7 +667,7 @@ fn emulate_kernel_boot(
     // Find an appropriate region of normal memory to allocate the objects
     // from; this follows the same algorithm used within the kernel boot code
     // (or at least we hope it does!)
-    // TOOD: this loop could be done better in a functional way?
+    // TODO: this loop could be done better in a functional way?
     let mut region_to_remove: Option<u64> = None;
     for region in normal_memory.regions.iter().rev() {
         let start = util::round_down(
@@ -860,7 +860,7 @@ fn build_system(
     // on how `system_cnode_size` is iteratively determined).
     //
     // The system CNode is not available at startup and must be created (by retyping
-    // memory from an untyped object). Once created the two CNodes must be aranged
+    // memory from an untyped object). Once created the two CNodes must be arranged
     // as a tree such that the slots in both CNodes are addressable.
     //
     // The system CNode shall become the root of the CSpace. The initial CNode shall
@@ -889,7 +889,7 @@ fn build_system(
     // will have enough slots for all required caps.
     let system_cnode_allocation = kao
         .alloc(system_cnode_size * (1 << SLOT_BITS))
-        .unwrap_or_else(|| panic!("Internal erorr: failed to allocate system CNode"));
+        .unwrap_or_else(|| panic!("Internal error: failed to allocate system CNode"));
     let system_cnode_cap = kernel_boot_info.first_available_cap + 1;
     cap_address_names.insert(system_cnode_cap, "CNode: system".to_string());
 
@@ -1797,7 +1797,7 @@ fn build_system(
 
     // Create copies of all caps required via minting.
 
-    // Mint copies of required pages, while also determing what's required
+    // Mint copies of required pages, while also determining what's required
     // for later mapping
     let mut pd_page_descriptors = Vec::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
@@ -3389,7 +3389,7 @@ fn main() -> Result<(), String> {
     // A: The monitor
 
     // A.1: As part of emulated boot we determined exactly how the kernel would
-    // create untyped objects. Throught testing we know that this matches, but
+    // create untyped objects. Through testing we know that this matches, but
     // we could have a bug, or the kernel could change. It that happens we are
     // in a bad spot! Things will break. So we write out this information so that
     // the monitor can double check this at run time.
