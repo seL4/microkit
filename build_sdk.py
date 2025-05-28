@@ -64,6 +64,9 @@ class KernelArch(IntEnum):
         else:
             raise Exception(f"Unsupported arch {self}")
 
+    def as_kernel_arch_config(self) -> tuple[str, str]:
+        return ("KernelSel4Arch", self.to_str())
+
 
 @dataclass
 class BoardInfo:
@@ -429,7 +432,11 @@ def build_sel4(
 
     print(f"Building sel4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
 
-    config_args = list(board.kernel_options.items()) + list(config.kernel_options.items())
+    config_args = [
+        *board.kernel_options.items(),
+        *config.kernel_options.items(),
+        board.arch.as_kernel_arch_config(),
+    ]
     config_strs = []
     for arg, val in sorted(config_args):
         if isinstance(val, bool):
