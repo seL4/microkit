@@ -92,6 +92,7 @@ pub struct SysMap {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum SysMemoryRegionKind {
     User,
+    // This one is special and is allocated from the existing frames in the initial task
     Elf,
     Stack,
 }

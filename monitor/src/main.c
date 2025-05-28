@@ -116,7 +116,7 @@ seL4_Word bootstrap_invocation_count;
 seL4_Word bootstrap_invocation_data[BOOTSTRAP_INVOCATION_DATA_SIZE];
 
 seL4_Word system_invocation_count;
-seL4_Word *system_invocation_data = (void *)0x80000000;
+seL4_Word *system_invocation_data;
 
 struct untyped_info untyped_info;
 

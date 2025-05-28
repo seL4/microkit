@@ -108,6 +108,7 @@ struct MonitorConfig {
     bootstrap_invocation_count_symbol_name: &'static str,
     bootstrap_invocation_data_symbol_name: &'static str,
     system_invocation_count_symbol_name: &'static str,
+    system_invocation_data_symbol_name: &'static str,
 }
 
 impl MonitorConfig {
@@ -122,11 +123,14 @@ struct InitSystem<'a> {
     cnode_cap: u64,
     cnode_mask: u64,
     invocations: &'a mut Vec<Invocation>,
-    cap_slot: u64,
+    next_system_cap_slot: u64,
     last_fixed_address: u64,
     normal_untyped: &'a mut ObjectAllocator,
     device_untyped: &'a mut ObjectAllocator,
     cap_address_names: &'a mut HashMap<u64, String>,
+    // seL4_BootInfo caps (sharedFrames, userImageFrames, etc).
+    // TODO: at the moment just userImageFrames
+    unused_boot_info_frames: Vec<Object>,
     objects: Vec<Object>,
 }
 
@@ -136,26 +140,29 @@ impl<'a> InitSystem<'a> {
         config: &'a Config,
         cnode_cap: u64,
         cnode_mask: u64,
-        first_available_cap_slot: u64,
+        starting_system_cap_slot: u64,
         normal_untyped: &'a mut ObjectAllocator,
         device_untyped: &'a mut ObjectAllocator,
         invocations: &'a mut Vec<Invocation>,
         cap_address_names: &'a mut HashMap<u64, String>,
+        unused_boot_info_frames: Vec<Object>,
     ) -> InitSystem<'a> {
         InitSystem {
             config,
             cnode_cap,
             cnode_mask,
             invocations,
-            cap_slot: first_available_cap_slot,
+            next_system_cap_slot: starting_system_cap_slot,
             last_fixed_address: 0,
             normal_untyped,
             device_untyped,
             cap_address_names,
+            unused_boot_info_frames,
             objects: Vec::new(),
         }
     }
 
+    #[allow(dead_code)]
     pub fn reserve(&mut self, allocations: Vec<(&UntypedObject, u64)>) {
         for alloc in allocations {
             self.device_untyped.reserve(alloc);
@@ -225,16 +232,16 @@ impl<'a> InitSystem<'a> {
                         root: self.cnode_cap,
                         node_index: 1,
                         node_depth: 1,
-                        node_offset: self.cap_slot,
+                        node_offset: self.next_system_cap_slot,
                         num_objects: 1,
                     },
                 ));
-                self.cap_slot += 1;
+                self.next_system_cap_slot += 1;
             }
         }
 
-        let object_cap = self.cap_slot;
-        self.cap_slot += 1;
+        let object_cap = self.next_system_cap_slot;
+        self.next_system_cap_slot += 1;
         self.invocations.push(Invocation::new(
             self.config,
             InvocationArgs::UntypedRetype {
@@ -260,6 +267,29 @@ impl<'a> InitSystem<'a> {
         self.cap_address_names.insert(cap_addr, name);
 
         kernel_object
+    }
+
+    pub fn allocate_from_bootinfo_frames(
+        &mut self,
+        phys_address: u64,
+        object_type: ObjectType,
+        name: String,
+    ) -> Object {
+        let boot_info_frame_idx = self
+            .unused_boot_info_frames
+            .iter()
+            .position(|o| o.phys_addr == phys_address)
+            .expect("couldn't find the boot info frame at phys addr");
+
+        let boot_info_frame = self.unused_boot_info_frames[boot_info_frame_idx];
+        assert_eq!(boot_info_frame.object_type, object_type);
+
+        self.unused_boot_info_frames.remove(boot_info_frame_idx);
+        self.objects.push(boot_info_frame);
+        self.cap_address_names
+            .insert(boot_info_frame.cap_addr, name);
+
+        boot_info_frame
     }
 
     pub fn allocate_objects(
@@ -307,8 +337,8 @@ impl<'a> InitSystem<'a> {
                                     std::process::exit(1);
                                 }
                              );
-        let base_cap_slot = self.cap_slot;
-        self.cap_slot += count;
+        let base_cap_slot = self.next_system_cap_slot;
+        self.next_system_cap_slot += count;
 
         let mut to_alloc = count;
         let mut alloc_cap_slot = base_cap_slot;
@@ -360,7 +390,6 @@ struct BuiltSystem {
     bootstrap_invocations: Vec<Invocation>,
     system_invocations: Vec<Invocation>,
     kernel_boot_info: BootInfo,
-    reserved_region: MemoryRegion,
     fault_ep_cap_address: u64,
     reply_cap_address: u64,
     cap_lookup: HashMap<u64, String>,
@@ -368,12 +397,19 @@ struct BuiltSystem {
     vm_tcb_caps: Vec<u64>,
     sched_caps: Vec<u64>,
     ntfn_caps: Vec<u64>,
+    // subset of the initial task
     pd_elf_regions: Vec<Vec<Region>>,
     pd_setvar_values: Vec<Vec<u64>>,
     pd_stack_addrs: Vec<u64>,
     kernel_objects: Vec<Object>,
+
+    // full is temp.
     initial_task_virt_region: MemoryRegion,
     initial_task_phys_region: MemoryRegion,
+    initial_task_monitor_virt_subregion: MemoryRegion,
+    initial_task_monitor_phys_subregion: MemoryRegion,
+    initial_task_invocations_virt_subregion: MemoryRegion,
+    initial_task_invocations_phys_subregion: MemoryRegion,
 }
 
 pub fn pd_write_symbols(
@@ -649,7 +685,6 @@ fn emulate_kernel_boot(
     kernel_elf: &ElfFile,
     initial_task_phys_region: MemoryRegion,
     initial_task_virt_region: MemoryRegion,
-    reserved_region: MemoryRegion,
 ) -> BootInfo {
     assert!(initial_task_phys_region.size() == initial_task_virt_region.size());
     let partial_info = kernel_partial_boot(config, kernel_elf);
@@ -657,8 +692,9 @@ fn emulate_kernel_boot(
     let device_memory = partial_info.device_memory;
     let boot_region = partial_info.boot_region;
 
+    // The initial task memory does not appear in the untypes, but instead
+    // appears in the userImageFrames part of the bootinfo as frames.
     normal_memory.remove_region(initial_task_phys_region.base, initial_task_phys_region.end);
-    normal_memory.remove_region(reserved_region.base, reserved_region.end);
 
     // Now, the tricky part! determine which memory is used for the initial task objects
     let initial_objects_size = calculate_rootserver_size(config, initial_task_virt_region);
@@ -688,21 +724,47 @@ fn emulate_kernel_boot(
     let fixed_cap_count = 0x10;
     let sched_control_cap_count = 1;
     let paging_cap_count = get_arch_n_paging(config, initial_task_virt_region);
+
+    let sched_control_cap = fixed_cap_count + paging_cap_count;
+
+    // TODO: Does the kernel allocate these like this, or is it done purely in 4k?
+    let user_image_frames = {
+        let mut frames = Vec::new();
+        let user_image_pages = initial_task_virt_region.size() / config.minimum_page_size;
+        let mut phys_addr = initial_task_phys_region.base;
+
+        for i in 1..=user_image_pages {
+            // TODO: make the loader able to check these frames.
+            frames.push(Object {
+                object_type: ObjectType::SmallPage,
+                cap_addr: i + sched_control_cap,
+                phys_addr,
+            });
+
+            phys_addr += config.minimum_page_size;
+        }
+
+        frames
+    };
+
+    assert_eq!(
+        initial_task_phys_region.size(),
+        initial_task_virt_region.size()
+    );
     let page_cap_count = initial_task_virt_region.size() / config.minimum_page_size;
+    assert_eq!(page_cap_count, user_image_frames.len() as u64);
+
     let first_untyped_cap =
         fixed_cap_count + paging_cap_count + sched_control_cap_count + page_cap_count;
-    let sched_control_cap = fixed_cap_count + paging_cap_count;
 
     let max_bits = match config.arch {
         Arch::Aarch64 => 47,
         Arch::Riscv64 => 38,
     };
-    let device_regions: Vec<MemoryRegion> = [
-        reserved_region.aligned_power_of_two_regions(config, max_bits),
-        device_memory.aligned_power_of_two_regions(config, max_bits),
-    ]
-    .concat();
+    let device_regions: Vec<MemoryRegion> =
+        device_memory.aligned_power_of_two_regions(config, max_bits);
     let normal_regions: Vec<MemoryRegion> = [
+        // TODO: ??
         boot_region.aligned_power_of_two_regions(config, max_bits),
         normal_memory.aligned_power_of_two_regions(config, max_bits),
     ]
@@ -723,7 +785,7 @@ fn emulate_kernel_boot(
     BootInfo {
         fixed_cap_count,
         paging_cap_count,
-        page_cap_count,
+        user_image_frames,
         sched_control_cap,
         first_available_cap,
         untyped_objects,
@@ -754,55 +816,97 @@ fn build_system(
 
     let system_cnode_bits = system_cnode_size.ilog2() as u64;
 
-    // Emulate kernel boot
-
-    // Determine physical memory region used by the monitor
-    let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
-
-    // Determine physical memory region for 'reserved' memory.
+    // ==== Emulate kernel boot ====
     //
-    // The 'reserved' memory region will not be touched by seL4 during boot
-    // and allows the monitor (initial task) to create memory regions
-    // from this area, which can then be made available to the appropriate
-    // protection domains
-    let mut pd_elf_size = 0;
-    for pd_elf in pd_elf_files {
-        for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
-            pd_elf_size += r.size();
+    // Determine physical memory region used by the monitor (the initial task)
+    let monitor_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
+    let pd_elfs_size = {
+        let mut size = 0;
+        for pd_elf in pd_elf_files {
+            for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
+                size += r.size();
+            }
         }
-    }
-    let reserved_size = invocation_table_size + pd_elf_size;
+
+        size
+    };
+
+    // The 'initial task' region consists of the monitor ELF (the real initial task)
+    // but also the invocation table and the size of the PD elfs.
+    // If we don't include these here or otherwise reserve the memory, seL4
+    // will clear it and we need it after bootup.
+    let initial_task_size = monitor_size + invocation_table_size + pd_elfs_size;
 
     // Now that the size is determined, find a free region in the physical memory
     // space.
     let (mut available_memory, kernel_boot_region) =
         emulate_kernel_boot_partial(config, kernel_elf);
 
-    // The kernel relies on the reserved region being allocated above the kernel
+    // The kernel relies on the initial task being allocated above the kernel
     // boot/ELF region, so we have the end of the kernel boot region as the lower
-    // bound for allocating the reserved region.
-    let reserved_base = available_memory.allocate_from(reserved_size, kernel_boot_region.end);
-    assert!(kernel_boot_region.base < reserved_base);
-    // The kernel relies on the initial task being allocated above the reserved
-    // region, so we have the address of the end of the reserved region as the
-    // lower bound for allocating the initial task.
-    let initial_task_phys_base =
-        available_memory.allocate_from(initial_task_size, reserved_base + reserved_size);
-    assert!(reserved_base < initial_task_phys_base);
+    // bound for allocating the initial task.
+    let initial_task_phys_region = {
+        let initial_task_phys_base =
+            available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
+        assert!(kernel_boot_region.base < initial_task_phys_base);
 
-    let initial_task_phys_region = MemoryRegion::new(
-        initial_task_phys_base,
-        initial_task_phys_base + initial_task_size,
+        MemoryRegion::new(
+            initial_task_phys_base,
+            initial_task_phys_base + initial_task_size,
+        )
+    };
+
+    // TODO: this can be different.
+    let monitor_virt_region = virt_mem_region_from_elf(monitor_elf, config.minimum_page_size);
+
+    let initial_task_virt_region = MemoryRegion::new(
+        // TODO: is the best spot for the invoc table + elfs before the monitor,
+        //       or after? note they have to be contiguously mapped.
+        monitor_virt_region.base - (invocation_table_size + pd_elfs_size),
+        monitor_virt_region.end,
     );
-    let initial_task_virt_region = virt_mem_region_from_elf(monitor_elf, config.minimum_page_size);
 
-    let reserved_region = MemoryRegion::new(reserved_base, reserved_base + reserved_size);
+    let monitor_phys_region = MemoryRegion::new(
+        initial_task_phys_region.base + (invocation_table_size + pd_elfs_size),
+        initial_task_phys_region.base + (invocation_table_size + pd_elfs_size + monitor_size),
+    );
 
     // Now that the reserved region has been allocated we can determine the specific
     // region of physical memory required for the inovcation table itself, and
     // all the ELF segments
-    let invocation_table_region =
-        MemoryRegion::new(reserved_base, reserved_base + invocation_table_size);
+    let invocation_table_phys_region = MemoryRegion::new(
+        initial_task_phys_region.base,
+        initial_task_phys_region.base + invocation_table_size,
+    );
+    let invocation_table_virt_region = MemoryRegion::new(
+        initial_task_virt_region.base,
+        initial_task_virt_region.base + invocation_table_size,
+    );
+    let pd_elfs_phys_region = MemoryRegion::new(
+        invocation_table_phys_region.end,
+        invocation_table_phys_region.end + pd_elfs_size,
+    );
+    let pd_elfs_virt_region = MemoryRegion::new(
+        monitor_virt_region.base - pd_elfs_size,
+        monitor_virt_region.base,
+    );
+
+    // contiguous and matches
+    assert_eq!(
+        initial_task_phys_region.base,
+        invocation_table_phys_region.base
+    );
+    assert_eq!(invocation_table_phys_region.end, pd_elfs_phys_region.base);
+    assert_eq!(pd_elfs_phys_region.end, monitor_phys_region.base);
+    assert_eq!(monitor_phys_region.end, initial_task_phys_region.end);
+    // same for virt.
+    assert_eq!(
+        initial_task_virt_region.base,
+        invocation_table_virt_region.base
+    );
+    assert_eq!(invocation_table_virt_region.end, pd_elfs_virt_region.base);
+    assert_eq!(pd_elfs_virt_region.end, monitor_virt_region.base);
+    assert_eq!(monitor_virt_region.end, initial_task_virt_region.end);
 
     // 1.3 With both the initial task region and reserved region determined the kernel
     // boot can be emulated. This provides the boot info information which is needed
@@ -812,7 +916,6 @@ fn build_system(
         kernel_elf,
         initial_task_phys_region,
         initial_task_virt_region,
-        reserved_region,
     );
 
     for ut in &kernel_boot_info.untyped_objects {
@@ -984,172 +1087,6 @@ fn build_system(
         },
     ));
 
-    // 2.2 At this point it is necessary to get the frames containing the
-    // main system invocations into the virtual address space. (Remember the
-    // invocations we are writing out here actually _execute_ at run time!
-    // It is a bit weird that we talk about mapping in the invocation data
-    // before we have even generated the invocation data!).
-    //
-    // This needs a few steps:
-    //
-    // 1. Turn untyped into page objects
-    // 2. Map the page objects into the address space
-    //
-
-    // 2.2.1: The memory for the system invocation data resides at the start
-    // of the reserved region. We can retype multiple frames as a time (
-    // which reduces the number of invocations we need). However, it is possible
-    // that the region spans multiple untyped objects.
-    // At this point in time we assume we will map the area using the minimum
-    // page size. It would be good in the future to use super pages (when
-    // it makes sense to - this would reduce memory usage, and the number of
-    // invocations required to set up the address space
-    let pages_required = invocation_table_size / config.minimum_page_size;
-    let base_page_cap = 0;
-    for pta in base_page_cap..base_page_cap + pages_required {
-        cap_address_names.insert(
-            system_cap_address_mask | pta,
-            "SmallPage: monitor invocation table".to_string(),
-        );
-    }
-
-    let mut remaining_pages = pages_required;
-    let mut invocation_table_allocations = Vec::new();
-    let mut cap_slot = base_page_cap;
-    let mut phys_addr = invocation_table_region.base;
-
-    let boot_info_device_untypeds: Vec<&UntypedObject> = kernel_boot_info
-        .untyped_objects
-        .iter()
-        .filter(|o| o.is_device)
-        .collect();
-    for ut in boot_info_device_untypeds {
-        let ut_pages = ut.region.size() / config.minimum_page_size;
-        let retype_page_count = min(ut_pages, remaining_pages);
-
-        let mut retypes_remaining = retype_page_count;
-        while retypes_remaining > 0 {
-            let num_retypes = min(retypes_remaining, config.fan_out_limit);
-            bootstrap_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::UntypedRetype {
-                    untyped: ut.cap,
-                    object_type: ObjectType::SmallPage,
-                    size_bits: 0,
-                    root: root_cnode_cap,
-                    node_index: 1,
-                    node_depth: 1,
-                    node_offset: cap_slot,
-                    num_objects: num_retypes,
-                },
-            ));
-
-            retypes_remaining -= num_retypes;
-            cap_slot += num_retypes;
-        }
-
-        remaining_pages -= retype_page_count;
-        phys_addr += retype_page_count * config.minimum_page_size;
-        invocation_table_allocations.push((ut, phys_addr));
-        if remaining_pages == 0 {
-            break;
-        }
-    }
-
-    // 2.2.1: Now that physical pages have been allocated it is possible to setup
-    // the virtual memory objects so that the pages can be mapped into virtual memory
-    // At this point we map into the arbitrary address of 0x0.8000.0000 (i.e.: 2GiB)
-    // We arbitrary limit the maximum size to be 128MiB. This allows for at least 1 million
-    // invocations to occur at system startup. This should be enough for any reasonable
-    // sized system.
-    //
-    // Before mapping it is necessary to install page tables that can cover the region.
-    let large_page_size = ObjectType::LargePage.fixed_size(config).unwrap();
-    let page_table_size = ObjectType::PageTable.fixed_size(config).unwrap();
-    let page_tables_required =
-        util::round_up(invocation_table_size, large_page_size) / large_page_size;
-    let page_table_allocation = kao
-        .alloc_n(page_table_size, page_tables_required)
-        .unwrap_or_else(|| panic!("Internal error: failed to allocate page tables"));
-    let base_page_table_cap = cap_slot;
-
-    for pta in base_page_table_cap..base_page_table_cap + page_tables_required {
-        cap_address_names.insert(
-            system_cap_address_mask | pta,
-            "PageTable: monitor".to_string(),
-        );
-    }
-
-    assert!(page_tables_required <= config.fan_out_limit);
-    bootstrap_invocations.push(Invocation::new(
-        config,
-        InvocationArgs::UntypedRetype {
-            untyped: page_table_allocation.untyped_cap_address,
-            object_type: ObjectType::PageTable,
-            size_bits: 0,
-            root: root_cnode_cap,
-            node_index: 1,
-            node_depth: 1,
-            node_offset: cap_slot,
-            num_objects: page_tables_required,
-        },
-    ));
-    cap_slot += page_tables_required;
-
-    let page_table_vaddr: u64 = 0x8000_0000;
-    // Now that the page tables are allocated they can be mapped into vspace
-    let bootstrap_pt_attr = match config.arch {
-        Arch::Aarch64 => ArmVmAttributes::default(),
-        Arch::Riscv64 => RiscvVmAttributes::default(),
-    };
-    let mut pt_map_invocation = Invocation::new(
-        config,
-        InvocationArgs::PageTableMap {
-            page_table: system_cap_address_mask | base_page_table_cap,
-            vspace: INIT_VSPACE_CAP_ADDRESS,
-            vaddr: page_table_vaddr,
-            attr: bootstrap_pt_attr,
-        },
-    );
-    pt_map_invocation.repeat(
-        page_tables_required as u32,
-        InvocationArgs::PageTableMap {
-            page_table: 1,
-            vspace: 0,
-            vaddr: ObjectType::LargePage.fixed_size(config).unwrap(),
-            attr: 0,
-        },
-    );
-    bootstrap_invocations.push(pt_map_invocation);
-
-    // Finally, once the page tables are allocated the pages can be mapped
-    let page_vaddr: u64 = 0x8000_0000;
-    let bootstrap_page_attr = match config.arch {
-        Arch::Aarch64 => ArmVmAttributes::default() | ArmVmAttributes::ExecuteNever as u64,
-        Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
-    };
-    let mut map_invocation = Invocation::new(
-        config,
-        InvocationArgs::PageMap {
-            page: system_cap_address_mask | base_page_cap,
-            vspace: INIT_VSPACE_CAP_ADDRESS,
-            vaddr: page_vaddr,
-            rights: Rights::Read as u64,
-            attr: bootstrap_page_attr,
-        },
-    );
-    map_invocation.repeat(
-        pages_required as u32,
-        InvocationArgs::PageMap {
-            page: 1,
-            vspace: 0,
-            vaddr: config.minimum_page_size,
-            rights: 0,
-            attr: 0,
-        },
-    );
-    bootstrap_invocations.push(map_invocation);
-
     // 3. Now we can start setting up the system based on the information
     // the user provided in the System Description Format.
     //
@@ -1167,75 +1104,88 @@ fn build_system(
     //     as needed by MRs
     //  Page table structs:
     //     as needed by protection domains based on mappings required
-    let mut phys_addr_next = reserved_base + invocation_table_size;
-    // Now we create additional MRs (and mappings) for the ELF files.
-    let mut pd_elf_regions: Vec<Vec<Region>> = Vec::with_capacity(system.protection_domains.len());
     let mut extra_mrs = Vec::new();
     let mut pd_extra_maps: HashMap<&ProtectionDomain, Vec<SysMap>> = HashMap::new();
-    for (i, pd) in system.protection_domains.iter().enumerate() {
-        pd_elf_regions.push(Vec::with_capacity(pd_elf_files[i].segments.len()));
-        for (seg_idx, segment) in pd_elf_files[i].segments.iter().enumerate() {
-            if !segment.loadable {
-                continue;
-            }
 
-            let segment_phys_addr = phys_addr_next + (segment.virt_addr % config.minimum_page_size);
-            pd_elf_regions[i].push(Region::new(
-                format!("PD-ELF {}-{}", pd.name, seg_idx),
-                segment_phys_addr,
-                segment.data.len() as u64,
-                seg_idx,
-            ));
+    let pd_elf_regions = {
+        let mut phys_addr_next = pd_elfs_phys_region.base;
 
-            let mut perms = 0;
-            if segment.is_readable() {
-                perms |= SysMapPerms::Read as u8;
-            }
-            if segment.is_writable() {
-                perms |= SysMapPerms::Write as u8;
-            }
-            if segment.is_executable() {
-                perms |= SysMapPerms::Execute as u8;
-            }
+        // Now we create additional MRs (and mappings) for the ELF files.
+        // But: the ELF files are special, and are part of the initial task
+        //    => we do not create them from untypes, but from pre-existing frames
+        //       from the boot info.
+        let mut pd_elf_regions: Vec<Vec<Region>> =
+            Vec::with_capacity(system.protection_domains.len());
+        for (i, pd) in system.protection_domains.iter().enumerate() {
+            pd_elf_regions.push(Vec::with_capacity(pd_elf_files[i].segments.len()));
+            for (seg_idx, segment) in pd_elf_files[i].segments.iter().enumerate() {
+                if !segment.loadable {
+                    continue;
+                }
 
-            let base_vaddr = util::round_down(segment.virt_addr, config.minimum_page_size);
-            let end_vaddr = util::round_up(
-                segment.virt_addr + segment.mem_size(),
-                config.minimum_page_size,
-            );
-            let aligned_size = end_vaddr - base_vaddr;
-            let name = format!("ELF:{}-{}", pd.name, seg_idx);
-            let mr = SysMemoryRegion {
-                name,
-                size: aligned_size,
-                page_size: PageSize::Small,
-                page_count: aligned_size / PageSize::Small as u64,
-                phys_addr: Some(phys_addr_next),
-                text_pos: None,
-                kind: SysMemoryRegionKind::Elf,
-            };
-            phys_addr_next += aligned_size;
+                let segment_phys_addr =
+                    phys_addr_next + (segment.virt_addr % config.minimum_page_size);
+                pd_elf_regions[i].push(Region::new(
+                    format!("PD-ELF {}-{}", pd.name, seg_idx),
+                    segment_phys_addr,
+                    segment.data.len() as u64,
+                    seg_idx,
+                ));
 
-            let mp = SysMap {
-                mr: mr.name.clone(),
-                vaddr: base_vaddr,
-                perms,
-                cached: true,
-                text_pos: None,
-            };
-            if let Some(extra_maps) = pd_extra_maps.get_mut(pd) {
-                extra_maps.push(mp);
-            } else {
-                pd_extra_maps.insert(pd, vec![mp]);
+                let mut perms = 0;
+                if segment.is_readable() {
+                    perms |= SysMapPerms::Read as u8;
+                }
+                if segment.is_writable() {
+                    perms |= SysMapPerms::Write as u8;
+                }
+                if segment.is_executable() {
+                    perms |= SysMapPerms::Execute as u8;
+                }
+
+                let base_vaddr = util::round_down(segment.virt_addr, config.minimum_page_size);
+                let end_vaddr = util::round_up(
+                    segment.virt_addr + segment.mem_size(),
+                    config.minimum_page_size,
+                );
+                let aligned_size = end_vaddr - base_vaddr;
+                let name = format!("ELF:{}-{}", pd.name, seg_idx);
+
+                // This memory region is special!
+                let mr = SysMemoryRegion {
+                    name,
+                    size: aligned_size,
+                    page_size: PageSize::Small,
+                    page_count: aligned_size / PageSize::Small as u64,
+                    phys_addr: Some(phys_addr_next),
+                    text_pos: None,
+                    kind: SysMemoryRegionKind::Elf,
+                };
+                phys_addr_next += aligned_size;
+
+                let mp = SysMap {
+                    mr: mr.name.clone(),
+                    vaddr: base_vaddr,
+                    perms,
+                    cached: true,
+                    text_pos: None,
+                };
+                if let Some(extra_maps) = pd_extra_maps.get_mut(pd) {
+                    extra_maps.push(mp);
+                } else {
+                    pd_extra_maps.insert(pd, vec![mp]);
+                }
+
+                // Add to extra_mrs at the end to avoid movement issues with the MR since it's used in
+                // constructing the SysMap struct
+                extra_mrs.push(mr);
             }
-
-            // Add to extra_mrs at the end to avoid movement issues with the MR since it's used in
-            // constructing the SysMap struct
-            extra_mrs.push(mr);
         }
-    }
 
-    assert!(phys_addr_next - (reserved_base + invocation_table_size) == pd_elf_size);
+        assert!(phys_addr_next == pd_elfs_phys_region.end);
+
+        pd_elf_regions
+    };
 
     // Here we create a memory region/mapping for the stack for each PD.
     // We allocate the stack at the highest possible virtual address that the
@@ -1281,14 +1231,14 @@ fn build_system(
         config,
         root_cnode_cap,
         system_cap_address_mask,
-        cap_slot,
+        /* starting_system_cap_slot */ 0,
         &mut kao,
         &mut kad,
         &mut system_invocations,
         &mut cap_address_names,
+        kernel_boot_info.user_image_frames.clone(),
     );
 
-    init_system.reserve(invocation_table_allocations);
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
 
     // 3.1 Work out how many fixed page objects are required
@@ -1321,7 +1271,14 @@ fn build_system(
             "Page({} {}): MR={} @ {:x}",
             page_size_human, page_size_label, mr.name, phys_addr
         );
-        let page = init_system.allocate_fixed_object(phys_addr, obj_type, name);
+        let page = if mr.kind == SysMemoryRegionKind::Elf {
+            // These ones can from the user image (initial task) frames that
+            // the kernel passes in the boot info.
+            init_system.allocate_from_bootinfo_frames(phys_addr, obj_type, name)
+        } else {
+            init_system.allocate_fixed_object(phys_addr, obj_type, name)
+        };
+
         mr_pages.get_mut(mr).unwrap().push(page);
     }
 
@@ -1710,7 +1667,7 @@ fn build_system(
 
     let vm_cnode_objs = &cnode_objs[system.protection_domains.len()..];
 
-    let mut cap_slot = init_system.cap_slot;
+    let mut cap_slot = init_system.next_system_cap_slot;
     let kernel_objects = init_system.objects;
 
     // Create all the necessary interrupt handler objects. These aren't
@@ -2787,7 +2744,6 @@ fn build_system(
         bootstrap_invocations,
         system_invocations,
         kernel_boot_info,
-        reserved_region,
         fault_ep_cap_address: fault_ep_endpoint_object.cap_addr,
         reply_cap_address: reply_obj.cap_addr,
         cap_lookup: cap_address_names,
@@ -2801,6 +2757,10 @@ fn build_system(
         kernel_objects,
         initial_task_phys_region,
         initial_task_virt_region,
+        initial_task_monitor_phys_subregion: monitor_phys_region,
+        initial_task_monitor_virt_subregion: monitor_virt_region,
+        initial_task_invocations_phys_subregion: invocation_table_phys_region,
+        initial_task_invocations_virt_subregion: invocation_table_virt_region,
     })
 }
 
@@ -2822,10 +2782,11 @@ fn write_report<W: std::io::Write>(
         "    # of page table caps: {:>8}",
         comma_sep_u64(built_system.kernel_boot_info.paging_cap_count)
     )?;
+    // TODO: print out the details?
     writeln!(
         buf,
         "    # of page caps      : {:>8}",
-        comma_sep_u64(built_system.kernel_boot_info.page_cap_count)
+        comma_sep_u64(built_system.kernel_boot_info.user_image_frames.len() as u64)
     )?;
     writeln!(
         buf,
@@ -2838,7 +2799,10 @@ fn write_report<W: std::io::Write>(
             writeln!(buf, "       {}", region)?;
         }
     }
-    writeln!(buf, "\n# Monitor (Initial Task) Info\n")?;
+    writeln!(
+        buf,
+        "\n# Initial Task Info (Monitor + Invocation Data + PD Elfs)\n"
+    )?;
     writeln!(
         buf,
         "     virtual memory : {}",
@@ -3309,6 +3273,7 @@ fn main() -> Result<(), String> {
         bootstrap_invocation_count_symbol_name: "bootstrap_invocation_count",
         bootstrap_invocation_data_symbol_name: "bootstrap_invocation_data",
         system_invocation_count_symbol_name: "system_invocation_count",
+        system_invocation_data_symbol_name: "system_invocation_data",
     };
 
     let kernel_elf = ElfFile::from_path(&kernel_elf_path)?;
@@ -3469,6 +3434,14 @@ fn main() -> Result<(), String> {
         &built_system.bootstrap_invocations.len().to_le_bytes(),
     )?;
     monitor_elf.write_symbol(
+        // address
+        monitor_config.system_invocation_data_symbol_name,
+        &built_system
+            .initial_task_invocations_virt_subregion
+            .base
+            .to_le_bytes(),
+    )?;
+    monitor_elf.write_symbol(
         monitor_config.system_invocation_count_symbol_name,
         &built_system.system_invocations.len().to_le_bytes(),
     )?;
@@ -3550,10 +3523,11 @@ fn main() -> Result<(), String> {
     }
     report_buf.flush().unwrap();
 
-    let mut loader_regions: Vec<(u64, &[u8])> = vec![(
-        built_system.reserved_region.base,
-        &built_system.invocation_data,
-    )];
+    #[rustfmt::skip]
+    let mut loader_regions: Vec<(u64, &[u8])> = vec![
+        // TODO: we should really have the monitor elf as a region here, no?
+        (built_system.initial_task_invocations_phys_subregion.base, &built_system.invocation_data)
+    ];
     for (i, regions) in built_system.pd_elf_regions.iter().enumerate() {
         for r in regions {
             loader_regions.push((r.addr, r.data(&pd_elf_files[i])));
@@ -3564,9 +3538,12 @@ fn main() -> Result<(), String> {
         &kernel_config,
         Path::new(&loader_elf_path),
         &kernel_elf,
+        // see the above todo as part of loader regions
         &monitor_elf,
-        Some(built_system.initial_task_phys_region.base),
-        built_system.reserved_region,
+        built_system.initial_task_monitor_phys_subregion,
+        built_system.initial_task_monitor_virt_subregion,
+        built_system.initial_task_phys_region,
+        built_system.initial_task_virt_region,
         loader_regions,
     );
     loader.write_image(Path::new(args.output));
