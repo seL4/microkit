@@ -10,9 +10,8 @@ from os import environ, system
 from pathlib import Path
 from shutil import rmtree
 from subprocess import run
-from sys import executable
 
-CWD = Path.cwd()
+CWD = Path(__file__).parent
 BUILD_DIR = CWD / "tmp_build"
 
 
@@ -77,7 +76,7 @@ def main():
     if not BUILD_DIR.exists():
         BUILD_DIR.mkdir()
 
-    tool_rebuild = f"cd tool/microkit && cargo build --release"
+    tool_rebuild = f"cd {CWD / "tool/microkit"} && cargo build --release"
     r = system(tool_rebuild)
     assert r == 0
 
@@ -86,7 +85,7 @@ def main():
     make_env["MICROKIT_BOARD"] = args.board
     make_env["MICROKIT_CONFIG"] = args.config
     make_env["MICROKIT_SDK"] = str(release)
-    make_env["MICROKIT_TOOL"] = Path("tool/microkit/target/release/microkit").absolute()
+    make_env["MICROKIT_TOOL"] = (CWD / "tool/microkit/target/release/microkit").absolute()
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
@@ -97,7 +96,7 @@ def main():
 
     cmd = ["make", "-C", makefile_directory]
 
-    run(cmd, env=make_env)
+    run(cmd, env=make_env, check=True)
 
 
 if __name__ == "__main__":
