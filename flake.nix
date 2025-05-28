@@ -37,13 +37,6 @@
           }
         );
 
-        aarch64-toolchain = import nixpkgs {
-          localSystem = "${system}";
-          crossSystem = {
-            config = "aarch64-none-elf";
-          };
-        };
-
         # pyfdt is not officially supported in Nix so we compile it ourselves
         pyfdt = with pkgs.python312Packages;
           buildPythonPackage rec {
@@ -111,6 +104,7 @@
             cmake
             ninja
             libxml2
+            qemu
           ];
         };
       });
