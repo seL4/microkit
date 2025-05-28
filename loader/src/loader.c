@@ -390,7 +390,7 @@ static void puthex(uintptr_t val)
 #endif
 }
 
-/* Returns the current execption level */
+/* Returns the current exception level */
 static enum el current_el(void)
 {
     /* See: C5.2.1 CurrentEL */
@@ -530,7 +530,7 @@ static char *ec_to_string(uintptr_t ec)
  *
  * This doesn't *do anything*. It helps when
  * debugging to verify that the data structures are
- * being interpretted correctly by the loader.
+ * being interpreted correctly by the loader.
  */
 static void print_flags(void)
 {

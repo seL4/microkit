@@ -169,7 +169,7 @@ By default `dev_build.py` will use the the Microkit tool directory from source (
 However, in some cases it is desirable to test the Microkit tool built into the SDK.
 In this case pass `--tool-from-sdk` to use the tool that is built into the SDK.
 
-Finally, by default the `dev_build.py` script relies on the default Makefile dependecy resolution.
+Finally, by default the `dev_build.py` script relies on the default Makefile dependency resolution.
 However, in some cases it is useful to force a rebuild while doing SDK development.
 For example, the `Makefile` can't know about the state of the Microkit tool source code.
 To support this a `--rebuild` option is provided.

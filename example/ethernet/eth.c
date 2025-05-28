@@ -8,7 +8,7 @@
 #include <microkit.h>
 
 #define OUTPUT_CH 1 /* output from this PD -- becomes input for peer */
-#define INPUT_CH 2 /* intput to this PD -- comes from peer output */
+#define INPUT_CH 2 /* input to this PD -- comes from peer output */
 #define IRQ_CH 3
 
 uintptr_t ring_buffer_vaddr;
@@ -708,7 +708,7 @@ handle_rx(microkit_channel ch, volatile struct regs *eth)
     uint16_t flags;
     int r;
 
-    /* received at least one frame, iterate through all recieve descriptor buffers */
+    /* received at least one frame, iterate through all receive descriptor buffers */
     for (;;) {
         void *packet;
         uint16_t packet_length;

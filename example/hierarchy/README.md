@@ -5,7 +5,7 @@
 # Example - Hierarchy
 
 This example shows off the parent/child PD concept in Microkit as
-well as fault handling. The parent 'restarter' PD recieves faults
+well as fault handling. The parent 'restarter' PD receives faults
 from the 'crasher' PD that is intentionally crashing and then
 resets the crasher's program counter.
 

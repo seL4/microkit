@@ -30,7 +30,7 @@
  * The motivation for this design is to keep both the initial
  * task image and the initial CNode as small, fixed size entities.
  *
- * Fixed size allows both kernel and monitor to avoid unnecesary
+ * Fixed size allows both kernel and monitor to avoid unnecessary
  * recompilation for different system configurations. Keeping things
  * small optimizes overall memory usage.
  *
@@ -398,7 +398,7 @@ static char *usban_code_to_string(seL4_Word code)
     case UBSAN_MUL_OVERFLOW:
         return "multiplication overflow";
     case UBSAN_NEGATE_OVERFLOW:
-        return "negate overlfow";
+        return "negate overflow";
     case UBSAN_NULLABILITY_ARG:
         return "nullability argument";
     case UBSAN_NULLABILITY_RETURN:

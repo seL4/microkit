@@ -74,7 +74,7 @@ static inline void microkit_internal_crash(seL4_Error err)
     /*
      * Currently crash be dereferencing NULL page
      *
-     * Actually derference 'err' which means the crash reporting will have
+     * Actually dereference 'err' which means the crash reporting will have
      * `err` as the fault address. A bit of a cute hack. Not a good long term
      * solution but good for now.
      */

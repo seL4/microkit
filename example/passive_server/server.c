@@ -27,5 +27,5 @@ void init(void)
 
 void notified(microkit_channel ch)
 {
-    microkit_dbg_puts("SERVER|ERROR: recieved a notification on an unexpected channel\n");
+    microkit_dbg_puts("SERVER|ERROR: received a notification on an unexpected channel\n");
 }

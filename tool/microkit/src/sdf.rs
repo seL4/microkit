@@ -1425,8 +1425,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     for mr in &mut mrs {
         // If the largest possible page size based on the MR's size is already
         // set as its page size, skip it.
-        let mr_larget_page_size = mr.optimal_page_size(config);
-        if mr.page_size_bytes() == mr_larget_page_size {
+        let mr_largest_page_size = mr.optimal_page_size(config);
+        if mr.page_size_bytes() == mr_largest_page_size {
             continue;
         }
 

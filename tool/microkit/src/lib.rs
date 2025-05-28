@@ -125,11 +125,11 @@ impl MemoryRegion {
         // based on the kernel virtual addresses, rather than the physical
         // memory addresses. This has a subtle side affect in the process of
         // creating untypeds as even though all the kernel virtual addresses are
-        // a constant offest of the corresponding physical address, overflow can
+        // a constant offset of the corresponding physical address, overflow can
         // occur when dealing with virtual addresses. This precisely occurs in
         // this function, causing different regions depending on whether
         // you use kernel virtual or physical addresses. In order to properly
-        // emulate the kernel booting process, we also have to emulate the unsigned interger
+        // emulate the kernel booting process, we also have to emulate the unsigned integer
         // overflow that can occur.
         let mut regions = Vec::new();
         let mut base = config.paddr_to_kernel_vaddr(self.base);
