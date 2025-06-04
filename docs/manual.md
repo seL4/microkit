@@ -894,6 +894,22 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x20000000
 
+## SiFive Premier P550
+
+The SiFive Premier P550 is a development board based on the ESWIN EIC7700X system-on-chip.
+
+Right now Microkit will always produce raw binary file, however when using U-Boot on the
+P550 it is recommended to instead convert the image to the `uImage` format.
+
+This can be done with the `mkimage` tool:
+```sh
+mkimage -A riscv -O linux -T kernel -C none -a 0x90000000 -e 0x90000000 -d loader.img uImage
+```
+
+You will then want to load `uImage` instead, and then run the following U-Boot command
+
+    => go 0x90000000
+
 ## QEMU virt (AArch64)
 
 Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
