@@ -23,13 +23,20 @@ ifneq ($(MICROKIT_BOARD),tqma8xqp1gb)
 $(error Unsupported MICROKIT_BOARD given, only tqma8xqp1gb supported)
 endif
 
-TOOLCHAIN := aarch64-none-elf
+TARGET_TRIPLE := aarch64-none-elf
 
 CPU := cortex-a35
 
-CC := $(TOOLCHAIN)-gcc
-LD := $(TOOLCHAIN)-ld
-AS := $(TOOLCHAIN)-as
+ifeq ($(strip $(LLVM)),True)
+  CC := clang -target $(TARGET_TRIPLE)
+  AS := clang -target $(TARGET_TRIPLE)
+  LD := ld.lld
+else
+  CC := $(TARGET_TRIPLE)-gcc
+  LD := $(TARGET_TRIPLE)-ld
+  AS := $(TARGET_TRIPLE)-as
+endif
+
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 ETH_OBJS := eth.o
