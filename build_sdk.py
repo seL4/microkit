@@ -31,8 +31,8 @@ ENV_BIN_DIR = Path(executable).parent
 
 MICROKIT_EPOCH = 1616367257
 
-TOOLCHAIN_AARCH64 = "aarch64-none-elf"
-TOOLCHAIN_RISCV = "riscv64-unknown-elf"
+TRIPLE_AARCH64 = "aarch64-none-elf"
+TRIPLE_RISCV = "riscv64-unknown-elf"
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, Union[bool, str]]
@@ -42,13 +42,13 @@ class KernelArch(IntEnum):
     AARCH64 = 1
     RISCV64 = 2
 
-    def c_toolchain(self) -> str:
+    def target_triple(self) -> str:
         if self == KernelArch.AARCH64:
-            return TOOLCHAIN_AARCH64
+            return TRIPLE_AARCH64
         elif self == KernelArch.RISCV64:
-            return TOOLCHAIN_RISCV
+            return TRIPLE_RISCV
         else:
-            raise Exception(f"Unsupported toolchain architecture '{self}'")
+            raise Exception(f"Unsupported toolchain target triple '{self}'")
 
     def is_riscv(self) -> bool:
         return self == KernelArch.RISCV64
@@ -431,6 +431,7 @@ def build_sel4(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
+    llvm: bool
 ) -> Dict[str, Any]:
     """Build seL4"""
     build_dir = build_dir / board.name / config.name / "sel4"
@@ -459,13 +460,18 @@ def build_sel4(
         config_strs.append(s)
     config_str = " ".join(config_strs)
 
-    toolchain = f"{board.arch.c_toolchain()}-"
+    target_triple = f"{board.arch.target_triple()}"
+
     cmd = (
         f"cmake -GNinja -DCMAKE_INSTALL_PREFIX={sel4_install_dir.absolute()} "
         f" -DPYTHON3={executable} "
-        f" -DCROSS_COMPILER_PREFIX={toolchain}"
         f" {config_str} "
         f"-S {sel4_dir.absolute()} -B {sel4_build_dir.absolute()}")
+
+    if llvm:
+        cmd += f" -DTRIPLE={target_triple}"
+    else:
+        cmd += f" -DCROSS_COMPILER_PREFIX={target_triple}-"
 
     r = system(cmd)
     if r != 0:
@@ -527,7 +533,8 @@ def build_elf_component(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
-    defines: List[Tuple[str, str]]
+    llvm: bool,
+    defines: List[Tuple[str, str]],
 ) -> None:
     """Build a specific ELF component.
 
@@ -536,9 +543,9 @@ def build_elf_component(
     sel4_dir = root_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
-    toolchain = f"{board.arch.c_toolchain()}-"
+    target_triple = f"{board.arch.target_triple()}"
     defines_str = " ".join(f"{k}={v}" for k, v in defines)
-    defines_str += f" ARCH={board.arch.to_str()} BOARD={board.name} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
+    defines_str += f" ARCH={board.arch.to_str()} BOARD={board.name} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TARGET_TRIPLE={target_triple} LLVM={llvm}"
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
@@ -574,6 +581,7 @@ def build_lib_component(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
+    llvm: bool
 ) -> None:
     """Build a specific library component.
 
@@ -583,8 +591,8 @@ def build_lib_component(
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
 
-    toolchain = f"{board.arch.c_toolchain()}-"
-    defines_str = f" ARCH={board.arch.to_str()} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TOOLCHAIN={toolchain}"
+    target_triple = f"{board.arch.target_triple()}"
+    defines_str = f" ARCH={board.arch.to_str()} BUILD_DIR={build_dir.absolute()} SEL4_SDK={sel4_dir.absolute()} TARGET_TRIPLE={target_triple} LLVM={llvm}"
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
@@ -628,6 +636,7 @@ def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
     parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
+    parser.add_argument("--llvm", action="store_true", help="Cross-compile seL4 and Microkit's run-time targets with LLVM")
     parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
     parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
     parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
@@ -641,14 +650,14 @@ def main() -> None:
     parser.add_argument("--version", default=default_version, help="SDK version")
     for arch in KernelArch:
         arch_str = arch.name.lower()
-        parser.add_argument(f"--toolchain-prefix-{arch_str}", default=arch.c_toolchain(), help=f"C toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
+        parser.add_argument(f"--gcc-toolchain-prefix-{arch_str}", default=arch.target_triple(), help=f"GCC toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
 
     args = parser.parse_args()
 
-    global TOOLCHAIN_AARCH64
-    global TOOLCHAIN_RISCV
-    TOOLCHAIN_AARCH64 = args.toolchain_prefix_aarch64
-    TOOLCHAIN_RISCV = args.toolchain_prefix_riscv64
+    global TRIPLE_AARCH64
+    global TRIPLE_RISCV
+    TRIPLE_AARCH64 = args.gcc_toolchain_prefix_aarch64
+    TRIPLE_RISCV = args.gcc_toolchain_prefix_riscv64
 
     version = args.version
 
@@ -728,7 +737,7 @@ def main() -> None:
     for board in selected_boards:
         for config in selected_configs:
             if not args.skip_sel4:
-                sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config)
+                sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
             loader_printing = 1 if config.name == "debug" else 0
             loader_defines = [
                 ("LINK_ADDRESS", hex(board.loader_link_address)),
@@ -747,9 +756,9 @@ def main() -> None:
                     raise Exception("Unexpected ARM physical address bits defines")
                 loader_defines.append(("PHYSICAL_ADDRESS_BITS", arm_pa_size_bits))
 
-            build_elf_component("loader", root_dir, build_dir, board, config, loader_defines)
-            build_elf_component("monitor", root_dir, build_dir, board, config, [])
-            build_lib_component("libmicrokit", root_dir, build_dir, board, config)
+            build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
+            build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
+            build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():

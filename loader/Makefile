@@ -19,8 +19,20 @@ ifeq ($(strip $(LINK_ADDRESS)),)
 $(error LINK_ADDRESS must be specified)
 endif
 
-ifeq ($(strip $(TOOLCHAIN)),)
-$(error TOOLCHAIN must be specified)
+ifeq ($(strip $(TARGET_TRIPLE)),)
+$(error TARGET_TRIPLE must be specified)
+endif
+
+ifeq ($(strip $(LLVM)),True)
+  CC = clang -target $(TARGET_TRIPLE)
+  CPP = clang-cpp -target $(TARGET_TRIPLE)
+  AS = clang -target $(TARGET_TRIPLE)
+  LD = ld.lld
+else
+  CC = $(TARGET_TRIPLE)-gcc
+  CPP = $(TARGET_TRIPLE)-cpp
+  AS = $(TARGET_TRIPLE)-as
+  LD = $(TARGET_TRIPLE)-ld
 endif
 
 ifeq ($(strip $(PRINTING)),)
@@ -54,20 +66,20 @@ LINKSCRIPT_INPUT := $(ARCH).ld
 LINKSCRIPT := $(BUILD_DIR)/link.ld
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
-	$(TOOLCHAIN)gcc -DLINK_ADDRESS=$(LINK_ADDRESS) -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
+	$(CC) -DLINK_ADDRESS=$(LINK_ADDRESS) -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
-	$(TOOLCHAIN)as $< -o $@
+	$(AS) -c $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
-	$(TOOLCHAIN)gcc -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 
 OBJPROG = $(addprefix $(BUILD_DIR)/, $(PROGS))
 
 all: $(OBJPROG)
 
 $(LINKSCRIPT): $(LINKSCRIPT_INPUT)
-	$(TOOLCHAIN)cpp -DLINK_ADDRESS=$(LINK_ADDRESS) $< | grep -v "^#" > $@
+	$(CPP) -DLINK_ADDRESS=$(LINK_ADDRESS) $< | grep -v "^#" > $@
 
 $(OBJPROG): $(addprefix $(BUILD_DIR)/, $(OBJECTS)) $(LINKSCRIPT)
-	$(TOOLCHAIN)ld -T$(LINKSCRIPT) $(addprefix $(BUILD_DIR)/, $(OBJECTS)) -o $@
+	$(LD) -T$(LINKSCRIPT) $(addprefix $(BUILD_DIR)/, $(OBJECTS)) -o $@
