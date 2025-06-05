@@ -23,13 +23,20 @@ ifneq ($(MICROKIT_BOARD),odroidc4)
 $(error Unsupported MICROKIT_BOARD given, only odroidc4 supported)
 endif
 
-TOOLCHAIN := aarch64-none-elf
+TARGET_TRIPLE := aarch64-none-elf
 
 CPU := cortex-a55
 
-CC := $(TOOLCHAIN)-gcc
-LD := $(TOOLCHAIN)-ld
-AS := $(TOOLCHAIN)-as
+ifeq ($(strip $(LLVM)),True)
+  CC := clang -target $(TARGET_TRIPLE)
+  AS := clang -target $(TARGET_TRIPLE)
+  LD := ld.lld
+else
+  CC := $(TARGET_TRIPLE)-gcc
+  LD := $(TARGET_TRIPLE)-ld
+  AS := $(TARGET_TRIPLE)-as
+endif
+
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
 TIMER_OBJS := timer.o
