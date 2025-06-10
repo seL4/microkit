@@ -9,6 +9,7 @@
 
 use elf::ElfFile;
 use loader::Loader;
+use microkit_tool::elf::TableMetadata;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, FindFixedError, MemoryRegion,
     ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH,
@@ -740,6 +741,7 @@ fn build_system(
     system: &SystemDescription,
     invocation_table_size: u64,
     system_cnode_size: u64,
+    has_built: bool,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
     assert!(invocation_table_size % config.minimum_page_size == 0);
@@ -760,6 +762,54 @@ fn build_system(
 
     // Determine physical memory region used by the monitor
     let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
+
+    // Only append new segments to the elf on the FIRST iteration of this function.
+    if (!has_built) {
+        // If we are mapping the child page tables into the parents,
+        // calculate the extra that these occupy and increment the pd_elf_size
+        // appropriately.
+        for (parent_idx, pd) in system.protection_domains.iter().enumerate() {
+            let mut pd_extra_elf_size = 0;
+            // Flag to enable the patching of child page tables
+            if (pd.child_pts) {
+                // @kwinter: Assuming that the parents and children have been flattened
+                // to be consecutive
+                // Find all child page tables and find size of loadable segments.
+                for (child_idx, child_pd) in system.protection_domains.iter().enumerate() {
+                    if (child_idx <= parent_idx) {
+                        continue;
+                    } else if (child_idx >= parent_idx && child_pd.parent != Some(parent_idx)) {
+                        break;
+                    }
+                    let mut child_pgd = PGD::new();
+                    // Find the corresponding elf for this child and add loadable segments
+                    // to page table structures.
+                    let child_elf = &pd_elf_files[parent_idx + child_idx];
+                    for loadable_segment in child_elf.loadable_segments() {
+                        child_pgd.add_4k_page_at_vaddr(loadable_segment.virt_addr, loadable_segment.data.len() as i64);
+                    }
+                    // Find all associated memory regions and their size.
+                    for child_map in &child_pd.maps {
+                        // Find the memory region associated with this map
+                        for mr in &system.memory_regions {
+                            if mr.name == child_map.mr {
+                                child_pgd.add_4k_page_at_vaddr(child_map.vaddr, mr.size as i64);
+                            }
+                        }
+                    }
+                    // Account for the stack of each child pd
+                    child_pgd.add_4k_page_at_vaddr(config.pd_stack_bottom(child_pd.stack_size), child_pd.stack_size as i64);
+                    // We have now constructed the dummy page tables, calculate how much size we
+                    // need to add to the pd_elf_sizes
+                    pd_extra_elf_size += child_pgd.get_size();
+                }
+                // Push this new region to the parent's elf
+                let parent_elf = &mut pd_elf_files[parent_idx];
+                let new_elf_seg = parent_elf.create_segment(".table_data", pd_extra_elf_size);
+                parent_elf.segments.push(new_elf_seg);
+            }
+        }
+    }
 
     // Determine physical memory region for 'reserved' memory.
     //
@@ -3426,6 +3476,7 @@ fn main() -> Result<(), String> {
     let mut system_cnode_size = 2;
 
     let mut built_system;
+    let mut has_built = false;
     loop {
         built_system = build_system(
             &kernel_config,
@@ -3435,9 +3486,12 @@ fn main() -> Result<(), String> {
             &system,
             invocation_table_size,
             system_cnode_size,
+            has_built
         )?;
         println!("BUILT: system_cnode_size={} built_system.number_of_system_caps={} invocation_table_size={} built_system.invocation_data_size={}",
                  system_cnode_size, built_system.number_of_system_caps, invocation_table_size, built_system.invocation_data_size);
+
+        has_built = true;
 
         if built_system.number_of_system_caps <= system_cnode_size
             && built_system.invocation_data_size <= invocation_table_size

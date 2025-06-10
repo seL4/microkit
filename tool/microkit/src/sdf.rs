@@ -189,6 +189,7 @@ pub struct ProtectionDomain {
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
     pub parent: Option<usize>,
+    pub child_pts: bool,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
 }
@@ -362,6 +363,7 @@ impl ProtectionDomain {
             // The SMC field is only available in certain configurations
             // but we do the error-checking further down.
             "smc",
+            "child_pts",
         ];
         if is_child {
             attrs.push("id");
@@ -656,6 +658,25 @@ impl ProtectionDomain {
 
         let has_children = !child_pds.is_empty();
 
+        let child_pts = if has_children {
+            if let Some(xml_child_pts) = node.attribute("child_pts") {
+                match str_to_bool(xml_child_pts) {
+                    Some(val) => val,
+                    None => {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "child_pts must be 'true' or 'false'".to_string(),
+                        ))
+                    }
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         Ok(ProtectionDomain {
             id,
             name,
@@ -675,6 +696,7 @@ impl ProtectionDomain {
             virtual_machine,
             has_children,
             parent: None,
+            child_pts,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
         })
     }
