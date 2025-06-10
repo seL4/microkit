@@ -97,11 +97,19 @@ struct ElfHeader64 {
 const ELF_MAGIC: &[u8; 4] = b"\x7FELF";
 
 pub struct ElfSegment {
+    pub name: Option<String>,
     pub data: Vec<u8>,
     pub phys_addr: u64,
     pub virt_addr: u64,
     pub loadable: bool,
     attrs: u32,
+}
+
+#[derive(IntoBytes,Immutable)]
+#[repr(C)]
+pub struct TableMetadata {
+    pub base_addr: u64,
+    pub pgd:[u64;64],
 }
 
 impl ElfSegment {
@@ -211,6 +219,7 @@ impl ElfFile {
                 .copy_from_slice(&bytes[segment_start..segment_end]);
 
             let segment = ElfSegment {
+                name: None,
                 data: segment_data,
                 phys_addr: phent.paddr,
                 virt_addr: phent.vaddr,
@@ -362,5 +371,43 @@ impl ElfFile {
 
     pub fn loadable_segments(&self) -> Vec<&ElfSegment> {
         self.segments.iter().filter(|s| s.loadable).collect()
+    }
+
+    pub fn create_segment(&mut self, segment_name: &str, size: u64) -> ElfSegment {
+        let mut last_addr = 0;
+        for segment in self.segments.iter() {
+            if segment.virt_addr > last_addr {
+                last_addr = segment.virt_addr + segment.data.len() as u64;
+            }
+        }
+
+        last_addr = last_addr + (0x10000 - (last_addr % 0x10000));
+
+        return ElfSegment{name: Some(segment_name.to_string()), data: vec![0; size as usize],
+            phys_addr: last_addr, virt_addr: last_addr, loadable: true,
+            attrs: ElfSegmentAttributes::Read as u32};
+    }
+
+    pub fn populate_segment(&mut self, segment_name: &str, data: &[u8]) {
+        // Find segment
+        for segment in self.segments.iter_mut() {
+            if let Some(name) = &segment.name {
+                if name == segment_name {
+                    assert!(data.len() <= segment.data.len());
+                    segment.data = data.to_vec();
+                }
+            }
+        }
+    }
+
+    pub fn get_segment(&mut self, segment_name: &str) -> Option<&ElfSegment> {
+        for segment in &self.segments {
+            if let Some(name) = &segment.name {
+                if name == segment_name {
+                    return Some(segment);
+                }
+            }
+        }
+        return None;
     }
 }
