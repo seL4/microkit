@@ -8,6 +8,7 @@ use crate::util::bytes_to_struct;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use zerocopy::{Immutable,IntoBytes};
 
 #[repr(C, packed)]
 struct ElfHeader32 {

@@ -35,6 +35,7 @@ use util::{
     comma_sep_u64, comma_sep_usize, human_size_strict, json_str, json_str_as_bool, json_str_as_u64,
     monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
+use zerocopy::{Immutable,IntoBytes};
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
@@ -786,19 +787,19 @@ fn build_system(
                     // to page table structures.
                     let child_elf = &pd_elf_files[parent_idx + child_idx];
                     for loadable_segment in child_elf.loadable_segments() {
-                        child_pgd.add_4k_page_at_vaddr(loadable_segment.virt_addr, loadable_segment.data.len() as i64);
+                        child_pgd.add_page_at_vaddr_range(loadable_segment.virt_addr, loadable_segment.data.len() as i64, 1, PageSize::Small);
                     }
                     // Find all associated memory regions and their size.
                     for child_map in &child_pd.maps {
                         // Find the memory region associated with this map
                         for mr in &system.memory_regions {
                             if mr.name == child_map.mr {
-                                child_pgd.add_4k_page_at_vaddr(child_map.vaddr, mr.size as i64);
+                                child_pgd.add_page_at_vaddr_range(child_map.vaddr, mr.size as i64, 1, mr.page_size);
                             }
                         }
                     }
                     // Account for the stack of each child pd
-                    child_pgd.add_4k_page_at_vaddr(config.pd_stack_bottom(child_pd.stack_size), child_pd.stack_size as i64);
+                    child_pgd.add_page_at_vaddr_range(config.pd_stack_bottom(child_pd.stack_size), child_pd.stack_size as i64, 1, PageSize::Small);
                     // We have now constructed the dummy page tables, calculate how much size we
                     // need to add to the pd_elf_sizes
                     pd_extra_elf_size += child_pgd.get_size();
