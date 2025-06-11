@@ -2072,6 +2072,122 @@ fn build_system(
         }
     }
 
+    // Create an outline of the page table mappings for each pd. We can later populate this outline
+    // with the corresponding frame caps should any pd have a parent
+    let mut all_pd_page_tables: Vec<PGD> = vec![PGD::new(); 64];
+
+    let mut sorted_mp_mr_pairs: Vec<(&SysMap, &SysMemoryRegion, String)> = vec![];
+    for pd in system.protection_domains.iter() {
+        for map_set in [&pd.maps, &pd_extra_maps[pd]] {
+            for mp in map_set {
+                let mr = all_mr_by_name[mp.mr.as_str()];
+                let id = mr.name.clone() + " " + &pd.name;
+                sorted_mp_mr_pairs.push((mp, mr, id));
+            }
+        }
+    }
+    sorted_mp_mr_pairs.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+    let mut base_frame_cap = BASE_FRAME_CAP;
+
+    // If a pd has a parent, we mint the child's frame caps into the parent's vspace
+    // We additionally place these frame caps into the corresponding page in our copy of the tables
+    for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
+        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                if parent_idx == pd_idx {
+                    for mp_mr_pair in &sorted_mp_mr_pairs {
+                        let child_mp = mp_mr_pair.0;
+                        let child_mr = mp_mr_pair.1;
+                        let name = &mp_mr_pair.2;
+                        if name.contains(&maybe_child_pd.name) {
+                            println!(
+                                "parent: {} wants to map this child memory regions: {}",
+                                parent.name, child_mr.name
+                            );
+
+                            println!("we have {} frames", mr_pages[child_mr].len());
+                            let mut invocation = Invocation::new(
+                                config,
+                                InvocationArgs::CnodeMint {
+                                    cnode: cnode_objs[pd_idx].cap_addr,
+                                    dest_index: base_frame_cap,
+                                    dest_depth: PD_CAP_BITS,
+                                    src_root: root_cnode_cap,
+                                    src_obj: mr_pages[child_mr][0].cap_addr,
+                                    src_depth: config.cap_address_bits,
+                                    rights: (Rights::Read as u64 | Rights::Write as u64),
+                                    badge: 0,
+                                },
+                            );
+
+                            invocation.repeat(
+                                mr_pages[child_mr].len() as u32,
+                                InvocationArgs::CnodeMint {
+                                    cnode: 0,
+                                    dest_index: 1,
+                                    dest_depth: 0,
+                                    src_root: 0,
+                                    src_obj: 1,
+                                    src_depth: 0,
+                                    rights: 0,
+                                    badge: 0,
+                                },
+                            );
+
+                            for mr_idx in 0..mr_pages[child_mr].len() {
+                                let cap = mr_pages[child_mr][mr_idx].cap_addr;
+                                let vaddr = child_mp.vaddr + child_mr.page_size_bytes() * mr_idx as u64;
+                                let minted_cap = base_frame_cap + mr_idx as u64;
+
+                                // Check if we have a small or large page.
+                                all_pd_page_tables[maybe_child_idx].add_page_at_vaddr(vaddr, minted_cap, child_mr.page_size);
+                            }
+
+                            base_frame_cap += mr_pages[child_mr].len() as u64;
+                            system_invocations.push(invocation);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
+        let mut parent_pd_view: Vec<PGD> = vec![PGD::new(); 64];
+        let mut child_pds: Vec<usize> = vec![];
+
+        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                if parent_idx == pd_idx {
+                    let id = maybe_child_pd.id.unwrap() as usize;
+                    parent_pd_view[id] = all_pd_page_tables[maybe_child_idx].clone();
+                    child_pds.push(id);
+                }
+            }
+        }
+
+        if child_pds.is_empty() {
+            continue;
+        }
+
+        let mut table_metadata = TableMetadata { base_addr: 0, pgd: [0; 64]};
+        let mut table_data = Vec::<u8>::new();
+        let mut offset = 0;
+
+        for i in child_pds {
+            offset = parent_pd_view[i].recurse(offset, &mut table_data);
+            table_metadata.pgd[i] = offset - (512 * 8);
+        }
+
+        // patch the data in
+        let elf = &mut pd_elf_files[pd_idx];
+        elf.populate_segment(".table_data", &table_data);
+        let new_elf_seg = elf.get_segment(".table_data").unwrap();
+
+        table_metadata.base_addr = new_elf_seg.virt_addr;
+        elf.write_symbol("table_metadata", &table_metadata.as_bytes())?;
+    }
+
     let mut badged_irq_caps: HashMap<&ProtectionDomain, Vec<u64>> = HashMap::new();
     for (notification_obj, pd) in zip(&notification_objs, &system.protection_domains) {
         badged_irq_caps.insert(pd, vec![]);
