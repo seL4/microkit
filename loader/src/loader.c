@@ -756,6 +756,12 @@ int main(void)
         goto fail;
     }
 
+#ifdef ARCH_riscv64
+    puts("LDR|INFO: configured with FIRST_HART_ID ");
+    puthex32(FIRST_HART_ID);
+    puts("\n");
+#endif
+
     print_loader_data();
 
     /* past here we have trashed u-boot so any errors should go to the
