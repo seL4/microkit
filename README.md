@@ -208,6 +208,7 @@ The currently supported boards are:
 
 * ariane
 * cheshire
+* hifive_p550
 * imx8mm_evk
 * imx8mp_evk
 * imx8mq_evk
