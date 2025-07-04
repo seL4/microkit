@@ -14,7 +14,7 @@ pub struct BootInfo {
     pub fixed_cap_count: u64,
     pub sched_control_cap: u64,
     pub paging_cap_count: u64,
-    pub page_cap_count: u64,
+    pub user_image_frames: Vec<Object>,
     pub untyped_objects: Vec<UntypedObject>,
     pub first_available_cap: u64,
 }
@@ -40,7 +40,7 @@ pub struct PlatformConfig {
 /// The cap_address refers to a cap address that addresses this cap.
 /// The cap_address is is intended to be valid within the context of the
 /// initial task.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Object {
     /// Type of kernel object
     pub object_type: ObjectType,
