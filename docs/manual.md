@@ -99,7 +99,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [protection domain (PD)](#pd)
 * [virtual machine (VM)](#vm)
 * [memory region](#mr)
-* [channel](#channel)
+* [channel](#channels)
 * [protected procedure](#pp)
 * [notification](#notification)
 * [interrupt](#irq)
@@ -231,7 +231,7 @@ The mapping has a number of attributes, which include:
 **Note:** When a memory region is mapped into multiple protection
 domains, the attributes used for different mappings may vary.
 
-## Channels {#channel}
+## Channels {#channels}
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
 Each connects exactly two PDs; there are no multi-party channels.
@@ -1280,7 +1280,7 @@ which PD caused an exception and details on the PD's state at the time of the fa
 Other than printing fault details, the monitor does not do anything to handle
 the fault, it will simply go back to sleep waiting for any other faults.
 
-## libmicrokit
+## libmicrokit {#libmicrokit_internals}
 
 Unlike the previous sections, libmicrokit is not its own program but it is worth
 a mention since it makes up the core of each protection domain in a system.
