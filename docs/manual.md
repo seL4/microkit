@@ -917,7 +917,7 @@ dtc -I dts -O dtb seL4/tools/dts/hifive-p550.dts > hifive_p550.dtb
 Now you can load the images into U-Boot at the appropriate addresses, for example via TFTP:
 
      => tftpboot 0x90000000 /path/to/loader.uimg
-     => tftpboot 0x90000000 /path/to/hifive_p550.dtb
+     => tftpboot 0xa0000000 /path/to/hifive_p550.dtb
      => bootm 0x90000000 - 0xa0000000
 
 ## QEMU virt (AArch64)
