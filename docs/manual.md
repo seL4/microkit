@@ -771,7 +771,7 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 This chapter describes the board support packages that are available in the SDK.
 
-## Ariane (CVA6)
+## Ariane (CVA6) {#ariane}
 
 Initial support is available for the CVA6 (formerly Ariane) core design
 on the Digilent Genesys2 board. CVA6 is an open-source RISC-V (rv64i) processor.
@@ -791,7 +791,7 @@ If you are booting from U-Boot, use the following command to start the system im
 Note that the OpenSBI version from the CVA6 SDK at the time of writing has issues when
 booting. It is recommended to use the mainline OpenSBI.
 
-## Cheshire
+## Cheshire {#cheshire}
 
 Support is available for [Cheshire](https://github.com/pulp-platform/cheshire).
 It is an SoC design based on the CVA6 core, implementing a 64-bit RISC-V CPU.
@@ -850,25 +850,25 @@ Using a GDB prompt via openOCD:
 
     > continue
 
-## i.MX8MM-EVK
+## i.MX8MM-EVK {#imx8mm_evk}
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
-## i.MX8MP-EVK
+## i.MX8MP-EVK {#imx8mp_evk}
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
-## i.MX8MQ-EVK
+## i.MX8MQ-EVK {#imx8mq_evk}
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
-## MaaXBoard
+## MaaXBoard {#maaxboard}
 
 The MaaXBoard is a low-cost ARM SBC based on the NXP i.MX8MQ system-on-chip.
 
@@ -876,7 +876,7 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x50000000
 
-## Odroid-C2
+## Odroid-C2 {#odroidc2}
 
 The HardKernel Odroid-C2 is an ARM SBC based on the Amlogic Meson S905 system-on-chip. It
 should be noted that the Odroid-C2 is no longer available for purchase but its successor,
@@ -886,7 +886,7 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x20000000
 
-## Odroid-C4
+## Odroid-C4 {#odroidc4}
 
 The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-on-chip.
 
@@ -894,7 +894,7 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x20000000
 
-## SiFive Premier P550
+## SiFive Premier P550 {#hifive_p550}
 
 The SiFive Premier P550 is a development board based on the ESWIN EIC7700X system-on-chip.
 
@@ -920,7 +920,7 @@ Now you can load the images into U-Boot at the appropriate addresses, for exampl
      => tftpboot 0x90000000 /path/to/hifive_p550.dtb
      => bootm 0x90000000 - 0xa0000000
 
-## QEMU virt (AArch64)
+## QEMU virt (AArch64) {#qemu_virt_aarch64}
 
 Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
 on any specific SoC or hardware platform and is intended for simulating systems for
@@ -942,7 +942,7 @@ You can use the following command to simulate a Microkit system:
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
 
-## QEMU virt (RISC-V 64-bit)
+## QEMU virt (RISC-V 64-bit) {#qemu_virt_riscv64}
 
 Support is available for the virtual RISC-V (64-bit) QEMU platform.
 This is a platform that is not based on any specific SoC or hardware platform
@@ -964,7 +964,7 @@ QEMU will start the system image using its packaged version of OpenSBI.
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
 
-## Raspberry Pi 4B
+## Raspberry Pi 4B {#rpi4b_1gb}
 
 Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
 Raspberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
@@ -983,13 +983,13 @@ U-Boot commands:
      => fatload mmc 0 0x10000000 <SYSTEM IMAGE>
      => go 0x10000000
 
-## Pine64 ROCKPro64
+## Pine64 ROCKPro64 {#rockpro64}
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x30000000
 
-## Pine64 Star64
+## Pine64 Star64 {#star64}
 
 Support is available for the Pine64 Star64 platform which is based on the
 StarFive JH7110 SoC.
@@ -1008,7 +1008,7 @@ To execute the system image produced by Microkit, execute the following command 
 
     => go 0x60000000
 
-## TQMa8XQP 1GB
+## TQMa8XQP 1GB {#tqma8xqp1gb}
 
 The TQMa8XQP is a system-on-module designed by TQ-Systems GmbH.
 The modules incorporates an NXP i.MX8X Quad Plus system-on-chip and 1GiB ECC memory.
@@ -1070,7 +1070,7 @@ Rather than typing these each time you can create a U-Boot script:
 
 When debugging is enabled the kernel will use the same UART as U-Boot.
 
-## Ultra96V2
+## Ultra96V2 {#ultra96v2}
 
 To run the built image on the board, you have to use properly patched U-Boot - please see the section for ZCU102, for the details.
 
@@ -1081,7 +1081,7 @@ ZynqMP> tftpboot 0x40000000 loader.img
 ZynqMP> go 0x40000000
 ```
 
-## ZCU102
+## ZCU102 {#zcu102}
 
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
 
