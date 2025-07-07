@@ -116,8 +116,6 @@ struct LoaderHeader64 {
     ui_p_reg_end: u64,
     pv_offset: u64,
     v_entry: u64,
-    extra_device_addr_p: u64,
-    extra_device_size: u64,
     num_regions: u64,
 }
 
@@ -129,18 +127,20 @@ pub struct Loader<'a> {
 }
 
 impl<'a> Loader<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: &Config,
         loader_elf_path: &Path,
         kernel_elf: &'a ElfFile,
-        initial_task_elf: &'a ElfFile,
-        initial_task_phys_base: Option<u64>,
-        reserved_region: MemoryRegion,
+        monitor_elf: &'a ElfFile,
+        monitor_phys_subregion: MemoryRegion,
+        monitor_virt_subregion: MemoryRegion,
+        // includes monitor subregion
+        initial_task_phys_region: MemoryRegion,
+        initial_task_virt_region: MemoryRegion,
+        // ... excluding the monitor??
         system_regions: Vec<(u64, &'a [u8])>,
     ) -> Loader<'a> {
-        // Note: If initial_task_phys_base is not None, then it just this address
-        // as the base physical address of the initial task, rather than the address
-        // that comes from the initial_task_elf file.
         let elf = ElfFile::from_path(loader_elf_path).unwrap();
         let sz = elf.word_size;
         let magic = match sz {
@@ -193,26 +193,26 @@ impl<'a> Loader<'a> {
         // (and indeed initial did support multi-segment ELF files). However
         // it adds significant complexity, and the calling functions enforce
         // only single-segment ELF files, so we keep things simple here.
-        let initial_task_segments: Vec<_> = initial_task_elf
-            .segments
-            .iter()
-            .filter(|s| s.loadable)
-            .collect();
-        assert!(initial_task_segments.len() == 1);
-        let segment = &initial_task_segments[0];
+        let monitor_segments: Vec<_> = monitor_elf.segments.iter().filter(|s| s.loadable).collect();
+        assert!(monitor_segments.len() == 1);
+        let segment = &monitor_segments[0];
         assert!(segment.loadable);
 
-        let inittask_first_vaddr = segment.virt_addr;
-        let inittask_last_vaddr = round_up(segment.virt_addr + segment.mem_size(), kb(4));
+        let monitor_first_vaddr = segment.virt_addr;
+        let monitor_last_vaddr = round_up(segment.virt_addr + segment.mem_size(), kb(4));
 
-        let inittask_first_paddr = match initial_task_phys_base {
-            Some(paddr) => paddr,
-            None => segment.phys_addr,
-        };
-        let inittask_p_v_offset = inittask_first_vaddr - inittask_first_paddr;
+        // TODO: Why are we even rederiving it here, tbh?
+        assert_eq!(monitor_virt_subregion.base, monitor_first_vaddr);
+        assert_eq!(monitor_virt_subregion.end, monitor_last_vaddr);
 
+        // Initial task contains the PD elfs and invocation data and monitor.
+        // So the initial task contains the monitor at the very end.
+        assert_eq!(initial_task_virt_region.end, monitor_last_vaddr);
+        assert!(initial_task_virt_region.base < monitor_first_vaddr);
+
+        let monitor_first_paddr = monitor_phys_subregion.base;
         // Note: For now we include any zeroes. We could optimize in the future
-        regions.push((inittask_first_paddr, &segment.data));
+        regions.push((monitor_first_paddr, &segment.data));
 
         // Determine the pagetable variables
         assert!(kernel_first_vaddr.is_some());
@@ -253,16 +253,15 @@ impl<'a> Loader<'a> {
 
         let kernel_entry = kernel_elf.entry;
 
-        let pv_offset = inittask_first_paddr.wrapping_sub(inittask_first_vaddr);
+        // wrapping_sub because phys could be higher/lower in vmem than virt
+        // and the kernel is in C and so (unsigned) overflow wraps.
+        let pv_offset = (initial_task_phys_region.base).wrapping_sub(initial_task_virt_region.base);
 
-        let ui_p_reg_start = inittask_first_paddr;
-        let ui_p_reg_end = inittask_last_vaddr - inittask_p_v_offset;
+        let ui_p_reg_start = initial_task_phys_region.base;
+        let ui_p_reg_end = initial_task_phys_region.end;
         assert!(ui_p_reg_end > ui_p_reg_start);
 
-        let v_entry = initial_task_elf.entry;
-
-        let extra_device_addr_p = reserved_region.base;
-        let extra_device_size = reserved_region.size();
+        let v_entry = monitor_elf.entry;
 
         let mut all_regions = Vec::with_capacity(regions.len() + system_regions.len());
         for region_set in [regions, system_regions] {
@@ -306,8 +305,6 @@ impl<'a> Loader<'a> {
             ui_p_reg_end,
             pv_offset,
             v_entry,
-            extra_device_addr_p,
-            extra_device_size,
             num_regions: all_regions.len() as u64,
         };
 
