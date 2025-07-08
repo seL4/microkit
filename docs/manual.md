@@ -804,7 +804,7 @@ Build the firmware payload using platform `fpga/cheshire`.
 
 ### Using U-Boot
 
-With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-boot:
+With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-Boot:
 
     => go 0x90000000
 
