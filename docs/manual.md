@@ -771,6 +771,25 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 This chapter describes the board support packages that are available in the SDK.
 
+The currently supported platforms are:
+* ariane
+* cheshire
+* hifive_p550
+* imx8mm_evk
+* imx8mp_evk
+* imx8mq_evk
+* maaxboard
+* odroidc2
+* odroidc4
+* qemu_virt_aarch64
+* qemu_virt_riscv64
+* rockpro64
+* rpi4b_1gb
+* star64
+* tqma8xqp1gb
+* ultra96v2
+* zcu102
+
 ## Ariane (CVA6) {#ariane}
 
 Initial support is available for the CVA6 (formerly Ariane) core design
