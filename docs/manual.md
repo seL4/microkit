@@ -671,7 +671,7 @@ It supports the following attributes:
 * `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
-  Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
+  Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 
 Additionally, it supports the following child elements:
