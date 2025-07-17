@@ -2027,8 +2027,6 @@ fn build_system(
         }
     }
 
-    let mut base_frame_cap = BASE_FRAME_CAP;
-
     for (pd_idx, _) in system.protection_domains.iter().enumerate() {
         for maybe_child_pd in system.protection_domains.iter() {
             if maybe_child_pd.parent.is_some_and(|x| x == pd_idx) {
@@ -2040,7 +2038,7 @@ fn build_system(
                             config,
                             InvocationArgs::CnodeMint {
                                 cnode: cnode_objs[pd_idx].cap_addr,
-                                dest_index: base_frame_cap,
+                                dest_index: BASE_FRAME_CAP,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
                                 src_obj: mr_pages[mr][0].cap_addr,
@@ -2066,7 +2064,7 @@ fn build_system(
 
                         for mr_idx in 0..mr_pages[mr].len() {
                             let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
-                            let minted_cap = base_frame_cap + mr_idx as u64;
+                            let minted_cap = BASE_FRAME_CAP + mr_idx as u64;
 
                             all_child_page_tables[pd_idx]
                             .as_mut()
@@ -2079,10 +2077,6 @@ fn build_system(
         }
     }
 
-    // Create an outline of the page table mappings for each pd. We can later populate this outline
-    // with the corresponding frame caps should any pd have a parent
-    let mut all_pd_page_tables: Vec<PGD> = vec![PGD::new(); 64];
-
     let mut sorted_mp_mr_pairs: Vec<(&SysMap, &SysMemoryRegion, String)> = vec![];
     for pd in system.protection_domains.iter() {
         for map_set in [&pd.maps, &pd_extra_maps[pd]] {
@@ -2094,12 +2088,12 @@ fn build_system(
         }
     }
     sorted_mp_mr_pairs.sort_by(|a, b| a.1.name.cmp(&b.1.name));
-    let mut base_frame_cap = BASE_FRAME_CAP;
+    let mut frame_cap = BASE_FRAME_CAP;
 
     // If a pd has a parent, we mint the child's frame caps into the parent's vspace
     // We additionally place these frame caps into the corresponding page in our copy of the tables
     for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
-        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+        for (_maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
             if let Some(parent_idx) = maybe_child_pd.parent {
                 if parent_idx == pd_idx && parent.child_pts {
                     for mp_mr_pair in &sorted_mp_mr_pairs {
@@ -2107,17 +2101,11 @@ fn build_system(
                         let child_mr = mp_mr_pair.1;
                         let name = &mp_mr_pair.2;
                         if name.contains(&maybe_child_pd.name) {
-                            println!(
-                                "parent: {} wants to map this child memory regions: {}",
-                                parent.name, child_mr.name
-                            );
-
-                            println!("we have {} frames", mr_pages[child_mr].len());
                             let mut invocation = Invocation::new(
                                 config,
                                 InvocationArgs::CnodeMint {
                                     cnode: cnode_objs[pd_idx].cap_addr,
-                                    dest_index: base_frame_cap,
+                                    dest_index: frame_cap,
                                     dest_depth: PD_CAP_BITS,
                                     src_root: root_cnode_cap,
                                     src_obj: mr_pages[child_mr][0].cap_addr,
@@ -2142,9 +2130,8 @@ fn build_system(
                             );
 
                             for mr_idx in 0..mr_pages[child_mr].len() {
-                                let cap = mr_pages[child_mr][mr_idx].cap_addr;
                                 let vaddr = child_mp.vaddr + child_mr.page_size_bytes() * mr_idx as u64;
-                                let minted_cap = base_frame_cap + mr_idx as u64;
+                                let minted_cap = frame_cap + mr_idx as u64;
 
                                 // Check if we have a small or large page.
                                 all_child_page_tables[parent_idx]
@@ -2153,7 +2140,7 @@ fn build_system(
                                 .add_page_at_vaddr(vaddr, minted_cap, child_mr.page_size);
                             }
 
-                            base_frame_cap += mr_pages[child_mr].len() as u64;
+                            frame_cap += mr_pages[child_mr].len() as u64;
                             system_invocations.push(invocation);
                         }
                     }
