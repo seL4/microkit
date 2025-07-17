@@ -14,6 +14,8 @@ use sel4::Config;
 use std::cmp::min;
 use std::fmt;
 
+use crate::sel4::PageSize;
+
 // Note that these values are used in the monitor so should also be changed there
 // if any of these were to change.
 pub const MAX_PDS: usize = 63;
@@ -23,6 +25,227 @@ pub const MAX_VMS: usize = 63;
 // the monitor and libmicrokit.
 pub const PD_MAX_NAME_LENGTH: usize = 64;
 pub const VM_MAX_NAME_LENGTH: usize = 64;
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PGD {
+    puds: Vec<Option<PUD>>,
+}
+
+impl PGD {
+    pub fn new() -> Self {
+        PGD {
+            puds: vec![None; 512],
+        }
+    }
+
+    pub fn recurse(&mut self, mut curr_offset: u64,  buffer: &mut Vec<u8>) -> u64 {
+        let mut offset_table: [u64; 512] = [u64::MAX; 512];
+        for i in 0..512 {
+            if let Some(pud) = &mut self.puds[i] {
+                curr_offset = pud.recurse(curr_offset, buffer);
+                offset_table[i] = curr_offset - (512 * 8);
+            }
+        }
+
+        for value in &mut offset_table {
+            buffer.append(&mut value.to_le_bytes().to_vec());
+        }
+        curr_offset + (512 * 8)
+    }
+
+    pub fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
+        let pgd_index = ((vaddr & (0x1ff << 39)) >> 39) as usize;
+        if self.puds[pgd_index].is_none() {
+            self.puds[pgd_index] = Some(PUD::new());
+        }
+        self.puds[pgd_index].as_mut().unwrap().add_page_at_vaddr(vaddr, frame, size);
+
+    }
+
+    pub fn add_page_at_vaddr_range(&mut self, mut vaddr: u64, mut data_len: i64, frame: u64, size: PageSize) {
+        while data_len > 0 {
+            self.add_page_at_vaddr(vaddr, frame, size);
+            data_len -= size as i64;
+            vaddr += size as u64;
+        }
+    }
+
+    pub fn get_size(&self) -> u64{
+        let mut child_size = 0;
+        for pud in &self.puds {
+            if pud.is_some() {
+                child_size += pud.as_ref().unwrap().get_size();
+            }
+        }
+        return (512 * 8) + child_size;
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PUD {
+    dirs: Vec<Option<DIR>>,
+}
+
+impl PUD {
+    fn new() -> Self {
+        PUD {
+            dirs: vec![None; 512],
+        }
+    }
+
+    fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
+        let mut offset_table: [u64; 512] = [u64::MAX; 512];
+        for i in 0..512 {
+            if let Some(dir) = &mut self.dirs[i] {
+                curr_offset = dir.recurse(curr_offset, buffer);
+                offset_table[i] = curr_offset - (512 * 8);
+            }
+        }
+
+        for value in &mut offset_table {
+            buffer.append(&mut value.to_le_bytes().to_vec());
+        }
+        curr_offset + (512 * 8)
+    }
+
+    fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
+        let pud_index = ((vaddr & (0x1ff << 30)) >> 30) as usize;
+        if self.dirs[pud_index].is_none() {
+            self.dirs[pud_index] = Some(DIR::new());
+        }
+        self.dirs[pud_index].as_mut().unwrap().add_page_at_vaddr(vaddr, frame, size);
+    }
+
+    fn get_size(&self) -> u64{
+        let mut child_size = 0;
+        for dir in &self.dirs {
+            if dir.is_some() {
+                child_size += dir.as_ref().unwrap().get_size();
+            }
+        }
+        return (512 * 8) + child_size;
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum DirEntry {
+    PageTable(PT),
+    LargePage(u64),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DIR {
+    entries: Vec<Option<DirEntry>>,
+}
+
+impl DIR {
+    fn new() -> Self {
+        DIR {
+            entries: vec![None; 512],
+        }
+    }
+
+    fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
+        let mut offset_table: [u64; 512] = [u64::MAX; 512];
+        for i in 0..512 {
+            if let Some(entry) = &mut self.entries[i] {
+                match entry {
+                    DirEntry::PageTable(x) => {
+                        curr_offset = x.recurse(curr_offset, buffer);
+                        offset_table[i] = curr_offset - (512 * 8);
+                    },
+                    DirEntry::LargePage(x) => {
+                        // curr_offset += 8;
+                        // we mark the top bit to signal to the pd that this is a large page
+                        offset_table[i] = *x | (1 << 63);
+                        println!("Large page encountered!");
+                    }
+                }
+            }
+        }
+
+        for value in &mut offset_table {
+            buffer.append(&mut value.to_le_bytes().to_vec());
+        }
+        curr_offset + (512 * 8)
+    }
+
+    fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
+        let dir_index = ((vaddr & (0x1ff << 21)) >> 21) as usize;
+        match size {
+            PageSize::Small => {
+                println!("We are NOT adding a large page!\n");
+                if self.entries[dir_index].is_none() {
+                    self.entries[dir_index] = Some(DirEntry::PageTable(PT::new()));
+                }
+                match &mut self.entries[dir_index] {
+                    Some(DirEntry::PageTable(x)) => {
+                        x.add_page_at_vaddr(vaddr, frame, size);
+                    },
+                    _ => {
+                        panic!("Trying to add small page where a large page already exists!");
+                    }
+                }
+            },
+            PageSize::Large => {
+                if let Some(DirEntry::PageTable(_)) = self.entries[dir_index] {
+                    panic!("Attempting to insert a large page where a page table already exists!");
+                }
+                println!("We are adding a large page!\n");
+                self.entries[dir_index] = Some(DirEntry::LargePage(frame));
+            }
+        }
+
+    }
+
+    fn get_size(&self) -> u64{
+        let mut child_size = 0;
+        for pt in &self.entries {
+            match pt {
+                Some(DirEntry::PageTable(x)) => {
+                    child_size += x.get_size();
+                },
+                _ => {}
+            }
+        }
+        return (512 * 8) + child_size;
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PT {
+    large_page: u64,
+    pages: Vec<u64>,
+}
+
+impl PT {
+    fn new() -> Self {
+        PT {
+            pages: vec![u64::MAX; 512],
+            large_page: u64::MAX,
+        }
+    }
+
+    fn recurse(&mut self, curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
+        for value in &mut self.pages {
+            buffer.append(&mut value.to_le_bytes().to_vec());
+        }
+        curr_offset + (512 * 8)
+    }
+
+    fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
+        let pt_index = ((vaddr & (0x1ff << 12)) >> 12) as usize;
+        // Unconditionally overwrite.
+        assert!(size == PageSize::Small);
+        self.pages[pt_index] = frame;
+    }
+
+    fn get_size(&self) -> u64{
+        return 512 * 8;
+    }
+}
+
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct UntypedObject {

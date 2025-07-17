@@ -20,7 +20,7 @@ use crate::sel4::{Config, IrqTrigger, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
 use std::path::{Path, PathBuf};
-
+use crate::PGD;
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
 /// On 64-bit platforms, this badge has a limit of 64-bits which means that we are
@@ -192,6 +192,10 @@ pub struct ProtectionDomain {
     pub child_pts: bool,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
+    // Create an outline of the page table mappings for each pd. We can
+    //later populate this outline with the corresponding frame caps should
+    //any pd have a parent
+    pub child_page_tables: Option<Vec<PGD>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -698,6 +702,7 @@ impl ProtectionDomain {
             parent: None,
             child_pts,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+            child_page_tables: None,
         })
     }
 }
