@@ -7,13 +7,12 @@
 // we want our asserts, even if the compiler figures out they hold true already during compile-time
 #![allow(clippy::assertions_on_constants)]
 
-use elf::ElfFile;
+use elf::{ElfFile, TableMetadata};
 use loader::Loader;
-use microkit_tool::elf::TableMetadata;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, FindFixedError, MemoryRegion,
     ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH,
-    VM_MAX_NAME_LENGTH,
+    VM_MAX_NAME_LENGTH, PGD
 };
 use sdf::{
     parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SysMemoryRegionKind,
@@ -27,7 +26,7 @@ use sel4::{
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Read, Write};
 use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
@@ -63,7 +62,7 @@ const BASE_FRAME_CAP: u64 = BASE_VCPU_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
-const PD_CAP_SIZE: u64 = 512;
+const PD_CAP_SIZE: u64 = 4096;
 const PD_CAP_BITS: u64 = PD_CAP_SIZE.ilog2() as u64;
 const PD_SCHEDCONTEXT_SIZE: u64 = 1 << 8;
 
@@ -736,7 +735,7 @@ fn emulate_kernel_boot(
 
 fn build_system(
     config: &Config,
-    pd_elf_files: &Vec<ElfFile>,
+    pd_elf_files: &mut Vec<ElfFile>,
     kernel_elf: &ElfFile,
     monitor_elf: &ElfFile,
     system: &SystemDescription,
@@ -764,46 +763,49 @@ fn build_system(
     // Determine physical memory region used by the monitor
     let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
 
-    // Only append new segments to the elf on the FIRST iteration of this function.
-    if (!has_built) {
-        // If we are mapping the child page tables into the parents,
-        // calculate the extra that these occupy and increment the pd_elf_size
-        // appropriately.
-        for (parent_idx, pd) in system.protection_domains.iter().enumerate() {
-            let mut pd_extra_elf_size = 0;
-            // Flag to enable the patching of child page tables
-            if (pd.child_pts) {
-                // @kwinter: Assuming that the parents and children have been flattened
-                // to be consecutive
-                // Find all child page tables and find size of loadable segments.
-                for (child_idx, child_pd) in system.protection_domains.iter().enumerate() {
-                    if (child_idx <= parent_idx) {
-                        continue;
-                    } else if (child_idx >= parent_idx && child_pd.parent != Some(parent_idx)) {
-                        break;
-                    }
-                    let mut child_pgd = PGD::new();
-                    // Find the corresponding elf for this child and add loadable segments
-                    // to page table structures.
-                    let child_elf = &pd_elf_files[parent_idx + child_idx];
-                    for loadable_segment in child_elf.loadable_segments() {
-                        child_pgd.add_page_at_vaddr_range(loadable_segment.virt_addr, loadable_segment.data.len() as i64, 1, PageSize::Small);
-                    }
-                    // Find all associated memory regions and their size.
-                    for child_map in &child_pd.maps {
-                        // Find the memory region associated with this map
-                        for mr in &system.memory_regions {
-                            if mr.name == child_map.mr {
-                                child_pgd.add_page_at_vaddr_range(child_map.vaddr, mr.size as i64, 1, mr.page_size);
-                            }
+    // Create a vector of optional vectors, which we will populate as needed. This maintains the pd_idx mapping.
+    let mut all_child_page_tables:Vec<Option<Vec<PGD>>> = vec![None; system.protection_domains.len()];
+
+    // If we are mapping the child page tables into the parents,
+    // calculate the extra that these occupy and increment the pd_elf_size
+    // appropriately.
+    for (parent_idx, pd) in system.protection_domains.iter().enumerate() {
+        let mut pd_extra_elf_size = 0;
+        // Flag to enable the patching of child page tables
+        if pd.child_pts {
+            // Initialise the page table structure for this parent pd.
+            all_child_page_tables[parent_idx] = Some(vec![PGD::new(); 64]);
+            // Find all child page tables and find size of loadable segments.
+            for (child_idx, child_pd) in system.protection_domains.iter().enumerate() {
+                if child_idx <= parent_idx {
+                    continue;
+                } else if child_idx >= parent_idx && child_pd.parent != Some(parent_idx) {
+                    break;
+                }
+
+                let child_pgd: &mut PGD = &mut all_child_page_tables[parent_idx].as_mut().unwrap()[child_pd.id.unwrap() as usize];
+                // Find the corresponding elf for this child and add loadable segments
+                // to page table structures.
+                let child_elf = &pd_elf_files[parent_idx + child_idx];
+                for loadable_segment in child_elf.loadable_segments() {
+                    child_pgd.add_page_at_vaddr_range(loadable_segment.virt_addr, loadable_segment.data.len() as i64, 1, PageSize::Small);
+                }
+                // Find all associated memory regions and their size.
+                for child_map in &child_pd.maps {
+                    // Find the memory region associated with this map
+                    for mr in &system.memory_regions {
+                        if mr.name == child_map.mr {
+                            child_pgd.add_page_at_vaddr_range(child_map.vaddr, mr.size as i64, 1, mr.page_size);
                         }
                     }
-                    // Account for the stack of each child pd
-                    child_pgd.add_page_at_vaddr_range(config.pd_stack_bottom(child_pd.stack_size), child_pd.stack_size as i64, 1, PageSize::Small);
-                    // We have now constructed the dummy page tables, calculate how much size we
-                    // need to add to the pd_elf_sizes
-                    pd_extra_elf_size += child_pgd.get_size();
                 }
+                // Account for the stack of each child pd
+                child_pgd.add_page_at_vaddr_range(config.pd_stack_bottom(child_pd.stack_size), child_pd.stack_size as i64, 1, PageSize::Small);
+                // We have now constructed the dummy page tables, calculate how much size we
+                // need to add to the pd_elf_sizes
+                pd_extra_elf_size += child_pgd.get_size();
+            }
+            if !has_built {
                 // Push this new region to the parent's elf
                 let parent_elf = &mut pd_elf_files[parent_idx];
                 let new_elf_seg = parent_elf.create_segment(".table_data", pd_extra_elf_size);
@@ -819,8 +821,8 @@ fn build_system(
     // from this area, which can then be made available to the appropriate
     // protection domains
     let mut pd_elf_size = 0;
-    for pd_elf in pd_elf_files {
-        for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
+    for pd_elf in pd_elf_files.iter_mut() {
+        for r in phys_mem_regions_from_elf(&pd_elf, config.minimum_page_size) {
             pd_elf_size += r.size();
         }
     }
@@ -2094,7 +2096,7 @@ fn build_system(
     for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
         for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
             if let Some(parent_idx) = maybe_child_pd.parent {
-                if parent_idx == pd_idx {
+                if parent_idx == pd_idx && parent.child_pts {
                     for mp_mr_pair in &sorted_mp_mr_pairs {
                         let child_mp = mp_mr_pair.0;
                         let child_mr = mp_mr_pair.1;
@@ -2140,7 +2142,10 @@ fn build_system(
                                 let minted_cap = base_frame_cap + mr_idx as u64;
 
                                 // Check if we have a small or large page.
-                                all_pd_page_tables[maybe_child_idx].add_page_at_vaddr(vaddr, minted_cap, child_mr.page_size);
+                                all_child_page_tables[parent_idx]
+                                .as_mut()
+                                .unwrap()[maybe_child_pd.id.unwrap() as usize]
+                                .add_page_at_vaddr(vaddr, minted_cap, child_mr.page_size);
                             }
 
                             base_frame_cap += mr_pages[child_mr].len() as u64;
@@ -2153,14 +2158,12 @@ fn build_system(
     }
 
     for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
-        let mut parent_pd_view: Vec<PGD> = vec![PGD::new(); 64];
         let mut child_pds: Vec<usize> = vec![];
 
         for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
             if let Some(parent_idx) = maybe_child_pd.parent {
                 if parent_idx == pd_idx {
                     let id = maybe_child_pd.id.unwrap() as usize;
-                    parent_pd_view[id] = all_pd_page_tables[maybe_child_idx].clone();
                     child_pds.push(id);
                 }
             }
@@ -2175,7 +2178,7 @@ fn build_system(
         let mut offset = 0;
 
         for i in child_pds {
-            offset = parent_pd_view[i].recurse(offset, &mut table_data);
+            offset = all_child_page_tables[pd_idx].as_mut().unwrap()[i].recurse(offset, &mut table_data);
             table_metadata.pgd[i] = offset - (512 * 8);
         }
 
@@ -3597,7 +3600,7 @@ fn main() -> Result<(), String> {
     loop {
         built_system = build_system(
             &kernel_config,
-            &pd_elf_files,
+            &mut pd_elf_files,
             &kernel_elf,
             &monitor_elf,
             &system,
