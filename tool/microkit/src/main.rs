@@ -26,7 +26,7 @@ use sel4::{
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufWriter, Write};
 use std::iter::zip;
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ use util::{
     comma_sep_u64, comma_sep_usize, human_size_strict, json_str, json_str_as_bool, json_str_as_u64,
     monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
-use zerocopy::{Immutable,IntoBytes};
+use zerocopy::{IntoBytes};
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
@@ -766,9 +766,8 @@ fn build_system(
     // Create a vector of optional vectors, which we will populate as needed. This maintains the pd_idx mapping.
     let mut all_child_page_tables:Vec<Option<Vec<PGD>>> = vec![None; system.protection_domains.len()];
 
-    // If we are mapping the child page tables into the parents,
-    // calculate the extra that these occupy and increment the pd_elf_size
-    // appropriately.
+    // If we are mapping the child page tables into the parent, we will create the paging structures
+    // now, so that the pd_elf_size can be properly calculated.
     for (parent_idx, pd) in system.protection_domains.iter().enumerate() {
         let mut pd_extra_elf_size = 0;
         // Flag to enable the patching of child page tables
@@ -805,6 +804,8 @@ fn build_system(
                 // need to add to the pd_elf_sizes
                 pd_extra_elf_size += child_pgd.get_size();
             }
+            // We only want to add these new elf regions ONCE. As the microkit tool can run multiple times,
+            // we keep track of we have already built these.
             if !has_built {
                 // Push this new region to the parent's elf
                 let parent_elf = &mut pd_elf_files[parent_idx];
@@ -2026,33 +2027,32 @@ fn build_system(
         }
     }
 
-    // mint frame caps of child into parent
     let mut base_frame_cap = BASE_FRAME_CAP;
-    let mut all_mr_by_name_sorted: Vec<&&str> = all_mr_by_name.keys().collect();
-    all_mr_by_name_sorted.sort();
 
-    for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
         for maybe_child_pd in system.protection_domains.iter() {
-            if let Some(parent_idx) = maybe_child_pd.parent {
-                if parent_idx == pd_idx {
-                    for child_mr_name  in &all_mr_by_name_sorted {
-                        if child_mr_name.contains(&maybe_child_pd.name) {
-                            println!("parent: {} wants to map this child memory regions: {}", parent.name, child_mr_name);
+            if maybe_child_pd.parent.is_some_and(|x| x == pd_idx) {
+                for map_set in [&maybe_child_pd.maps, &pd_extra_maps[maybe_child_pd]] {
+                    for mp in map_set {
 
-                            let child_mr = all_mr_by_name[*child_mr_name];
-                            let mut invocation = Invocation::new(InvocationArgs::CnodeMint{
+                        let mr = all_mr_by_name[mp.mr.as_str()];
+                        let mut invocation = Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
                                 cnode: cnode_objs[pd_idx].cap_addr,
                                 dest_index: base_frame_cap,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
-                                src_obj: mr_pages[child_mr][0].cap_addr, // the memory region has multiple
-                                // pages, we're taking the first one at 0x20300
-                                src_depth: kernel_config.cap_address_bits,
+                                src_obj: mr_pages[mr][0].cap_addr,
+                                src_depth: config.cap_address_bits,
                                 rights: (Rights::Read as u64 | Rights::Write as u64),
                                 badge: 0,
-                            });
+                            },
+                        );
 
-                            invocation.repeat(mr_pages[child_mr].len() as u32, InvocationArgs::CnodeMint{
+                        invocation.repeat(
+                            mr_pages[mr].len() as u32,
+                            InvocationArgs::CnodeMint {
                                 cnode: 0,
                                 dest_index: 1,
                                 dest_depth: 0,
@@ -2061,14 +2061,19 @@ fn build_system(
                                 src_depth: 0,
                                 rights: 0,
                                 badge: 0,
-                            });
+                            },
+                        );
 
-                            base_frame_cap += mr_pages[child_mr].len() as u64;
+                        for mr_idx in 0..mr_pages[mr].len() {
+                            let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
+                            let minted_cap = base_frame_cap + mr_idx as u64;
 
-                            system_invocations.push(invocation);
+                            all_child_page_tables[pd_idx]
+                            .as_mut()
+                            .unwrap()[maybe_child_pd.id.unwrap() as usize]
+                            .add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
                         }
                     }
-                    
                 }
             }
         }
@@ -2157,10 +2162,10 @@ fn build_system(
         }
     }
 
-    for (pd_idx, parent) in system.protection_domains.iter().enumerate() {
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
         let mut child_pds: Vec<usize> = vec![];
 
-        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+        for maybe_child_pd in system.protection_domains.iter() {
             if let Some(parent_idx) = maybe_child_pd.parent {
                 if parent_idx == pd_idx {
                     let id = maybe_child_pd.id.unwrap() as usize;
