@@ -159,7 +159,6 @@ impl DIR {
                         // curr_offset += 8;
                         // we mark the top bit to signal to the pd that this is a large page
                         offset_table[i] = *x | (1 << 63);
-                        println!("Large page encountered!");
                     }
                 }
             }
@@ -175,7 +174,6 @@ impl DIR {
         let dir_index = ((vaddr & (0x1ff << 21)) >> 21) as usize;
         match size {
             PageSize::Small => {
-                println!("We are NOT adding a large page!\n");
                 if self.entries[dir_index].is_none() {
                     self.entries[dir_index] = Some(DirEntry::PageTable(PT::new()));
                 }
@@ -192,7 +190,6 @@ impl DIR {
                 if let Some(DirEntry::PageTable(_)) = self.entries[dir_index] {
                     panic!("Attempting to insert a large page where a page table already exists!");
                 }
-                println!("We are adding a large page!\n");
                 self.entries[dir_index] = Some(DirEntry::LargePage(frame));
             }
         }
