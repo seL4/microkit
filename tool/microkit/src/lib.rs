@@ -199,7 +199,7 @@ impl DisjointMemoryRegion {
             }
         }
         if maybe_idx.is_none() {
-            panic!("Internal error: attempting to remove region [0x{:x}-0x{:x}) that is not currently covered", base, end);
+            panic!("Internal error: attempting to remove region [0x{base:x}-0x{end:x}) that is not currently covered");
         }
 
         let idx = maybe_idx.unwrap();
@@ -258,7 +258,7 @@ impl DisjointMemoryRegion {
                 self.remove_region(region.base, region.base + size);
                 region.base
             }
-            None => panic!("Unable to allocate {} bytes", size),
+            None => panic!("Unable to allocate {size} bytes"),
         }
     }
 
@@ -276,10 +276,7 @@ impl DisjointMemoryRegion {
                 self.remove_region(region.base, region.base + size);
                 region.base
             }
-            None => panic!(
-                "Unable to allocate {} bytes from lower_bound 0x{:x}",
-                size, lower_bound
-            ),
+            None => panic!("Unable to allocate {size} bytes from lower_bound 0x{lower_bound:x}"),
         }
     }
 }

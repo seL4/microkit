@@ -272,7 +272,7 @@ impl SysMap {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("vaddr (0x{:x}) must be less than 0x{:x}", vaddr, max_vaddr),
+                format!("vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"),
             ));
         }
 
@@ -394,10 +394,7 @@ impl ProtectionDomain {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!(
-                    "budget ({}) must be less than, or equal to, period ({})",
-                    budget, period
-                ),
+                format!("budget ({budget}) must be less than, or equal to, period ({period})"),
             ));
         }
 
@@ -459,8 +456,7 @@ impl ProtectionDomain {
                 xml_sdf,
                 node,
                 format!(
-                    "stack size must be between 0x{:x} bytes and 0x{:x} bytes",
-                    PD_MIN_STACK_SIZE, PD_MAX_STACK_SIZE
+                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
                 ),
             ));
         }
@@ -495,7 +491,7 @@ impl ProtectionDomain {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("priority must be between 0 and {}", PD_MAX_PRIORITY),
+                format!("priority must be between 0 and {PD_MAX_PRIORITY}"),
             ));
         }
 
@@ -529,7 +525,7 @@ impl ProtectionDomain {
                                 return Err(value_error(
                                     xml_sdf,
                                     &child,
-                                    format!("setvar on symbol '{}' already exists", setvar_vaddr),
+                                    format!("setvar on symbol '{setvar_vaddr}' already exists"),
                                 ));
                             }
                         }
@@ -547,7 +543,7 @@ impl ProtectionDomain {
                                 return Err(value_error(
                                     xml_sdf,
                                     &child,
-                                    format!("setvar on symbol '{}' already exists", setvar_size),
+                                    format!("setvar on symbol '{setvar_size}' already exists"),
                                 ));
                             }
                         }
@@ -613,7 +609,7 @@ impl ProtectionDomain {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
-                                format!("setvar on symbol '{}' already exists", symbol),
+                                format!("setvar on symbol '{symbol}' already exists"),
                             ));
                         }
                     }
@@ -649,8 +645,7 @@ impl ProtectionDomain {
 
         if program_image.is_none() {
             return Err(format!(
-                "Error: missing 'program_image' element on protection_domain: '{}'",
-                name
+                "Error: missing 'program_image' element on protection_domain: '{name}'"
             ));
         }
 
@@ -704,10 +699,7 @@ impl VirtualMachine {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!(
-                    "budget ({}) must be less than, or equal to, period ({})",
-                    budget, period
-                ),
+                format!("budget ({budget}) must be less than, or equal to, period ({period})"),
             ));
         }
 
@@ -773,8 +765,7 @@ impl VirtualMachine {
 
         if vcpus.is_empty() {
             return Err(format!(
-                "Error: missing 'vcpu' element on virtual_machine: '{}'",
-                name
+                "Error: missing 'vcpu' element on virtual_machine: '{name}'"
             ));
         }
 
@@ -813,7 +804,7 @@ impl SysMemoryRegion {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("page size 0x{:x} not supported", page_size),
+                format!("page size 0x{page_size:x} not supported"),
             ));
         }
 
@@ -1188,7 +1179,7 @@ fn pd_flatten(
 pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
-        Err(err) => return Err(format!("Could not parse '{}': {}", filename, err)),
+        Err(err) => return Err(format!("Could not parse '{filename}': {err}")),
     };
 
     let xml_sdf = XmlSystemDescription {

@@ -327,7 +327,7 @@ impl ElfFile {
             }
         }
 
-        Err(format!("No symbol named {} found", variable_name))
+        Err(format!("No symbol named {variable_name} found"))
     }
 
     pub fn get_data(&self, vaddr: u64, size: u64) -> Option<&[u8]> {
@@ -348,14 +348,12 @@ impl ElfFile {
                 match std::str::from_utf8(&strtab[idx..end_idx]) {
                     Ok(string) => Ok(string),
                     Err(err) => Err(format!(
-                        "Failed to convert strtab bytes to UTF-8 string: {}",
-                        err
+                        "Failed to convert strtab bytes to UTF-8 string: {err}"
                     )),
                 }
             }
             None => Err(format!(
-                "Could not find null byte in strtab from index {}",
-                idx
+                "Could not find null byte in strtab from index {idx}"
             )),
         }
     }

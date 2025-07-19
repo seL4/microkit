@@ -136,8 +136,8 @@ pub fn json_str<'a>(json: &'a serde_json::Value, field: &'static str) -> Result<
     match json.get(field) {
         Some(value) => Ok(value
             .as_str()
-            .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))),
-        None => Err(format!("JSON field '{}' does not exist", field)),
+            .unwrap_or_else(|| panic!("JSON field '{field}' is not a string"))),
+        None => Err(format!("JSON field '{field}' does not exist")),
     }
 }
 
@@ -145,10 +145,10 @@ pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<
     match json.get(field) {
         Some(value) => Ok(value
             .as_str()
-            .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))
+            .unwrap_or_else(|| panic!("JSON field '{field}' is not a string"))
             .parse::<u64>()
-            .unwrap_or_else(|_| panic!("JSON field '{}' could not be converted to u64", field))),
-        None => Err(format!("JSON field '{}' does not exist", field)),
+            .unwrap_or_else(|_| panic!("JSON field '{field}' could not be converted to u64"))),
+        None => Err(format!("JSON field '{field}' does not exist")),
     }
 }
 
@@ -156,8 +156,8 @@ pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result
     match json.get(field) {
         Some(value) => Ok(value
             .as_bool()
-            .unwrap_or_else(|| panic!("JSON field '{}' could not be converted to bool", field))),
-        None => Err(format!("JSON field '{}' does not exist", field)),
+            .unwrap_or_else(|| panic!("JSON field '{field}' could not be converted to bool"))),
+        None => Err(format!("JSON field '{field}' does not exist")),
     }
 }
 

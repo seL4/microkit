@@ -87,10 +87,7 @@ fn check_non_overlapping(regions: &Vec<(u64, &[u8])>) {
         // Check that this does not overlap with any checked regions
         for (b, e) in &checked {
             if !(end <= *b || *base >= *e) {
-                panic!(
-                    "Overlapping regions: [{:x}..{:x}) overlaps [{:x}..{:x})",
-                    base, end, b, e
-                );
+                panic!("Overlapping regions: [{base:x}..{end:x}) overlaps [{b:x}..{e:x})");
             }
         }
 

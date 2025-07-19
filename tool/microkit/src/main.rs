@@ -178,15 +178,15 @@ impl<'a> InitSystem<'a> {
         // in device memory or normal memory.
         let device_ut = self.device_untyped.find_fixed(phys_address, alloc_size).unwrap_or_else(|err| {
             match err {
-                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{}' at 0x{:x} from reserved region, pick another physical address", name, phys_address),
-                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{}' for this physical address 0x{:x}", name, phys_address),
+                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{name}' at 0x{phys_address:x} from reserved region, pick another physical address"),
+                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{name}' for this physical address 0x{phys_address:x}"),
             }
             std::process::exit(1);
         });
         let normal_ut = self.normal_untyped.find_fixed(phys_address, alloc_size).unwrap_or_else(|err| {
             match err {
-                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{}' at 0x{:x} from reserved region, pick another physical address", name, phys_address),
-                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{}' for this physical address 0x{:x}", name, phys_address),
+                FindFixedError::AlreadyAllocated => eprintln!("ERROR: attempted to allocate object '{name}' at 0x{phys_address:x} from reserved region, pick another physical address"),
+                FindFixedError::TooLarge => eprintln!("ERROR: attempted too allocate too large of an object '{name}' for this physical address 0x{phys_address:x}"),
             }
             std::process::exit(1);
         });
@@ -200,8 +200,7 @@ impl<'a> InitSystem<'a> {
             x
         } else {
             eprintln!(
-                "ERROR: physical address 0x{:x} not in any valid region, below are the valid ranges of memory to be allocated from:",
-                phys_address
+                "ERROR: physical address 0x{phys_address:x} not in any valid region, below are the valid ranges of memory to be allocated from:"
             );
             eprintln!("valid ranges outside of main memory:");
             for ut in &self.device_untyped.untyped {
@@ -292,7 +291,7 @@ impl<'a> InitSystem<'a> {
                 alloc_size = sz;
             }
         } else {
-            panic!("Internal error: invalid object type: {:?}", object_type);
+            panic!("Internal error: invalid object type: {object_type:?}");
         }
 
         let allocation = self.normal_untyped
@@ -302,7 +301,7 @@ impl<'a> InitSystem<'a> {
                                     let (human_max_alloc, human_max_alloc_label) = human_size_strict(self.normal_untyped.max_alloc_size());
                                     eprintln!("ERROR: failed to allocate objects for '{}' of object type '{}'", names[0], object_type.to_str());
                                     if alloc_size * count > self.normal_untyped.max_alloc_size() {
-                                        eprintln!("ERROR: allocation size ({} {}) is greater than current maximum size for a single allocation ({} {})", human_size, human_size_label, human_max_alloc, human_max_alloc_label);
+                                        eprintln!("ERROR: allocation size ({human_size} {human_size_label}) is greater than current maximum size for a single allocation ({human_max_alloc} {human_max_alloc_label})");
                                     }
                                     std::process::exit(1);
                                 }
@@ -1514,7 +1513,7 @@ fn build_system(
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx]
             .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
+            .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"));
         let mut upper_directory_vaddrs = HashSet::new();
         let mut directory_vaddrs = HashSet::new();
         let mut page_table_vaddrs = HashSet::new();
@@ -2478,7 +2477,7 @@ fn build_system(
     for pd_idx in 0..system.protection_domains.len() {
         let (vaddr, _) = pd_elf_files[pd_idx]
             .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
+            .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"));
         system_invocations.push(Invocation::new(
             config,
             InvocationArgs::PageMap {
@@ -2643,7 +2642,7 @@ fn build_system(
     for pd_idx in 0..system.protection_domains.len() {
         let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx]
             .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
+            .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"));
         system_invocations.push(Invocation::new(
             config,
             InvocationArgs::TcbSetIpcBuffer {
@@ -2771,7 +2770,7 @@ fn build_system(
                             .memory_regions
                             .iter()
                             .find(|mr| mr.name == *region)
-                            .unwrap_or_else(|| panic!("Cannot find region: {}", region));
+                            .unwrap_or_else(|| panic!("Cannot find region: {region}"));
 
                         mr_pages[mr][0].phys_addr
                     }
@@ -2835,7 +2834,7 @@ fn write_report<W: std::io::Write>(
     writeln!(buf, "\n# Loader Regions\n")?;
     for regions in &built_system.pd_elf_regions {
         for region in regions {
-            writeln!(buf, "       {}", region)?;
+            writeln!(buf, "       {region}")?;
         }
     }
     writeln!(buf, "\n# Monitor (Initial Task) Info\n")?;
@@ -2892,12 +2891,12 @@ fn write_report<W: std::io::Write>(
     }
     writeln!(buf, "\n# Bootstrap Kernel Invocations Detail\n")?;
     for (i, invocation) in built_system.bootstrap_invocations.iter().enumerate() {
-        write!(buf, "    0x{:04x} ", i)?;
+        write!(buf, "    0x{i:04x} ")?;
         invocation.report_fmt(buf, config, &built_system.cap_lookup);
     }
     writeln!(buf, "\n# System Kernel Invocations Detail\n")?;
     for (i, invocation) in built_system.system_invocations.iter().enumerate() {
-        write!(buf, "    0x{:04x} ", i)?;
+        write!(buf, "    0x{i:04x} ")?;
         invocation.report_fmt(buf, config, &built_system.cap_lookup);
     }
 
@@ -3064,8 +3063,7 @@ fn main() -> Result<(), String> {
             std::env::VarError::NotPresent => exe_path.parent().unwrap().parent().unwrap(),
             _ => {
                 return Err(format!(
-                    "Could not read MICROKIT_SDK environment variable: {}",
-                    err
+                    "Could not read MICROKIT_SDK environment variable: {err}"
                 ))
             }
         },
@@ -3447,10 +3445,7 @@ fn main() -> Result<(), String> {
     let (_, bootstrap_invocation_data_size) =
         monitor_elf.find_symbol(monitor_config.bootstrap_invocation_data_symbol_name)?;
     if bootstrap_invocation_data.len() as u64 > bootstrap_invocation_data_size {
-        eprintln!(
-            "bootstrap invocation array size   : {}",
-            bootstrap_invocation_data_size
-        );
+        eprintln!("bootstrap invocation array size   : {bootstrap_invocation_data_size}");
         eprintln!(
             "bootstrap invocation required size: {}",
             bootstrap_invocation_data.len()
