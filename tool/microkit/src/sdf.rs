@@ -19,8 +19,8 @@
 use crate::sel4::{Config, IrqTrigger, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
-use std::path::{Path, PathBuf};
 use crate::PGD;
+use std::path::{Path, PathBuf};
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
 /// On 64-bit platforms, this badge has a limit of 64-bits which means that we are
