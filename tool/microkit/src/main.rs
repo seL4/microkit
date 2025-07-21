@@ -840,7 +840,7 @@ fn build_system(
     // protection domains
     let mut pd_elf_size = 0;
     for pd_elf in pd_elf_files.iter_mut() {
-        for r in phys_mem_regions_from_elf(&pd_elf, config.minimum_page_size) {
+        for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
             pd_elf_size += r.size();
         }
     }
@@ -2132,7 +2132,7 @@ fn build_system(
         let new_elf_seg = elf.get_segment(".table_data").unwrap();
 
         table_metadata.base_addr = new_elf_seg.virt_addr;
-        elf.write_symbol("table_metadata", &table_metadata.as_bytes())?;
+        elf.write_symbol("table_metadata", table_metadata.as_bytes())?;
     }
 
     let mut badged_irq_caps: HashMap<&ProtectionDomain, Vec<u64>> = HashMap::new();
@@ -3465,7 +3465,7 @@ fn main() -> Result<(), String> {
         cap_address_bits: 64,
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
         hypervisor,
-        microkit_config: MicrokitConfig::from_str(args.config),
+        microkit_config: MicrokitConfig::config_from_str(args.config),
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
         arm_pa_size_bits,
         arm_smc,

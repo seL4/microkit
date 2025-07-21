@@ -31,6 +31,12 @@ pub struct PGD {
     puds: Vec<Option<PUD>>,
 }
 
+impl Default for PGD {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PGD {
     pub fn new() -> Self {
         PGD {
@@ -40,10 +46,10 @@ impl PGD {
 
     pub fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
         let mut offset_table: [u64; 512] = [u64::MAX; 512];
-        for i in 0..512 {
+        for (i, entry) in offset_table.iter_mut().enumerate() {
             if let Some(pud) = &mut self.puds[i] {
                 curr_offset = pud.recurse(curr_offset, buffer);
-                offset_table[i] = curr_offset - (512 * 8);
+                *entry = curr_offset - (512 * 8);
             }
         }
 
@@ -85,7 +91,7 @@ impl PGD {
                 child_size += pud.as_ref().unwrap().get_size();
             }
         }
-        return (512 * 8) + child_size;
+        (512 * 8) + child_size
     }
 }
 
@@ -103,10 +109,10 @@ impl PUD {
 
     fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
         let mut offset_table: [u64; 512] = [u64::MAX; 512];
-        for i in 0..512 {
+        for (i, entry) in offset_table.iter_mut().enumerate() {
             if let Some(dir) = &mut self.dirs[i] {
                 curr_offset = dir.recurse(curr_offset, buffer);
-                offset_table[i] = curr_offset - (512 * 8);
+                *entry = curr_offset - (512 * 8);
             }
         }
 
@@ -134,7 +140,7 @@ impl PUD {
                 child_size += dir.as_ref().unwrap().get_size();
             }
         }
-        return (512 * 8) + child_size;
+        (512 * 8) + child_size
     }
 }
 
@@ -158,17 +164,17 @@ impl DIR {
 
     fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
         let mut offset_table: [u64; 512] = [u64::MAX; 512];
-        for i in 0..512 {
+        for (i, dir_entry) in offset_table.iter_mut().enumerate() {
             if let Some(entry) = &mut self.entries[i] {
                 match entry {
                     DirEntry::PageTable(x) => {
                         curr_offset = x.recurse(curr_offset, buffer);
-                        offset_table[i] = curr_offset - (512 * 8);
+                        *dir_entry = curr_offset - (512 * 8);
                     }
                     DirEntry::LargePage(x) => {
                         // curr_offset += 8;
                         // we mark the top bit to signal to the pd that this is a large page
-                        offset_table[i] = *x | (1 << 63);
+                        *dir_entry = *x | (1 << 63);
                     }
                 }
             }
@@ -208,14 +214,11 @@ impl DIR {
     fn get_size(&self) -> u64 {
         let mut child_size = 0;
         for pt in &self.entries {
-            match pt {
-                Some(DirEntry::PageTable(x)) => {
-                    child_size += x.get_size();
-                }
-                _ => {}
+            if let Some(DirEntry::PageTable(x)) = pt {
+                child_size += x.get_size();
             }
         }
-        return (512 * 8) + child_size;
+        (512 * 8) + child_size
     }
 }
 
@@ -248,7 +251,7 @@ impl PT {
     }
 
     fn get_size(&self) -> u64 {
-        return 512 * 8;
+        512 * 8
     }
 }
 

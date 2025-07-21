@@ -39,7 +39,7 @@ pub enum MicrokitConfig {
 }
 
 impl MicrokitConfig {
-    pub fn from_str(string: &str) -> Self {
+    pub fn config_from_str(string: &str) -> Self {
         match string {
             "debug" => MicrokitConfig::Debug,
             "release" => MicrokitConfig::Release,

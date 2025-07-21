@@ -384,14 +384,14 @@ impl ElfFile {
 
         last_addr = last_addr + (0x10000 - (last_addr % 0x10000));
 
-        return ElfSegment {
+        ElfSegment {
             name: Some(segment_name.to_string()),
             data: vec![0; size as usize],
             phys_addr: last_addr,
             virt_addr: last_addr,
             loadable: true,
             attrs: ElfSegmentAttributes::Read as u32,
-        };
+        }
     }
 
     pub fn populate_segment(&mut self, segment_name: &str, data: &[u8]) {
@@ -414,6 +414,6 @@ impl ElfFile {
                 }
             }
         }
-        return None;
+        None
     }
 }
