@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright 2025 Ivan Velickovic
+
+# This YAML file describes the supported platforms in Microkit.
+# It mainly exists so that the seL4 documentation website can list
+# the supported platforms in a data-oriented way.
+#
+# For each new platform, please at least supply the following:
+# name: the Microkit name in build_sdk.py
+# cmake_plat: the name of the platform in the seL4 kernel build-system
+# since: if this is a new platform, put 'dev' otherwise put what the
+#        first released Microkit version the platform was available in.
+#
+# This list is ordered based on the order in what the platforms were added
+# in.
+platforms:
+  - name: hifive_p550
+    cmake_plat: hifive-p550
+    since: dev
+  - name: ultra96v2
+    cmake_plat: ultra96v2
+    since: dev
+  - name: ariane
+    cmake_plat: ariane
+    since: 2.0.0
+  - name: cheshire
+    cmake_plat: cheshire
+    since: 2.0.0
+  - name: rockpro64
+    cmake_plat: rockpro64
+    since: 2.0.0
+  - name: rpi4b_1gb
+    cmake_plat: rpi4
+    since: 2.0.0
+  - name: imx8mm_evk
+    cmake_plat: imx8mm-evk
+    since: 1.3.0
+  - name: imx8mp_evk
+    cmake_plat: imx8mp-evk
+    since: 2.0.0
+  - name: star64
+    cmake_plat: star64
+    since: 1.4.0
+  - name: qemu_virt_riscv64
+    cmake_plat: qemu-riscv-virt
+    cpu: rv64
+    since: 1.4.0
+  - name: imx8mq_evk
+    cmake_plat: imx8mq-evk
+    since: 1.3.0
+  - name: maaxboard
+    cmake_plat: maaxboard
+    since: 1.3.0
+  - name: odroidc2
+    cmake_plat: odroidc2
+    since: 1.3.0
+  - name: odroidc4
+    cmake_plat: odroidc4
+    since: 1.3.0
+  - name: qemu_virt_aarch64
+    cmake_plat: qemu-arm-virt
+    cpu: Cortext-A53
+    since: 1.3.0
+  - name: tqma8xqp1gb
+    cmake_plat: tqma8xqp1gb
+    since: 1.3.0
+  - name: zcu102
+    cmake_plat: zcu102
+    since: 1.3.0
