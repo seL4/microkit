@@ -1167,6 +1167,8 @@ If there are issues with porting the platform, please [open an issue on GitHub](
 Once you believe that the port works, you can [open a pull request](https://github.com/seL4/microkit/pulls) with required
 changes as well as documentation in the manual about the platform and how to run Microkit images on it.
 
+Please also update the `platforms.yml` file, you can find more information at the top of the file.
+
 # Rationale
 
 This section describes the rationales driving the Microkit design choices.
