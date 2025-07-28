@@ -37,6 +37,19 @@ TRIPLE_RISCV = "riscv64-unknown-elf"
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, Union[bool, str]]
 
+DEFAULT_KERNEL_OPTIONS = {
+    "KernelIsMCS": True,
+}
+
+DEFAULT_KERNEL_OPTIONS_AARCH64 = {
+    "KernelArmExportPCNTUser": True,
+    "KernelArmHypervisorSupport": True,
+    "KernelArmVtimerUpdateVOffset": False,
+    "KernelAllowSMCCalls": True,
+} | DEFAULT_KERNEL_OPTIONS
+
+DEFAULT_KERNEL_OPTIONS_RISCV64 = DEFAULT_KERNEL_OPTIONS
+
 
 class KernelArch(IntEnum):
     AARCH64 = 1
@@ -68,6 +81,9 @@ class KernelArch(IntEnum):
         return ("KernelSel4Arch", self.to_str())
 
 
+KERNEL_OPTIONS_ARCH = Dict[KernelArch, KERNEL_OPTIONS]
+
+
 @dataclass
 class BoardInfo:
     name: str
@@ -82,6 +98,7 @@ class ConfigInfo:
     name: str
     debug: bool
     kernel_options: KERNEL_OPTIONS
+    kernel_options_arch: KERNEL_OPTIONS_ARCH
 
 
 SUPPORTED_BOARDS = (
@@ -92,12 +109,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x80280000,
         kernel_options={
             "KernelPlatform": "tqma8xqp1gb",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="zcu102",
@@ -107,12 +119,7 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "zcu102",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="maaxboard",
@@ -121,12 +128,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x50000000,
         kernel_options={
             "KernelPlatform": "maaxboard",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="imx8mm_evk",
@@ -135,12 +137,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x41000000,
         kernel_options={
             "KernelPlatform": "imx8mm-evk",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="imx8mp_evk",
@@ -149,12 +146,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x41000000,
         kernel_options={
             "KernelPlatform": "imx8mp-evk",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="imx8mq_evk",
@@ -163,12 +155,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x41000000,
         kernel_options={
             "KernelPlatform": "imx8mq-evk",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="odroidc2",
@@ -177,12 +164,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x20000000,
         kernel_options={
             "KernelPlatform": "odroidc2",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="odroidc4",
@@ -191,12 +173,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x20000000,
         kernel_options={
             "KernelPlatform": "odroidc4",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="ultra96v2",
@@ -206,12 +183,7 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "ultra96v2",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="qemu_virt_aarch64",
@@ -220,15 +192,11 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x70000000,
         kernel_options={
             "KernelPlatform": "qemu-arm-virt",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
             "QEMU_MEMORY": "2048",
-            "KernelArmHypervisorSupport": True,
-            "KernelArmExportPCNTUser": True,
+            # There is not peripheral timer, so we use the ARM
+            # architectural timer
             "KernelArmExportPTMRUser": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="qemu_virt_riscv64",
@@ -237,11 +205,10 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "qemu-riscv-virt",
-            "KernelIsMCS": True,
             "QEMU_MEMORY": "2048",
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
         name="rpi4b_1gb",
@@ -250,13 +217,8 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x10000000,
         kernel_options={
             "KernelPlatform": "bcm2711",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
             "RPI4_MEMORY": 1024,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="rockpro64",
@@ -265,12 +227,7 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x30000000,
         kernel_options={
             "KernelPlatform": "rockpro64",
-            "KernelIsMCS": True,
-            "KernelArmExportPCNTUser": True,
-            "KernelArmHypervisorSupport": True,
-            "KernelArmVtimerUpdateVOffset": False,
-            "KernelAllowSMCCalls": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
         name="hifive_p550",
@@ -278,11 +235,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x90000000,
         kernel_options={
-            "KernelIsMCS": True,
             "KernelPlatform": "hifive-p550",
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
         name="star64",
@@ -290,11 +246,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x60000000,
         kernel_options={
-            "KernelIsMCS": True,
             "KernelPlatform": "star64",
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
         name="ariane",
@@ -302,11 +257,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x90000000,
         kernel_options={
-            "KernelIsMCS": True,
             "KernelPlatform": "ariane",
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
         name="cheshire",
@@ -314,11 +268,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x90000000,
         kernel_options={
-            "KernelIsMCS": True,
             "KernelPlatform": "cheshire",
             "KernelRiscvExtD": True,
             "KernelRiscvExtF": True,
-        },
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
 )
 
@@ -327,6 +280,7 @@ SUPPORTED_CONFIGS = (
         name="release",
         debug=False,
         kernel_options={},
+        kernel_options_arch={},
     ),
     ConfigInfo(
         name="debug",
@@ -335,16 +289,21 @@ SUPPORTED_CONFIGS = (
             "KernelDebugBuild": True,
             "KernelPrinting": True,
             "KernelVerificationBuild": False
-        }
+        },
+        kernel_options_arch={},
     ),
     ConfigInfo(
         name="benchmark",
         debug=False,
         kernel_options={
-            "KernelArmExportPMUUser": True,
             "KernelDebugBuild": False,
             "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation"
+        },
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+            },
         },
     ),
 )
@@ -450,6 +409,9 @@ def build_sel4(
         *config.kernel_options.items(),
         board.arch.as_kernel_arch_config(),
     ]
+    if config.kernel_options_arch is not None:
+        if board.arch in config.kernel_options_arch:
+            config_args += config.kernel_options_arch[board.arch].items()
     config_strs = []
     for arg, val in sorted(config_args):
         if isinstance(val, bool):
