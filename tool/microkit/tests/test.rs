@@ -17,7 +17,7 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     cap_address_bits: 64,
     fan_out_limit: 256,
     hypervisor: true,
-    benchmark: false,
+    microkit_config: sel4::MicrokitConfig::Debug,
     fpu: true,
     arm_pa_size_bits: Some(40),
     arm_smc: None,

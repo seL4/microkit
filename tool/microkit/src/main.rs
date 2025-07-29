@@ -7,11 +7,11 @@
 // we want our asserts, even if the compiler figures out they hold true already during compile-time
 #![allow(clippy::assertions_on_constants)]
 
-use elf::ElfFile;
+use elf::{ElfFile, TableMetadata};
 use loader::Loader;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, FindFixedError, MemoryRegion,
-    ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH,
+    ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, PGD,
     VM_MAX_NAME_LENGTH,
 };
 use sdf::{
@@ -20,8 +20,8 @@ use sdf::{
 };
 use sel4::{
     default_vm_attr, Aarch64Regs, Arch, ArmVmAttributes, BootInfo, Config, Invocation,
-    InvocationArgs, Object, ObjectType, PageSize, PlatformConfig, Rights, Riscv64Regs,
-    RiscvVirtualMemory, RiscvVmAttributes,
+    InvocationArgs, MicrokitConfig, Object, ObjectType, PageSize, PlatformConfig, Rights,
+    Riscv64Regs, RiscvVirtualMemory, RiscvVmAttributes,
 };
 use std::cmp::{max, min};
 use std::collections::{HashMap, HashSet};
@@ -34,6 +34,7 @@ use util::{
     comma_sep_u64, comma_sep_usize, human_size_strict, json_str, json_str_as_bool, json_str_as_u64,
     monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes,
 };
+use zerocopy::IntoBytes;
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
@@ -54,12 +55,14 @@ const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
 const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
-const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
+const BASE_PD_VSPACE_CAP: u64 = BASE_PD_TCB_CAP + 64;
+const BASE_VM_TCB_CAP: u64 = BASE_PD_VSPACE_CAP + 64;
 const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
+const BASE_FRAME_CAP: u64 = BASE_VCPU_CAP + 64;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
-const PD_CAP_SIZE: u64 = 512;
+const PD_CAP_SIZE: u64 = 4096;
 const PD_CAP_BITS: u64 = PD_CAP_SIZE.ilog2() as u64;
 const PD_SCHEDCONTEXT_SIZE: u64 = 1 << 8;
 
@@ -731,12 +734,13 @@ fn emulate_kernel_boot(
 
 fn build_system(
     config: &Config,
-    pd_elf_files: &Vec<ElfFile>,
+    pd_elf_files: &mut Vec<ElfFile>,
     kernel_elf: &ElfFile,
     monitor_elf: &ElfFile,
     system: &SystemDescription,
     invocation_table_size: u64,
     system_cnode_size: u64,
+    has_built: bool,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
     assert!(invocation_table_size % config.minimum_page_size == 0);
@@ -758,6 +762,75 @@ fn build_system(
     // Determine physical memory region used by the monitor
     let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
 
+    // Create a vector of optional vectors, which we will populate as needed. This maintains the pd_idx mapping.
+    let mut all_child_page_tables: Vec<Option<Vec<PGD>>> =
+        vec![None; system.protection_domains.len()];
+
+    // If we are mapping the child page tables into the parent, we will create the paging structures
+    // now, so that the pd_elf_size can be properly calculated.
+    for (parent_idx, pd) in system.protection_domains.iter().enumerate() {
+        let mut pd_extra_elf_size = 0;
+        // Flag to enable the patching of child page tables
+        if pd.child_pts {
+            // Initialise the page table structure for this parent pd.
+            all_child_page_tables[parent_idx] = Some(vec![PGD::new(); 64]);
+            // Find all child page tables and find size of loadable segments.
+            for (child_idx, child_pd) in system.protection_domains.iter().enumerate() {
+                if child_idx <= parent_idx {
+                    continue;
+                } else if child_idx >= parent_idx && child_pd.parent != Some(parent_idx) {
+                    break;
+                }
+
+                let child_pgd: &mut PGD = &mut all_child_page_tables[parent_idx].as_mut().unwrap()
+                    [child_pd.id.unwrap() as usize];
+                // Find the corresponding elf for this child and add loadable segments
+                // to page table structures.
+                let child_elf = &pd_elf_files[parent_idx + child_idx];
+                for loadable_segment in child_elf.loadable_segments() {
+                    child_pgd.add_page_at_vaddr_range(
+                        loadable_segment.virt_addr,
+                        loadable_segment.data.len() as i64,
+                        1,
+                        PageSize::Small,
+                    );
+                }
+                // Find all associated memory regions and their size.
+                for child_map in &child_pd.maps {
+                    // Find the memory region associated with this map
+                    for mr in &system.memory_regions {
+                        if mr.name == child_map.mr {
+                            child_pgd.add_page_at_vaddr_range(
+                                child_map.vaddr,
+                                mr.size as i64,
+                                1,
+                                mr.page_size,
+                            );
+                        }
+                    }
+                }
+                // Account for the stack of each child pd
+                child_pgd.add_page_at_vaddr_range(
+                    config.pd_stack_bottom(child_pd.stack_size),
+                    child_pd.stack_size as i64,
+                    1,
+                    PageSize::Small,
+                );
+                // We have now constructed the dummy page tables, calculate how much size we
+                // need to add to the pd_elf_sizes
+                pd_extra_elf_size += child_pgd.get_size();
+            }
+            // We only want to add these new elf regions ONCE. As the microkit tool can run multiple times,
+            // we keep track of we have already built these.
+            if !has_built {
+                // Push this new region to the parent's elf
+                let parent_elf = &mut pd_elf_files[parent_idx];
+                let new_elf_seg = parent_elf.create_segment(".table_data", pd_extra_elf_size);
+                parent_elf.segments.push(new_elf_seg);
+            }
+        }
+    }
+
     // Determine physical memory region for 'reserved' memory.
     //
     // The 'reserved' memory region will not be touched by seL4 during boot
@@ -765,7 +838,7 @@ fn build_system(
     // from this area, which can then be made available to the appropriate
     // protection domains
     let mut pd_elf_size = 0;
-    for pd_elf in pd_elf_files {
+    for pd_elf in pd_elf_files.iter_mut() {
         for r in phys_mem_regions_from_elf(pd_elf, config.minimum_page_size) {
             pd_elf_size += r.size();
         }
@@ -1970,6 +2043,97 @@ fn build_system(
         }
     }
 
+    let mut frame_cap = BASE_FRAME_CAP;
+
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        for maybe_child_pd in system.protection_domains.iter() {
+            if maybe_child_pd.parent.is_some_and(|x| x == pd_idx) {
+                for map_set in [&maybe_child_pd.maps, &pd_extra_maps[maybe_child_pd]] {
+                    for mp in map_set {
+                        let mr = all_mr_by_name[mp.mr.as_str()];
+                        let mut invocation = Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
+                                cnode: cnode_objs[pd_idx].cap_addr,
+                                dest_index: frame_cap,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: mr_pages[mr][0].cap_addr,
+                                src_depth: config.cap_address_bits,
+                                rights: (Rights::Read as u64 | Rights::Write as u64),
+                                badge: 0,
+                            },
+                        );
+
+                        invocation.repeat(
+                            mr_pages[mr].len() as u32,
+                            InvocationArgs::CnodeMint {
+                                cnode: 0,
+                                dest_index: 1,
+                                dest_depth: 0,
+                                src_root: 0,
+                                src_obj: 1,
+                                src_depth: 0,
+                                rights: 0,
+                                badge: 0,
+                            },
+                        );
+
+                        for mr_idx in 0..mr_pages[mr].len() {
+                            let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
+                            let minted_cap = frame_cap + mr_idx as u64;
+
+                            all_child_page_tables[pd_idx].as_mut().unwrap()
+                                [maybe_child_pd.id.unwrap() as usize]
+                                .add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                        }
+
+                        frame_cap += mr_pages[mr].len() as u64;
+                        system_invocations.push(invocation);
+                    }
+                }
+            }
+        }
+    }
+
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        let mut child_pds: Vec<usize> = vec![];
+
+        for maybe_child_pd in system.protection_domains.iter() {
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                if parent_idx == pd_idx {
+                    let id = maybe_child_pd.id.unwrap() as usize;
+                    child_pds.push(id);
+                }
+            }
+        }
+
+        if child_pds.is_empty() {
+            continue;
+        }
+
+        let mut table_metadata = TableMetadata {
+            base_addr: 0,
+            pgd: [0; 64],
+        };
+        let mut table_data = Vec::<u8>::new();
+        let mut offset = 0;
+
+        for i in child_pds {
+            offset =
+                all_child_page_tables[pd_idx].as_mut().unwrap()[i].recurse(offset, &mut table_data);
+            table_metadata.pgd[i] = offset - (512 * 8);
+        }
+
+        // patch the data in
+        let elf = &mut pd_elf_files[pd_idx];
+        elf.populate_segment(".table_data", &table_data);
+        let new_elf_seg = elf.get_segment(".table_data").unwrap();
+
+        table_metadata.base_addr = new_elf_seg.virt_addr;
+        elf.write_symbol("table_metadata", table_metadata.as_bytes())?;
+    }
+
     let mut badged_irq_caps: HashMap<&ProtectionDomain, Vec<u64>> = HashMap::new();
     for (notification_obj, pd) in zip(&notification_objs, &system.protection_domains) {
         badged_irq_caps.insert(pd, vec![]);
@@ -2205,6 +2369,33 @@ fn build_system(
                             badge: 0,
                         },
                     ));
+                }
+            }
+        }
+    }
+
+    // Mint access to the child VSpace in the CSpace of root PDs
+    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+        for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
+            // Check if we are dealing with a child PD
+            if let Some(parent_idx) = maybe_child_pd.parent {
+                // Check that the current PD is the parent of the child
+                if parent_idx == pd_idx {
+                    let cap_idx = BASE_PD_VSPACE_CAP + maybe_child_pd.id.unwrap();
+                    assert!(cap_idx < PD_CAP_SIZE);
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: cnode_objs[pd_idx].cap_addr,
+                            dest_index: cap_idx,
+                            dest_depth: PD_CAP_BITS,
+                            src_root: root_cnode_cap,
+                            src_obj: vspace_objs[maybe_child_idx].cap_addr,
+                            src_depth: config.cap_address_bits,
+                            rights: Rights::All as u64,
+                            badge: 0,
+                        },
+                    ))
                 }
             }
         }
@@ -2558,7 +2749,7 @@ fn build_system(
 
     // In the benchmark configuration, we allow PDs to access their own TCB.
     // This is necessary for accessing kernel's benchmark API.
-    if config.benchmark {
+    if config.microkit_config == MicrokitConfig::Benchmark {
         let mut tcb_cap_copy_invocation = Invocation::new(
             config,
             InvocationArgs::CnodeCopy {
@@ -3272,7 +3463,7 @@ fn main() -> Result<(), String> {
         cap_address_bits: 64,
         fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
         hypervisor,
-        benchmark: args.config == "benchmark",
+        microkit_config: MicrokitConfig::config_from_str(args.config),
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
         arm_pa_size_bits,
         arm_smc,
@@ -3347,18 +3538,22 @@ fn main() -> Result<(), String> {
     let mut system_cnode_size = 2;
 
     let mut built_system;
+    let mut has_built = false;
     loop {
         built_system = build_system(
             &kernel_config,
-            &pd_elf_files,
+            &mut pd_elf_files,
             &kernel_elf,
             &monitor_elf,
             &system,
             invocation_table_size,
             system_cnode_size,
+            has_built,
         )?;
         println!("BUILT: system_cnode_size={} built_system.number_of_system_caps={} invocation_table_size={} built_system.invocation_data_size={}",
                  system_cnode_size, built_system.number_of_system_caps, invocation_table_size, built_system.invocation_data_size);
+
+        has_built = true;
 
         if built_system.number_of_system_caps <= system_cnode_size
             && built_system.invocation_data_size <= invocation_table_size
