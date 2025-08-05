@@ -2046,93 +2046,97 @@ fn build_system(
 
     let mut frame_cap = BASE_FRAME_CAP;
 
-    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
-        for maybe_child_pd in system.protection_domains.iter() {
-            if maybe_child_pd.parent.is_some_and(|x| x == pd_idx) {
-                for map_set in [&maybe_child_pd.maps, &pd_extra_maps[maybe_child_pd]] {
-                    for mp in map_set {
-                        let mr = all_mr_by_name[mp.mr.as_str()];
-                        let mut invocation = Invocation::new(
-                            config,
-                            InvocationArgs::CnodeMint {
-                                cnode: cnode_objs[pd_idx].cap_addr,
-                                dest_index: frame_cap,
-                                dest_depth: PD_CAP_BITS,
-                                src_root: root_cnode_cap,
-                                src_obj: mr_pages[mr][0].cap_addr,
-                                src_depth: config.cap_address_bits,
-                                rights: (Rights::Read as u64 | Rights::Write as u64),
-                                badge: 0,
-                            },
-                        );
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if pd.child_pts {
+            for maybe_child_pd in system.protection_domains.iter() {
+                if maybe_child_pd.parent.is_some_and(|x| x == pd_idx) {
+                    for map_set in [&maybe_child_pd.maps, &pd_extra_maps[maybe_child_pd]] {
+                        for mp in map_set {
+                            let mr = all_mr_by_name[mp.mr.as_str()];
+                            let mut invocation = Invocation::new(
+                                config,
+                                InvocationArgs::CnodeMint {
+                                    cnode: cnode_objs[pd_idx].cap_addr,
+                                    dest_index: frame_cap,
+                                    dest_depth: PD_CAP_BITS,
+                                    src_root: root_cnode_cap,
+                                    src_obj: mr_pages[mr][0].cap_addr,
+                                    src_depth: config.cap_address_bits,
+                                    rights: (Rights::Read as u64 | Rights::Write as u64),
+                                    badge: 0,
+                                },
+                            );
 
-                        invocation.repeat(
-                            mr_pages[mr].len() as u32,
-                            InvocationArgs::CnodeMint {
-                                cnode: 0,
-                                dest_index: 1,
-                                dest_depth: 0,
-                                src_root: 0,
-                                src_obj: 1,
-                                src_depth: 0,
-                                rights: 0,
-                                badge: 0,
-                            },
-                        );
+                            invocation.repeat(
+                                mr_pages[mr].len() as u32,
+                                InvocationArgs::CnodeMint {
+                                    cnode: 0,
+                                    dest_index: 1,
+                                    dest_depth: 0,
+                                    src_root: 0,
+                                    src_obj: 1,
+                                    src_depth: 0,
+                                    rights: 0,
+                                    badge: 0,
+                                },
+                            );
 
-                        for mr_idx in 0..mr_pages[mr].len() {
-                            let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
-                            let minted_cap = frame_cap + mr_idx as u64;
+                            for mr_idx in 0..mr_pages[mr].len() {
+                                let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
+                                let minted_cap = frame_cap + mr_idx as u64;
 
-                            all_child_page_tables[pd_idx].as_mut().unwrap()
-                                [maybe_child_pd.id.unwrap() as usize]
-                                .add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                                all_child_page_tables[pd_idx].as_mut().unwrap()
+                                    [maybe_child_pd.id.unwrap() as usize]
+                                    .add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                            }
+
+                            frame_cap += mr_pages[mr].len() as u64;
+                            system_invocations.push(invocation);
                         }
-
-                        frame_cap += mr_pages[mr].len() as u64;
-                        system_invocations.push(invocation);
                     }
                 }
             }
         }
     }
 
-    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
-        let mut child_pds: Vec<usize> = vec![];
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if pd.child_pts {
+            let mut child_pds: Vec<usize> = vec![];
 
-        for maybe_child_pd in system.protection_domains.iter() {
-            if let Some(parent_idx) = maybe_child_pd.parent {
-                if parent_idx == pd_idx {
-                    let id = maybe_child_pd.id.unwrap() as usize;
-                    child_pds.push(id);
+            for maybe_child_pd in system.protection_domains.iter() {
+                if let Some(parent_idx) = maybe_child_pd.parent {
+                    if parent_idx == pd_idx {
+                        let id = maybe_child_pd.id.unwrap() as usize;
+                        child_pds.push(id);
+                    }
                 }
             }
+
+            if child_pds.is_empty() {
+                continue;
+            }
+
+            let mut table_metadata = TableMetadata {
+                base_addr: 0,
+                pgd: [0; 64],
+            };
+            let mut table_data = Vec::<u8>::new();
+            let mut offset = 0;
+
+            for i in child_pds {
+                offset =
+                    all_child_page_tables[pd_idx].as_mut().unwrap()[i].recurse(offset, &mut table_data);
+                table_metadata.pgd[i] = offset - (512 * 8);
+            }
+
+            // patch the data in
+            let elf = &mut pd_elf_files[pd_idx];
+            elf.populate_segment(".table_data", &table_data);
+            let new_elf_seg = elf.get_segment(".table_data").unwrap();
+
+            table_metadata.base_addr = new_elf_seg.virt_addr;
+            elf.write_symbol("table_metadata", table_metadata.as_bytes())?;
         }
-
-        if child_pds.is_empty() {
-            continue;
-        }
-
-        let mut table_metadata = TableMetadata {
-            base_addr: 0,
-            pgd: [0; 64],
-        };
-        let mut table_data = Vec::<u8>::new();
-        let mut offset = 0;
-
-        for i in child_pds {
-            offset =
-                all_child_page_tables[pd_idx].as_mut().unwrap()[i].recurse(offset, &mut table_data);
-            table_metadata.pgd[i] = offset - (512 * 8);
-        }
-
-        // patch the data in
-        let elf = &mut pd_elf_files[pd_idx];
-        elf.populate_segment(".table_data", &table_data);
-        let new_elf_seg = elf.get_segment(".table_data").unwrap();
-
-        table_metadata.base_addr = new_elf_seg.virt_addr;
-        elf.write_symbol("table_metadata", table_metadata.as_bytes())?;
     }
 
     let mut badged_irq_caps: HashMap<&ProtectionDomain, Vec<u64>> = HashMap::new();
