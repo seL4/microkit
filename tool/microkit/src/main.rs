@@ -785,9 +785,7 @@ fn build_system(
 
                 let child_pgd: &mut PGD = &mut all_child_page_tables[parent_idx].as_mut().unwrap()
                     [child_pd.id.unwrap() as usize];
-                // Find the corresponding elf for this child and add loadable segments
-                // to page table structures.
-                let child_elf = &pd_elf_files[parent_idx + child_idx];
+                let child_elf = &pd_elf_files[child_idx];
                 for loadable_segment in child_elf.loadable_segments() {
                     child_pgd.add_page_at_vaddr_range(
                         loadable_segment.virt_addr,
