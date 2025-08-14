@@ -837,14 +837,14 @@ Using a GDB prompt via openOCD:
 
         (gdb) monitor reset halt
 
-2. Set the a0 and a1 registers for OpenSBI
+2. Set the `a0` and `a1` registers for OpenSBI
 
         # tell OpenSBI where DTB is (there is none)
         (gdb) set $a0=0
         # tell OpenSBI that the default hart is #0
         (gdb) set $a1=0
 
-3. Load OpenSBI's FW_JUMP payload targeted at 0x90000000, implicitly setting the program counter.
+3. Load OpenSBI's FW_JUMP payload targeted at `0x90000000`, implicitly setting the program counter.
 
         (gdb) load /path/to/opensbi/fw_jump.elf
 
