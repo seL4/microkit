@@ -309,15 +309,15 @@ static char *data_abort_dfsc_to_string(uintptr_t dfsc)
     case 0x17:
         return "synchronous external abort, level 3";
     case 0x18:
-        return "syncrhonous partity or ECC error";
+        return "synchronous partity or ECC error";
     case 0x1c:
-        return "syncrhonous partity or ECC error, level 0";
+        return "synchronous partity or ECC error, level 0";
     case 0x1d:
-        return "syncrhonous partity or ECC error, level 1";
+        return "synchronous partity or ECC error, level 1";
     case 0x1e:
-        return "syncrhonous partity or ECC error, level 2";
+        return "synchronous partity or ECC error, level 2";
     case 0x1f:
-        return "syncrhonous partity or ECC error, level 3";
+        return "synchronous partity or ECC error, level 3";
     case 0x21:
         return "alignment fault";
     case 0x30:
