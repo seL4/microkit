@@ -221,6 +221,36 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="rpi4b_2gb",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a72",
+        loader_link_address=0x10000000,
+        kernel_options={
+            "KernelPlatform": "bcm2711",
+            "RPI4_MEMORY": 2048,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
+        name="rpi4b_4gb",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a72",
+        loader_link_address=0x10000000,
+        kernel_options={
+            "KernelPlatform": "bcm2711",
+            "RPI4_MEMORY": 4096,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
+        name="rpi4b_8gb",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a72",
+        loader_link_address=0x10000000,
+        kernel_options={
+            "KernelPlatform": "bcm2711",
+            "RPI4_MEMORY": 8192,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="rockpro64",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",

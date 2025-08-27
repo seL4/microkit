@@ -278,7 +278,7 @@ static void putc(uint8_t ch)
     *UART_REG(PL011_UARTDR) = ch;
 }
 
-#elif defined(BOARD_rpi4b_1gb)
+#elif defined(BOARD_rpi4b_1gb) || defined(BOARD_rpi4b_2gb) || defined(BOARD_rpi4b_4gb) || defined(BOARD_rpi4b_8gb)
 #define UART_BASE 0xfe215040
 #define MU_IO 0x00
 #define MU_LSR 0x14
