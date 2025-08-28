@@ -32,6 +32,15 @@ platforms:
   - name: rpi4b_1gb
     cmake_plat: rpi4
     since: 2.0.0
+  - name: rpi4b_2gb
+    cmake_plat: rpi4
+    since: 2.0.1
+  - name: rpi4b_4gb
+    cmake_plat: rpi4
+    since: 2.0.1
+  - name: rpi4b_8gb
+    cmake_plat: rpi4
+    since: 2.0.1
   - name: imx8mm_evk
     cmake_plat: imx8mm-evk
     since: 1.3.0
