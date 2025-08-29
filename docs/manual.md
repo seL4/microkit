@@ -785,6 +785,9 @@ The currently supported platforms are:
 * qemu_virt_riscv64
 * rockpro64
 * rpi4b_1gb
+* rpi4b_2gb
+* rpi4b_4gb
+* rpi4b_8gb
 * star64
 * tqma8xqp1gb
 * ultra96v2
@@ -974,9 +977,14 @@ You can find more about the QEMU virt platform in the
 ## Raspberry Pi 4B {#rpi4b_1gb}
 
 Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
-Raspberry Pi 4B that have different amounts of RAM, we target the 1GB model in Microkit.
-If you require more than 1GB, please file an issue or pull request to add support for
-models with larger amounts of memory.
+Raspberry Pi 4B that have different amounts of RAM, we have support for the 1GB,
+2GB, 4GB and 8GB models. Because the amount of RAM must be known statically by
+seL4, the Microkit board names differ for each model:
+
+* `rpi4b_1gb` for 1GB of RAM.
+* `rpi4b_2gb` for 2GB of RAM.
+* `rpi4b_4gb` for 4GB of RAM.
+* `rpi4b_8gb` for 8GB of RAM.
 
 For initial board setup, please see the instructions on the
 [seL4 website](https://docs.sel4.systems/Hardware/Rpi4.html).
