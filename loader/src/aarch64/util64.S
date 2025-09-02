@@ -328,13 +328,6 @@ BEGIN_FUNC(el1_mmu_enable)
 
     enable_mmu sctlr_el1, x8
 
-    /* set up a vector table so that if the low-level kernel
-     * initialization code fails, we have some chance of finding
-     * out and printing reasonable diagnostics.
-     */
-    adrp    x8, arm_vector_table
-    msr     vbar_el1, x8
-
     ldp     x29, x30, [sp], #16
     ret
 
@@ -426,21 +419,19 @@ END_FUNC(el2_mmu_enable)
     stp     x26, x27, [x0, #16 * 13]
     stp     x28, x29, [x0, #16 * 14]
     mov     x0, \id
-    mrs     x1, ESR_EL1
-    mrs     x2, FAR_EL1
     b       exception_handler
 .endm
 
 .align 12
 BEGIN_FUNC(arm_vector_table)
-    ventry  #0     // Synchronous EL1t
-    ventry  #1     // IRQ EL1t
-    ventry  #2     // FIQ EL1t
-    ventry  #3     // SError EL1t
-    ventry  #4     // Synchronous EL1h
-    ventry  #5     // IRQ EL1h
-    ventry  #6     // FIQ EL1h
-    ventry  #7     // SError EL1h
+    ventry  #0     // Synchronous EL1t/EL2t
+    ventry  #1     // IRQ EL1t/EL2t
+    ventry  #2     // FIQ EL1t/EL2t
+    ventry  #3     // SError EL1t/EL2t
+    ventry  #4     // Synchronous EL1h/EL2h
+    ventry  #5     // IRQ EL1h/EL2h
+    ventry  #6     // FIQ EL1h/EL2h
+    ventry  #7     // SError EL1h/EL2h
     ventry  #8     // Synchronous 64-bit EL0
     ventry  #9     // IRQ 64-bit EL0
     ventry  #10    // FIQ 64-bit EL0
