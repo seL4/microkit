@@ -120,14 +120,15 @@ void *memmove(void *restrict dest, const void *restrict src, size_t n)
     return dest;
 }
 
+char _stack[STACK_SIZE] ALIGN(16);
+
+#ifdef ARCH_aarch64
 void switch_to_el1(void);
 void switch_to_el2(void);
 void el1_mmu_enable(void);
 void el2_mmu_enable(void);
+extern char arm_vector_table[1];
 
-char _stack[STACK_SIZE] ALIGN(16);
-
-#ifdef ARCH_aarch64
 /* Paging structures for kernel mapping */
 uint64_t boot_lvl0_upper[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl1_upper[1 << 9] ALIGN(1 << 12);
@@ -420,21 +421,21 @@ static char *ex_to_string(uintptr_t ex)
 {
     switch (ex) {
     case 0:
-        return "Synchronous EL1t";
+        return "Synchronous (Current Exception level with SP_EL0)";
     case 1:
-        return "IRQ EL1t";
+        return "IRQ (Current Exception level with SP_EL0)";
     case 2:
-        return "FIQ EL1t";
+        return "FIQ (Current Exception level with SP_EL0)";
     case 3:
-        return "SError EL1t";
+        return "SError (Current Exception level with SP_EL0)";
     case 4:
-        return "Synchronous EL1h";
+        return "Synchronous (Current Exception level with SP_ELx)";
     case 5:
-        return "IRQ EL1h";
+        return "IRQ (Current Exception level with SP_ELx)";
     case 6:
-        return "FIQ EL1h";
+        return "FIQ (Current Exception level with SP_ELx)";
     case 7:
-        return "SError EL1h";
+        return "SError (Current Exception level with SP_ELx)";
     case 8:
         return "Synchronous 64-bit EL0";
     case 9:
@@ -745,9 +746,32 @@ void relocation_log(uint64_t reloc_addr, uint64_t curr_addr)
     puts("\n");
 }
 
+void set_exception_handler()
+{
+#ifdef ARCH_aarch64
+    enum el el = current_el();
+    if (el == EL2) {
+        asm volatile("msr vbar_el2, %0" :: "r"(arm_vector_table));
+    }
+    /* Since we call the exception handler before we check we're at
+     * a valid EL we shouldn't assume we are at EL1 or higher. */
+    if (el != EL0) {
+        asm volatile("msr vbar_el1, %0" :: "r"(arm_vector_table));
+    }
+#elif ARCH_riscv64
+    /* Don't do anything on RISC-V since we always are in S-mode so M-mode
+     * will catch our faults (e.g SBI). */
+#else
+#error "Unsupported architecture for set_exception_handler"
+#endif
+}
+
 int main(void)
 {
     uart_init();
+    /* After any UART initialisation is complete, setup an arch-specific exception
+     * handler in case we fault somewhere in the loader. */
+    set_exception_handler();
 
     puts("LDR|INFO: altloader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
@@ -808,27 +832,44 @@ fail:
     for (;;) {
     }
 }
-
 #ifdef ARCH_aarch64
-void exception_handler(uintptr_t ex, uintptr_t esr, uintptr_t far)
+void exception_handler(uintptr_t ex)
 {
+    /* Read ESR/FSR based on the exception level we're at. */
+    uint64_t esr;
+    uintptr_t far;
+
+    if (loader_data->flags & FLAG_SEL4_HYP) {
+        asm volatile("mrs %0, ESR_EL2" : "=r"(esr) :: "cc");
+        asm volatile("mrs %0, FAR_EL2" : "=r"(far) :: "cc");
+    } else {
+        asm volatile("mrs %0, ESR_EL1" : "=r"(esr) :: "cc");
+        asm volatile("mrs %0, FAR_EL1" : "=r"(far) :: "cc");
+    }
+
     uintptr_t ec = (esr >> 26) & 0x3f;
-    puts("LDR|ERROR: loader trapped kernel exception: ");
+    puts("\nLDR|ERROR: loader trapped exception: ");
     puts(ex_to_string(ex));
-    puts("   ec=");
-    puts(ec_to_string(ec));
-    puts("(");
+    if (loader_data->flags & FLAG_SEL4_HYP) {
+        puts("\n    esr_el2: ");
+    } else {
+        puts("\n    esr_el1: ");
+    }
+    puthex(esr);
+    puts("\n    ec: ");
     puthex32(ec);
-    puts(")   il=");
+    puts(" (");
+    puts(ec_to_string(ec));
+    puts(")\n    il: ");
     puthex((esr >> 25) & 1);
-    puts("   iss=");
+    puts("\n    iss: ");
     puthex(esr & MASK(24));
-    puts("   far=");
+    puts("\n    far: ");
     puthex(far);
     puts("\n");
 
     for (unsigned i = 0; i < 32; i++)  {
-        puts("reg: ");
+        puts("    reg: ");
         puthex32(i);
         puts(": ");
         puthex(exception_register_state[i]);
