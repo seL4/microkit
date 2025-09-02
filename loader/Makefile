@@ -40,7 +40,7 @@ $(error PRINTING must be specified)
 endif
 
 ifeq ($(ARCH),aarch64)
-	CFLAGS_AARCH64 := -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU) -mgeneral-regs-only
+	CFLAGS_AARCH64 := -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
 	CFLAGS_ARCH := $(CFLAGS_AARCH64) -DARCH_aarch64
 	ASM_FLAGS_ARCH := -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU)
 	ARCH_DIR := aarch64
