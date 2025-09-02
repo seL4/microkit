@@ -72,7 +72,7 @@ jobs:
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
   build_macos:
     name: Build SDK (macOS x86-64, ARM64)
-    runs-on: macos-14
+    runs-on: [self-hosted, macos, ARM64]
     steps:
       - name: Checkout Microkit repository
         uses: actions/checkout@v4
@@ -85,32 +85,19 @@ jobs:
             repository: seL4/seL4
             ref: microkit
             path: seL4
-      - name: Install SDK dependencies
-        run: |
-          rustup target add x86_64-apple-darwin
-          rustup target add aarch64-apple-darwin
-          brew tap riscv-software-src/riscv
-          brew install riscv-tools
-          brew install pandoc cmake dtc ninja qemu libxml2 python@3.12 coreutils texlive qemu
-          python3.12 -m venv pyenv
-          ./pyenv/bin/pip install --upgrade pip setuptools wheel
-          ./pyenv/bin/pip install -r requirements.txt
-      - name: Install AArch64 GCC toolchain
-        run: |
-          wget -O aarch64-toolchain.tar.gz https://sel4-toolchains.s3.us-east-2.amazonaws.com/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf.tar.xz%3Frev%3D09b11f159fc24fdda01e05bb32695dd5%26hash%3D6AAF4239F28AE17389AB3E611DFFE0A6
-          tar xf aarch64-toolchain.tar.gz
-          echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-darwin-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
+      - name: Get Nix dependencies
+        run: nix develop -c bash -c 'echo Hello World'
       - name: Set version
         run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK (x86-64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-x86-64 --tool-target-triple=x86_64-apple-darwin
+        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-x86-64 --gcc-toolchain-prefix-riscv64 riscv64-none-elf --tool-target-triple=x86_64-apple-darwin"
       - name: Upload SDK (x86-64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
       - name: Build SDK (ARM64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-aarch64 --tool-target-triple=aarch64-apple-darwin
+        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-aarch64 --gcc-toolchain-prefix-riscv64 riscv64-none-elf --tool-target-triple=aarch64-apple-darwin"
       - name: Upload SDK (ARM64)
         uses: actions/upload-artifact@v4
         with:
