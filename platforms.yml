@@ -14,6 +14,15 @@
 # This list is ordered based on the order in what the platforms were added
 # in.
 platforms:
+  - name: rpi4b_2gb
+    cmake_plat: rpi4
+    since: dev
+  - name: rpi4b_4gb
+    cmake_plat: rpi4
+    since: dev
+  - name: rpi4b_8gb
+    cmake_plat: rpi4
+    since: dev
   - name: hifive_p550
     cmake_plat: hifive-p550
     since: dev
@@ -32,15 +41,6 @@ platforms:
   - name: rpi4b_1gb
     cmake_plat: rpi4
     since: 2.0.0
-  - name: rpi4b_2gb
-    cmake_plat: rpi4
-    since: 2.0.1
-  - name: rpi4b_4gb
-    cmake_plat: rpi4
-    since: 2.0.1
-  - name: rpi4b_8gb
-    cmake_plat: rpi4
-    since: 2.0.1
   - name: imx8mm_evk
     cmake_plat: imx8mm-evk
     since: 1.3.0
