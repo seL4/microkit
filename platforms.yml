@@ -14,6 +14,9 @@
 # This list is ordered based on the order in what the platforms were added
 # in.
 platforms:
+  - name: imx8mp_iotgate
+    cmake_plat: imx8mp-evk
+    since: dev
   - name: rpi4b_2gb
     cmake_plat: rpi4
     since: dev
