@@ -158,6 +158,17 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="imx8mp_iotgate",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x50000000,
+        kernel_options={
+            "KernelPlatform": "imx8mp-evk",
+            "KernelCustomDTS": "custom_dts/iot-gate.dts",
+            "KernelCustomDTSOverlay": "src/plat/imx8m-evk/overlay-imx8mp-evk.dts",
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="odroidc2",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
@@ -446,6 +457,8 @@ def build_sel4(
     for arg, val in sorted(config_args):
         if isinstance(val, bool):
             str_val = "ON" if val else "OFF"
+        elif arg == "KernelCustomDTSOverlay":
+            str_val = f"{Path.cwd()}/{sel4_dir}/{val}"
         else:
             str_val = str(val)
         s = f"-D{arg}={str_val}"

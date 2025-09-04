@@ -165,7 +165,7 @@ static void putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 
-#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mp_evk)
+#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mp_evk) || defined(BOARD_imx8mp_iotgate)
 #define UART_BASE 0x30890000
 #define STAT 0x98
 #define TRANSMIT 0x40

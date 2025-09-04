@@ -777,6 +777,7 @@ The currently supported platforms are:
 * hifive_p550
 * imx8mm_evk
 * imx8mp_evk
+* imx8mp_iotgate
 * imx8mq_evk
 * maaxboard
 * odroidc2
@@ -812,6 +813,14 @@ If you are booting from U-Boot, use the following command to start the system im
 
 Note that the OpenSBI version from the CVA6 SDK at the time of writing has issues when
 booting. It is recommended to use the mainline OpenSBI.
+
+## Compulab IOT-GATE-IMX8MPLUS {#imx8mp_iotgate}
+
+The IOT-GATE-IMX8PLUS is based on the NXP i.MX8MP SoC.
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x50000000
 
 ## Cheshire {#cheshire}
 
