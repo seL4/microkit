@@ -290,6 +290,27 @@ static void putc(uint8_t ch)
     while (!(*UART_REG(MU_LSR) & MU_LSR_TXIDLE));
     *UART_REG(MU_IO) = (ch & 0xff);
 }
+#elif defined(BOARD_rpi5b_2gb)
+#define UART_BASE                 0x107d001000
+#define PL011_TCR                 0x030
+#define PL011_UARTDR              0x000
+#define PL011_UARTFR              0x018
+#define PL011_UARTFR_TXFF         (1 << 5)
+#define PL011_CR_UART_EN          (1 << 0)
+#define PL011_CR_TX_EN            (1 << 8)
+
+static void uart_init()
+{
+    /* Enable the device and transmit */
+    *UART_REG(PL011_TCR) |= (PL011_CR_TX_EN | PL011_CR_UART_EN);
+}
+
+static void putc(uint8_t ch)
+{
+    while ((*UART_REG(PL011_UARTFR) & PL011_UARTFR_TXFF) != 0);
+    *UART_REG(PL011_UARTDR) = ch;
+}
+
 #elif defined(BOARD_rockpro64)
 #define UART_BASE   0xff1a0000
 #define UTHR        0x0
