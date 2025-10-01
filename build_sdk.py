@@ -204,7 +204,7 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "qemu-arm-virt",
             "QEMU_MEMORY": "2048",
-            # There is not peripheral timer, so we use the ARM
+            # There is no peripheral timer, so we use the ARM
             # architectural timer
             "KernelArmExportPTMRUser": True,
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
