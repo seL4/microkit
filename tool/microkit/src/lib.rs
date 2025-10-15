@@ -101,13 +101,13 @@ pub struct PUD {
 }
 
 impl PUD {
-    fn new() -> Self {
+    pub fn new() -> Self {
         PUD {
             dirs: vec![None; 512],
         }
     }
 
-    fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
+    pub fn recurse(&mut self, mut curr_offset: u64, buffer: &mut Vec<u8>) -> u64 {
         let mut offset_table: [u64; 512] = [u64::MAX; 512];
         for (i, entry) in offset_table.iter_mut().enumerate() {
             if let Some(dir) = &mut self.dirs[i] {
@@ -122,7 +122,7 @@ impl PUD {
         curr_offset + (512 * 8)
     }
 
-    fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
+    pub fn add_page_at_vaddr(&mut self, vaddr: u64, frame: u64, size: PageSize) {
         let pud_index = ((vaddr & (0x1ff << 30)) >> 30) as usize;
         if self.dirs[pud_index].is_none() {
             self.dirs[pud_index] = Some(DIR::new());
@@ -133,7 +133,21 @@ impl PUD {
             .add_page_at_vaddr(vaddr, frame, size);
     }
 
-    fn get_size(&self) -> u64 {
+    pub fn add_page_at_vaddr_range(
+        &mut self,
+        mut vaddr: u64,
+        mut data_len: i64,
+        frame: u64,
+        size: PageSize,
+    ) {
+        while data_len > 0 {
+            self.add_page_at_vaddr(vaddr, frame, size);
+            data_len -= size as i64;
+            vaddr += size as u64;
+        }
+    }
+
+    pub fn get_size(&self) -> u64 {
         let mut child_size = 0;
         for dir in &self.dirs {
             if dir.is_some() {
@@ -253,6 +267,18 @@ impl PT {
     fn get_size(&self) -> u64 {
         512 * 8
     }
+}
+
+// #[derive(Debug, Clone)]
+// pub enum TopLevelPageTable {
+//     Riscv64(PUD),
+//     Aarch64(PGD),
+// }
+
+#[derive(Debug, Clone)]
+pub enum TopLevelPageTable {
+    Riscv64 { top_level: PUD },
+    Aarch64 { top_level: PGD},
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

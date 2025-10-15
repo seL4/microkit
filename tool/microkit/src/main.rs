@@ -12,7 +12,7 @@ use loader::Loader;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, FindFixedError, MemoryRegion,
     ObjectAllocator, Region, UntypedObject, MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, PGD,
-    VM_MAX_NAME_LENGTH,
+    PUD,TopLevelPageTable, VM_MAX_NAME_LENGTH,
 };
 use sdf::{
     parse, Channel, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SysMemoryRegionKind,
@@ -764,8 +764,7 @@ fn build_system(
     let initial_task_size = phys_mem_region_from_elf(monitor_elf, config.minimum_page_size).size();
 
     // Create a vector of optional vectors, which we will populate as needed. This maintains the pd_idx mapping.
-    let mut all_child_page_tables: Vec<Option<Vec<PGD>>> =
-        vec![None; system.protection_domains.len()];
+    let mut all_child_page_tables: Vec<Option<Vec<TopLevelPageTable>>> = vec![None; system.protection_domains.len()];
 
     // If we are mapping the child page tables into the parent, we will create the paging structures
     // now, so that the pd_elf_size can be properly calculated.
@@ -774,7 +773,11 @@ fn build_system(
         // Flag to enable the patching of child page tables
         if pd.child_pts {
             // Initialise the page table structure for this parent pd.
-            all_child_page_tables[parent_idx] = Some(vec![PGD::new(); 64]);
+            all_child_page_tables[parent_idx] = match config.arch {
+                Arch::Aarch64 => {Some(vec![TopLevelPageTable::Aarch64{top_level: PGD::new()}; 64])},
+                Arch::Riscv64 => {Some(vec![TopLevelPageTable::Riscv64{top_level: PUD::new()}; 64])},
+            };
+            
             // Find all child page tables and find size of loadable segments.
             for (child_idx, child_pd) in system.protection_domains.iter().enumerate() {
                 if child_idx <= parent_idx {
@@ -783,41 +786,86 @@ fn build_system(
                     break;
                 }
 
-                let child_pgd: &mut PGD = &mut all_child_page_tables[parent_idx].as_mut().unwrap()
+                let child_top_table: &mut TopLevelPageTable = &mut all_child_page_tables[parent_idx].as_mut().unwrap()
                     [child_pd.id.unwrap() as usize];
                 let child_elf = &pd_elf_files[child_idx];
                 for loadable_segment in child_elf.loadable_segments() {
-                    child_pgd.add_page_at_vaddr_range(
-                        loadable_segment.virt_addr,
-                        loadable_segment.data.len() as i64,
-                        1,
-                        PageSize::Small,
-                    );
+                    match child_top_table {
+                        TopLevelPageTable::Aarch64 { top_level } => {
+                            top_level.add_page_at_vaddr_range(
+                                loadable_segment.virt_addr,
+                                loadable_segment.data.len() as i64,
+                                1,
+                                PageSize::Small,
+                            );
+                        },
+                        TopLevelPageTable::Riscv64 { top_level } => {
+                            top_level.add_page_at_vaddr_range(
+                                loadable_segment.virt_addr,
+                                loadable_segment.data.len() as i64,
+                                1,
+                                PageSize::Small,
+                            );
+                        }
+                    };
+                    
                 }
                 // Find all associated memory regions and their size.
                 for child_map in &child_pd.maps {
                     // Find the memory region associated with this map
                     for mr in &system.memory_regions {
                         if mr.name == child_map.mr {
-                            child_pgd.add_page_at_vaddr_range(
-                                child_map.vaddr,
-                                mr.size as i64,
-                                1,
-                                mr.page_size,
-                            );
+                            match child_top_table {
+                                TopLevelPageTable::Aarch64 { top_level } => {
+                                    top_level.add_page_at_vaddr_range(
+                                        child_map.vaddr,
+                                        mr.size as i64,
+                                        1,
+                                        mr.page_size,
+                                    );
+                                },
+                                TopLevelPageTable::Riscv64 { top_level } => {
+                                    top_level.add_page_at_vaddr_range(
+                                        child_map.vaddr,
+                                        mr.size as i64,
+                                        1,
+                                        mr.page_size,
+                                    );
+                                }
+                            };
                         }
                     }
                 }
+
                 // Account for the stack of each child pd
-                child_pgd.add_page_at_vaddr_range(
-                    config.pd_stack_bottom(child_pd.stack_size),
-                    child_pd.stack_size as i64,
-                    1,
-                    PageSize::Small,
-                );
+                match child_top_table {
+                    TopLevelPageTable::Aarch64 { top_level } => {
+                        top_level.add_page_at_vaddr_range(
+                            config.pd_stack_bottom(child_pd.stack_size),
+                            child_pd.stack_size as i64,
+                            1,
+                            PageSize::Small,
+                        );
+                    },
+                    TopLevelPageTable::Riscv64 { top_level } => {
+                        top_level.add_page_at_vaddr_range(
+                            config.pd_stack_bottom(child_pd.stack_size),
+                            child_pd.stack_size as i64,
+                            1,
+                            PageSize::Small,
+                        );
+                    }
+                };
                 // We have now constructed the dummy page tables, calculate how much size we
                 // need to add to the pd_elf_sizes
-                pd_extra_elf_size += child_pgd.get_size();
+                pd_extra_elf_size += match child_top_table {
+                    TopLevelPageTable::Aarch64 { top_level } => {
+                        top_level.get_size()
+                    },
+                    TopLevelPageTable::Riscv64 { top_level } => {
+                        top_level.get_size()
+                    }
+                };
             }
             // We only want to add these new elf regions ONCE. As the microkit tool can run multiple times,
             // we keep track of we have already built these.
@@ -2083,9 +2131,19 @@ fn build_system(
                                 let vaddr = mp.vaddr + mr.page_size_bytes() * mr_idx as u64;
                                 let minted_cap = frame_cap + mr_idx as u64;
 
-                                all_child_page_tables[pd_idx].as_mut().unwrap()
-                                    [maybe_child_pd.id.unwrap() as usize]
-                                    .add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                                let mut child_top = &mut all_child_page_tables[pd_idx].as_mut().unwrap()
+                                    [maybe_child_pd.id.unwrap() as usize];
+
+                                match child_top {
+                                    TopLevelPageTable::Aarch64 { top_level } => {
+                                        top_level.add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                                    },
+                                    TopLevelPageTable::Riscv64 { top_level } => {
+                                        top_level.add_page_at_vaddr(vaddr, minted_cap, mr.page_size);
+                                    }
+                                };
+
+                                    
                             }
 
                             frame_cap += mr_pages[mr].len() as u64;
@@ -2122,8 +2180,16 @@ fn build_system(
             let mut offset = 0;
 
             for i in child_pds {
-                offset =
-                    all_child_page_tables[pd_idx].as_mut().unwrap()[i].recurse(offset, &mut table_data);
+                let mut child_top = &mut all_child_page_tables[pd_idx].as_mut().unwrap()[i];
+                offset = match child_top {
+                    TopLevelPageTable::Aarch64 { top_level } => {
+                        top_level.recurse(offset, &mut table_data)
+                    },
+                    TopLevelPageTable::Riscv64 { top_level } => {
+                        top_level.recurse(offset, &mut table_data)
+                    }
+                };
+
                 table_metadata.pgd[i] = offset - (512 * 8);
             }
 
