@@ -394,20 +394,8 @@ impl ElfFile {
         }
     }
 
-    pub fn populate_segment(&mut self, segment_name: &str, data: &[u8]) {
-        // Find segment
+    pub fn get_segment(&mut self, segment_name: &str) -> Option<&mut ElfSegment> {
         for segment in self.segments.iter_mut() {
-            if let Some(name) = &segment.name {
-                if name == segment_name {
-                    assert!(data.len() <= segment.data.len());
-                    segment.data = data.to_vec();
-                }
-            }
-        }
-    }
-
-    pub fn get_segment(&mut self, segment_name: &str) -> Option<&ElfSegment> {
-        for segment in &self.segments {
             if let Some(name) = &segment.name {
                 if name == segment_name {
                     return Some(segment);
@@ -415,5 +403,11 @@ impl ElfFile {
             }
         }
         None
+    }
+
+    pub fn populate_segment(&mut self, segment_name: &str, data: &[u8]) {
+        let mut segment = self.get_segment(segment_name).unwrap();
+        assert!(data.len() <= segment.data.len());
+        segment.data = data.to_vec();
     }
 }
