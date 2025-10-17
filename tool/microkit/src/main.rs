@@ -790,6 +790,7 @@ fn build_system(
                     [child_pd.id.unwrap() as usize];
                 let child_elf = &pd_elf_files[child_idx];
                 for loadable_segment in child_elf.loadable_segments() {
+                    // Adding placeholder cap "1", we will populate the actual caps once they have been allocated
                     match child_top_table {
                         TopLevelPageTable::Aarch64 { top_level } => {
                             top_level.add_page_at_vaddr_range(
@@ -815,6 +816,7 @@ fn build_system(
                     // Find the memory region associated with this map
                     for mr in &system.memory_regions {
                         if mr.name == child_map.mr {
+                            // Adding placeholder cap "1", we will populate the actual caps once they have been allocated
                             match child_top_table {
                                 TopLevelPageTable::Aarch64 { top_level } => {
                                     top_level.add_page_at_vaddr_range(

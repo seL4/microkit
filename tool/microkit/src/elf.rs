@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use zerocopy::{Immutable, IntoBytes};
+use crate::sel4::PageSize;
 
 #[repr(C, packed)]
 struct ElfHeader32 {
@@ -382,7 +383,8 @@ impl ElfFile {
             }
         }
 
-        last_addr = last_addr + (0x10000 - (last_addr % 0x10000));
+        // Align the last address we found to a page boundary
+        last_addr = last_addr + (PageSize::Small as u64 - (last_addr % PageSize::Small as u64));
 
         ElfSegment {
             name: Some(segment_name.to_string()),
