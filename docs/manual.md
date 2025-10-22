@@ -1140,6 +1140,7 @@ The currently supported platforms are:
 * qemu_virt_aarch64
 * qemu_virt_riscv64
 * rockpro64
+* rock3b
 * rpi4b_1gb
 * rpi4b_2gb
 * rpi4b_4gb
@@ -1378,6 +1379,19 @@ U-Boot commands:
 Microkit will produce a raw binary file by default, so when using U-Boot run the following command:
 
     => go 0x30000000
+
+## Radxa Rock3b {#rock3b}
+
+Support is available for the Radxa Rock3b platform which is based on the Rockchip rk3568 SoC.
+
+Since the platform relies on some closed-source binary blobs for first stage bootloader and then ARM's TrustZone A, we need to compile the U-Boot including these images. Detailed instructions on how to do that are avalilable [here](https://docs.sel4.systems/Hardware/rock3b.html).
+
+Once the proper U-Boot image is in place, you can simply load the `loader.img` on the board and run it like that (this is assuming you have the TFTP server set up):
+
+    => tftp 0x02000000 loader.img
+    => go 0x02000000
+
+For more booting options, please refer to the seL4 [board setup guide](https://docs.sel4.systems/Hardware/rock3b.html).
 
 ## Pine64 Star64 {#star64}
 
