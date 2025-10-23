@@ -162,12 +162,12 @@ static inline seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo)
     return seL4_MessageInfo_get_length(msginfo);
 }
 
-static void microkit_mr_set(seL4_Uint8 mr, seL4_Word value)
+static inline void microkit_mr_set(seL4_Uint8 mr, seL4_Word value)
 {
     seL4_SetMR(mr, value);
 }
 
-static seL4_Word microkit_mr_get(seL4_Uint8 mr)
+static inline seL4_Word microkit_mr_get(seL4_Uint8 mr)
 {
     return seL4_GetMR(mr);
 }
