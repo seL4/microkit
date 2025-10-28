@@ -458,7 +458,7 @@ def build_sel4(
         if isinstance(val, bool):
             str_val = "ON" if val else "OFF"
         elif arg == "KernelCustomDTSOverlay":
-            str_val = f"{Path.cwd()}/{sel4_dir}/{val}"
+            str_val = f"{sel4_dir.absolute()}/{val}"
         else:
             str_val = str(val)
         s = f"-D{arg}={str_val}"
