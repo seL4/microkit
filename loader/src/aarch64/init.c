@@ -64,9 +64,34 @@ static void configure_gicv2(void)
 }
 #endif
 
+void el1_mmu_disable(void);
+void el2_mmu_disable(void);
+
 void arch_init(void)
 {
 #if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
     configure_gicv2();
 #endif
+
+    /* Disable the MMU, as U-Boot will start in virtual memory on some platforms
+     * (https://docs.u-boot.org/en/latest/arch/arm64.html), which means that
+     * certain physical memory addresses contain page table information which
+     * the loader doesn't know about and would need to be careful not to
+     * overwrite.
+     *
+     * This also means that we would need to worry about caching.
+     * TODO: should we do that instead?
+     * note the issues where it forces us to flush any shared addresses all the
+     * way to cache as we might have mixed non-cached/cached access.
+     */
+    puts("LDR|INFO: disabling MMU (if it was enabled)\n");
+    enum el el = current_el();
+
+    if (el == EL1) {
+        el1_mmu_disable();
+    } else if (el == EL2) {
+        el2_mmu_disable();
+    } else {
+        puts("LDR|ERROR: unknown EL level for MMU disable\n");
+    }
 }
