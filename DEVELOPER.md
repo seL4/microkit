@@ -5,7 +5,7 @@
 
 # Developing Microkit
 
-Building the Microkit SDK is supported on Linux (x86_64) and macOS (Apple Silicon/Intel).
+Building the Microkit SDK is supported on Linux (x86_64/AArch64) and macOS (Apple Silicon/Intel).
 
 This section attempts to list the packages or external development tools which are required during development.
 
