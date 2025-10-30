@@ -732,11 +732,6 @@ def build_capdl_initialiser(
     board: BoardInfo,
     config: ConfigInfo,
 ) -> None:
-    if config.debug:
-        cargo_env = "RUSTFLAGS='-C debuginfo=2 -C strip=none'"
-    else:
-        cargo_env = ""
-
     sel4_src_dir = build_dir / board.name / config.name / "sel4" / "install"
 
     cargo_cross_options = "-Z build-std=core,alloc,compiler_builtins -Z build-std-features=compiler-builtins-mem"
@@ -755,7 +750,7 @@ def build_capdl_initialiser(
         cmd = f"""
             RUSTC_BOOTSTRAP=1 \
             RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
-            {cargo_env} cargo install {cargo_cross_options} \
+            cargo install {cargo_cross_options} \
             --target {cargo_target} \
             --git https://github.com/au-ts/rust-seL4 --branch capdl_dev sel4-capdl-initializer \
             --root {build_dir}
