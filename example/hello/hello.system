@@ -5,7 +5,7 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <protection_domain name="hello" priority="254">
+    <protection_domain name="hello"">
         <program_image path="hello.elf" />
     </protection_domain>
 </system>

@@ -6,35 +6,10 @@
 /*
  * The Microkit Monitor.
  *
- * The monitor is the initial task in a Microkit system.
+ * The monitor is the highest priority Protection Domain
+ * exclusively in a Microkit system. It fulfills one purpose:
  *
- * The monitor fulfills two purposes:
- *
- *   1. creating the initial state of the system.
- *   2. acting as the fault handler for for protection domains.
- *
- * Initialisation is performed by executing a number of kernel
- * invocations to create and configure kernel objects.
- *
- * The specific invocations to make are configured by the build
- * tool; the monitor simply reads a data structure to execute
- * each invocation one at a time.
- *
- * The process occurs in a two step manner. The first bootstrap
- * step execute the `bootstrap_invocations` only. The purpose
- * of this bootstrap is to get the system to the point for the
- * `system_invocations` is mapped into the monitors address space.
- * Once this occurs it is possible for the monitor to switch to
- * executing invocation from this second data structure.
- *
- * The motivation for this design is to keep both the initial
- * task image and the initial CNode as small, fixed size entities.
- *
- * Fixed size allows both kernel and monitor to avoid unnecessary
- * recompilation for different system configurations. Keeping things
- * small optimizes overall memory usage.
- *
- *
+ *   Acting as the fault handler for protection domains.
  */
 
 /*
@@ -63,99 +38,42 @@
 #include <sel4/sel4.h>
 
 #include "util.h"
-#include "debug.h"
 
 #define MAX_VMS 64
 #define MAX_PDS 64
 #define MAX_NAME_LEN 64
 
-#define MAX_UNTYPED_REGIONS 256
+#define FAULT_EP_CAP 1
+#define REPLY_CAP 2
+#define BASE_PD_TCB_CAP 10
+#define BASE_VM_TCB_CAP 74
+#define BASE_SCHED_CONTEXT_CAP 138
+#define BASE_NOTIFICATION_CAP 202
 
-/* Max words available for bootstrap invocations.
- *
- * Only a small number of syscalls is required to
- * get to the point where the main syscalls data
- * is mapped in, so we keep this small.
- *
- * FIXME: This can be smaller once compression is enabled.
- */
-#define BOOTSTRAP_INVOCATION_DATA_SIZE 150
-
-seL4_IPCBuffer *__sel4_ipc_buffer;
-
-char _stack[4096];
+extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
+seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 
 char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;
 char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
 seL4_Word vm_names_len;
 
-seL4_Word fault_ep;
-seL4_Word reply;
-seL4_Word pd_tcbs[MAX_PDS];
-seL4_Word vm_tcbs[MAX_VMS];
-seL4_Word scheduling_contexts[MAX_PDS];
-seL4_Word notification_caps[MAX_PDS];
-
 /* For reporting potential stack overflows, keep track of the stack regions for each PD. */
-seL4_Word pd_stack_addrs[MAX_PDS];
+seL4_Word pd_stack_bottom_addrs[MAX_PDS];
 
-struct region {
-    uintptr_t paddr;
-    uintptr_t size_bits;
-    uintptr_t is_device; /*FIXME: should back size_bits / is_device */
-};
+/* Sanity check that the architecture specific macro have been set. */
+#if defined(ARCH_aarch64)
+#elif defined(ARCH_x86_64)
+#elif defined(ARCH_riscv64)
+#else
+#error "No architecture flag was defined, double check your CC flags"
+#endif
 
-struct untyped_info {
-    seL4_Word cap_start;
-    seL4_Word cap_end;
-    struct region regions[MAX_UNTYPED_REGIONS];
-};
-
-seL4_Word bootstrap_invocation_count;
-seL4_Word bootstrap_invocation_data[BOOTSTRAP_INVOCATION_DATA_SIZE];
-
-seL4_Word system_invocation_count;
-seL4_Word *system_invocation_data = (void *)0x80000000;
-
-struct untyped_info untyped_info;
-
-void dump_untyped_info()
-{
-    puts("\nUntyped Info Expected Memory Ranges\n");
-    seL4_Word start = untyped_info.regions[0].paddr;
-    seL4_Word end = start + (1ULL << untyped_info.regions[0].size_bits);
-    seL4_Word is_device = untyped_info.regions[0].is_device;
-    for (int i = 1; i < untyped_info.cap_end - untyped_info.cap_start; i++) {
-        if (untyped_info.regions[i].paddr != end || untyped_info.regions[i].is_device != is_device) {
-            puts("                                     paddr: ");
-            puthex64(start);
-            puts(" - ");
-            puthex64(end);
-            puts(" (");
-            puts(is_device ? "device" : "normal");
-            puts(")\n");
-            start = untyped_info.regions[i].paddr;
-            end = start + (1ULL << untyped_info.regions[i].size_bits);
-            is_device = untyped_info.regions[i].is_device;
-        } else {
-            end += (1ULL << untyped_info.regions[i].size_bits);
-        }
-    }
-    puts("                                     paddr: ");
-    puthex64(start);
-    puts(" - ");
-    puthex64(end);
-    puts(" (");
-    puts(is_device ? "device" : "normal");
-    puts(")\n");
-}
-
+#ifdef ARCH_riscv64
 /*
  * Convert the fault status register given by the kernel into a string describing
  * what fault happened. The FSR is the 'scause' register.
  */
-#ifdef ARCH_riscv64
 static char *riscv_fsr_to_string(seL4_Word fsr)
 {
     switch (fsr) {
@@ -329,6 +247,29 @@ static char *data_abort_dfsc_to_string(uintptr_t dfsc)
 }
 #endif
 
+#ifdef ARCH_x86_64
+static char *page_fault_to_string(seL4_Word fsr)
+{
+    // https://wiki.osdev.org/Exceptions#Page_Fault
+    switch (fsr) {
+    case 0 | 4:
+        return "read to a non-present page at ring 3";
+    case 1 | 4:
+        return "page-protection violation from read at ring 3";
+    case 2 | 4:
+        return "write to a non-present page at ring 3";
+    case 3 | 4:
+        return "page-protection violation from write at ring 3";
+    case 16:
+        // Note that seL4 currently does not implement the NX/XD bit
+        // to mark a page as non-executable so we will never see the below message.
+        return "instruction fetch from non-executable page";
+    default:
+        return "invalid FSR or unimplemented decoding";
+    }
+}
+#endif
+
 /* UBSAN decoding related functionality */
 #define UBSAN_ARM64_BRK_IMM 0x5500
 #define UBSAN_ARM64_BRK_MASK 0x00ff
@@ -426,197 +367,6 @@ static char *usban_code_to_string(seL4_Word code)
     }
 }
 #endif
-
-static bool check_untypeds_match(seL4_BootInfo *bi)
-{
-    /* Check that untypeds list generate from build matches the kernel */
-    if (untyped_info.cap_start != bi->untyped.start) {
-        puts("MON|ERROR: cap start mismatch. Expected cap start: ");
-        puthex32(untyped_info.cap_start);
-        puts("  boot info cap start: ");
-        puthex32(bi->untyped.start);
-        puts("\n");
-        puts("cap start mismatch");
-        return false;
-    }
-
-    if (untyped_info.cap_end != bi->untyped.end) {
-        puts("MON|ERROR: cap end mismatch. Expected cap end: ");
-        puthex32(untyped_info.cap_end);
-        puts("  boot info cap end: ");
-        puthex32(bi->untyped.end);
-        puts("\n");
-        puts("cap end mismatch");
-        return false;
-    }
-
-    for (unsigned i = 0; i < untyped_info.cap_end - untyped_info.cap_start; i++) {
-        if (untyped_info.regions[i].paddr != bi->untypedList[i].paddr) {
-            puts("MON|ERROR: paddr mismatch for untyped region: ");
-            puthex32(i);
-            puts("  expected paddr: ");
-            puthex64(untyped_info.regions[i].paddr);
-            puts("  boot info paddr: ");
-            puthex64(bi->untypedList[i].paddr);
-            puts("\n");
-            puts("paddr mismatch");
-            return false;
-        }
-        if (untyped_info.regions[i].size_bits != bi->untypedList[i].sizeBits) {
-            puts("MON|ERROR: size_bits mismatch for untyped region: ");
-            puthex32(i);
-            puts("  expected size_bits: ");
-            puthex32(untyped_info.regions[i].size_bits);
-            puts("  boot info size_bits: ");
-            puthex32(bi->untypedList[i].sizeBits);
-            puts("\n");
-            puts("size_bits mismatch");
-            return false;
-        }
-        if (untyped_info.regions[i].is_device != bi->untypedList[i].isDevice) {
-            puts("MON|ERROR: is_device mismatch for untyped region: ");
-            puthex32(i);
-            puts("  expected is_device: ");
-            puthex32(untyped_info.regions[i].is_device);
-            puts("  boot info is_device: ");
-            puthex32(bi->untypedList[i].isDevice);
-            puts("\n");
-            puts("is_device mismatch");
-            return false;
-        }
-    }
-
-    puts("MON|INFO: bootinfo untyped list matches expected list\n");
-
-    return true;
-}
-
-static unsigned perform_invocation(seL4_Word *invocation_data, unsigned offset, unsigned idx)
-{
-    seL4_MessageInfo_t tag, out_tag;
-    seL4_Error result;
-    seL4_Word mr0;
-    seL4_Word mr1;
-    seL4_Word mr2;
-    seL4_Word mr3;
-    seL4_Word service;
-    seL4_Word service_incr;
-    seL4_Word cmd = invocation_data[offset];
-    seL4_Word iterations = (cmd >> 32) + 1;
-    seL4_Word tag0 = cmd & 0xffffffffULL;
-    unsigned int cap_offset, cap_incr_offset, cap_count;
-    unsigned int mr_offset, mr_incr_offset, mr_count;
-    unsigned int next_offset;
-
-    tag.words[0] = tag0;
-    service = invocation_data[offset + 1];
-    cap_count = seL4_MessageInfo_get_extraCaps(tag);
-    mr_count = seL4_MessageInfo_get_length(tag);
-
-#if 0
-    puts("Doing invocation: ");
-    puthex32(idx);
-    puts(" cap count: ");
-    puthex32(cap_count);
-    puts(" MR count: ");
-    puthex32(mr_count);
-    puts("\n");
-#endif
-
-    cap_offset = offset + 2;
-    mr_offset = cap_offset + cap_count;
-    if (iterations > 1) {
-        service_incr = invocation_data[mr_offset + mr_count];
-        cap_incr_offset = mr_offset + mr_count + 1;
-        mr_incr_offset = cap_incr_offset + cap_count;
-        next_offset = mr_incr_offset + mr_count;
-    } else {
-        next_offset = mr_offset + mr_count;
-    }
-
-    if (seL4_MessageInfo_get_capsUnwrapped(tag) != 0) {
-        fail("kernel invocation should never have unwrapped caps");
-    }
-
-    for (unsigned i = 0; i < iterations; i++) {
-#if 0
-        puts("Preparing invocation:\n");
-#endif
-        /* Set all the caps */
-        seL4_Word call_service = service;
-        if (i > 0) {
-            call_service += service_incr * i;
-        }
-        for (unsigned j = 0; j < cap_count; j++) {
-            seL4_Word cap = invocation_data[cap_offset + j];
-            if (i > 0) {
-                cap += invocation_data[cap_incr_offset + j] * i;
-            }
-#if 0
-            puts("   SetCap: ");
-            puthex32(j);
-            puts(" ");
-            puthex64(cap);
-            puts("\n");
-#endif
-            seL4_SetCap(j, cap);
-        }
-
-        for (unsigned j = 0; j < mr_count; j++) {
-            seL4_Word mr = invocation_data[mr_offset + j];
-            if (i > 0) {
-                mr += invocation_data[mr_incr_offset + j] * i;
-            }
-#if 0
-            puts("   SetMR: ");
-            puthex32(j);
-            puts(" ");
-            puthex64(mr);
-            puts("\n");
-#endif
-            switch (j) {
-            case 0:
-                mr0 = mr;
-                break;
-            case 1:
-                mr1 = mr;
-                break;
-            case 2:
-                mr2 = mr;
-                break;
-            case 3:
-                mr3 = mr;
-                break;
-            default:
-                seL4_SetMR(j, mr);
-                break;
-            }
-        }
-
-        out_tag = seL4_CallWithMRs(call_service, tag, &mr0, &mr1, &mr2, &mr3);
-        result = (seL4_Error) seL4_MessageInfo_get_label(out_tag);
-        if (result != seL4_NoError) {
-            puts("ERROR: ");
-            puthex64(result);
-            puts(" ");
-            puts(sel4_strerror(result));
-            puts("  invocation idx: ");
-            puthex32(idx);
-            puts(".");
-            puthex32(i);
-            puts("\n");
-            fail("invocation error");
-        }
-#if 0
-        puts("Done invocation: ");
-        puthex32(idx);
-        puts(".");
-        puthex32(i);
-        puts("\n");
-#endif
-    }
-    return next_offset;
-}
 
 static void print_tcb_registers(seL4_UserContext *regs)
 {
@@ -819,6 +569,68 @@ static void print_tcb_registers(seL4_UserContext *regs)
     puts("tpidrro_el0 : ");
     puthex64(regs->tpidrro_el0);
     puts("\n");
+#elif ARCH_x86_64
+    puts("Registers: \n");
+    puts("rip : ");
+    puthex64(regs->rip);
+    puts("\n");
+    puts("rsp: ");
+    puthex64(regs->rsp);
+    puts("\n");
+    puts("rflags : ");
+    puthex64(regs->rflags);
+    puts("\n");
+    puts("rax : ");
+    puthex64(regs->rax);
+    puts("\n");
+    puts("rbx : ");
+    puthex64(regs->rbx);
+    puts("\n");
+    puts("rcx : ");
+    puthex64(regs->rcx);
+    puts("\n");
+    puts("rdx : ");
+    puthex64(regs->rdx);
+    puts("\n");
+    puts("rsi : ");
+    puthex64(regs->rsi);
+    puts("\n");
+    puts("rdi : ");
+    puthex64(regs->rdi);
+    puts("\n");
+    puts("rbp : ");
+    puthex64(regs->rbp);
+    puts("\n");
+    puts("r8 : ");
+    puthex64(regs->r8);
+    puts("\n");
+    puts("r9 : ");
+    puthex64(regs->r9);
+    puts("\n");
+    puts("r10 : ");
+    puthex64(regs->r10);
+    puts("\n");
+    puts("r11 : ");
+    puthex64(regs->r11);
+    puts("\n");
+    puts("r12 : ");
+    puthex64(regs->r12);
+    puts("\n");
+    puts("r13 : ");
+    puthex64(regs->r13);
+    puts("\n");
+    puts("r14 : ");
+    puthex64(regs->r14);
+    puts("\n");
+    puts("r15 : ");
+    puthex64(regs->r15);
+    puts("\n");
+    puts("fs_base : ");
+    puthex64(regs->fs_base);
+    puts("\n");
+    puts("gs_base : ");
+    puthex64(regs->gs_base);
+    puts("\n");
 #endif
 }
 
@@ -840,6 +652,29 @@ static void riscv_print_vm_fault()
     puts("\n");
     puts("MON|ERROR: description of fault: ");
     puts(riscv_fsr_to_string(fsr));
+    puts("\n");
+}
+#endif
+
+#if ARCH_x86_64
+static void x86_64_print_vm_fault()
+{
+    seL4_Word ip = seL4_GetMR(seL4_VMFault_IP);
+    seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
+    seL4_Word is_instruction = seL4_GetMR(seL4_VMFault_PrefetchFault);
+    seL4_Word fsr = seL4_GetMR(seL4_VMFault_FSR);
+    puts("MON|ERROR: VMFault: ip=");
+    puthex64(ip);
+    puts("  fault_addr=");
+    puthex64(fault_addr);
+    puts("  fsr=");
+    puthex64(fsr);
+    puts("  ");
+    puts(is_instruction ? "(instruction fault)" : "(data fault)");
+    puts("\n");
+
+    puts("MON|ERROR: description of fault: ");
+    puts(page_fault_to_string(fsr));
     puts("\n");
 }
 #endif
@@ -911,20 +746,21 @@ static void monitor(void)
         seL4_MessageInfo_t tag;
         seL4_Error err;
 
-        tag = seL4_Recv(fault_ep, &badge, reply);
+        tag = seL4_Recv(FAULT_EP_CAP, &badge, REPLY_CAP);
         label = seL4_MessageInfo_get_label(tag);
 
-        seL4_Word tcb_cap = pd_tcbs[badge];
+        seL4_Word pd_id = badge - 1;
+        seL4_Word tcb_cap = BASE_PD_TCB_CAP + pd_id;
 
-        if (label == seL4_Fault_NullFault && badge < MAX_PDS) {
+        if (label == seL4_Fault_NullFault && pd_id < MAX_PDS) {
             /* This is a request from our PD to become passive */
-            err = seL4_SchedContext_UnbindObject(scheduling_contexts[badge], tcb_cap);
-            err = seL4_SchedContext_Bind(scheduling_contexts[badge], notification_caps[badge]);
+            err = seL4_SchedContext_UnbindObject(BASE_SCHED_CONTEXT_CAP + pd_id, tcb_cap);
+            err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + pd_id, BASE_NOTIFICATION_CAP + pd_id);
             if (err != seL4_NoError) {
                 puts("MON|ERROR: could not bind scheduling context to notification object");
             } else {
                 puts("MON|INFO: PD '");
-                puts(pd_names[badge]);
+                puts(pd_names[pd_id]);
                 puts("' is now passive!\n");
             }
             continue;
@@ -938,9 +774,9 @@ static void monitor(void)
         puthex64(tcb_cap);
         puts("\n");
 
-        if (badge < MAX_PDS && pd_names[badge][0] != 0) {
+        if (pd_id < MAX_PDS && pd_names[pd_id][0] != 0) {
             puts("MON|ERROR: faulting PD: ");
-            puts(pd_names[badge]);
+            puts(pd_names[pd_id]);
             puts("\n");
         } else {
             fail("MON|ERROR: unknown/invalid badge\n");
@@ -1023,12 +859,14 @@ static void monitor(void)
             aarch64_print_vm_fault();
 #elif defined(ARCH_riscv64)
             riscv_print_vm_fault();
+#elif defined(ARCH_x86_64)
+            x86_64_print_vm_fault();
 #else
 #error "Unknown architecture to print a VM fault for"
 #endif
 
             seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
-            seL4_Word stack_addr = pd_stack_addrs[badge];
+            seL4_Word stack_addr = pd_stack_bottom_addrs[pd_id];
             if (fault_addr < stack_addr && fault_addr >= stack_addr - 0x1000) {
                 puts("MON|ERROR: potential stack overflow, fault address within one page outside of stack region\n");
             }
@@ -1065,58 +903,22 @@ static void monitor(void)
     }
 }
 
-void main(seL4_BootInfo *bi)
+void main(void)
 {
-    __sel4_ipc_buffer = bi->ipcBuffer;
-    puts("MON|INFO: Microkit Bootstrap\n");
-
-    if (!check_untypeds_match(bi)) {
-        /* This can be useful to enable during new platform bring up
-         * if there are problems
-         */
-        dump_bootinfo(bi);
-        dump_untyped_info();
-        fail("MON|ERROR: found mismatch between boot info and untyped info");
-    }
-
-    puts("MON|INFO: Number of bootstrap invocations: ");
-    puthex32(bootstrap_invocation_count);
-    puts("\n");
-
-    puts("MON|INFO: Number of system invocations:    ");
-    puthex32(system_invocation_count);
-    puts("\n");
-
-    unsigned offset = 0;
-    for (unsigned idx = 0; idx < bootstrap_invocation_count; idx++) {
-        offset = perform_invocation(bootstrap_invocation_data, offset, idx);
-    }
-    puts("MON|INFO: completed bootstrap invocations\n");
-
-    offset = 0;
-    for (unsigned idx = 0; idx < system_invocation_count; idx++) {
-        offset = perform_invocation(system_invocation_data, offset, idx);
-    }
-
 #if CONFIG_DEBUG_BUILD
     /*
      * Assign PD/VM names to each TCB with seL4, this helps debugging when an error
      * message is printed by seL4 or if we dump the scheduler state.
-     * This is done specifically in the monitor rather than being prepared as an
-     * invocation like everything else because it is technically a separate system
-     * call and not an invocation.
-     * If we end up doing various different kinds of system calls we should add
-     * support in the tooling and make the monitor generic.
      */
-    for (unsigned idx = 1; idx < pd_names_len + 1; idx++) {
-        seL4_DebugNameThread(pd_tcbs[idx], pd_names[idx]);
+    for (unsigned idx = 0; idx < pd_names_len; idx++) {
+        seL4_DebugNameThread(BASE_PD_TCB_CAP + idx, pd_names[idx]);
     }
-    for (unsigned idx = 1; idx < vm_names_len + 1; idx++) {
-        seL4_DebugNameThread(vm_tcbs[idx], vm_names[idx]);
+    for (unsigned idx = 0; idx < vm_names_len; idx++) {
+        seL4_DebugNameThread(BASE_VM_TCB_CAP + idx, vm_names[idx]);
     }
 #endif
 
-    puts("MON|INFO: completed system invocations\n");
+    puts("MON|INFO: Microkit Monitor started!\n");
 
     monitor();
 }

@@ -31,6 +31,7 @@ seL4_MessageInfo_t microkit_signal_msg;
 seL4_Word microkit_irqs;
 seL4_Word microkit_notifications;
 seL4_Word microkit_pps;
+seL4_Word microkit_ioports;
 
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 

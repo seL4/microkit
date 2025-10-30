@@ -22,6 +22,7 @@ This section attempts to list the packages or external development tools which a
 * xmllint
 * qemu-system-aarch64
 * qemu-system-riscv64
+* qemu-system-x86_64
 
 To build the documentation you also need
 * pandoc
@@ -37,13 +38,15 @@ On a Debian-like system you can do:
 
     $ curl https://sh.rustup.rs -sSf | sh
     $ rustup target add x86_64-unknown-linux-musl
+    $ rustup component add rust-src --toolchain stable-x86_64-unknown-linux-gnu
     $ sudo apt install build-essential git cmake ninja-build \
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
         python3.12 python3.12-venv \
-        qemu-system-arm qemu-system-misc \
-        gcc-riscv64-unknown-elf
+        qemu-system-arm qemu-system-misc qemu-system-x86 \
+        gcc-riscv64-unknown-elf \
+        gcc-x86-64-linux-gnu
     $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
@@ -72,7 +75,7 @@ On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
     $ curl https://sh.rustup.rs -sSf | sh
     $ brew tap riscv-software-src/riscv
     $ brew install riscv-tools
-    $ brew install pandoc cmake dtc ninja libxml2 python@3.12 coreutils texlive qemu
+    $ brew install x86_64-elf-gcc pandoc cmake dtc ninja libxml2 python@3.12 coreutils texlive qemu
     $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
@@ -100,14 +103,13 @@ Will give a shell with all the required dependencies to build the SDK.
 An important note is that Nix's RISC-V cross-compiler will have a different
 prefix to the default one the SDK build script expects.
 
-When you build the SDK, provide an extra argument `--toolchain-prefix-riscv64 riscv64-none-elf`.
+When you build the SDK, provide two extra arguments:
+`--gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf`.
 
 ## seL4 Version
 
 The SDK includes a binary of the seL4 kernel.
 During the SDK build process the kernel is build from source.
-
-At this point in time there are some minor changes to the seL4 kernel required for Microkit. This is temporary, more details can be found [here](https://github.com/seL4/microkit/issues/52).
 
 Please clone seL4 from:
 

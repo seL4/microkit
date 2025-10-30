@@ -4,15 +4,18 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::{cmp::min, fmt};
+
+use crate::{sel4::Config, util::struct_to_bytes};
+
+pub mod capdl;
 pub mod elf;
 pub mod loader;
+pub mod report;
 pub mod sdf;
 pub mod sel4;
+pub mod symbols;
 pub mod util;
-
-use sel4::Config;
-use std::cmp::min;
-use std::fmt;
 
 // Note that these values are used in the monitor so should also be changed there
 // if any of these were to change.
@@ -24,11 +27,37 @@ pub const MAX_VMS: usize = 63;
 pub const PD_MAX_NAME_LENGTH: usize = 64;
 pub const VM_MAX_NAME_LENGTH: usize = 64;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UntypedObject {
     pub cap: u64,
     pub region: MemoryRegion,
     pub is_device: bool,
+}
+
+pub const UNTYPED_DESC_PADDING: usize = size_of::<u64>() - (2 * size_of::<u8>());
+#[repr(C)]
+struct SeL4UntypedDesc {
+    paddr: u64,
+    size_bits: u8,
+    is_device: u8,
+    padding: [u8; UNTYPED_DESC_PADDING],
+}
+
+impl From<&UntypedObject> for SeL4UntypedDesc {
+    fn from(value: &UntypedObject) -> Self {
+        Self {
+            paddr: value.base(),
+            size_bits: value.size_bits() as u8,
+            is_device: if value.is_device { 1 } else { 0 },
+            padding: [0u8; UNTYPED_DESC_PADDING],
+        }
+    }
+}
+
+/// Getting a `seL4_UntypedDesc` for patching into the initialiser
+pub fn serialise_ut(ut: &UntypedObject) -> Vec<u8> {
+    let sel4_untyped_desc: SeL4UntypedDesc = ut.into();
+    unsafe { struct_to_bytes(&sel4_untyped_desc).to_vec() }
 }
 
 impl UntypedObject {
@@ -74,7 +103,7 @@ impl Region {
     }
 
     pub fn data<'a>(&self, elf: &'a elf::ElfFile) -> &'a Vec<u8> {
-        &elf.segments[self.segment_idx].data
+        elf.segments[self.segment_idx].data()
     }
 }
 
@@ -158,7 +187,7 @@ impl MemoryRegion {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DisjointMemoryRegion {
     pub regions: Vec<MemoryRegion>,
 }
@@ -278,232 +307,5 @@ impl DisjointMemoryRegion {
             }
             None => panic!("Unable to allocate {size} bytes from lower_bound 0x{lower_bound:x}"),
         }
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct KernelAllocation {
-    pub untyped_cap_address: u64, // FIXME: possibly this is an object, not an int?
-    pub phys_addr: u64,
-    pub size: u64,
-}
-
-pub struct UntypedAllocator {
-    untyped_object: UntypedObject,
-    allocation_point: u64,
-    allocations: Vec<KernelAllocation>,
-}
-
-impl UntypedAllocator {
-    pub fn new(
-        untyped_object: UntypedObject,
-        allocation_point: u64,
-        allocations: Vec<KernelAllocation>,
-    ) -> UntypedAllocator {
-        UntypedAllocator {
-            untyped_object,
-            allocation_point,
-            allocations,
-        }
-    }
-
-    pub fn base(&self) -> u64 {
-        self.untyped_object.region.base
-    }
-
-    pub fn end(&self) -> u64 {
-        self.untyped_object.region.end
-    }
-}
-
-/// Allocator for kernel objects.
-///
-/// This tracks the space available in a set of untyped objects.
-/// On allocation an untyped with sufficient remaining space is
-/// returned (while updating the internal tracking).
-///
-/// Within an untyped object this mimics the kernel's allocation
-/// policy (basically a bump allocator with alignment).
-///
-/// The only 'choice' this allocator has is which untyped object
-/// to use. The current algorithm is simply first fit: the first
-/// untyped that has sufficient space. This is not optimal.
-///
-/// Note: The allocator does not generate the Retype invocations;
-/// this must be done with more knowledge (specifically the destination
-/// cap) which is distinct.
-///
-/// It is critical that invocations are generated in the same order
-/// as the allocations are made.
-pub struct ObjectAllocator {
-    pub init_capacity: u64,
-    allocation_idx: u64,
-    pub untyped: Vec<UntypedAllocator>,
-}
-
-/// First entry is potential padding, then the actual allocation is the second
-/// entry.
-type FixedAllocation = (Option<Vec<KernelAllocation>>, KernelAllocation);
-
-pub enum FindFixedError {
-    AlreadyAllocated,
-    TooLarge,
-}
-
-impl ObjectAllocator {
-    pub fn new(untyped_pool: Vec<&UntypedObject>) -> ObjectAllocator {
-        let mut untyped: Vec<UntypedAllocator> = untyped_pool
-            .into_iter()
-            .map(|ut| UntypedAllocator::new(*ut, 0, vec![]))
-            .collect();
-        untyped.sort_by(|a, b| a.untyped_object.base().cmp(&b.untyped_object.base()));
-
-        let mut capacity = 0;
-        for ut in &untyped {
-            capacity += ut.end() - (ut.base() + ut.allocation_point);
-        }
-
-        ObjectAllocator {
-            init_capacity: capacity,
-            allocation_idx: 0,
-            untyped,
-        }
-    }
-
-    pub fn capacity(&self) -> u64 {
-        let mut capacity = 0;
-        for ut in &self.untyped {
-            capacity += ut.end() - (ut.base() + ut.allocation_point);
-        }
-
-        capacity
-    }
-
-    pub fn max_alloc_size(&self) -> u64 {
-        let mut largest_capacity = 0;
-        for ut in &self.untyped {
-            let ut_capacity = ut.end() - (ut.base() + ut.allocation_point);
-            if ut_capacity > largest_capacity {
-                largest_capacity = ut_capacity;
-            }
-        }
-
-        largest_capacity
-    }
-
-    pub fn alloc(&mut self, size: u64) -> Option<KernelAllocation> {
-        self.alloc_n(size, 1)
-    }
-
-    pub fn alloc_n(&mut self, size: u64, count: u64) -> Option<KernelAllocation> {
-        assert!(util::is_power_of_two(size));
-        assert!(count > 0);
-        let mem_size = count * size;
-        for ut in &mut self.untyped {
-            // See if this fits
-            let start = util::round_up(ut.base() + ut.allocation_point, size);
-            if start + mem_size <= ut.end() {
-                ut.allocation_point = (start - ut.base()) + mem_size;
-                self.allocation_idx += 1;
-                let allocation = KernelAllocation {
-                    untyped_cap_address: ut.untyped_object.cap,
-                    phys_addr: start,
-                    size: mem_size,
-                };
-                ut.allocations.push(allocation);
-                return Some(allocation);
-            }
-        }
-
-        None
-    }
-
-    pub fn reserve(&mut self, alloc: (&UntypedObject, u64)) {
-        for ut in &mut self.untyped {
-            if *alloc.0 == ut.untyped_object {
-                if ut.base() <= alloc.1 && alloc.1 <= ut.end() {
-                    ut.allocation_point = alloc.1 - ut.base();
-                    return;
-                } else {
-                    panic!(
-                        "Allocation {:?} ({:x}) not in untyped region {:?}",
-                        alloc.0, alloc.1, ut.untyped_object
-                    );
-                }
-            }
-        }
-
-        panic!(
-            "Allocation {:?} ({:x}) not in any device untyped",
-            alloc.0, alloc.1
-        );
-    }
-
-    pub fn find_fixed(
-        &mut self,
-        phys_addr: u64,
-        size: u64,
-    ) -> Result<Option<FixedAllocation>, FindFixedError> {
-        for ut in &mut self.untyped {
-            /* Find the right untyped */
-            if phys_addr >= ut.base() && phys_addr < ut.end() {
-                if phys_addr < ut.base() + ut.allocation_point {
-                    return Err(FindFixedError::AlreadyAllocated);
-                }
-
-                let space_left = ut.end() - (ut.base() + ut.allocation_point);
-                if space_left < size {
-                    return Err(FindFixedError::TooLarge);
-                }
-
-                let mut watermark = ut.base() + ut.allocation_point;
-                let mut allocations: Option<Vec<KernelAllocation>>;
-
-                if phys_addr != watermark {
-                    allocations = Some(Vec::new());
-                    /* If the watermark isn't at the right place, we need to pad */
-                    let mut padding_required = phys_addr - watermark;
-                    // We are restricted in how much we can pad:
-                    // 1: Untyped objects must be power-of-two sized.
-                    // 2: Untyped objects must be aligned to their size.
-                    let mut padding_sizes = Vec::new();
-                    // We have two potential approaches for how we pad.
-                    // 1: Use largest objects possible respecting alignment
-                    // and size restrictions.
-                    // 2: Use a fixed size object multiple times. This will
-                    // create more objects, but as same sized objects can be
-                    // create in a batch, required fewer invocations.
-                    // For now we choose #1
-                    while padding_required > 0 {
-                        let wm_lsb = util::lsb(watermark);
-                        let sz_msb = util::msb(padding_required);
-                        let pad_object_size = 1 << min(wm_lsb, sz_msb);
-                        padding_sizes.push(pad_object_size);
-
-                        allocations.as_mut().unwrap().push(KernelAllocation {
-                            untyped_cap_address: ut.untyped_object.cap,
-                            phys_addr: watermark,
-                            size: pad_object_size,
-                        });
-
-                        watermark += pad_object_size;
-                        padding_required -= pad_object_size;
-                    }
-                } else {
-                    allocations = None;
-                }
-
-                let obj = KernelAllocation {
-                    untyped_cap_address: ut.untyped_object.cap,
-                    phys_addr: watermark,
-                    size,
-                };
-
-                ut.allocation_point = (watermark + size) - ut.base();
-                return Ok(Some((allocations, obj)));
-            }
-        }
-
-        Ok(None)
     }
 }

@@ -7,6 +7,7 @@ Files:
   tool/microkit/Cargo.lock
   example/rust/Cargo.lock
   example/rust/support/*.json
+  initialiser/support/*.json
   flake.lock
   CHANGES.md
   VERSION
