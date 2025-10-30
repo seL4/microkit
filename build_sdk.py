@@ -790,6 +790,7 @@ def main() -> None:
     parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
     parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
     parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
+    parser.add_argument("--skip-initialiser", action="store_true", help="Initialiser will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
     # Read from the version file as unless someone has specified
@@ -911,7 +912,8 @@ def main() -> None:
                 build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
-            build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
+            if not args.skip_initialiser:
+                build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
