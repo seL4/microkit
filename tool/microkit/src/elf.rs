@@ -220,9 +220,19 @@ impl ElfFile {
     }
 
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
+        Self::from_split_paths(path, None)
+    }
+
+    pub fn from_split_paths(
+        path: &Path,
+        path_for_symbols: Option<&Path>,
+    ) -> Result<ElfFile, String> {
         let reader = ElfFileReader::from_path(path)?;
         let segments = reader.segments()?;
-        let symbols = reader.symbols()?;
+        let symbols = match path_for_symbols {
+            Some(path_for_symbols) => ElfFileReader::from_path(path_for_symbols)?.symbols()?,
+            None => reader.symbols()?,
+        };
         Ok(ElfFile {
             path: path.to_owned(),
             word_size: reader.word_size,
