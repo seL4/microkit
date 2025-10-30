@@ -351,7 +351,7 @@ The SDK contains:
 Additionally, for each supported board configuration the following are provided:
 
 * `libmicrokit.a`
-* `capdl_initialiser.elf`
+* `initialiser.elf`
 * `sel4.elf`
 * `monitor.elf`
 
