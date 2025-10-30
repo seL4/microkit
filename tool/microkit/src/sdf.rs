@@ -1593,16 +1593,16 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
-    let mut vms = vec![];
+    let mut vms: Vec<&String> = vec![];
     for pd in &pds {
         if let Some(vm) = &pd.virtual_machine {
-            if vms.contains(&vm) {
+            if vms.contains(&&vm.name) {
                 return Err(format!(
                     "Error: duplicate virtual machine name '{}'.",
                     vm.name
                 ));
             }
-            vms.push(vm);
+            vms.push(&vm.name);
         }
     }
 

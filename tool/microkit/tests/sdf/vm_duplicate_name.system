@@ -14,7 +14,7 @@
     <protection_domain name="hello2">
         <program_image path="hello.elf" />
         <virtual_machine name="guest">
-            <vcpu id="0" />
+            <vcpu id="10" />
         </virtual_machine>
     </protection_domain>
 </system>
