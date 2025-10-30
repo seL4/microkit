@@ -171,10 +171,12 @@ impl<'a> Loader<'a> {
                     kernel_first_paddr = Some(segment.phys_addr);
                 }
 
-                if kernel_p_v_offset.is_none() {
+                if let Some(p_v_offset) = kernel_p_v_offset {
+                    if p_v_offset != segment.virt_addr - segment.phys_addr {
+                        panic!("Kernel does not have a consistent physical to virtual offset");
+                    }
+                } else {
                     kernel_p_v_offset = Some(segment.virt_addr - segment.phys_addr);
-                } else if kernel_p_v_offset.unwrap() != segment.virt_addr - segment.phys_addr {
-                    panic!("Kernel does not have a consistent physical to virtual offset");
                 }
 
                 regions.push((segment.phys_addr, segment.data().as_slice()));
