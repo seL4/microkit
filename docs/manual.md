@@ -762,6 +762,7 @@ The `setvar` element has the following attributes:
 The `protection_domain` element has the same attributes as any other protection domain as well as:
 
 * `id`: The ID of the child for the parent to refer to.
+* `setvar_id`: (optional) Specifies a symbol in the parent program image. This symbol will be rewritten with the ID of the child.
 
 The `virtual_machine` element has the following attributes:
 

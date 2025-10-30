@@ -239,6 +239,8 @@ pub struct ProtectionDomain {
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
     pub parent: Option<usize>,
+    /// Value of the setvar_id attribute, if a parent protection domain exists
+    pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
 }
@@ -425,18 +427,18 @@ impl ProtectionDomain {
         ];
         if is_child {
             attrs.push("id");
+            attrs.push("setvar_id");
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
 
-        let id = if is_child {
-            Some(sdf_parse_number(
-                checked_lookup(xml_sdf, node, "id")?,
-                node,
-            )?)
+        let (id, setvar_id) = if is_child {
+            let id = sdf_parse_number(checked_lookup(xml_sdf, node, "id")?, node)?;
+            let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
+            (Some(id), setvar_id)
         } else {
-            None
+            (None, None)
         };
 
         // If we do not have an explicit budget the period is equal to the default budget.
@@ -924,7 +926,19 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
+                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true)?;
+
+                    if let Some(setvar_id) = &child_pd.setvar_id {
+                        let setvar = SysSetVar {
+                            symbol: setvar_id.to_string(),
+                            kind: SysSetVarKind::Id {
+                                id: child_pd.id.unwrap(),
+                            },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
+
+                    child_pds.push(child_pd);
                 }
                 "virtual_machine" => {
                     if !config.hypervisor {
@@ -995,6 +1009,7 @@ impl ProtectionDomain {
             virtual_machine,
             has_children,
             parent: None,
+            setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
