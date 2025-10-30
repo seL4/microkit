@@ -775,7 +775,10 @@ Additionally, it supports the following child elements:
 * `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
-The `vcpu` element has a single `id` attribute defining the identifier used for the virtual machine's vCPU.
+The `vcpu` element has the following attributes:
+
+* `id`: The vCPU identifier. Must be at least 0 and less than 62.
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the vCPU identifier.
 
 The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
 

@@ -256,6 +256,7 @@ pub struct VirtualMachine {
 #[derive(Debug, PartialEq, Eq)]
 pub struct VirtualCpu {
     pub id: u64,
+    pub setvar_id: Option<String>,
 }
 
 /// To avoid code duplication for handling protection domains
@@ -941,7 +942,19 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
+                    let vm = VirtualMachine::from_xml(config, xml_sdf, &child)?;
+
+                    for vcpu in &vm.vcpus {
+                        if let Some(setvar_id) = &vcpu.setvar_id {
+                            let setvar = SysSetVar {
+                                symbol: setvar_id.to_string(),
+                                kind: SysSetVarKind::Id { id: vcpu.id },
+                            };
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        }
+                    }
+
+                    virtual_machine = Some(vm);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -1032,7 +1045,7 @@ impl VirtualMachine {
             let child_name = child.tag_name().name();
             match child_name {
                 "vcpu" => {
-                    check_attributes(xml_sdf, &child, &["id"])?;
+                    check_attributes(xml_sdf, &child, &["id", "setvar_id"])?;
                     let id = checked_lookup(xml_sdf, &child, "id")?
                         .parse::<u64>()
                         .unwrap();
@@ -1056,7 +1069,9 @@ impl VirtualMachine {
                         }
                     }
 
-                    vcpus.push(VirtualCpu { id });
+                    let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
+
+                    vcpus.push(VirtualCpu { id, setvar_id });
                 }
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
