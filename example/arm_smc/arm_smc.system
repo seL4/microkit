@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2025, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="arm_smc" priority="1" smc="true">
+        <program_image path="arm_smc.elf" />
+    </protection_domain>
+</system>
