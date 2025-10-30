@@ -724,7 +724,7 @@ def build_lib_component(
         dest.chmod(0o744)
 
 
-def build_capdl_initialiser(
+def build_initialiser(
     component_name: str,
     custom_rust_sel4_dir: Path,
     root_dir: Path,
@@ -906,7 +906,7 @@ def main() -> None:
                 build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
             build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
-            build_capdl_initialiser("capdl_initialiser", args.rust_sel4, root_dir, build_dir, board, config)
+            build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():

@@ -305,7 +305,7 @@ fn main() -> Result<(), String> {
     let loader_elf_path = elf_path.join("loader.elf");
     let kernel_elf_path = elf_path.join("sel4.elf");
     let monitor_elf_path = elf_path.join("monitor.elf");
-    let capdl_init_elf_path = elf_path.join("capdl_initialiser.elf");
+    let capdl_init_elf_path = elf_path.join("initialiser.elf");
 
     let kernel_config_path = sdk_dir
         .join("board")
