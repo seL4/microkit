@@ -60,9 +60,11 @@ Rather than a single `main` entry point, a program has four distinct entry point
 
 On ARM and RISC-V, the individual programs are combined to produce a single bootable *system image*.
 The format of the image is suitable for loading by the target board's bootloader.
-The Microkit tool, which is provided as part of the SDK, is used to generate the system image.
 
-On x86-64, the individual programs are combined to produce a capDL initialiser ELF image that is loaded by Multiboot as a boot module to seL4. More details in later sections.
+On x86-64, there are two ELF images invovled. One for the seL4 kernel, and one for the initialiser that
+setups up the Microkit system. These are loaded by a Multiboot 2 compliant bootloader.
+
+The Microkit tool, which is provided as part of the SDK, is used to generate the system image(s).
 
 The Microkit tool takes a *system description* as input.
 The system description is an XML file that specifies all the objects that make up the system.
@@ -374,7 +376,7 @@ The *debug* configuration includes a debug build of the seL4 kernel to allow con
 
 ## Release
 
-The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, capDL initialiser and
+The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, initialiser and
 kernel do *not* perform any serial output.
 
 ## Benchmark
@@ -1338,7 +1340,7 @@ booting process as well as what exactly the Microkit tool is doing.
 
 The loader starts first, it has two main jobs:
 
-1. Unpack all the parts of the system (kernel and capDL initialiser) into
+1. Unpack all the parts of the system (kernel and initialiser) into
    their expected locations within main memory.
 2. Finish initialising the hardware such that the rest of the system can start.
 
