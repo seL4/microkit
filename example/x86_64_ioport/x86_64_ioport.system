@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2025, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="x86_64_ioport" priority="100" >
+        <program_image path="x86_64_ioport.elf" />
+        <ioport id="0" addr="0x3f8" size="8" />
+    </protection_domain>
+</system>
