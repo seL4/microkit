@@ -191,6 +191,7 @@ pub enum SysSetVarKind {
     Size { mr: String },
     Vaddr { address: u64 },
     Paddr { region: String },
+    Id { id: u64 },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -205,6 +206,7 @@ pub struct ChannelEnd {
     pub id: u64,
     pub notify: bool,
     pub pp: bool,
+    pub setvar_id: Option<String>,
 }
 
 #[derive(Debug)]
@@ -609,6 +611,14 @@ impl ProtectionDomain {
                         return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
                     }
 
+                    if let Some(setvar_id) = child.attribute("setvar_id") {
+                        let setvar = SysSetVar {
+                            symbol: setvar_id.to_string(),
+                            kind: SysSetVarKind::Id { id: id as u64 },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
+
                     if let Some(irq_str) = child.attribute("irq") {
                         if config.arch == Arch::X86_64 {
                             return Err(value_error(
@@ -619,7 +629,7 @@ impl ProtectionDomain {
                         }
 
                         // ARM and RISC-V interrupts must have an "irq" attribute.
-                        check_attributes(xml_sdf, &child, &["irq", "id", "trigger"])?;
+                        check_attributes(xml_sdf, &child, &["irq", "id", "setvar_id", "trigger"])?;
                         let irq = irq_str.parse::<u64>().unwrap();
                         let trigger = if let Some(trigger_str) = child.attribute("trigger") {
                             match trigger_str {
@@ -655,7 +665,15 @@ impl ProtectionDomain {
                         check_attributes(
                             xml_sdf,
                             &child,
-                            &["id", "ioapic", "pin", "trigger", "polarity", "vector"],
+                            &[
+                                "id",
+                                "setvar_id",
+                                "ioapic",
+                                "pin",
+                                "trigger",
+                                "polarity",
+                                "vector",
+                            ],
                         )?;
 
                         let ioapic = if let Some(ioapic_str) = child.attribute("ioapic") {
@@ -745,7 +763,11 @@ impl ProtectionDomain {
                         }
 
                         // MSI interrupts (X86_64) have a "pcidev" attribute.
-                        check_attributes(xml_sdf, &child, &["id", "pcidev", "handle", "vector"])?;
+                        check_attributes(
+                            xml_sdf,
+                            &child,
+                            &["id", "setvar_id", "pcidev", "handle", "vector"],
+                        )?;
 
                         let pci_parts: Vec<i64> = pcidev_str
                             .split([':', '.'])
@@ -834,7 +856,7 @@ impl ProtectionDomain {
                 }
                 "ioport" => {
                     if let Arch::X86_64 = config.arch {
-                        check_attributes(xml_sdf, &child, &["id", "addr", "size"])?;
+                        check_attributes(xml_sdf, &child, &["id", "setvar_id", "addr", "size"])?;
 
                         let id = checked_lookup(xml_sdf, &child, "id")?
                             .parse::<i64>()
@@ -852,6 +874,14 @@ impl ProtectionDomain {
                                 &child,
                                 "id must be >= 0".to_string(),
                             ));
+                        }
+
+                        if let Some(setvar_id) = child.attribute("setvar_id") {
+                            let setvar = SysSetVar {
+                                symbol: setvar_id.to_string(),
+                                kind: SysSetVarKind::Id { id: id as u64 },
+                            };
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                         }
 
                         let addr =
@@ -1145,7 +1175,7 @@ impl ChannelEnd {
             ));
         }
 
-        check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify"])?;
+        check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id"])?;
         let end_pd = checked_lookup(xml_sdf, node, "pd")?;
         let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<i64>().unwrap();
 
@@ -1182,11 +1212,13 @@ impl ChannelEnd {
             })?;
 
         if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
+            let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
             Ok(ChannelEnd {
                 pd: pd_idx,
                 id: end_id.try_into().unwrap(),
                 notify,
                 pp,
+                setvar_id,
             })
         } else {
             Err(value_error(
@@ -1520,10 +1552,28 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
-    let pds = pd_flatten(&xml_sdf, root_pds)?;
+    let mut pds = pd_flatten(&xml_sdf, root_pds)?;
 
     for node in channel_nodes {
-        channels.push(Channel::from_xml(&xml_sdf, &node, &pds)?);
+        let ch = Channel::from_xml(&xml_sdf, &node, &pds)?;
+
+        if let Some(setvar_id) = &ch.end_a.setvar_id {
+            let setvar = SysSetVar {
+                symbol: setvar_id.to_string(),
+                kind: SysSetVarKind::Id { id: ch.end_a.id },
+            };
+            checked_add_setvar(&mut pds[ch.end_a.pd].setvars, setvar, &xml_sdf, &node)?;
+        }
+
+        if let Some(setvar_id) = &ch.end_b.setvar_id {
+            let setvar = SysSetVar {
+                symbol: setvar_id.to_string(),
+                kind: SysSetVarKind::Id { id: ch.end_b.id },
+            };
+            checked_add_setvar(&mut pds[ch.end_b.pd].setvars, setvar, &xml_sdf, &node)?;
+        }
+
+        channels.push(ch);
     }
 
     // Now that we have parsed everything in the system description we can validate any

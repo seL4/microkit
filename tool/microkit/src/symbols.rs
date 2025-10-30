@@ -164,6 +164,7 @@ pub fn patch_symbols(
                                 }
                             }
                         }
+                        sdf::SysSetVarKind::Id { id } => *id,
                     };
                     symbols_to_write.push((&setvar.symbol, data));
                 }

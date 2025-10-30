@@ -725,6 +725,7 @@ The `irq` element has the following attributes on ARM and RISC-V:
 * `irq`: The hardware interrupt number.
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `irq` element has the following attributes when registering X86_64 IOAPIC interrupts:
 
@@ -734,6 +735,7 @@ The `irq` element has the following attributes when registering X86_64 IOAPIC in
 * `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
 * `level`: (optional) Whether the IRQ is level triggered (1) or edge triggered (0). Defaults to level (1).
 * `polarity`: (optional) Whether the line polarity is high (1) or low (0). Defaults to high (1).
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `irq` element has the following attributes when registering X86_64 MSI interrupts:
 
@@ -741,12 +743,14 @@ The `irq` element has the following attributes when registering X86_64 MSI inter
 * `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
 * `handle`: Value of the handle programmed into the data portion of the MSI.
 * `vector`: CPU vector to deliver the interrupt to.
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `ioport` element has the following attributes:
 
 * `id`: The I/O port identifier. Must be at least 0 and less than 63.
 * `addr`: The base address of the I/O port.
 * `size`: The size in bytes of the I/O port region.
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the I/O port identifier.
 
 The `setvar` element has the following attributes:
 
@@ -818,6 +822,7 @@ The `end` element has the following attributes:
 * `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
         Protected procedure calls can only be to PDs of strictly higher priority.
 * `notify`: (optional) Indicates that the protection domain for this end can send a notification to the other end; defaults to true.
+* `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier.
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
 The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functions.
