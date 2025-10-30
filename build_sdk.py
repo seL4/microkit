@@ -742,18 +742,23 @@ def build_initialiser(
         root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
     )
 
-    build_dir = build_dir / board.name / config.name / component_name
-    build_dir.mkdir(exist_ok=True, parents=True)
+    # To save on build times, we share a single 'build target' dir for the component,
+    # this means many initialiser dependencies do not have to be rebuilt unless something
+    # with the seL4 headers changes or the target architecture.
+    rust_target_dir = build_dir / component_name
+    component_build_dir = build_dir / board.name / config.name / component_name
+    component_build_dir.mkdir(exist_ok=True, parents=True)
 
     if custom_rust_sel4_dir is None:
-        capdl_init_elf = build_dir / "bin" / "sel4-capdl-initializer.elf"
+        capdl_init_elf = component_build_dir / "bin" / "sel4-capdl-initializer.elf"
         cmd = f"""
             RUSTC_BOOTSTRAP=1 \
             RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo install {cargo_cross_options} \
             --target {cargo_target} \
             --git https://github.com/au-ts/rust-seL4 --branch capdl_dev sel4-capdl-initializer \
-            --root {build_dir}
+            --target-dir {rust_target_dir} \
+            --root {component_build_dir}
         """
     else:
         capdl_init_elf = custom_rust_sel4_dir / "target" / cargo_target / "release" / "sel4-capdl-initializer.elf"
