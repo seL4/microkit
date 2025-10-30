@@ -577,39 +577,19 @@ impl ProtectionDomain {
                     let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
-                        // Check that the symbol does not already exist
-                        for setvar in &setvars {
-                            if setvar_vaddr == setvar.symbol {
-                                return Err(value_error(
-                                    xml_sdf,
-                                    &child,
-                                    format!("setvar on symbol '{setvar_vaddr}' already exists"),
-                                ));
-                            }
-                        }
-
-                        setvars.push(SysSetVar {
+                        let setvar = SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             kind: SysSetVarKind::Vaddr { address: map.vaddr },
-                        });
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                     }
 
                     if let Some(setvar_size) = child.attribute("setvar_size") {
-                        // Check that the symbol does not already exist
-                        for setvar in &setvars {
-                            if setvar_size == setvar.symbol {
-                                return Err(value_error(
-                                    xml_sdf,
-                                    &child,
-                                    format!("setvar on symbol '{setvar_size}' already exists"),
-                                ));
-                            }
-                        }
-
-                        setvars.push(SysSetVar {
+                        let setvar = SysSetVar {
                             symbol: setvar_size.to_string(),
                             kind: SysSetVarKind::Size { mr: map.mr.clone() },
-                        });
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                     }
 
                     maps.push(map);
@@ -906,20 +886,11 @@ impl ProtectionDomain {
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
                     let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
-                    // Check that the symbol does not already exist
-                    for setvar in &setvars {
-                        if symbol == setvar.symbol {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                format!("setvar on symbol '{symbol}' already exists"),
-                            ));
-                        }
-                    }
-                    setvars.push(SysSetVar {
+                    let setvar = SysSetVar {
                         symbol,
                         kind: SysSetVarKind::Paddr { region },
-                    })
+                    };
+                    checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
                     child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
@@ -1854,4 +1825,26 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         memory_regions: mrs,
         channels,
     })
+}
+
+fn checked_add_setvar(
+    setvars: &mut Vec<SysSetVar>,
+    setvar: SysSetVar,
+    xml_sdf: &XmlSystemDescription<'_>,
+    node: &roxmltree::Node<'_, '_>,
+) -> Result<(), String> {
+    // Check that the symbol does not already exist
+    for other_setvar in setvars.iter() {
+        if setvar.symbol == other_setvar.symbol {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("setvar on symbol '{}' already exists", setvar.symbol),
+            ));
+        }
+    }
+
+    setvars.push(setvar);
+
+    Ok(())
 }
