@@ -923,6 +923,7 @@ def main() -> None:
             dest.chmod(0o744)
 
     if not args.skip_tar:
+        print(f"Generating {tar_file}")
         # At this point we create a tar.gz file
         with tar_open(tar_file, "w:gz") as tar:
             tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
