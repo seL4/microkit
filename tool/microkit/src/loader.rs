@@ -3,13 +3,12 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-
 use crate::elf::ElfFile;
 use crate::sel4::{Arch, Config};
-use crate::util::{kb, mask, mb, round_up, struct_to_bytes};
-use crate::MemoryRegion;
+use crate::util::{mask, mb, round_up, struct_to_bytes};
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::ops::Range;
 use std::path::Path;
 
 const PAGE_TABLE_SIZE: usize = 4096;
@@ -113,8 +112,6 @@ struct LoaderHeader64 {
     ui_p_reg_end: u64,
     pv_offset: u64,
     v_entry: u64,
-    extra_device_addr_p: u64,
-    extra_device_size: u64,
     num_regions: u64,
 }
 
@@ -131,15 +128,15 @@ impl<'a> Loader<'a> {
         loader_elf_path: &Path,
         kernel_elf: &'a ElfFile,
         initial_task_elf: &'a ElfFile,
-        initial_task_phys_base: Option<u64>,
-        reserved_region: MemoryRegion,
-        system_regions: Vec<(u64, &'a [u8])>,
+        initial_task_phy_base: u64,
+        initial_task_vaddr_range: Range<u64>,
     ) -> Loader<'a> {
-        // Note: If initial_task_phys_base is not None, then it just this address
-        // as the base physical address of the initial task, rather than the address
-        // that comes from the initial_task_elf file.
-        let elf = ElfFile::from_path(loader_elf_path).unwrap();
-        let sz = elf.word_size;
+        if config.arch == Arch::X86_64 {
+            unreachable!("internal error: x86_64 does not support creating a loader image");
+        }
+
+        let loader_elf = ElfFile::from_path(loader_elf_path).unwrap();
+        let sz = loader_elf.word_size;
         let magic = match sz {
             32 => 0x5e14dead,
             64 => 0x5e14dead14de5ead,
@@ -150,7 +147,7 @@ impl<'a> Loader<'a> {
             ),
         };
 
-        let mut regions = Vec::new();
+        let mut regions: Vec<(u64, &[u8])> = Vec::new();
 
         let mut kernel_first_vaddr = None;
         let mut kernel_last_vaddr = None;
@@ -180,63 +177,63 @@ impl<'a> Loader<'a> {
                     panic!("Kernel does not have a consistent physical to virtual offset");
                 }
 
-                regions.push((segment.phys_addr, segment.data.as_slice()));
+                regions.push((segment.phys_addr, segment.data().as_slice()));
             }
         }
 
         assert!(kernel_first_paddr.is_some());
 
-        // Note: This could be extended to support multi-segment ELF files
-        // (and indeed initial did support multi-segment ELF files). However
-        // it adds significant complexity, and the calling functions enforce
-        // only single-segment ELF files, so we keep things simple here.
-        let initial_task_segments: Vec<_> = initial_task_elf
-            .segments
-            .iter()
-            .filter(|s| s.loadable)
-            .collect();
-        assert!(initial_task_segments.len() == 1);
-        let segment = &initial_task_segments[0];
-        assert!(segment.loadable);
+        // We support an initial task ELF with multiple segments. This is implemented by amalgamating all the segments
+        // into 1 segment, so if your segments are sparse, a lot of memory will be wasted.
+        let initial_task_segments = initial_task_elf.loadable_segments();
 
-        let inittask_first_vaddr = segment.virt_addr;
-        let inittask_last_vaddr = round_up(segment.virt_addr + segment.mem_size(), kb(4));
+        // Compute an available physical memory segment large enough to house the initial task (CapDL initialiser with spec)
+        // that is after the kernel window.
+        let inittask_p_v_offset = initial_task_vaddr_range.start - initial_task_phy_base;
+        let inittask_v_entry = initial_task_elf.entry;
 
-        let inittask_first_paddr = match initial_task_phys_base {
-            Some(paddr) => paddr,
-            None => segment.phys_addr,
-        };
-        let inittask_p_v_offset = inittask_first_vaddr - inittask_first_paddr;
-
-        // Note: For now we include any zeroes. We could optimize in the future
-        regions.push((inittask_first_paddr, &segment.data));
+        // initialiser.rs will always place the heap as the last region in the initial task's address space.
+        // So instead of copying a bunch of useless zeroes into the image, we can just leave it uninitialised.
+        assert!(initial_task_segments.last().unwrap().is_uninitialised());
+        // Skip heap segment
+        for segment in initial_task_segments[..initial_task_segments.len() - 1].iter() {
+            if segment.mem_size() > 0 {
+                let segment_paddr =
+                    initial_task_phy_base + (segment.virt_addr - initial_task_vaddr_range.start);
+                regions.push((segment_paddr, segment.data()));
+            }
+        }
 
         // Determine the pagetable variables
         assert!(kernel_first_vaddr.is_some());
         assert!(kernel_first_vaddr.is_some());
         let pagetable_vars = match config.arch {
             Arch::Aarch64 => Loader::aarch64_setup_pagetables(
-                &elf,
+                &loader_elf,
                 kernel_first_vaddr.unwrap(),
                 kernel_first_paddr.unwrap(),
             ),
             Arch::Riscv64 => Loader::riscv64_setup_pagetables(
                 config,
-                &elf,
+                &loader_elf,
                 kernel_first_vaddr.unwrap(),
                 kernel_first_paddr.unwrap(),
             ),
+            Arch::X86_64 => unreachable!("x86_64 does not support creating a loader image"),
         };
 
-        let image_segment = elf
+        let image_segment = loader_elf
             .segments
             .into_iter()
             .find(|segment| segment.loadable)
             .expect("Did not find loadable segment");
         let image_vaddr = image_segment.virt_addr;
-        let mut image = image_segment.data;
+        // We have to clone here as the image executable is part of this function return object,
+        // and the loader ELF is deserialised in this scope, so its lifetime will be shorter than
+        // the return object.
+        let mut image = image_segment.data().clone();
 
-        if image_vaddr != elf.entry {
+        if image_vaddr != loader_elf.entry {
             panic!("The loader entry point must be the first byte in the image");
         }
 
@@ -250,25 +247,14 @@ impl<'a> Loader<'a> {
 
         let kernel_entry = kernel_elf.entry;
 
-        let pv_offset = inittask_first_paddr.wrapping_sub(inittask_first_vaddr);
+        let pv_offset = initial_task_phy_base.wrapping_sub(initial_task_vaddr_range.start);
 
-        let ui_p_reg_start = inittask_first_paddr;
-        let ui_p_reg_end = inittask_last_vaddr - inittask_p_v_offset;
+        let ui_p_reg_start = initial_task_phy_base;
+        let ui_p_reg_end = initial_task_vaddr_range.end - inittask_p_v_offset;
         assert!(ui_p_reg_end > ui_p_reg_start);
 
-        let v_entry = initial_task_elf.entry;
-
-        let extra_device_addr_p = reserved_region.base;
-        let extra_device_size = reserved_region.size();
-
-        let mut all_regions = Vec::with_capacity(regions.len() + system_regions.len());
-        for region_set in [regions, system_regions] {
-            for r in region_set {
-                all_regions.push(r);
-            }
-        }
-
-        let mut all_regions_with_loader = all_regions.clone();
+        // This clone isn't too bad as it is just a Vec<(u64, &[u8])>
+        let mut all_regions_with_loader = regions.clone();
         all_regions_with_loader.push((image_vaddr, &image));
         check_non_overlapping(&all_regions_with_loader);
 
@@ -279,7 +265,7 @@ impl<'a> Loader<'a> {
 
         let mut region_metadata = Vec::new();
         let mut offset: u64 = 0;
-        for (addr, data) in &all_regions {
+        for (addr, data) in &regions {
             region_metadata.push(LoaderRegion64 {
                 load_addr: *addr,
                 size: data.len() as u64,
@@ -302,17 +288,15 @@ impl<'a> Loader<'a> {
             ui_p_reg_start,
             ui_p_reg_end,
             pv_offset,
-            v_entry,
-            extra_device_addr_p,
-            extra_device_size,
-            num_regions: all_regions.len() as u64,
+            v_entry: inittask_v_entry,
+            num_regions: regions.len() as u64,
         };
 
         Loader {
             image,
             header,
             region_metadata,
-            regions: all_regions,
+            regions,
         }
     }
 

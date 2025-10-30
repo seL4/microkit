@@ -36,6 +36,15 @@ SECTIONS
         PROVIDE(__init_array_end = .);
     } :data
 
+    .data.rel.ro :
+    {
+        . = ALIGN(8);
+        __data_rel_ro_start = .;
+        *(.data.rel.ro.local*) *(.data.rel.ro*) *(.data.rel*)
+        __data_rel_ro_end = .;
+        . = ALIGN(8);
+    } :data
+
     .data :
     {
         _data = .;

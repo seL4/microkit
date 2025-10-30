@@ -64,8 +64,6 @@ struct loader_data {
     uintptr_t ui_p_reg_end;
     uintptr_t pv_offset;
     uintptr_t v_entry;
-    uintptr_t extra_device_addr_p;
-    uintptr_t extra_device_size;
 
     uintptr_t num_regions;
     struct region regions[];
@@ -652,8 +650,8 @@ static void start_kernel(void)
         loader_data->v_entry,
         0,
         0,
-        loader_data->extra_device_addr_p,
-        loader_data->extra_device_size
+        0,
+        0
     );
 }
 

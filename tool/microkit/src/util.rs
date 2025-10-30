@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::Object;
+use std::ops::Range;
+
 use serde_json;
 
 pub fn msb(x: u64) -> u64 {
@@ -67,17 +68,9 @@ pub fn mask(n: u64) -> u64 {
     (1 << n) - 1
 }
 
-/// Check that all objects in the list are adjacent
-pub fn objects_adjacent(objects: &[Object]) -> bool {
-    let mut prev_cap_addr = objects[0].cap_addr;
-    for obj in &objects[1..] {
-        if obj.cap_addr != prev_cap_addr + 1 {
-            return false;
-        }
-        prev_cap_addr = obj.cap_addr;
-    }
-
-    true
+/// Returns true if two ranges overlap.
+pub fn ranges_overlap<T: PartialOrd>(left: &Range<T>, right: &Range<T>) -> bool {
+    left.start <= right.end && right.start <= left.end
 }
 
 /// Product a 'human readable' string for the size.
@@ -85,7 +78,7 @@ pub fn objects_adjacent(objects: &[Object]) -> bool {
 /// 'strict' means that it must be simply represented.
 ///  Specifically, it must be a multiple of standard power-of-two.
 ///  (e.g. KiB, MiB, GiB, TiB, PiB, EiB)
-pub fn human_size_strict(size: u64) -> (String, &'static str) {
+pub fn human_size_strict(size: u64) -> String {
     for (bits, label) in [
         (60, "EiB"),
         (50, "PiB"),
@@ -102,12 +95,12 @@ pub fn human_size_strict(size: u64) -> (String, &'static str) {
                 let (d_count, extra) = divmod(size, base);
                 count = d_count;
                 if extra != 0 {
-                    return (format!("{:.2}", size as f64 / base as f64), label);
+                    return format!("{:.2} {}", size as f64 / base as f64, label);
                 }
             } else {
                 count = size;
             }
-            return (comma_sep_u64(count), label);
+            return format!("{} {}", comma_sep_u64(count), label);
         }
     }
 
@@ -119,7 +112,7 @@ pub fn human_size_strict(size: u64) -> (String, &'static str) {
 pub fn comma_sep_u64(n: u64) -> String {
     let mut s = String::new();
     for (i, val) in n.to_string().chars().rev().enumerate() {
-        if i != 0 && i % 3 == 0 {
+        if i != 0 && i.is_multiple_of(3) {
             s.insert(0, ',');
         }
         s.insert(0, val);
@@ -178,12 +171,11 @@ pub unsafe fn bytes_to_struct<T>(bytes: &[u8]) -> &T {
     &body[0]
 }
 
-/// Serialise an array of u64 to a Vector of bytes. Pads the Vector of bytes
-/// such that the first entry is empty.
+/// Serialise an array of u64 to a Vector of bytes.
 pub fn monitor_serialise_u64_vec(vec: &[u64]) -> Vec<u8> {
     let mut bytes = vec![0; (1 + vec.len()) * 8];
     for (i, value) in vec.iter().enumerate() {
-        let start = (i + 1) * 8;
+        let start = i * 8;
         let end = start + 8;
         bytes[start..end].copy_from_slice(&value.to_le_bytes());
     }
@@ -191,19 +183,12 @@ pub fn monitor_serialise_u64_vec(vec: &[u64]) -> Vec<u8> {
     bytes
 }
 
-/// For serialising an array of PD or VM names. Pads the Vector of bytes such that
-/// the first entry is empty.
-pub fn monitor_serialise_names(
-    names: Vec<&String>,
-    max_len: usize,
-    max_name_len: usize,
-) -> Vec<u8> {
+/// For serialising an array of PD or VM names
+pub fn monitor_serialise_names(names: &[String], max_len: usize, max_name_len: usize) -> Vec<u8> {
     let mut names_bytes = vec![0; (max_len + 1) * max_name_len];
     for (i, name) in names.iter().enumerate() {
-        // The monitor will index into the array of names based on the badge, which
-        // starts at 1 and hence we cannot use the 0th entry in the array.
         let name_bytes = name.as_bytes();
-        let start = (i + 1) * max_name_len;
+        let start = i * max_name_len;
         // Here instead of giving an error we simply take the minimum of the name
         // and how large of a name we can encode. The name length is one less than
         // the maximum since we still have to add the null terminator.
