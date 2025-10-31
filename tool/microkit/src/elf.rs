@@ -360,14 +360,12 @@ impl ElfFile {
     pub fn find_symbol(&self, variable_name: &str) -> Result<(u64, u64), String> {
         if let Some((sym, duplicate)) = self.symbols.get(variable_name) {
             if *duplicate {
-                Err(format!(
-                    "Found multiple symbols with name '{variable_name}'"
-                ))
+                Err(format!("multiple symbols with name '{variable_name}'"))
             } else {
                 Ok((sym.value, sym.size))
             }
         } else {
-            Err(format!("No symbol named '{variable_name}' not found"))
+            Err(format!("no symbol named '{variable_name}' found"))
         }
     }
 

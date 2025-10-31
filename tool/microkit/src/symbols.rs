@@ -140,10 +140,11 @@ pub fn patch_symbols(
             match elf_obj.find_symbol(&setvar.symbol) {
                 Ok(sym_info) => {
                     // Sanity check that the symbol is of word size so we dont overwrite anything.
-                    if sym_info.1 != (kernel_config.word_size / 8) {
+                    let expected_symbol_size = kernel_config.word_size / 8;
+                    if sym_info.1 != expected_symbol_size {
                         return Err(format!(
-                            "setvar to non word size symbol '{}', which is of size {} bytes",
-                            setvar.symbol, sym_info.1
+                            "setvar to non-word size symbol '{}' for PD '{}', symbol has size '{}' bytes, expected size '{}' bytes",
+                            setvar.symbol, pd.name, sym_info.1, expected_symbol_size
                         ));
                     }
                     let data = match &setvar.kind {
@@ -168,7 +169,15 @@ pub fn patch_symbols(
                     };
                     symbols_to_write.push((&setvar.symbol, data));
                 }
-                Err(err) => return Err(err),
+                Err(err) => {
+                    return Err(format!(
+                        "could not patch symbol '{}' in program image for PD '{}' ({}): {}",
+                        setvar.symbol,
+                        pd.name,
+                        pd.program_image.display(),
+                        err
+                    ))
+                }
             }
         }
         let elf_obj = pd_elf_files.get_mut(pd_global_idx).unwrap();

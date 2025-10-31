@@ -529,7 +529,10 @@ fn main() -> Result<(), String> {
         }
     }
     // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
-    patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elf, &system)?;
+    if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elf, &system) {
+        eprintln!("ERROR: {err}");
+        std::process::exit(1);
+    }
 
     // The monitor is just a special PD
     system_elfs.push(monitor_elf);
