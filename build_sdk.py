@@ -115,7 +115,7 @@ class BoardInfo:
     name: str
     arch: KernelArch
     gcc_cpu: Optional[str]
-    loader_link_address: int | None
+    loader_link_address: Optional[int]
     kernel_options: KERNEL_OPTIONS
 
 
