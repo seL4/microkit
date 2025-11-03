@@ -72,4 +72,4 @@ LIB = $(addprefix $(BUILD_DIR)/, $(LIBS))
 all: $(LIB)
 
 $(LIB): $(addprefix $(BUILD_DIR)/, $(OBJS))
-	$(AR) -rv $@ $^
+	$(AR) -crv $@ $^
