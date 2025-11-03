@@ -590,8 +590,8 @@ fn main() -> Result<(), String> {
     );
 
     // For x86 we write out the initialiser ELF as is, but on ARM and RISC-V we build the bootloader image.
-    if kernel_config.arch == Arch::X86_64 {
-        match capdl_initialiser.elf.reserialise(Path::new(args.output)) {
+    match kernel_config.arch {
+        Arch::X86_64 => match capdl_initialiser.elf.reserialise(Path::new(args.output)) {
             Ok(size) => {
                 println!(
                     "MICROKIT|BOOT MODULE: image file size = {}",
@@ -601,84 +601,85 @@ fn main() -> Result<(), String> {
             Err(err) => {
                 eprintln!("Error: couldn't write the boot module to filesystem: {err}");
             }
+        },
+        Arch::Aarch64 | Arch::Riscv64 => {
+            // Now that we have the entire spec and CapDL initialiser ELF with embedded spec,
+            // we can determine exactly how much memory will be available statically when the kernel
+            // drops to userspace on ARM and RISC-V. This allow us to sanity check that:
+            // 1. There are enough memory to allocate all the objects required in the spec.
+            // 2. All frames with a physical attached reside in legal memory (device or normal).
+            // 3. Objects can be allocated from the free untyped list. For example, we detect
+            //    situations where you might have a few frames with size bit 12 to allocate but
+            //    only have untyped with size bit <12 remaining.
+
+            // We achieve this by emulating the kernel's boot process in the tool:
+
+            // Determine how much memory the CapDL initialiser needs.
+            let initial_task_size = initialiser_vaddr_range.end - initialiser_vaddr_range.start;
+
+            // Parse the kernel's ELF to determine the kernel's window.
+            let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
+
+            // Now determine how much memory we have after the kernel boots.
+            let (mut available_memory, kernel_boot_region) =
+                emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
+
+            // The kernel relies on the initial task region being allocated above the kernel
+            // boot/ELF region, so we have the end of the kernel boot region as the lower
+            // bound for allocating the reserved region.
+            let initial_task_phys_base =
+                available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
+
+            let initial_task_phys_region = MemoryRegion::new(
+                initial_task_phys_base,
+                initial_task_phys_base + initial_task_size,
+            );
+            let initial_task_virt_region = MemoryRegion::new(
+                capdl_initialiser.elf.lowest_vaddr(),
+                initialiser_vaddr_range.end,
+            );
+
+            // With the initial task region determined the kernel boot can be emulated. This provides
+            // the boot info information which is needed for the next steps
+            let kernel_boot_info = emulate_kernel_boot(
+                &kernel_config,
+                &kernel_elf,
+                initial_task_phys_region,
+                initial_task_virt_region,
+            );
+
+            let alloc_ok =
+                simulate_capdl_object_alloc_algorithm(&mut spec, &kernel_boot_info, &kernel_config);
+            write_report(&spec, &kernel_config, args.report);
+            if !alloc_ok {
+                eprintln!("ERROR: could not allocate all required kernel objects. Please see report for more details.");
+                std::process::exit(1);
+            }
+
+            // Everything checks out, patch the list of untypeds we used to simulate object allocation into the initialiser.
+            // At runtime the intialiser will validate what we simulated against what the kernel gives it. If they deviate
+            // we will have problems! For example, if we simulated with more memory than what's actually available, the initialiser
+            // can crash.
+            capdl_initialiser.add_expected_untypeds(&kernel_boot_info.untyped_objects);
+
+            // Everything checks out, now build the bootloader!
+            let loader = Loader::new(
+                &kernel_config,
+                Path::new(&loader_elf_path),
+                &kernel_elf,
+                &capdl_initialiser.elf,
+                initial_task_phys_base,
+                initialiser_vaddr_range,
+            );
+
+            loader.write_image(Path::new(args.output));
+
+            println!(
+                "MICROKIT|LOADER: image file size = {}",
+                human_size_strict(metadata(args.output).unwrap().len())
+            );
         }
-    } else {
-        // Now that we have the entire spec and CapDL initialiser ELF with embedded spec,
-        // we can determine exactly how much memory will be available statically when the kernel
-        // drops to userspace on ARM and RISC-V. This allow us to sanity check that:
-        // 1. There are enough memory to allocate all the objects required in the spec.
-        // 2. All frames with a physical attached reside in legal memory (device or normal).
-        // 3. Objects can be allocated from the free untyped list. For example, we detect
-        //    situations where you might have a few frames with size bit 12 to allocate but
-        //    only have untyped with size bit <12 remaining.
-
-        // We achieve this by emulating the kernel's boot process in the tool:
-
-        // Determine how much memory the CapDL initialiser needs.
-        let initial_task_size = initialiser_vaddr_range.end - initialiser_vaddr_range.start;
-
-        // Parse the kernel's ELF to determine the kernel's window.
-        let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
-
-        // Now determine how much memory we have after the kernel boots.
-        let (mut available_memory, kernel_boot_region) =
-            emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
-
-        // The kernel relies on the initial task region being allocated above the kernel
-        // boot/ELF region, so we have the end of the kernel boot region as the lower
-        // bound for allocating the reserved region.
-        let initial_task_phys_base =
-            available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
-
-        let initial_task_phys_region = MemoryRegion::new(
-            initial_task_phys_base,
-            initial_task_phys_base + initial_task_size,
-        );
-        let initial_task_virt_region = MemoryRegion::new(
-            capdl_initialiser.elf.lowest_vaddr(),
-            initialiser_vaddr_range.end,
-        );
-
-        // With the initial task region determined the kernel boot can be emulated. This provides
-        // the boot info information which is needed for the next steps
-        let kernel_boot_info = emulate_kernel_boot(
-            &kernel_config,
-            &kernel_elf,
-            initial_task_phys_region,
-            initial_task_virt_region,
-        );
-
-        let alloc_ok =
-            simulate_capdl_object_alloc_algorithm(&mut spec, &kernel_boot_info, &kernel_config);
-        write_report(&spec, &kernel_config, args.report);
-        if !alloc_ok {
-            eprintln!("ERROR: could not allocate all required kernel objects. Please see report for more details.");
-            std::process::exit(1);
-        }
-
-        // Everything checks out, patch the list of untypeds we used to simulate object allocation into the initialiser.
-        // At runtime the intialiser will validate what we simulated against what the kernel gives it. If they deviate
-        // we will have problems! For example, if we simulated with more memory than what's actually available, the initialiser
-        // can crash.
-        capdl_initialiser.add_expected_untypeds(&kernel_boot_info.untyped_objects);
-
-        // Everything checks out, now build the bootloader!
-        let loader = Loader::new(
-            &kernel_config,
-            Path::new(&loader_elf_path),
-            &kernel_elf,
-            &capdl_initialiser.elf,
-            initial_task_phys_base,
-            initialiser_vaddr_range,
-        );
-
-        loader.write_image(Path::new(args.output));
-
-        println!(
-            "MICROKIT|LOADER: image file size = {}",
-            human_size_strict(metadata(args.output).unwrap().len())
-        );
-    }
+    };
 
     write_report(&spec, &kernel_config, args.report);
 
