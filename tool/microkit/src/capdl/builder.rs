@@ -488,7 +488,7 @@ pub fn build_capdl_spec(
 
         for frame_sequence in 0..mr.page_count {
             let paddr = mr
-                .phys_addr
+                .paddr()
                 .map(|base_paddr| (base_paddr + (frame_sequence * mr.page_size_bytes())) as usize);
             frame_ids.push(capdl_util_make_frame_obj(
                 &mut spec,
