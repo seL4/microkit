@@ -508,7 +508,7 @@ fn main() -> Result<(), String> {
     // Determine how much physical memory is available to the kernel after it boots but before dropping
     // to userspace by partially emulating the kernel boot process. This is useful for two purposes:
     // 1. To implement setvar region_paddr for memory regions that doesn't specify a phys address, where
-    //    we can automatically select a suitable address inside the Microkit tool.
+    //    we must automatically select a suitable address inside the Microkit tool.
     // 2. Post-spec generation sanity checks at a later point to ensure that there are sufficient memory
     //    to allocate all kernel objects.
     let (kernel_elf_maybe, available_memory_maybe, kernel_boot_region_maybe) =
@@ -528,7 +528,7 @@ fn main() -> Result<(), String> {
             }
         };
 
-    let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
+    let monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
 
     let mut search_paths = vec![std::env::current_dir().unwrap()];
     for path in args.search_paths {
@@ -554,14 +554,14 @@ fn main() -> Result<(), String> {
         }
     }
 
+    // The monitor is just a special PD
+    system_elfs.push(monitor_elf);
+
     // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
-    if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elf, &system) {
+    if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &system) {
         eprintln!("ERROR: {err}");
         std::process::exit(1);
     }
-
-    // The monitor is just a special PD
-    system_elfs.push(monitor_elf);
 
     // We have parsed the XML and all ELF files, create the CapDL spec of the system described in the XML.
     let mut spec = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
