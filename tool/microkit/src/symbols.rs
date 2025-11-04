@@ -157,6 +157,7 @@ pub fn patch_symbols(
                             .paddr()
                             .unwrap_or_default(),
                         sdf::SysSetVarKind::Id { id } => *id,
+                        sdf::SysSetVarKind::X86IoPortAddr { address } => *address,
                     };
                     symbols_to_write.push((&setvar.symbol, data));
                 }
