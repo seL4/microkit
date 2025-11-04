@@ -6,13 +6,13 @@
 #include <stdint.h>
 #include <microkit.h>
 
-#define SERIAL_IOPORT_ID 0
-#define SERIAL_IOPORT_ADDRESS 0x3f8
+uint64_t com1_ioport_id;
+uint64_t com1_ioport_addr;
 
 static inline void serial_putc(char ch)
 {
     // Danger: may overflow hardware FIFO, but we are only writing a small message.
-    microkit_x86_ioport_write_8(SERIAL_IOPORT_ID, SERIAL_IOPORT_ADDRESS, ch);
+    microkit_x86_ioport_write_8(com1_ioport_id, com1_ioport_addr, ch);
 }
 
 static inline void serial_puts(const char *s)
