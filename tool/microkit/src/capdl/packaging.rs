@@ -1,21 +1,25 @@
 //
-// Copyright 2023, Colias Group, LLC
 // Copyright 2025, UNSW
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
+
+use std::ops::Range;
+
+use sel4_capdl_initializer_types::{
+    DeflatedBytesContent, IndirectDeflatedBytesContent, IndirectObjectName, ObjectNamesLevel, Spec,
+};
+
+use crate::{
+    capdl::{initialiser::CapDLInitialiser, spec::ElfContent, CapDLSpec},
+    elf::ElfFile,
+};
 
 // A simple reimplementation of
 // https://github.com/seL4/rust-sel4/blob/6f8d1baaad3aaca6f20966a2acb40e4651546519/crates/sel4-capdl-initializer/add-spec/src/reserialize_spec.rs
 // We can't reuse the original code because it assumes that we are loading ELF frames from files.
 // Which isn't suitable for Microkit as we want to embed the frames' data directly into the spec for
 // easily patching ELF symbols.
-
-use std::ops::Range;
-
-use sel4_capdl_initializer_types::*;
-
-use crate::{capdl::spec::ElfContent, elf::ElfFile};
 
 // @billn TODO: instead of doing this serialise our type -> deserialise into their type -> serialise business
 //              we can directly insert IndirectObjectName and IndirectDeflatedBytesContent into our spec type
@@ -24,7 +28,7 @@ use crate::{capdl::spec::ElfContent, elf::ElfFile};
 
 // Given a `Spec` data structure from sel4_capdl_initializer_types, "flatten" it into a vector of bytes
 // for encapsulating it into the CapDL initialiser ELF.
-pub fn reserialise_spec(
+fn reserialise_spec(
     elfs: &[ElfFile],
     input_spec: &Spec<'static, String, ElfContent, ()>,
     object_names_level: &ObjectNamesLevel,
@@ -79,5 +83,41 @@ impl SourcesBuilder {
         self.buf.extend(bytes);
         let end = self.buf.len();
         start..end
+    }
+}
+
+pub fn pack_spec_into_initial_task(
+    build_config: &str,
+    spec: &CapDLSpec,
+    system_elfs: &[ElfFile],
+    capdl_initialiser: &mut CapDLInitialiser,
+) {
+    // Reserialise the spec into a type that can be understood by rust-sel4.
+    let spec_reserialised = {
+        let spec_as_json = serde_json::to_string(&spec).unwrap();
+
+        // The full type definition is `Spec<'a, N, D, M>` where:
+        // N = object name type
+        // D = frame fill data type
+        // M = embedded frame data type
+        // Only N and D is useful for Microkit.
+        serde_json::from_str::<Spec<String, ElfContent, ()>>(&spec_as_json).unwrap()
+    };
+
+    // Now embed the built spec into the CapDL initialiser.
+    let name_level = match build_config {
+        "debug" => ObjectNamesLevel::All,
+        // We don't copy over the object names as there is no debug printing in these configuration to save memory.
+        "release" | "benchmark" => ObjectNamesLevel::None,
+        _ => panic!("unknown configuration {build_config}"),
+    };
+
+    let capdl_spec_as_binary = reserialise_spec(system_elfs, &spec_reserialised, &name_level);
+
+    // Patch the spec and heap into the ELF image.
+    if capdl_initialiser.have_spec() {
+        capdl_initialiser.replace_spec(capdl_spec_as_binary);
+    } else {
+        capdl_initialiser.add_spec(capdl_spec_as_binary);
     }
 }
