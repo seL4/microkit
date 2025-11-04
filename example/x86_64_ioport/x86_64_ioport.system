@@ -7,6 +7,6 @@
 <system>
     <protection_domain name="x86_64_ioport" priority="100" >
         <program_image path="x86_64_ioport.elf" />
-        <ioport id="0" addr="0x3f8" size="8" />
+        <ioport id="0" addr="0x3f8" size="8" setvar_id="com1_ioport_id" setvar_addr="com1_ioport_addr"/>
     </protection_domain>
 </system>
