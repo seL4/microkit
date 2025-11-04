@@ -210,6 +210,7 @@ pub enum SysSetVarKind {
     Vaddr { address: u64 },
     Paddr { region: String },
     Id { id: u64 },
+    X86IoPortAddr { address: u64 },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -877,7 +878,11 @@ impl ProtectionDomain {
                 }
                 "ioport" => {
                     if let Arch::X86_64 = config.arch {
-                        check_attributes(xml_sdf, &child, &["id", "setvar_id", "addr", "size"])?;
+                        check_attributes(
+                            xml_sdf,
+                            &child,
+                            &["id", "setvar_id", "setvar_addr", "addr", "size"],
+                        )?;
 
                         let id = checked_lookup(xml_sdf, &child, "id")?
                             .parse::<i64>()
@@ -907,6 +912,14 @@ impl ProtectionDomain {
 
                         let addr =
                             sdf_parse_number(checked_lookup(xml_sdf, &child, "addr")?, &child)?;
+
+                        if let Some(setvar_addr) = child.attribute("setvar_addr") {
+                            let setvar = SysSetVar {
+                                symbol: setvar_addr.to_string(),
+                                kind: SysSetVarKind::X86IoPortAddr { address: addr },
+                            };
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        }
 
                         let size = checked_lookup(xml_sdf, &child, "size")?
                             .parse::<i64>()
