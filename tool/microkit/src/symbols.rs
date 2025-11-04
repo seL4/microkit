@@ -151,19 +151,7 @@ pub fn patch_symbols(
                         sdf::SysSetVarKind::Size { mr } => mr_name_to_desc.get(mr).unwrap().size,
                         sdf::SysSetVarKind::Vaddr { address } => *address,
                         sdf::SysSetVarKind::Paddr { region } => {
-                            match mr_name_to_desc.get(region).unwrap().phys_addr {
-                                Some(specified_paddr) => specified_paddr,
-                                None => {
-                                    if kernel_config.arch == Arch::X86_64 {
-                                        return Err(
-                                            "setvar with 'region_paddr' for MR without a specified paddr is unsupported on x86_64."
-                                                .to_string(),
-                                        );
-                                    } else {
-                                        panic!("setvar with 'region_paddr' for MR without a specified paddr is currently unimplemented!");
-                                    }
-                                }
-                            }
+                            mr_name_to_desc.get(region).unwrap().paddr().unwrap()
                         }
                         sdf::SysSetVarKind::Id { id } => *id,
                     };

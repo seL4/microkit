@@ -21,6 +21,7 @@ use crate::sel4::{
 };
 use crate::util::{ranges_overlap, str_to_bool};
 use crate::MAX_PDS;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
@@ -102,13 +103,22 @@ pub enum SysMemoryRegionKind {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub enum SysMemoryRegionPaddr {
+    Unspecified,
+    // ToolAllocated means that the MR doesn't have an explicit paddr in SDF, but
+    // is a subject of a setvar region_paddr.
+    ToolAllocated(Option<u64>),
+    Specified(u64),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SysMemoryRegion {
     pub name: String,
     pub size: u64,
     page_size_specified_by_user: bool,
     pub page_size: PageSize,
     pub page_count: u64,
-    pub phys_addr: Option<u64>,
+    pub phys_addr: SysMemoryRegionPaddr,
     pub text_pos: Option<roxmltree::TextPos>,
     /// For error reporting is useful to know whether the MR was created
     /// due to the user's SDF or created by the tool for setting up the
@@ -132,6 +142,14 @@ impl SysMemoryRegion {
 
     pub fn page_size_bytes(&self) -> u64 {
         self.page_size as u64
+    }
+
+    pub fn paddr(&self) -> Option<u64> {
+        match self.phys_addr {
+            SysMemoryRegionPaddr::Unspecified => None,
+            SysMemoryRegionPaddr::ToolAllocated(paddr_maybe) => paddr_maybe,
+            SysMemoryRegionPaddr::Specified(sdf_paddr) => Some(sdf_paddr),
+        }
     }
 }
 
@@ -916,6 +934,17 @@ impl ProtectionDomain {
                     }
                 }
                 "setvar" => {
+                    match config.arch {
+                        Arch::Aarch64 | Arch::Riscv64 => {}
+                        Arch::X86_64 => {
+                            return Err(value_error(
+                                xml_sdf,
+                                node,
+                                "setvar with 'region_paddr' for MR without a specified paddr is unsupported on x86_64".to_string(),
+                            ));
+                        }
+                    };
+
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
                     let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
@@ -1161,17 +1190,20 @@ impl SysMemoryRegion {
         }
 
         let phys_addr = if let Some(xml_phys_addr) = node.attribute("phys_addr") {
-            Some(sdf_parse_number(xml_phys_addr, node)?)
+            SysMemoryRegionPaddr::Specified(sdf_parse_number(xml_phys_addr, node)?)
         } else {
-            None
+            // At this point it is unsure whether this MR is a subject of a setvar region_paddr.
+            SysMemoryRegionPaddr::Unspecified
         };
 
-        if phys_addr.is_some() && !phys_addr.unwrap().is_multiple_of(page_size) {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                "phys_addr is not aligned to the page size".to_string(),
-            ));
+        if let SysMemoryRegionPaddr::Specified(sdf_paddr) = phys_addr {
+            if !sdf_paddr.is_multiple_of(page_size) {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    "phys_addr is not aligned to the page size".to_string(),
+                ));
+            }
         }
 
         let page_count = size / page_size;
@@ -1800,9 +1832,9 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     // Ensure MRs with physical addresses do not overlap
     let mut checked_mrs = Vec::with_capacity(mrs.len());
     for mr in &mrs {
-        if let Some(phys_addr) = mr.phys_addr {
-            let mr_start = phys_addr;
-            let mr_end = phys_addr + mr.size;
+        if let SysMemoryRegionPaddr::Specified(sdf_paddr) = mr.phys_addr {
+            let mr_start = sdf_paddr;
+            let mr_end = sdf_paddr + mr.size;
 
             for (name, start, end) in &checked_mrs {
                 if !(mr_start >= *end || mr_end <= *start) {
@@ -1872,8 +1904,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 }
             })
             .collect();
-        if let Some(paddr) = mr.phys_addr {
-            addrs.push(paddr);
+        if let SysMemoryRegionPaddr::Specified(sdf_paddr) = mr.phys_addr {
+            addrs.push(sdf_paddr);
         }
 
         // Get all page sizes larger than the MR's current one, sorted from
@@ -1897,6 +1929,24 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             // Safe to increase page size
             mr.page_size = larger_page_size.into();
             mr.page_count = mr.size / mr.page_size_bytes();
+        }
+    }
+
+    // If any MRs are subject of a setvar region_paddr, update its phys_addr field to indicate tool allocated.
+    let mut mr_names_with_setvar_paddr = HashSet::new();
+    for pd in pds.iter() {
+        for setvar in pd.setvars.iter() {
+            if let SysSetVarKind::Paddr { region } = &setvar.kind {
+                mr_names_with_setvar_paddr.insert(region);
+            };
+        }
+    }
+    for mr in mrs.iter_mut() {
+        if mr_names_with_setvar_paddr.contains(&mr.name)
+            && mr.phys_addr == SysMemoryRegionPaddr::Unspecified
+        {
+            // The actual allocation is done by another part of the tool.
+            mr.phys_addr = SysMemoryRegionPaddr::ToolAllocated(None);
         }
     }
 
