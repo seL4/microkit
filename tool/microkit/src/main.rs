@@ -503,6 +503,30 @@ fn main() -> Result<(), String> {
         }
     };
 
+    // Only relevant for ARM and RISC-V.
+    // Determine how much physical memory is available to the kernel after it boots but before dropping
+    // to userspace by partially emulating the kernel boot process. This is useful for two purposes:
+    // 1. To implement setvar region_paddr for memory regions that doesn't specify a phys address, where
+    //    we can automatically select a suitable address inside the Microkit tool.
+    // 2. Post-spec generation sanity checks at a later point to ensure that there are sufficient memory
+    //    to allocate all kernel objects.
+    let (kernel_elf_maybe, available_memory_maybe, kernel_boot_region_maybe) =
+        match kernel_config.arch {
+            Arch::X86_64 => (None, None, None),
+            Arch::Aarch64 | Arch::Riscv64 => {
+                let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
+
+                // Now determine how much memory we have after the kernel boots.
+                let (available_memory, kernel_boot_region) =
+                    emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
+                (
+                    Some(kernel_elf),
+                    Some(available_memory),
+                    Some(kernel_boot_region),
+                )
+            }
+        };
+
     let mut monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
 
     let mut search_paths = vec![std::env::current_dir().unwrap()];
@@ -528,6 +552,7 @@ fn main() -> Result<(), String> {
             }
         }
     }
+
     // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
     if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elf, &system) {
         eprintln!("ERROR: {err}");
@@ -561,7 +586,7 @@ fn main() -> Result<(), String> {
     // Now embed the built spec into the CapDL initialiser.
     let name_level = match args.config {
         "debug" => ObjectNamesLevel::All,
-        // We don't copy over the object names as there is no printing in these configuration to save memory.
+        // We don't copy over the object names as there is no debug printing in these configuration to save memory.
         "release" | "benchmark" => ObjectNamesLevel::None,
         _ => panic!("unknown configuration {}", args.config),
     };
@@ -612,24 +637,37 @@ fn main() -> Result<(), String> {
             //    situations where you might have a few frames with size bit 12 to allocate but
             //    only have untyped with size bit <12 remaining.
 
-            // We achieve this by emulating the kernel's boot process in the tool:
-
             // Determine how much memory the CapDL initialiser needs.
             let initial_task_size = initialiser_vaddr_range.end - initialiser_vaddr_range.start;
 
-            // Parse the kernel's ELF to determine the kernel's window.
-            let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
-
-            // Now determine how much memory we have after the kernel boots.
-            let (mut available_memory, kernel_boot_region) =
-                emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
+            // Reuse data from the partial kernel boot emulation previously done.
+            let kernel_elf = kernel_elf_maybe.unwrap();
+            let mut available_memory = available_memory_maybe.unwrap();
+            let kernel_boot_region = kernel_boot_region_maybe.unwrap();
 
             // The kernel relies on the initial task region being allocated above the kernel
             // boot/ELF region, so we have the end of the kernel boot region as the lower
             // bound for allocating the reserved region.
-            let initial_task_phys_base =
+            let initial_task_phys_base_maybe =
                 available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
+            if initial_task_phys_base_maybe.is_none() {
+                // Unlikely to happen on Microkit-supported platforms with multi gigabytes memory.
+                // But printing a helpful error in case we do run into this problem.
+                eprintln!("Error: out of contiguous physical memory to place the initial task.");
+                eprintln!("Help: initial task size is: {}", human_size_strict(initial_task_size));
+                eprintln!("Help: physical memory regions on this platform after kernel boot is:");
+                for region in available_memory.regions {
+                    eprintln!(
+                        "Help: [0x{:0>12x}..0x{:0>12x}), size: {}",
+                        region.base,
+                        region.end,
+                        human_size_strict(region.size())
+                    );
+                }
+                std::process::exit(1);
+            }
 
+            let initial_task_phys_base = initial_task_phys_base_maybe.unwrap();
             let initial_task_phys_region = MemoryRegion::new(
                 initial_task_phys_base,
                 initial_task_phys_base + initial_task_size,
@@ -639,7 +677,7 @@ fn main() -> Result<(), String> {
                 initialiser_vaddr_range.end,
             );
 
-            // With the initial task region determined the kernel boot can be emulated. This provides
+            // With the initial task region determined the kernel boot can be emulated in full. This provides
             // the boot info information which is needed for the next steps
             let kernel_boot_info = emulate_kernel_boot(
                 &kernel_config,
