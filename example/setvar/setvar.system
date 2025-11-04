@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2025, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <!-- 0x900_0000 == 150994944 -->
+    <memory_region name="pl011" size="0x1000" phys_addr="0x900_0000" />
+
+    <!-- 0x8000_0000 == 2147483648 -->
+    <memory_region name="mr_with_paddr" size="0x1000" phys_addr="0x8000_0000" />
+
+    <memory_region name="small_mr_no_paddr" size="0x1000" />
+    <memory_region name="large_mr_no_paddr" size="0x200000" page_size="0x200000" />
+
+    <protection_domain name="setvar" priority="1">
+        <program_image path="setvar.elf" />
+
+        <!-- 0x2000_0000 == 536870912 -->
+        <map mr="mr_with_paddr" vaddr="0x2000_0000" setvar_vaddr="mr_with_paddr_vaddr" />
+        <setvar region_paddr="mr_with_paddr" symbol="mr_with_paddr_paddr" />
+        <setvar region_paddr="small_mr_no_paddr" symbol="small_mr_no_paddr_paddr" />
+        <setvar region_paddr="large_mr_no_paddr" symbol="large_mr_no_paddr_paddr" />
+        <setvar region_paddr="pl011" symbol="pl011_paddr" />
+    </protection_domain>
+</system>
