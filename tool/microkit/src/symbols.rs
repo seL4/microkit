@@ -151,9 +151,11 @@ pub fn patch_symbols(
                     let data = match &setvar.kind {
                         sdf::SysSetVarKind::Size { mr } => mr_name_to_desc.get(mr).unwrap().size,
                         sdf::SysSetVarKind::Vaddr { address } => *address,
-                        sdf::SysSetVarKind::Paddr { region } => {
-                            mr_name_to_desc.get(region).unwrap().paddr().unwrap()
-                        }
+                        sdf::SysSetVarKind::Paddr { region } => mr_name_to_desc
+                            .get(region)
+                            .unwrap()
+                            .paddr()
+                            .unwrap_or_default(),
                         sdf::SysSetVarKind::Id { id } => *id,
                     };
                     symbols_to_write.push((&setvar.symbol, data));

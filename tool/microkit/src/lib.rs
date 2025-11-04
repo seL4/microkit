@@ -6,7 +6,10 @@
 
 use std::{cmp::min, fmt};
 
-use crate::{sel4::Config, util::struct_to_bytes};
+use crate::{
+    sel4::{Config, PageSize},
+    util::struct_to_bytes,
+};
 
 pub mod capdl;
 pub mod elf;
@@ -187,7 +190,7 @@ impl MemoryRegion {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct DisjointMemoryRegion {
     pub regions: Vec<MemoryRegion>,
 }
@@ -205,6 +208,13 @@ impl DisjointMemoryRegion {
     }
 
     pub fn insert_region(&mut self, base: u64, end: u64) {
+        assert!(base < end);
+
+        if self.regions.is_empty() {
+            self.regions.push(MemoryRegion::new(base, end));
+            return;
+        }
+
         let mut insert_idx = self.regions.len();
         for (idx, region) in self.regions.iter().enumerate() {
             if end <= region.base {
@@ -212,10 +222,17 @@ impl DisjointMemoryRegion {
                 break;
             }
         }
-        // FIXME: Should extend here if adjacent rather than
-        // inserting now
-        self.regions
-            .insert(insert_idx, MemoryRegion::new(base, end));
+        // Merge if contiguous
+        if insert_idx == 0 && self.regions.first().unwrap().base == end {
+            self.regions.first_mut().unwrap().base = base;
+        } else if insert_idx == self.regions.len() && self.regions.last().unwrap().end == base {
+            self.regions.last_mut().unwrap().end = end;
+        } else if insert_idx < self.regions.len() && end == self.regions[insert_idx].base {
+            self.regions[insert_idx].base = base;
+        } else {
+            self.regions
+                .insert(insert_idx, MemoryRegion::new(base, end));
+        }
         self.check();
     }
 
@@ -269,29 +286,34 @@ impl DisjointMemoryRegion {
 
     /// Allocate region of 'size' bytes, returning the base address.
     /// The allocated region is removed from the disjoint memory region.
-    /// Allocation policy is simple first fit.
+    /// Allocation policy is simple first fit in bottom up direction.
     /// Possibly a 'best fit' policy would be better.
     /// 'best' may be something that best matches a power-of-two
     /// allocation
-    pub fn allocate(&mut self, size: u64) -> u64 {
+    pub fn allocate(&mut self, size: u64, align_page_sz: PageSize) -> Option<u64> {
         let mut region_to_remove: Option<MemoryRegion> = None;
-        for region in &self.regions {
-            if size <= region.size() {
+
+        for region in self.regions.iter() {
+            if size <= region.size()
+                && region.base.next_multiple_of(align_page_sz as u64) + size <= region.end
+            {
                 region_to_remove = Some(*region);
                 break;
             }
         }
 
+        // Got a region that fits, block out the target area, split up the remaining region if necessary.
         match region_to_remove {
             Some(region) => {
-                self.remove_region(region.base, region.base + size);
-                region.base
+                let base = region.base.next_multiple_of(align_page_sz as u64);
+                self.remove_region(base, base + size);
+                Some(base)
             }
-            None => panic!("Unable to allocate {size} bytes"),
+            None => None,
         }
     }
 
-    pub fn allocate_from(&mut self, size: u64, lower_bound: u64) -> u64 {
+    pub fn allocate_from(&mut self, size: u64, lower_bound: u64) -> Option<u64> {
         let mut region_to_remove = None;
         for region in &self.regions {
             if size <= region.size() && region.base >= lower_bound {
@@ -303,9 +325,9 @@ impl DisjointMemoryRegion {
         match region_to_remove {
             Some(region) => {
                 self.remove_region(region.base, region.base + size);
-                region.base
+                Some(region.base)
             }
-            None => panic!("Unable to allocate {size} bytes from lower_bound 0x{lower_bound:x}"),
+            None => None,
         }
     }
 }

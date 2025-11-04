@@ -26,6 +26,7 @@ pub struct CapDLInitialiserSpecMetadata {
 pub struct CapDLInitialiser {
     pub elf: ElfFile,
     pub heap_multiplier: f64,
+    pub phys_base: Option<u64>,
     pub spec_metadata: Option<CapDLInitialiserSpecMetadata>,
 }
 
@@ -34,6 +35,7 @@ impl CapDLInitialiser {
         CapDLInitialiser {
             elf,
             heap_multiplier,
+            phys_base: None,
             spec_metadata: None,
         }
     }
@@ -128,6 +130,7 @@ impl CapDLInitialiser {
 
         self.elf.segments.pop();
         self.elf.segments.pop();
+        self.spec_metadata = None;
         self.add_spec(new_payload);
     }
 
@@ -146,5 +149,9 @@ impl CapDLInitialiser {
         self.elf
             .write_symbol("sel4_capdl_initializer_expected_untypeds_list", &uts_desc)
             .unwrap();
+    }
+
+    pub fn set_phys_base(&mut self, phys_base: u64) {
+        self.phys_base = Some(phys_base);
     }
 }
