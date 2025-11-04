@@ -19,12 +19,13 @@ use crate::{
 pub fn patch_symbols(
     kernel_config: &Config,
     pd_elf_files: &mut [ElfFile],
-    monitor_elf: &mut ElfFile,
     system: &SystemDescription,
 ) -> Result<(), String> {
     // *********************************
     // Step 1. Write ELF symbols in the monitor.
     // *********************************
+    let monitor_elf = pd_elf_files.last_mut().unwrap();
+
     let pd_names: Vec<String> = system
         .protection_domains
         .iter()
