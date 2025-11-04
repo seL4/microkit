@@ -129,7 +129,7 @@ impl<'a> Loader<'a> {
         kernel_elf: &'a ElfFile,
         initial_task_elf: &'a ElfFile,
         initial_task_phy_base: u64,
-        initial_task_vaddr_range: Range<u64>,
+        initial_task_vaddr_range: &Range<u64>,
     ) -> Loader<'a> {
         if config.arch == Arch::X86_64 {
             unreachable!("internal error: x86_64 does not support creating a loader image");

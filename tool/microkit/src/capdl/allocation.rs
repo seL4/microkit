@@ -13,6 +13,11 @@ use crate::{
     UntypedObject,
 };
 
+pub enum CapDLAllocEmulationErrorLevel {
+    Suppressed,
+    PrintStderr,
+}
+
 /// For the given spec and list of untypeds, simulate the CapDL initialiser's
 /// object allocation algorithm. Record each object's paddr and UT's index in
 /// its `expected_alloc` struct field. Assumes that the spec objects are sorted
@@ -23,6 +28,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
     spec: &mut CapDLSpec,
     kernel_boot_info: &BootInfo,
     kernel_config: &Config,
+    error_reporting_level: CapDLAllocEmulationErrorLevel,
 ) -> bool {
     // Step 1: sort untypeds by paddr.
     // We don't want to mess with the original order in `kernel_boot_info` as we will patch
@@ -84,13 +90,23 @@ pub fn simulate_capdl_object_alloc_algorithm(
             if !(candidate_ut_range.start <= paddr_range.start
                 && candidate_ut_range.end >= paddr_range.end)
             {
-                eprintln!("ERROR: object '{}', with paddr 0x{:0>12x}..0x{:0>12x} is not in any valid memory region.", named_obj.name, paddr_range.start, paddr_range.end);
+                if matches!(
+                    error_reporting_level,
+                    CapDLAllocEmulationErrorLevel::PrintStderr
+                ) {
+                    eprintln!("ERROR: object '{}', with paddr 0x{:0>12x}..0x{:0>12x} is not in any valid memory region.", named_obj.name, paddr_range.start, paddr_range.end);
+                }
                 phys_addrs_ok = false;
             }
         }
     }
 
-    if !phys_addrs_ok {
+    if !phys_addrs_ok
+        && matches!(
+            error_reporting_level,
+            CapDLAllocEmulationErrorLevel::PrintStderr
+        )
+    {
         eprintln!("Below are the valid ranges of memory to be allocated from:");
         eprintln!("Valid ranges outside of main memory:");
         for (_i, ut) in untypeds_by_paddr.iter().filter(|(_i, ut)| ut.is_device) {
@@ -204,10 +220,15 @@ pub fn simulate_capdl_object_alloc_algorithm(
                 oom = true;
                 let shortfall = (obj_id_range.end - obj_id_range.start) as u64;
                 let individual_sz = (1 << size_bit) as u64;
-                eprintln!(
-                    "ERROR: ran out of untypeds for allocating objects of size {}, still need to create {} objects which requires {} of additional memory.",
-                    human_size_strict(individual_sz), shortfall, human_size_strict(individual_sz * shortfall)
-                );
+                if matches!(
+                    error_reporting_level,
+                    CapDLAllocEmulationErrorLevel::PrintStderr
+                ) {
+                    eprintln!(
+                        "ERROR: ran out of untypeds for allocating objects of size {}, still need to create {} objects which requires {} of additional memory.",
+                        human_size_strict(individual_sz), shortfall, human_size_strict(individual_sz * shortfall)
+                    );
+                }
             }
         }
     }
