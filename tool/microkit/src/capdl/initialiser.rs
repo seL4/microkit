@@ -18,11 +18,15 @@ const INITIALISER_HEAP_ADD_ON_CONSTANT: u64 = 16 * 4096;
 // Page size used for allocating the spec and heap segments.
 pub const INITIALISER_GRANULE_SIZE: PageSize = PageSize::Small;
 
+pub struct CapDLInitialiserSpecMetadata {
+    pub spec_size: u64,
+    pub heap_size: u64,
+}
+
 pub struct CapDLInitialiser {
     pub elf: ElfFile,
     pub heap_multiplier: f64,
-    pub spec_size: Option<u64>,
-    pub heap_size: Option<u64>,
+    pub spec_metadata: Option<CapDLInitialiserSpecMetadata>,
 }
 
 impl CapDLInitialiser {
@@ -30,8 +34,7 @@ impl CapDLInitialiser {
         CapDLInitialiser {
             elf,
             heap_multiplier,
-            spec_size: None,
-            heap_size: None,
+            spec_metadata: None,
         }
     }
 
@@ -40,7 +43,7 @@ impl CapDLInitialiser {
     }
 
     pub fn add_spec(&mut self, payload: Vec<u8>) {
-        if self.spec_size.is_some() || self.heap_size.is_some() {
+        if self.spec_metadata.is_some() {
             unreachable!("internal bug: CapDLInitialiser::add_spec() called more than once");
         }
 
@@ -104,12 +107,22 @@ impl CapDLInitialiser {
             )
             .unwrap();
 
-        self.spec_size = Some(spec_size);
-        self.heap_size = Some(heap_size);
+        self.spec_metadata = Some(CapDLInitialiserSpecMetadata {
+            spec_size,
+            heap_size,
+        });
+    }
+
+    pub fn spec_metadata(&self) -> &Option<CapDLInitialiserSpecMetadata> {
+        &self.spec_metadata
+    }
+
+    pub fn have_spec(&self) -> bool {
+        self.spec_metadata.is_some()
     }
 
     pub fn replace_spec(&mut self, new_payload: Vec<u8>) {
-        if self.spec_size.is_none() || self.heap_size.is_none() {
+        if self.spec_metadata.is_none() {
             unreachable!("internal bug: CapDLInitialiser::replace_spec() called when no spec have been added before");
         }
 

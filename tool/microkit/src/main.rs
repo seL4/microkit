@@ -8,9 +8,9 @@
 #![allow(clippy::assertions_on_constants)]
 
 use microkit_tool::capdl::allocation::simulate_capdl_object_alloc_algorithm;
+use microkit_tool::capdl::build_capdl_spec;
 use microkit_tool::capdl::initialiser::{CapDLInitialiser, DEFAULT_INITIALISER_HEAP_MULTIPLIER};
-use microkit_tool::capdl::spec::ElfContent;
-use microkit_tool::capdl::{build_capdl_spec, reserialise_spec};
+use microkit_tool::capdl::packaging::pack_spec_into_initial_task;
 use microkit_tool::elf::ElfFile;
 use microkit_tool::loader::Loader;
 use microkit_tool::report::write_report;
@@ -22,7 +22,6 @@ use microkit_tool::sel4::{
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{human_size_strict, json_str, json_str_as_bool, json_str_as_u64};
 use microkit_tool::MemoryRegion;
-use sel4_capdl_initializer_types::{ObjectNamesLevel, Spec};
 use std::fs::{self, metadata};
 use std::path::{Path, PathBuf};
 
@@ -503,6 +502,8 @@ fn main() -> Result<(), String> {
         }
     };
 
+    let capdl_initialiser_elf = ElfFile::from_path(&capdl_init_elf_path).unwrap();
+
     // Only relevant for ARM and RISC-V.
     // Determine how much physical memory is available to the kernel after it boots but before dropping
     // to userspace by partially emulating the kernel boot process. This is useful for two purposes:
@@ -561,52 +562,19 @@ fn main() -> Result<(), String> {
 
     // The monitor is just a special PD
     system_elfs.push(monitor_elf);
+
     // We have parsed the XML and all ELF files, create the CapDL spec of the system described in the XML.
     let mut spec = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
 
-    // Reserialise the spec into a type that can be understood by rust-sel4.
-    let spec_reserialised = {
-        // Eagerly write out the spec so we can debug in case something crash later.
-        let spec_as_json = if args.capdl_spec.is_some() {
-            let serialised = serde_json::to_string_pretty(&spec).unwrap();
-            fs::write(args.capdl_spec.unwrap(), &serialised).unwrap();
-            serialised
-        } else {
-            serde_json::to_string(&spec).unwrap()
-        };
-
-        // The full type definition is `Spec<'a, N, D, M>` where:
-        // N = object name type
-        // D = frame fill data type
-        // M = embedded frame data type
-        // Only N and D is useful for Microkit.
-        serde_json::from_str::<Spec<String, ElfContent, ()>>(&spec_as_json).unwrap()
-    };
-
-    // Now embed the built spec into the CapDL initialiser.
-    let name_level = match args.config {
-        "debug" => ObjectNamesLevel::All,
-        // We don't copy over the object names as there is no debug printing in these configuration to save memory.
-        "release" | "benchmark" => ObjectNamesLevel::None,
-        _ => panic!("unknown configuration {}", args.config),
-    };
-
-    let num_objects = spec.objects.len();
-    let capdl_spec_as_binary =
-        reserialise_spec::reserialise_spec(&system_elfs, &spec_reserialised, &name_level);
-
-    // Patch the spec and heap into the ELF image.
-    let mut capdl_initialiser = CapDLInitialiser::new(
-        ElfFile::from_path(&capdl_init_elf_path)?,
-        args.initialiser_heap_size_multiplier,
-    );
-    capdl_initialiser.add_spec(capdl_spec_as_binary);
+    let mut capdl_initialiser =
+        CapDLInitialiser::new(capdl_initialiser_elf, args.initialiser_heap_size_multiplier);
+    pack_spec_into_initial_task(args.config, &spec, &system_elfs, &mut capdl_initialiser);
 
     println!(
         "MICROKIT|CAPDL SPEC: number of root objects = {}, spec footprint = {}, initialiser heap size = {}",
-        num_objects,
-        human_size_strict(capdl_initialiser.spec_size.unwrap()),
-        human_size_strict(capdl_initialiser.heap_size.unwrap())
+        spec.objects.len(),
+        human_size_strict(capdl_initialiser.spec_metadata().as_ref().unwrap().spec_size),
+        human_size_strict(capdl_initialiser.spec_metadata().as_ref().unwrap().heap_size)
     );
     let initialiser_vaddr_range = capdl_initialiser.image_bound();
     println!(
@@ -654,7 +622,10 @@ fn main() -> Result<(), String> {
                 // Unlikely to happen on Microkit-supported platforms with multi gigabytes memory.
                 // But printing a helpful error in case we do run into this problem.
                 eprintln!("Error: out of contiguous physical memory to place the initial task.");
-                eprintln!("Help: initial task size is: {}", human_size_strict(initial_task_size));
+                eprintln!(
+                    "Help: initial task size is: {}",
+                    human_size_strict(initial_task_size)
+                );
                 eprintln!("Help: physical memory regions on this platform after kernel boot is:");
                 for region in available_memory.regions {
                     eprintln!(
