@@ -853,6 +853,7 @@ The currently supported platforms are:
 * rpi4b_2gb
 * rpi4b_4gb
 * rpi4b_8gb
+* serengeti
 * star64
 * tqma8xqp1gb
 * ultra96v2
@@ -978,6 +979,11 @@ The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x20000000
+
+## Serengeti {#serengeti}
+
+Serengeti is a superset of [Cheshire](#cheshire) and has no build differences when compared
+to Cheshire. Please see [Cheshire](#cheshire) for instructions.
 
 ## SiFive Premier P550 {#hifive_p550}
 

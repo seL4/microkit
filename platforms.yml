@@ -38,6 +38,9 @@ platforms:
   - name: cheshire
     cmake_plat: cheshire
     since: 2.0.0
+  - name: serengeti
+    cmake_plat: serengeti
+    since: dev
   - name: rockpro64
     cmake_plat: rockpro64
     since: 2.0.0
