@@ -21,7 +21,7 @@ use crate::sel4::{
 };
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,10 @@ use std::path::{Path, PathBuf};
 /// IDs start at zero.
 const PD_MAX_ID: u64 = 61;
 const VCPU_MAX_ID: u64 = PD_MAX_ID;
+
+/// This is the maximum slot allowed for cap maps. This can change if you wish,
+/// but also update the MICROKIT_MAX_USER_CAPS define in `microkit.h`.
+const CAP_MAP_MAX_SLOT: u64 = 128;
 
 pub const MONITOR_PRIORITY: u8 = 255;
 const PD_MAX_PRIORITY: u8 = 254;
@@ -277,6 +281,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
+    pub cap_maps: Vec<CapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -289,6 +294,39 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+pub enum CapMapType {
+    Tcb,
+    Sc,
+    VSpace,
+    CSpace,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CapMap {
+    pub cap_type: CapMapType,
+    // FIXME: This is quite a hack. Basically, we need to be able to reference
+    // arbitrary PDs, but to gather the index, we need to know all the PDs.
+    // However, at the time of parsing the cap maps, we are in the process
+    // of parsing all the PDs. In lieu of something better (in my - @midnightveil's
+    // opinion, making everything think in terms of PD names, and something
+    // that was necessary to do for the multikernel changes); the pd idx will
+    // be filled out later during SDF parse process.
+    pub pd_name: String,
+    pub pd: Option<usize>,
+    // The destination "slot" in the CSpace: note that this is "opaque" and
+    // can be shifted depending on the location in the CSpace to work as the CPtr,
+    // but here it is given as the index into the CNode.
+    pub slot: u64,
+    /// Location in the parsed SDF file
+    text_pos: roxmltree::TextPos,
+}
+
+#[derive(Debug)]
+pub struct CSpace {
+    cap_maps: Vec<CapMap>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -610,6 +648,7 @@ impl ProtectionDomain {
         let mut program_image = None;
         let mut program_image_for_symbols = None;
         let mut virtual_machine = None;
+        let mut cspace = None;
 
         // Default to minimum priority
         let priority = if let Some(xml_priority) = node.attribute("priority") {
@@ -1128,6 +1167,17 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
+                "cspace" => {
+                    if cspace.is_some() {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "cspace must only be specified once".to_string(),
+                        ));
+                    }
+
+                    cspace = Some(CSpace::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1166,6 +1216,7 @@ impl ProtectionDomain {
             irqs,
             ioports,
             setvars,
+            cap_maps: cspace.map(|cspace| cspace.cap_maps).unwrap_or_default(),
             child_pds,
             virtual_machine,
             has_children,
@@ -1303,6 +1354,68 @@ impl VirtualMachine {
             budget,
             period,
         })
+    }
+}
+
+impl CapMap {
+    fn from_xml(
+        cap_type: CapMapType,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+    ) -> Result<CapMap, String> {
+        // At the moment the four cap maps we support all have the 'pd' element,
+        // so we can include it here. When that stops being the case we will
+        // have to rework this a bit.
+        check_attributes(xml_sdf, node, &["slot", "pd"])?;
+
+        let pd_name = checked_lookup(xml_sdf, node, "pd")?.to_string();
+
+        let slot = sdf_parse_number(checked_lookup(xml_sdf, node, "slot")?, node)?;
+
+        // TODO: Rework this so that we don't have a fixed upper limit.
+        if slot >= CAP_MAP_MAX_SLOT {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("There are only {CAP_MAP_MAX_SLOT} destination cspace slots available."),
+            ));
+        }
+
+        Ok(CapMap {
+            cap_type,
+            pd_name,
+            // FIXME: Hack, filled out later.
+            pd: None,
+            slot,
+            text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+        })
+    }
+}
+
+impl CSpace {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<Self, String> {
+        check_attributes(xml_sdf, node, &[])?;
+
+        let mut cap_maps = vec![];
+
+        for child in node.children().filter(|c| c.is_element()) {
+            cap_maps.push(match child.tag_name().name() {
+                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &child)?,
+                "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &child)?,
+                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &child)?,
+                "cap_cspace" => CapMap::from_xml(CapMapType::CSpace, xml_sdf, &child)?,
+                child_name => {
+                    let location = loc_string(xml_sdf, xml_sdf.doc.text_pos_at(child.range().start));
+                    if let Some(type_name) = child_name.strip_prefix("cap_") {
+                        return Err(format!("Cap type: '{type_name}' is not supported at '{location}'"));
+                    } else {
+                        return Err(format!("Element '{child_name}' is not supported in a <cspace> element at '{location}'"));
+                    }
+                }
+            })
+        }
+
+        Ok(CSpace { cap_maps })
     }
 }
 
@@ -1815,7 +1928,6 @@ pub fn parse(
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
-
     let system = doc
         .root()
         .children()
@@ -1887,6 +1999,27 @@ pub fn parse(
         }
 
         channels.push(ch);
+    }
+
+    // FIXME: Now we post-fill the PD ids in the capmap elements, which is
+    //        ugly, and we should rework this to be less so.
+    let pd_names_to_id: HashMap<_, _> = pds
+        .iter()
+        .enumerate()
+        .map(|(idx, pd)| (pd.name.clone(), idx))
+        .collect();
+    for pd in pds.iter_mut() {
+        for cap_map in pd.cap_maps.iter_mut() {
+            let Some(&pd) = pd_names_to_id.get(&cap_map.pd_name) else {
+                return Err(format!(
+                    "Error: unknown PD name '{}': {}",
+                    cap_map.pd_name,
+                    loc_string(&xml_sdf, cap_map.text_pos)
+                ));
+            };
+
+            cap_map.pd = Some(pd);
+        }
     }
 
     // Now that we have parsed everything in the system description we can validate any
@@ -2077,6 +2210,37 @@ pub fn parse(
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
         if let Some(vm) = &pd.virtual_machine {
             check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+        }
+    }
+
+    // Ensure that there are no overlapping extra cap maps in the user caps region
+    // and we are not mapping in the same cap from the same source more than once
+    for pd in &pds {
+        let mut user_cap_slots = HashMap::<u64, Vec<_>>::new();
+
+        for cap_map in &pd.cap_maps {
+            user_cap_slots
+                .entry(cap_map.slot)
+                .and_modify(|v| v.push(cap_map))
+                .or_insert(vec![cap_map]);
+        }
+
+        for (slot, cap_maps) in user_cap_slots.iter() {
+            if cap_maps.len() > 1 {
+                let mut lines = String::new();
+                for mapping in cap_maps {
+                    lines.push_str(&format!(
+                        "\n  type {:?} from '{}' at '{}'",
+                        mapping.cap_type,
+                        mapping.pd_name,
+                        loc_string(&xml_sdf, mapping.text_pos)
+                    ));
+                }
+                return Err(format!(
+                    "Error: overlapping user caps in slot {slot} of protection domain '{}':{}",
+                    pd.name, lines
+                ));
+            }
         }
     }
 

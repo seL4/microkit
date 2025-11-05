@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="primary" priority="1">
+        <program_image path="cap_sharing.elf" />
+
+        <cspace>
+            <!-- You can have the SC or TCB of another PD -->
+            <cap_sc  slot="1" pd="secondary" />
+            <cap_tcb slot="2" pd="secondary" />
+
+            <!-- You can also have it of yourself -->
+            <cap_sc  slot="3" pd="primary" />
+            <cap_tcb slot="4" pd="primary" />
+        </cspace>
+    </protection_domain>
+
+    <protection_domain name="secondary" priority="2">
+        <program_image path="secondary.elf" />
+    </protection_domain>
+
+    <channel>
+        <end pd="primary" id="0" />
+        <end pd="secondary" id="0" />
+    </channel>
+</system>

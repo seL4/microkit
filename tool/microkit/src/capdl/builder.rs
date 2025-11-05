@@ -24,8 +24,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY,
+        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT,
+        MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -95,8 +95,14 @@ const PD_BASE_PD_TCB_CAP: u64 = PD_BASE_IRQ_CAP + 64;
 const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
+// The following region can be used for whatever the user wants to map into their
+// cspace. We restrict them to use this region so that they don't accidently
+// overwrite other parts of the cspace. The cspace slot that the users provide
+// for mapping in extra caps such as TCBs and SCs will be as an offset to this
+// index. We are bounding this to 128 slots for now.
+const PD_BASE_USER_CAPS: u64 = PD_BASE_IOPORT_CAP + 64;
 
-pub const PD_CAP_SIZE: u32 = 512;
+pub const PD_CAP_SIZE: u32 = 1024;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
 const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() as u64;
@@ -116,6 +122,9 @@ struct PDShadowCspace {
     cspace: ObjectId,
     notification: ObjectId,
     endpoint: Option<ObjectId>,
+    sched_context: ObjectId,
+    tcb: ObjectId,
+    vspace: ObjectId,
 }
 
 pub struct CapDLSpecContainer {
@@ -1064,6 +1073,9 @@ pub fn build_capdl_spec(
                 cspace: pd_cnode_obj_id,
                 endpoint: pd_ep_obj_id,
                 notification: pd_ntfn_obj_id,
+                sched_context: pd_sc_obj_id,
+                vspace: pd_vspace_obj_id,
+                tcb: pd_tcb_obj_id,
             },
         );
     }
@@ -1136,7 +1148,36 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Sort the root objects
+    // Step 5. Handle extra cap mappings
+    // *********************************
+
+    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
+        let pd_dest_cspace_id = pd_shadow_cspaces[&pd_dest_idx].cspace;
+
+        for cap_map in pd.cap_maps.iter() {
+            // TODO: Once we add more CapMap options, they might not all have
+            // the pd_name. But for now, they do.
+            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];
+
+            let cap_map_obj = match cap_map.cap_type {
+                CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
+                CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
+                CapMapType::VSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.vspace),
+                CapMapType::CSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.cspace),
+            };
+
+            // Map this into the destination pd's cspace and the specified slot.
+            capdl_util_insert_cap_into_cspace(
+                &mut spec_container,
+                pd_dest_cspace_id,
+                (PD_BASE_USER_CAPS + cap_map.slot) as u32,
+                cap_map_obj,
+            );
+        }
+    }
+
+    // *********************************
+    // Step 6. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.
