@@ -92,7 +92,8 @@ const PD_BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const PD_BASE_OUTPUT_ENDPOINT_CAP: u64 = PD_BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const PD_BASE_IRQ_CAP: u64 = PD_BASE_OUTPUT_ENDPOINT_CAP + 64;
 const PD_BASE_PD_TCB_CAP: u64 = PD_BASE_IRQ_CAP + 64;
-const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
+const PD_BASE_PD_SC_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
+const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_SC_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 
@@ -679,6 +680,14 @@ pub fn build_capdl_spec(
                 *parent_cspace_obj_id,
                 (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
+            );
+
+            // Allow the parent PD to access the child's SC:
+            capdl_util_insert_cap_into_cspace(
+                &mut spec,
+                *parent_cspace_obj_id,
+                (PD_BASE_PD_SC_CAP + pd.id.unwrap()) as usize,
+                capdl_util_make_sc_cap(pd_sc_obj_id),
             );
 
             fault_ep_cap
