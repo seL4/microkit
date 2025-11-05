@@ -8,7 +8,7 @@
 name = "microkit-tool"
 version = "2.0.1-dev"
 edition = "2021"
-rust-version = "1.88.0"
+rust-version = "1.91.0"
 
 [[bin]]
 name = "microkit"
