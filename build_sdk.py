@@ -74,13 +74,13 @@ class KernelArch(IntEnum):
         else:
             raise Exception(f"Unsupported toolchain architecture '{self}'")
 
-    def rust_toolchain(self) -> str:
+    def rust_target(self) -> str:
         if self == KernelArch.AARCH64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"aarch64-unknown-none"
         elif self == KernelArch.RISCV64:
-            return f"{self.to_str()}imac-sel4-minimal"
+            return f"riscv64imac-unknown-none-elf"
         elif self == KernelArch.X86_64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"x86_64-unknown-none"
         else:
             raise Exception(f"Unsupported toolchain target triple '{self}'")
 
@@ -735,8 +735,7 @@ def build_initialiser(
     sel4_src_dir = build_dir / board.name / config.name / "sel4" / "install"
 
     cargo_cross_options = "-Z build-std=core,alloc,compiler_builtins -Z build-std-features=compiler-builtins-mem"
-    cargo_target = board.arch.rust_toolchain()
-    rust_target_path = Path("initialiser/support/targets").absolute()
+    cargo_target = board.arch.rust_target()
 
     dest = (
         root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
@@ -750,10 +749,10 @@ def build_initialiser(
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
     if custom_rust_sel4_dir is None:
-        capdl_init_elf = component_build_dir / "bin" / "sel4-capdl-initializer.elf"
+        capdl_init_elf = component_build_dir / "bin" / "sel4-capdl-initializer"
         cmd = f"""
             RUSTC_BOOTSTRAP=1 \
-            RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
+            SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo install {cargo_cross_options} \
             --target {cargo_target} \
             --git https://github.com/au-ts/rust-seL4 --branch capdl_dev sel4-capdl-initializer \
@@ -761,9 +760,9 @@ def build_initialiser(
             --root {component_build_dir}
         """
     else:
-        capdl_init_elf = custom_rust_sel4_dir / "target" / cargo_target / "release" / "sel4-capdl-initializer.elf"
+        capdl_init_elf = custom_rust_sel4_dir / "target" / cargo_target / "release" / "sel4-capdl-initializer"
         cmd = f"""
-            cd {custom_rust_sel4_dir} && SEL4_PREFIX={sel4_src_dir.absolute()} {cargo_env} \
+            cd {custom_rust_sel4_dir} && SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo build {cargo_cross_options} --target {cargo_target} \
             --release -p sel4-capdl-initializer
         """
