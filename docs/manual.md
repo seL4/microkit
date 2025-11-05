@@ -984,6 +984,13 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
+## `seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_slot_to_cptr}
+
+Converts the slot identifier of the `<cspace>`'s capability element into an
+`seL4_CPtr` value to be used in `libsel4` calls by the PD.
+
+If the slot exceeds the valid range of inputs (`0 <= slot < MICROKIT_MAX_USER_CAPS`), it returns the value `seL4_CapNull`.
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -1025,6 +1032,7 @@ Additionally, it supports the following child elements:
 * `protection_domain`: (zero or more) Describes a child protection domain.
 * `virtual_machine`: (zero or one) Describes a child virtual machine.
 * `ioport`: (zero or more) Describes an I/O port, x86-64 only.
+* `cspace`: (zero or one) Describes ["extra" capabilities](#sdf-cspace) in the microkit-provided CSpace.
 
 The `program_image` element has the following attributes:
 
@@ -1124,6 +1132,29 @@ It supports the following attributes:
 * `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at initialisation.
 
 The `memory_region` element does not support any child elements.
+
+## `cspace` {#sdf-cspace}
+
+The `cspace` element represents the *Capability Space* of each protection domain.
+This is an advanced feature designed for users of Microkit who want more complex runtime behaviour than the system description file allows.
+For more details on how CSpaces and capabilities work, please see the ['Capability Spaces' section of the seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf#chapter.3).
+
+It supports no attributes, but supports the following elements as children:
+
+* `cap_tcb`: A capability to a protection domain's Thread Control Block (TCB).
+* `cap_sc`: A capability to a protection domain's Scheduling Context (SC).
+  If the protection domain is passive, this is a capability to the notification's scheduling context.
+* `cap_vspace`: A capability to a protection domain's VSpace.
+* `cap_cspace`: A capability to a protection domain's CSpace.
+
+All of the elements support the `slot` attribute, which is is an opaque identifier used to address the capability at runtime.
+To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_slot_to_cptr) function.
+
+See the 'cap_sharing' example packaged in your SDK or [on GitHub](https://github.com/seL4/microkit/tree/main/example/cap_sharing).
+
+All capability elements (currently) all support the `pd` attribute, the name of the protection domain that the capability is from.
+For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' in the CSpace of the current PD.
+
 
 ### Page sizes by architecture
 
