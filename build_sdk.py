@@ -341,6 +341,17 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
+        name="serengeti",
+        arch=KernelArch.RISCV64,
+        gcc_cpu=None,
+        loader_link_address=0x90000000,
+        kernel_options={
+            "KernelPlatform": "cheshire",
+            "KernelRiscvExtD": True,
+            "KernelRiscvExtF": True,
+        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+    ),
+    BoardInfo(
         name="x86_64_generic",
         arch=KernelArch.X86_64,
         gcc_cpu="generic",
