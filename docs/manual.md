@@ -982,8 +982,13 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
 ## Serengeti {#serengeti}
 
-Serengeti is a superset of [Cheshire](#cheshire) and has no build differences when compared
-to Cheshire. Please see [Cheshire](#cheshire) for instructions.
+Serengeti is a fork of the [Cheshire](#cheshire) platform by Trustworthy Systems. More
+information on the hardware platform can be found [here](https://github.com/au-ts/serengeti).
+
+Right now Serengeti is a superset of Cheshire by offering more peripherals than Cheshire
+has.
+
+For running on Serengeti, please see [Cheshire](#cheshire) for instructions.
 
 ## SiFive Premier P550 {#hifive_p550}
 
