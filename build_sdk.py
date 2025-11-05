@@ -774,7 +774,7 @@ def build_initialiser(
     else:
         capdl_init_elf = custom_rust_sel4_dir / "target" / cargo_target / "release" / "sel4-capdl-initializer.elf"
         cmd = f"""
-            cd {custom_rust_sel4_dir} && SEL4_PREFIX={sel4_src_dir.absolute()} {cargo_env} \
+            cd {custom_rust_sel4_dir} && SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo build {cargo_cross_options} --target {cargo_target} \
             --release -p sel4-capdl-initializer
         """
