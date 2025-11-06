@@ -510,7 +510,7 @@ def test_tool() -> None:
 
 def build_tool(tool_target: Path, target_triple: str) -> None:
     r = system(
-        f"cd tool/microkit && cargo build --release --target {target_triple}"
+        f"cd tool/microkit && cargo build --release --locked --target {target_triple}"
     )
     assert r == 0
 
@@ -767,6 +767,7 @@ def build_initialiser(
             RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo install {cargo_cross_options} \
             --target {cargo_target} \
+            --locked \
             --git https://github.com/au-ts/rust-seL4 --branch capdl_dev sel4-capdl-initializer --rev 118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80 \
             --target-dir {rust_target_dir} \
             --root {component_build_dir}
