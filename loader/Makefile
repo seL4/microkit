@@ -56,7 +56,7 @@ CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding $(CFLAGS_ARCH) -DBOARD_$(BO
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g
 
 PROGS := loader.elf
-OBJECTS := loader.o crt0.o uart.o
+OBJECTS := loader.o crt0.o uart.o cutil.o
 
 ifeq ($(ARCH),aarch64)
 	OBJECTS += util64.o
