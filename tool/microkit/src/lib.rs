@@ -229,6 +229,8 @@ impl DisjointMemoryRegion {
             self.regions.last_mut().unwrap().end = end;
         } else if insert_idx < self.regions.len() && end == self.regions[insert_idx].base {
             self.regions[insert_idx].base = base;
+        } else if insert_idx < self.regions.len() && base == self.regions[insert_idx].end {
+            self.regions[insert_idx].end = end;
         } else {
             self.regions
                 .insert(insert_idx, MemoryRegion::new(base, end));
