@@ -751,6 +751,7 @@ The `ioport` element has the following attributes:
 * `addr`: The base address of the I/O port.
 * `size`: The size in bytes of the I/O port region.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the I/O port identifier.
+* `setvar_addr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the base address of the I/O port.
 
 The `setvar` element has the following attributes:
 
