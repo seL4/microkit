@@ -6,8 +6,8 @@
 
 This is a basic example that demonstrate how to use some `setvar` functionalities that the Microkit provides.
 
-Only QEMU virt (AArch64) is supported in this example. Though verything will work the same way on other
-platforms. But on x86, `setvar region_paddr` won't be supported.
+Only QEMU virt (AArch64) is supported in this example. Although everything will work the same way on other
+platforms, but on x86-64 `<setvar region_paddr` won't be supported.
 
 ## Building
 
