@@ -619,19 +619,12 @@ fn main() -> Result<(), String> {
                     // Unlikely to happen on Microkit-supported platforms with multi gigabytes memory.
                     // But printing a helpful error in case we do run into this problem.
                     eprintln!(
-                        "ERROR: out of contiguous physical memory to place the initial task."
+                        "ERROR: cannot allocate memory for the initialiser, contiguous physical memory region of size {} not found", human_size_strict(initial_task_size)
                     );
-                    eprintln!(
-                        "Help: initial task size is: {}",
-                        human_size_strict(initial_task_size)
-                    );
-                    eprintln!("Help: the initial task size is influenced by how many PDs and Memory Regions you creates.");
-                    eprintln!(
-                        "Help: physical memory regions on this platform after kernel boot are:"
-                    );
+                    eprintln!("ERROR: physical memory regions the initialiser can be placed at:");
                     for region in available_memory.regions {
                         eprintln!(
-                            "Help: [0x{:0>12x}..0x{:0>12x}), size: {}",
+                            "       [0x{:0>12x}..0x{:0>12x}), size: {}",
                             region.base,
                             region.end,
                             human_size_strict(region.size())
@@ -750,24 +743,24 @@ fn main() -> Result<(), String> {
                             .allocate(tool_allocate_mr.size, tool_allocate_mr.page_size);
                         if target_paddr.is_none() {
                             eprintln!("ERROR: cannot auto-select a physical address for MR {} because there are no contiguous memory region of sufficient size.", tool_allocate_mr.name);
-                            eprintln!("Help: MR {} needs to be physically contiguous as it is a subject of a setvar region_paddr.", tool_allocate_mr.name);
+                            eprintln!("ERROR: MR {} needs to be physically contiguous as it is a subject of a setvar region_paddr.", tool_allocate_mr.name);
                             if !tool_allocated_mrs.is_empty() {
-                                eprintln!("Help: previously auto-allocated memory regions:");
+                                eprintln!("Previously auto-allocated memory regions:");
                                 for allocated_mr_id in tool_allocated_mrs {
                                     let allocated_mr: &SysMemoryRegion =
                                         &system.memory_regions[allocated_mr_id];
                                     eprintln!(
-                                        "Help: name = '{}', paddr = 0x{:0>12x}, size = 0x{:0>12x}",
+                                        "name = '{}', paddr = 0x{:0>12x}, size = 0x{:0>12x}",
                                         allocated_mr.name,
                                         allocated_mr.paddr().unwrap(),
                                         allocated_mr.size
                                     );
                                 }
                             }
-                            eprintln!("Help: available physical memory regions:");
+                            eprintln!("available physical memory regions:");
                             for region in available_user_memory.regions {
                                 eprintln!(
-                                    "Help: [0x{:0>12x}..0x{:0>12x}), size: {}",
+                                    "[0x{:0>12x}..0x{:0>12x}), size: {}",
                                     region.base,
                                     region.end,
                                     human_size_strict(region.size())
@@ -852,7 +845,7 @@ fn main() -> Result<(), String> {
     if !system_built {
         // Cannot build a reasonable spec, absurd.
         // Only reachable when there are setvar region_paddr that we keep selecting the wrong address.
-        panic!("Couldn't build system in {iteration} iterations!!!");
+        panic!("ERROR: fatal, failed to build system in {iteration} iterations");
     }
 
     Ok(())
