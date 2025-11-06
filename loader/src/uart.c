@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include <stdint.h>
+#include "uart.h"
 
 #if PRINTING
 
