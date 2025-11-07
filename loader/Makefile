@@ -51,19 +51,23 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding $(CFLAGS_ARCH) -DBOARD_$(BOARD) -DPRINTING=$(PRINTING) -Wall -Werror -Wno-unused-function
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -DBOARD_$(BOARD) -DPRINTING=$(PRINTING) -Wall -Werror
 
-ASM_FLAGS := $(ASM_FLAGS_ARCH) -g
+ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o
 
 ifeq ($(ARCH),aarch64)
-	OBJECTS += util64.o
+	OBJECTS += util64.o el.o exceptions.o init.o mmu.o
+else ifeq ($(ARCH),riscv64)
+	OBJECTS += exceptions.o init.o mmu.o
 endif
 
 LINKSCRIPT_INPUT := $(ARCH).ld
 LINKSCRIPT := $(BUILD_DIR)/link.ld
+
+.SECONDARY:
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(CC) -DLINK_ADDRESS=$(LINK_ADDRESS) -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
@@ -71,8 +75,13 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
 	$(AS) -c $< -o $@
 
+$(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.c
+	$(CC) -c $(CFLAGS) $< -o $@
+
 $(BUILD_DIR)/%.o : src/%.c
 	$(CC) -c $(CFLAGS) $< -o $@
+
+-include $(BUILD_DIR)/*.d
 
 OBJPROG = $(addprefix $(BUILD_DIR)/, $(PROGS))
 
