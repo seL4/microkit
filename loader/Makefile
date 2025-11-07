@@ -51,7 +51,7 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -DBOARD_$(BOARD) -DPRINTING=$(PRINTING) -Wall -Werror
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -DPRINTING=$(PRINTING) -Wall -Werror -I$(SEL4_SDK)/include
 
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD
 

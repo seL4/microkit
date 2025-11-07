@@ -7,13 +7,13 @@
 
 #include "uart.h"
 
-#if PRINTING
+#if defined(CONFIG_PRINTING)
 
 #define UART_REG(x) ((volatile uint32_t *)(UART_BASE + (x)))
 
 static void putc(uint8_t ch);
 
-#if defined(BOARD_tqma8xqp1gb)
+#if defined(CONFIG_PLAT_TQMA8XQP1GB)
 #define UART_BASE 0x5a070000
 #define STAT 0x14
 #define TRANSMIT 0x1c
@@ -27,7 +27,8 @@ void putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 
-#elif defined(BOARD_imx8mm_evk) || defined(BOARD_imx8mp_evk) || defined(BOARD_imx8mp_iotgate)
+#elif defined(CONFIG_PLAT_IMX8MM_EVK) || defined(CONFIG_PLAT_IMX8MP_EVK)
+/* IMX8MP_EVK includes the iotgate, as this is the kernel platform */
 #define UART_BASE 0x30890000
 #define STAT 0x98
 #define TRANSMIT 0x40
@@ -40,7 +41,7 @@ void putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_zcu102)
+#elif defined(CONFIG_PLAT_ZYNQMP_ZCU102)
 #define UART_BASE 0xff000000
 #define UART_CHANNEL_STS_TXEMPTY 0x8
 #define UART_CHANNEL_STS         0x2C
@@ -63,7 +64,7 @@ void putc(uint8_t ch)
     while (!(*UART_REG(UART_CHANNEL_STS) & UART_CHANNEL_STS_TXEMPTY));
     *UART_REG(UART_TX_RX_FIFO) = ch;
 }
-#elif defined(BOARD_maaxboard) || defined(BOARD_imx8mq_evk)
+#elif defined(CONFIG_PLAT_MAAXBOARD) || defined(CONFIG_PLAT_IMX8MQ_EVK)
 #define UART_BASE 0x30860000
 #define STAT 0x98
 #define TRANSMIT 0x40
@@ -77,7 +78,7 @@ void putc(uint8_t ch)
     while (!(*UART_REG(STAT) & STAT_TDRE)) { }
     *UART_REG(TRANSMIT) = ch;
 }
-#elif defined(BOARD_odroidc2)
+#elif defined(CONFIG_PLAT_ODROIDC2)
 #define UART_BASE 0xc81004c0
 #define UART_WFIFO 0x0
 #define UART_STATUS 0xC
@@ -90,7 +91,7 @@ void putc(uint8_t ch)
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
 }
-#elif defined(BOARD_odroidc4)
+#elif defined(CONFIG_PLAT_ODROIDC4)
 #define UART_BASE 0xff803000
 #define UART_WFIFO 0x0
 #define UART_STATUS 0xC
@@ -103,7 +104,7 @@ void putc(uint8_t ch)
     while ((*UART_REG(UART_STATUS) & UART_TX_FULL));
     *UART_REG(UART_WFIFO) = ch;
 }
-#elif defined(BOARD_ultra96v2)
+#elif defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2)
 /* Use UART1 available through USB-to-JTAG/UART pod */
 #define UART_BASE 0x00ff010000
 #define R_UART_CHANNEL_STS          0x2C
@@ -120,7 +121,7 @@ void putc(uint8_t ch)
 
     *((volatile uint32_t *)(UART_BASE + R_UART_TX_RX_FIFO)) = ch;
 }
-#elif defined(BOARD_qemu_virt_aarch64)
+#elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 #define UART_BASE                 0x9000000
 #define PL011_TCR                 0x030
 #define PL011_UARTDR              0x000
@@ -141,7 +142,8 @@ void putc(uint8_t ch)
     *UART_REG(PL011_UARTDR) = ch;
 }
 
-#elif defined(BOARD_rpi4b_1gb) || defined(BOARD_rpi4b_2gb) || defined(BOARD_rpi4b_4gb) || defined(BOARD_rpi4b_8gb)
+#elif defined(CONFIG_PLAT_BCM2711)
+/* rpi4b */
 #define UART_BASE 0xfe215040
 #define MU_IO 0x00
 #define MU_LSR 0x14
@@ -154,7 +156,7 @@ void putc(uint8_t ch)
     while (!(*UART_REG(MU_LSR) & MU_LSR_TXIDLE));
     *UART_REG(MU_IO) = (ch & 0xff);
 }
-#elif defined(BOARD_rockpro64)
+#elif defined(CONFIG_PLAT_ROCKPRO64)
 #define UART_BASE   0xff1a0000
 #define UTHR        0x0
 #define ULSR        0x14
@@ -168,7 +170,7 @@ void putc(uint8_t ch)
     *UART_REG(UTHR) = ch;
 }
 
-#elif defined(ARCH_riscv64)
+#elif defined(CONFIG_ARCH_RISCV64)
 #define SBI_CONSOLE_PUTCHAR 1
 
 // TODO: remove, just do straight ASM
@@ -241,4 +243,4 @@ void puthex64(uint64_t val)
     puts(buffer);
 }
 
-#endif /* PRINTING */
+#endif /* CONFIG_PRINTING */
