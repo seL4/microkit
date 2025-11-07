@@ -654,7 +654,7 @@ def build_elf_component(
         defines_str += f" GCC_CPU={board.gcc_cpu}"
 
     r = system(
-        f"{defines_str} make -C {component_name}"
+        f"{defines_str} make -C {component_name} all"
     )
     if r != 0:
         raise Exception(
