@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 #include <stdint.h>
 
 static inline const char *ex_to_string(uintptr_t ex)

@@ -47,7 +47,7 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -Wall -Werror -I$(SEL4_SDK)/include
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -mno-outline-atomics -MP -MD $(CFLAGS_ARCH) -Wall -Werror -I$(SEL4_SDK)/include
 
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
 
@@ -55,7 +55,7 @@ PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o
 
 ifeq ($(ARCH),aarch64)
-	OBJECTS += util64.o el.o exceptions.o init.o mmu.o
+	OBJECTS += util64.o el.o exceptions.o init.o mmu.o cpus.o
 else ifeq ($(ARCH),riscv64)
 	OBJECTS += exceptions.o init.o mmu.o
 endif
