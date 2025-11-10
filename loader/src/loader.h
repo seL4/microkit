@@ -41,4 +41,4 @@ extern const struct loader_data *loader_data;
 
 extern char _stack[NUM_ACTIVE_CPUS][STACK_SIZE];
 
-void start_kernel(int logical_id);
+void start_kernel(int logical_cpu);

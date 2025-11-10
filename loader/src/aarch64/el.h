@@ -17,7 +17,7 @@ enum el {
 };
 
 enum el current_el(void);
-int ensure_correct_el(void);
+int ensure_correct_el(int logical_cpu);
 
 static inline const char *el_to_string(enum el el)
 {
