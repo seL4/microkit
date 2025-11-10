@@ -27,7 +27,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME, MONITOR_PRIORITY,
+        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
+        MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -166,6 +167,7 @@ impl CapDLSpec {
         &mut self,
         sel4_config: &Config,
         pd_name: &str,
+        pd_cpu: CpuCore,
         elf_id: usize,
         elf: &ElfFile,
     ) -> Result<ObjectId, String> {
@@ -310,7 +312,7 @@ impl CapDLSpec {
 
         let tcb_extra_info = capdl_object::TcbExtraInfo {
             ipc_buffer_addr: ipcbuf_vaddr,
-            affinity: 0,
+            affinity: pd_cpu.0.into(),
             prio: 0,
             max_prio: 0,
             resume: false,
@@ -391,8 +393,14 @@ pub fn build_capdl_spec(
     assert!(elfs.len() == system.protection_domains.len() + 1);
     let monitor_tcb_obj_id = {
         let monitor_elf = elfs.get(mon_elf_id).unwrap();
-        spec.add_elf_to_spec(kernel_config, MONITOR_PD_NAME, mon_elf_id, monitor_elf)
-            .unwrap()
+        spec.add_elf_to_spec(
+            kernel_config,
+            MONITOR_PD_NAME,
+            CpuCore(0),
+            mon_elf_id,
+            monitor_elf,
+        )
+        .unwrap()
     };
 
     // Create monitor fault endpoint object + cap
@@ -541,7 +549,7 @@ pub fn build_capdl_spec(
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
         let pd_tcb_obj_id = spec
-            .add_elf_to_spec(kernel_config, &pd.name, pd_global_idx, elf_obj)
+            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj)
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec, pd_tcb_obj_id);
 
@@ -703,8 +711,14 @@ pub fn build_capdl_spec(
         // Step 3-9 Create spec and caps to IRQs
         for irq in pd.irqs.iter() {
             // Create a IRQ handler cap and insert into the requested CSpace's slot.
-            let irq_handle_cap =
-                create_irq_handler_cap(&mut spec, kernel_config, &pd.name, pd_ntfn_obj_id, irq);
+            let irq_handle_cap = create_irq_handler_cap(
+                &mut spec,
+                kernel_config,
+                &pd.name,
+                pd.cpu,
+                pd_ntfn_obj_id,
+                irq,
+            );
             let irq_cap_idx = PD_BASE_IRQ_CAP + irq.id;
             caps_to_insert_to_pd_cspace.push((irq_cap_idx as usize, irq_handle_cap));
         }
@@ -837,7 +851,7 @@ pub fn build_capdl_spec(
                         slots: caps_to_bind_to_vm_tcbs,
                         extra: capdl_object::TcbExtraInfo {
                             ipc_buffer_addr: 0,
-                            affinity: 0, // @billn revisit for SMP, need a way to specify node id in the XML
+                            affinity: vcpu.cpu.0.into(),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
                             resume: false,
