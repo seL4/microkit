@@ -40,9 +40,9 @@ $(error PRINTING must be specified)
 endif
 
 ifeq ($(ARCH),aarch64)
-	CFLAGS_AARCH64 := -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
+	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
 	CFLAGS_ARCH := $(CFLAGS_AARCH64) -DARCH_aarch64
-	ASM_FLAGS_ARCH := -DPHYSICAL_ADDRESS_BITS=$(PHYSICAL_ADDRESS_BITS) -mcpu=$(GCC_CPU)
+	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 	ARCH_DIR := aarch64
 else ifeq ($(ARCH),riscv64)
 	CFLAGS_RISCV64 := -mcmodel=medany -march=rv64imac_zicsr_zifencei -mabi=lp64
@@ -51,9 +51,9 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -DPRINTING=$(PRINTING) -Wall -Werror -I$(SEL4_SDK)/include
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -Wall -Werror -I$(SEL4_SDK)/include
 
-ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD
+ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o

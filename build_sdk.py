@@ -910,14 +910,6 @@ def main() -> None:
             # needs to know about, so we figure that out here
             if board.arch.is_riscv():
                 loader_defines.append(("FIRST_HART_ID", sel4_gen_config["FIRST_HART_ID"]))
-            if board.arch.is_arm():
-                if sel4_gen_config["ARM_PA_SIZE_BITS_40"]:
-                    arm_pa_size_bits = 40
-                elif sel4_gen_config["ARM_PA_SIZE_BITS_44"]:
-                    arm_pa_size_bits = 44
-                else:
-                    raise Exception("Unexpected ARM physical address bits defines")
-                loader_defines.append(("PHYSICAL_ADDRESS_BITS", arm_pa_size_bits))
 
             if not board.arch.is_x86():
                 loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
