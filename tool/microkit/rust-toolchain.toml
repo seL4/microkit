@@ -1,0 +1,10 @@
+#
+# Copyright 2025, UNSW
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+
+[toolchain]
+channel = "1.90.0"
+components = [ "rustfmt", "rust-src", "rustc-dev", "llvm-tools-preview", "clippy" ]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "aarch64-apple-darwin"]

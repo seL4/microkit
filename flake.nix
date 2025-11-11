@@ -49,22 +49,7 @@
           ps.setuptools
         ]);
 
-        microkitToolToml = nixpkgs.lib.trivial.importTOML ./tool/microkit/Cargo.toml;
-        microkitToolVersion = microkitToolToml.package.rust-version;
-
-        # Unfortunately Cargo does not support all targets by default so for cross-compiling
-        # we must explicitly add certain targets.
-        rustAdditionalTargets = {
-          aarch64-darwin = [ "x86_64-apple-darwin" ];
-          x86_64-darwin = [ "aarch64-apple-darwin" ];
-          x86_64-linux = [];
-          aarch64-linux = [];
-        }.${system} or (throw "Unsupported system: ${system}");
-
-        rustTool = pkgs.rust-bin.stable.${microkitToolVersion}.default.override {
-          extensions = [ "rust-src" ];
-          targets = [ pkgs.pkgsStatic.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets;
-        };
+        rustTool = pkgs.rust-bin.fromRustupToolchainFile ./tool/microkit/rust-toolchain.toml;
       in
       {
         # for `nix fmt`
