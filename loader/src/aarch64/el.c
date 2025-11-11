@@ -6,8 +6,12 @@
  */
 
 #include "el.h"
-#include "../uart.h"
+
+#include <kernel/gen_config.h>
+
+#include "../cutil.h"
 #include "../loader.h"
+#include "../uart.h"
 
 void switch_to_el1(void);
 void switch_to_el2(void);
@@ -43,7 +47,7 @@ int ensure_correct_el(void)
         el = EL2;
     }
 
-    if (loader_data->flags & FLAG_SEL4_HYP) {
+    if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         if (el != EL2) {
             puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
             return 1;

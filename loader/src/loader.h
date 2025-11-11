@@ -11,8 +11,6 @@
 #define REGION_TYPE_DATA 1
 #define REGION_TYPE_ZERO 2
 
-#define FLAG_SEL4_HYP (1UL << 0)
-
 struct region {
     uintptr_t load_addr;
     uintptr_t size;
@@ -23,7 +21,6 @@ struct region {
 struct loader_data {
     uintptr_t magic;
     uintptr_t size;
-    uintptr_t flags;
     uintptr_t kernel_entry;
     uintptr_t ui_p_reg_start;
     uintptr_t ui_p_reg_end;
