@@ -5,8 +5,11 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include "el.h"
 #include "exceptions.h"
+
+#include <kernel/gen_config.h>
+
+#include "el.h"
 #include "../cutil.h"
 #include "../loader.h"
 #include "../uart.h"
@@ -35,7 +38,7 @@ void exception_handler(uintptr_t ex)
     uint64_t esr;
     uintptr_t far;
 
-    if (loader_data->flags & FLAG_SEL4_HYP) {
+    if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         asm volatile("mrs %0, ESR_EL2" : "=r"(esr) :: "cc");
         asm volatile("mrs %0, FAR_EL2" : "=r"(far) :: "cc");
     } else {
@@ -46,7 +49,7 @@ void exception_handler(uintptr_t ex)
     uintptr_t ec = (esr >> 26) & 0x3f;
     puts("\nLDR|ERROR: loader trapped exception: ");
     puts(ex_to_string(ex));
-    if (loader_data->flags & FLAG_SEL4_HYP) {
+    if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         puts("\n    esr_el2: ");
     } else {
         puts("\n    esr_el1: ");

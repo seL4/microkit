@@ -5,6 +5,8 @@
  */
 #include "loader.h"
 
+#include <kernel/gen_config.h>
+
 #include "arch.h"
 #include "cutil.h"
 #include "uart.h"
@@ -51,16 +53,14 @@ char _stack[STACK_SIZE] ALIGN(16);
  */
 static void print_flags(void)
 {
-    if (loader_data->flags & FLAG_SEL4_HYP) {
+    if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         puts("             seL4 configured as hypervisor\n");
     }
 }
 
 static void print_loader_data(void)
 {
-    puts("LDR|INFO: Flags:                ");
-    puthex64(loader_data->flags);
-    puts("\n");
+    puts("LDR|INFO: Flags:\n");
     print_flags();
     puts("LDR|INFO: Kernel:      entry:   ");
     puthex64(loader_data->kernel_entry);

@@ -106,7 +106,6 @@ struct LoaderRegion64 {
 struct LoaderHeader64 {
     magic: u64,
     size: u64,
-    flags: u64,
     kernel_entry: u64,
     ui_p_reg_start: u64,
     ui_p_reg_end: u64,
@@ -260,11 +259,6 @@ impl<'a> Loader<'a> {
         all_regions_with_loader.push((image_vaddr, &image));
         check_non_overlapping(&all_regions_with_loader);
 
-        let flags = match config.hypervisor {
-            true => 1,
-            false => 0,
-        };
-
         let mut region_metadata = Vec::new();
         let mut offset: u64 = 0;
         for (addr, data) in &regions {
@@ -285,7 +279,6 @@ impl<'a> Loader<'a> {
         let header = LoaderHeader64 {
             magic,
             size,
-            flags,
             kernel_entry,
             ui_p_reg_start,
             ui_p_reg_end,
