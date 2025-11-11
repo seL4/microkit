@@ -484,6 +484,14 @@ If the protection domain has children it must also implement:
     seL4_Uint8 microkit_x86_ioport_read_8(microkit_ioport ioport_id, seL4_Word port_addr);
     seL4_Uint16 microkit_x86_ioport_read_16(microkit_ioport ioport_id, seL4_Word port_addr);
     seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id, seL4_Word port_addr);
+    seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Word field);
+    void microkit_vcpu_x86_write_vmcs(microkit_child vcpu, seL4_Word field, seL4_Word value);
+    seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Word field);
+    void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value);
+    void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit_ioport ioport_id,
+                                         seL4_Word port_addr, seL4_Word length);
+    void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Word port_addr, seL4_Word length);
+    void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUContext *regs);
 
 
 ## `void init(void)`
@@ -669,6 +677,209 @@ Write an 8, 16, or 32 bits value at port address `port_addr` to I/O Port with ID
 ## `seL4_Uint(8|16|32) microkit_x86_ioport_read_(8|16|32)(microkit_ioport ioport_id, seL4_Word port_addr)`
 
 Read an 8, 16, or 32 bits value at port address `port_addr` from I/O Port with ID `ioport_id`.
+
+## `seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Word field)`
+
+Read a Virtual Machine Control Structure field specified by `field` for a given virtual CPU
+with ID `vcpu` using the `vmread` instruction. The following fields can be read from:
+```
+VMX_GUEST_RIP
+VMX_GUEST_RSP
+VMX_GUEST_ES_SELECTOR
+VMX_GUEST_CS_SELECTOR
+VMX_GUEST_SS_SELECTOR
+VMX_GUEST_DS_SELECTOR
+VMX_GUEST_FS_SELECTOR
+VMX_GUEST_GS_SELECTOR
+VMX_GUEST_LDTR_SELECTOR
+VMX_GUEST_TR_SELECTOR
+VMX_GUEST_DEBUGCTRL
+VMX_GUEST_PAT
+VMX_GUEST_EFER
+VMX_GUEST_PERF_GLOBAL_CTRL
+VMX_GUEST_PDPTE0
+VMX_GUEST_PDPTE1
+VMX_GUEST_PDPTE2
+VMX_GUEST_PDPTE3
+VMX_GUEST_ES_LIMIT
+VMX_GUEST_CS_LIMIT
+VMX_GUEST_SS_LIMIT
+VMX_GUEST_DS_LIMIT
+VMX_GUEST_FS_LIMIT
+VMX_GUEST_GS_LIMIT
+VMX_GUEST_LDTR_LIMIT
+VMX_GUEST_TR_LIMIT
+VMX_GUEST_GDTR_LIMIT
+VMX_GUEST_IDTR_LIMIT
+VMX_GUEST_ES_ACCESS_RIGHTS
+VMX_GUEST_CS_ACCESS_RIGHTS
+VMX_GUEST_SS_ACCESS_RIGHTS
+VMX_GUEST_DS_ACCESS_RIGHTS
+VMX_GUEST_FS_ACCESS_RIGHTS
+VMX_GUEST_GS_ACCESS_RIGHTS
+VMX_GUEST_LDTR_ACCESS_RIGHTS
+VMX_GUEST_TR_ACCESS_RIGHTS
+VMX_GUEST_INTERRUPTABILITY
+VMX_GUEST_ACTIVITY
+VMX_GUEST_SMBASE
+VMX_GUEST_SYSENTER_CS
+VMX_GUEST_PREEMPTION_TIMER_VALUE
+VMX_GUEST_ES_BASE
+VMX_GUEST_CS_BASE
+VMX_GUEST_SS_BASE
+VMX_GUEST_DS_BASE
+VMX_GUEST_FS_BASE
+VMX_GUEST_GS_BASE
+VMX_GUEST_LDTR_BASE
+VMX_GUEST_TR_BASE
+VMX_GUEST_GDTR_BASE
+VMX_GUEST_IDTR_BASE
+VMX_GUEST_DR7
+VMX_GUEST_RFLAGS
+VMX_GUEST_PENDING_DEBUG_EXCEPTIONS
+VMX_GUEST_SYSENTER_ESP
+VMX_GUEST_SYSENTER_EIP
+VMX_CONTROL_CR0_MASK
+VMX_CONTROL_CR4_MASK
+VMX_CONTROL_CR0_READ_SHADOW
+VMX_CONTROL_CR4_READ_SHADOW
+VMX_DATA_INSTRUCTION_ERROR
+VMX_DATA_EXIT_INTERRUPT_INFO
+VMX_DATA_EXIT_INTERRUPT_ERROR
+VMX_DATA_IDT_VECTOR_INFO
+VMX_DATA_IDT_VECTOR_ERROR
+VMX_DATA_EXIT_INSTRUCTION_LENGTH
+VMX_DATA_EXIT_INSTRUCTION_INFO
+VMX_DATA_GUEST_PHYSICAL
+VMX_DATA_IO_RCX
+VMX_DATA_IO_RSI
+VMX_DATA_IO_RDI
+VMX_DATA_IO_RIP
+VMX_DATA_GUEST_LINEAR_ADDRESS
+VMX_CONTROL_ENTRY_INTERRUPTION_INFO
+VMX_CONTROL_PIN_EXECUTION_CONTROLS
+VMX_CONTROL_PRIMARY_PROCESSOR_CONTROLS
+VMX_CONTROL_EXCEPTION_BITMAP
+VMX_CONTROL_EXIT_CONTROLS
+VMX_GUEST_CR0
+VMX_GUEST_CR3
+VMX_GUEST_CR4
+```
+
+These fields are defined in seL4 source at `include/arch/x86/arch/object/vcpu.h`.
+
+## `void microkit_vcpu_x86_write_vmcs(microkit_child vcpu, seL4_Word field, seL4_Word value)`
+
+Write a Virtual Machine Control Structure field specified by `field` for a given virtual CPU
+with ID `vcpu` using the `vmwrite` instruction. The value may be modified to ensure any bits
+that are fixed in the hardware are correct, and that any features required for kernel correctness
+are not disabled. The following fields can be written to:
+```
+VMX_GUEST_RIP
+VMX_GUEST_RSP
+VMX_GUEST_ES_SELECTOR
+VMX_GUEST_CS_SELECTOR
+VMX_GUEST_SS_SELECTOR
+VMX_GUEST_DS_SELECTOR
+VMX_GUEST_FS_SELECTOR
+VMX_GUEST_GS_SELECTOR
+VMX_GUEST_LDTR_SELECTOR
+VMX_GUEST_TR_SELECTOR
+VMX_GUEST_DEBUGCTRL
+VMX_GUEST_PAT
+VMX_GUEST_EFER
+VMX_GUEST_PERF_GLOBAL_CTRL
+VMX_GUEST_PDPTE0
+VMX_GUEST_PDPTE1
+VMX_GUEST_PDPTE2
+VMX_GUEST_PDPTE3
+VMX_GUEST_ES_LIMIT
+VMX_GUEST_CS_LIMIT
+VMX_GUEST_SS_LIMIT
+VMX_GUEST_DS_LIMIT
+VMX_GUEST_FS_LIMIT
+VMX_GUEST_GS_LIMIT
+VMX_GUEST_LDTR_LIMIT
+VMX_GUEST_TR_LIMIT
+VMX_GUEST_GDTR_LIMIT
+VMX_GUEST_IDTR_LIMIT
+VMX_GUEST_ES_ACCESS_RIGHTS
+VMX_GUEST_CS_ACCESS_RIGHTS
+VMX_GUEST_SS_ACCESS_RIGHTS
+VMX_GUEST_DS_ACCESS_RIGHTS
+VMX_GUEST_FS_ACCESS_RIGHTS
+VMX_GUEST_GS_ACCESS_RIGHTS
+VMX_GUEST_LDTR_ACCESS_RIGHTS
+VMX_GUEST_TR_ACCESS_RIGHTS
+VMX_GUEST_INTERRUPTABILITY
+VMX_GUEST_ACTIVITY
+VMX_GUEST_SMBASE
+VMX_GUEST_SYSENTER_CS
+VMX_GUEST_PREEMPTION_TIMER_VALUE
+VMX_GUEST_ES_BASE
+VMX_GUEST_CS_BASE
+VMX_GUEST_SS_BASE
+VMX_GUEST_DS_BASE
+VMX_GUEST_FS_BASE
+VMX_GUEST_GS_BASE
+VMX_GUEST_LDTR_BASE
+VMX_GUEST_TR_BASE
+VMX_GUEST_GDTR_BASE
+VMX_GUEST_IDTR_BASE
+VMX_GUEST_DR7
+VMX_GUEST_RFLAGS
+VMX_GUEST_PENDING_DEBUG_EXCEPTIONS
+VMX_GUEST_SYSENTER_ESP
+VMX_GUEST_SYSENTER_EIP
+VMX_CONTROL_CR0_MASK
+VMX_CONTROL_CR4_MASK
+VMX_CONTROL_CR0_READ_SHADOW
+VMX_CONTROL_CR4_READ_SHADOW
+VMX_CONTROL_EXCEPTION_BITMAP
+VMX_CONTROL_ENTRY_INTERRUPTION_INFO
+VMX_CONTROL_ENTRY_EXCEPTION_ERROR_CODE
+VMX_CONTROL_PIN_EXECUTION_CONTROLS
+VMX_CONTROL_PRIMARY_PROCESSOR_CONTROLS
+VMX_CONTROL_SECONDARY_PROCESSOR_CONTROLS
+VMX_CONTROL_EXIT_CONTROLS
+VMX_GUEST_CR3
+VMX_GUEST_CR0
+VMX_GUEST_CR4
+```
+These fields are defined in seL4 source at `include/arch/x86/arch/object/vcpu.h`.
+
+## `seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Word field)`
+
+Read a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by,
+`field` from hardware using the `rdmsr` instruction. The following registers can be written to:
+`IA32_LSTAR_MSR`,
+`IA32_STAR_MSR`,
+`IA32_CSTAR_MSR` and
+`IA32_FMASK_MSR`.
+
+## `void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value)`
+
+Write a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by,
+`field` to hardware using the `wrmsr` instruction. The following registers can be read from:
+`IA32_LSTAR_MSR`,
+`IA32_STAR_MSR`,
+`IA32_CSTAR_MSR` and
+`IA32_FMASK_MSR`.
+
+## `void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word length)`
+
+Enable I/O port range `[port_addr..port_addr + length)` of I/O Port with ID `ioport_id`
+in the execution environment of a given virtual CPU with ID `vcpu`.
+
+## `void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Word port_addr, seL4_Word length)`
+
+Disable I/O port range `[port_addr..port_addr + length)` in the execution environment of a given
+virtual CPU with ID `vcpu`.
+
+## `void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUContext *regs)`
+
+Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
+the struct of registers `seL4_VCPUContext` that are written from.
 
 # System Description File {#sysdesc}
 
