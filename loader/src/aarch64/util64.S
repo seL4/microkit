@@ -60,16 +60,14 @@
 #define TCR_PS_16T        (4 << 16)
 #define TCR_PS_256T       (5 << 16)
 
-#ifndef PHYSICAL_ADDRESS_BITS
-#error "Missing PHYSICAL_ADDRESS_BITS"
-#endif
+#include <kernel/gen_config.h>
 
-#if PHYSICAL_ADDRESS_BITS == 40
+#if defined(CONFIG_ARM_PA_SIZE_BITS_40)
 #define TCR_PS TCR_PS_1T
-#elif PHYSICAL_ADDRESS_BITS == 44
+#elif defined(CONFIG_ARM_PA_SIZE_BITS_44)
 #define TCR_PS TCR_PS_16T
 #else
-#error "Unsupported PHYSICAL_ADDRESS_BITS value"
+#error "Unsupported ARM_PA_SIZE_BITS value"
 #endif
 
 #define TCR_EL2_RES1      ((1 << 23) | (1 << 31))
