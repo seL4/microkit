@@ -9,15 +9,17 @@
 #include "../arch.h"
 #include "el.h"
 
-#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2)
+#include <kernel/gen_config.h>
+
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
-#elif defined(BOARD_qemu_virt_aarch64)
+#elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 #define GICD_BASE 0x8000000UL
 #define GICC_BASE 0x8010000UL
 #endif
 
-#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2) || defined(BOARD_qemu_virt_aarch64)
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 static void configure_gicv2(void)
 {
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
@@ -64,7 +66,7 @@ static void configure_gicv2(void)
 
 void arch_init(void)
 {
-#if defined(BOARD_zcu102) || defined(BOARD_ultra96v2) || defined(BOARD_qemu_virt_aarch64)
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
     configure_gicv2();
 #endif
 }
