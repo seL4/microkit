@@ -112,7 +112,7 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 [[package]]
 name = "sel4-capdl-initializer-types"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-seL4?rev=118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80#118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80"
+source = "git+https://github.com/au-ts/rust-seL4?rev=0186e53991b48118b39d9a048c526baabdf6f5d4#0186e53991b48118b39d9a048c526baabdf6f5d4"
 dependencies = [
  "cfg-if",
  "miniz_oxide",
@@ -124,7 +124,7 @@ dependencies = [
 [[package]]
 name = "sel4-capdl-initializer-types-derive"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-seL4?rev=118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80#118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80"
+source = "git+https://github.com/au-ts/rust-seL4?rev=0186e53991b48118b39d9a048c526baabdf6f5d4#0186e53991b48118b39d9a048c526baabdf6f5d4"
 dependencies = [
  "proc-macro2",
  "quote",
