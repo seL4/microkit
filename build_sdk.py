@@ -761,15 +761,17 @@ def build_initialiser(
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
     toolchain_setup = "cd tool/microkit && rustup toolchain install && cd ../../"
+    cargo_env = f"""
+        RUSTC_BOOTSTRAP=1 \
+        RUST_TARGET_PATH={rust_target_path} \
+        SEL4_PREFIX={sel4_src_dir.absolute()} \
+    """
 
     if custom_rust_sel4_dir is None:
         capdl_init_elf = component_build_dir / "bin" / "sel4-capdl-initializer.elf"
         cmd = f"""
             {toolchain_setup} && \
-            RUSTC_BOOTSTRAP=1 \
-            RUST_TARGET_PATH={rust_target_path} \
-            SEL4_PREFIX={sel4_src_dir.absolute()} \
-            cargo +1.90.0 install {cargo_cross_options} \
+            {cargo_env} cargo +1.90.0 install {cargo_cross_options} \
             --target {cargo_target} \
             --locked \
             --git https://github.com/au-ts/rust-seL4 --branch capdl_dev sel4-capdl-initializer --rev 118c9cd67d3a7c95431a0aeb08d8ce8692ab9d80 \
@@ -779,9 +781,9 @@ def build_initialiser(
     else:
         capdl_init_elf = custom_rust_sel4_dir / "target" / cargo_target / "release" / "sel4-capdl-initializer.elf"
         cmd = f"""
-            {toolchain_setup} && /
-            cd {custom_rust_sel4_dir} && SEL4_PREFIX={sel4_src_dir.absolute()} \
-            cargo +1.90.0 build {cargo_cross_options} --target {cargo_target} \
+            {toolchain_setup} && \
+            cd {custom_rust_sel4_dir} && \
+            {cargo_env} cargo +1.90.0 build {cargo_cross_options} --target {cargo_target} \
             --release -p sel4-capdl-initializer
         """
 
