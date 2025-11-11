@@ -14,7 +14,7 @@ use crate::{serialise_ut, UntypedObject};
 // The capDL initialiser heap size is calculated by:
 // (spec size * multiplier) + INITIALISER_HEAP_ADD_ON_CONSTANT
 pub const DEFAULT_INITIALISER_HEAP_MULTIPLIER: f64 = 2.0;
-const INITIALISER_HEAP_ADD_ON_CONSTANT: u64 = 16 * 4096;
+const INITIALISER_HEAP_ADD_ON_CONSTANT: u64 = 64 * 4096;
 // Page size used for allocating the spec and heap segments.
 pub const INITIALISER_GRANULE_SIZE: PageSize = PageSize::Small;
 
