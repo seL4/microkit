@@ -903,17 +903,11 @@ def main() -> None:
             if not args.skip_sel4:
                 sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
             loader_printing = 1 if config.name == "debug" else 0
-            loader_defines = [
-                ("PRINTING", loader_printing)
-            ]
-            # There are some architecture dependent configuration options that the loader
-            # needs to know about, so we figure that out here
-            if board.arch.is_riscv():
-                loader_defines.append(("FIRST_HART_ID", sel4_gen_config["FIRST_HART_ID"]))
-
+            loader_defines = []
             if not board.arch.is_x86():
                 loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
                 build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
+
             build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
             if not args.skip_initialiser:

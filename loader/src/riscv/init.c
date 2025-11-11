@@ -7,9 +7,11 @@
 
 #include "../uart.h"
 
+#include <kernel/gen_config.h>
+
 void arch_init(void)
 {
     puts("LDR|INFO: configured with FIRST_HART_ID ");
-    puthex32(FIRST_HART_ID);
+    puthex32(CONFIG_FIRST_HART_ID);
     puts("\n");
 }
