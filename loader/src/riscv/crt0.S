@@ -7,7 +7,9 @@
 .extern main
 .extern __global_pointer$
 
-#ifndef FIRST_HART_ID
+#include <kernel/gen_config.h>
+
+#ifndef CONFIG_FIRST_HART_ID
 #error "Loader must be defined with FIRST_HART_ID"
 #endif
 
@@ -85,14 +87,14 @@ _start:
   beqz a3, _start1 /* goto _start1 if HSM extension is missing */
 
   /* Check if we are running on the hart we expect on, FIRST_HART_ID */
-  li s1, FIRST_HART_ID
+  li s1, CONFIG_FIRST_HART_ID
   beq  a0, s1, _start1 /* goto _start1 if we are on FIRST_HART_ID */
 
   /* Use HSM extension to start hart FIRST_HART_ID. */
 hsm_switch_hart:
   li a7, SBI_HSM_BASE_EID
   li a6, SBI_HSM_BASE_HART_START_FID
-  li a0, FIRST_HART_ID
+  li a0, CONFIG_FIRST_HART_ID
   mv a2, s2 /* dtb address to be passed in a1 when new hart starts is 3rd parameter */
   la a1, _start1 /* where to start the hart */
   ecall /* call SBI to start hart FIRST_HART_ID */

@@ -35,10 +35,6 @@ else
   LD = $(TARGET_TRIPLE)-ld
 endif
 
-ifeq ($(strip $(PRINTING)),)
-$(error PRINTING must be specified)
-endif
-
 ifeq ($(ARCH),aarch64)
 	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
 	CFLAGS_ARCH := $(CFLAGS_AARCH64) -DARCH_aarch64
@@ -46,8 +42,8 @@ ifeq ($(ARCH),aarch64)
 	ARCH_DIR := aarch64
 else ifeq ($(ARCH),riscv64)
 	CFLAGS_RISCV64 := -mcmodel=medany -march=rv64imac_zicsr_zifencei -mabi=lp64
-	CFLAGS_ARCH := $(CFLAGS_RISCV64) -DARCH_riscv64 -DFIRST_HART_ID=$(FIRST_HART_ID)
-	ASM_FLAGS_ARCH := -march=rv64imac_zicsr_zifencei -mabi=lp64 -DFIRST_HART_ID=$(FIRST_HART_ID)
+	CFLAGS_ARCH := $(CFLAGS_RISCV64) -DARCH_riscv64
+	ASM_FLAGS_ARCH := -march=rv64imac_zicsr_zifencei -mabi=lp64
 	ARCH_DIR := riscv
 endif
 
