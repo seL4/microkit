@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 void arch_init(void);
 void arch_set_exception_handler(void);
-int arch_mmu_enable(void);
+int arch_mmu_enable(int logical_cpu);

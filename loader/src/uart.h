@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 #include <stdint.h>
 
 #include <kernel/gen_config.h>
@@ -15,11 +17,19 @@ void puts(const char *s);
 void puthex64(uint64_t val);
 void puthex32(uint32_t val);
 
+#define LDR_PRINT(lvl, cpu, msg) do {                                          \
+    puts("LDR|" lvl "|CPU");                                                   \
+    puts((const char[]){'0' + cpu, '\0'});                                     \
+    puts(": " msg);                                                            \
+} while (0);
+
 #else
 
 static inline void uart_init() {}
 static inline void puts(const char *s) {}
 static inline void puthex64(uint64_t val) {}
 static inline void puthex32(uint32_t val) {}
+
+#define LDR_PRINT(...) do { } while (0)
 
 #endif /* CONFIG_PRINTING */

@@ -157,6 +157,16 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="maaxboard_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x50000000,
+        kernel_options={
+            "KernelPlatform": "maaxboard",
+            "KernelMaxNumNodes": 4,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="imx8mm_evk",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
@@ -230,6 +240,20 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "qemu-arm-virt",
             "QEMU_MEMORY": "2048",
+            # There is no peripheral timer, so we use the ARM
+            # architectural timer
+            "KernelArmExportPTMRUser": True,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
+        name="qemu_virt_aarch64_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x70000000,
+        kernel_options={
+            "KernelPlatform": "qemu-arm-virt",
+            "QEMU_MEMORY": "2048",
+            "KernelMaxNumNodes": 4,
             # There is no peripheral timer, so we use the ARM
             # architectural timer
             "KernelArmExportPTMRUser": True,
@@ -907,7 +931,6 @@ def main() -> None:
             if not board.arch.is_x86():
                 loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
                 build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
-
             build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
             build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
             if not args.skip_initialiser:

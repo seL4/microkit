@@ -5,8 +5,12 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 #include <stdint.h>
 #include <stddef.h>
+
+#include "cpus.h"
 
 #define REGION_TYPE_DATA 1
 #define REGION_TYPE_ZERO 2
@@ -32,3 +36,9 @@ struct loader_data {
 };
 
 extern const struct loader_data *loader_data;
+
+#define STACK_SIZE 4096
+
+extern char _stack[NUM_ACTIVE_CPUS][STACK_SIZE];
+
+void start_kernel(int logical_cpu);
