@@ -1,0 +1,14 @@
+#
+# Copyright 2025, Colias Group, LLC
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+
+[package]
+name = "initialiser"
+version = "2.0.1-dev"
+edition = "2021"
+rust-version = "1.88.0"
+
+[dependencies]
+sel4-capdl-initializer = { workspace = true }
