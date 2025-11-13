@@ -184,7 +184,7 @@ static inline seL4_Word microkit_mr_get(seL4_Uint8 mr)
 }
 
 /* The following APIs are only available where the kernel is built as a hypervisor. */
-#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT) || defined(CONFIG_VTX)
+#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point)
 {
     seL4_Error err;
@@ -392,6 +392,92 @@ static inline seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id,
 
     return ret.result;
 }
+#endif
+
+#if defined(CONFIG_ARCH_X86_64) && defined(CONFIG_VTX)
+static inline seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Word field)
+{
+    seL4_X86_VCPU_ReadVMCS_t ret;
+    ret = seL4_X86_VCPU_ReadVMCS(BASE_VCPU_CAP + vcpu, field);
+    if (ret.error != seL4_NoError) {
+        microkit_dbg_puts("microkit_x86_read_vmcs: error reading data\n");
+        microkit_internal_crash(ret.error);
+    }
+
+    return ret.value;
+}
+
+static inline void microkit_vcpu_x86_write_vmcs(microkit_child vcpu, seL4_Word field, seL4_Word value)
+{
+    seL4_X86_VCPU_WriteVMCS_t ret;
+    ret = seL4_X86_VCPU_WriteVMCS(BASE_VCPU_CAP + vcpu, field, value);
+    if (ret.error != seL4_NoError) {
+        microkit_dbg_puts("microkit_x86_write_vmcs: error writing data\n");
+        microkit_internal_crash(ret.error);
+    }
+}
+
+static inline seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Word field)
+{
+    seL4_X86_VCPU_ReadMSR_t ret;
+    ret = seL4_X86_VCPU_ReadMSR(BASE_VCPU_CAP + vcpu, field);
+    if (ret.error != seL4_NoError) {
+        microkit_dbg_puts("microkit_x86_read_msr: error reading data\n");
+        microkit_internal_crash(ret.error);
+    }
+
+    return ret.value;
+}
+
+static inline void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value)
+{
+    seL4_X86_VCPU_WriteMSR_t ret;
+    ret = seL4_X86_VCPU_WriteMSR(BASE_VCPU_CAP + vcpu, field, value);
+    if (ret.error != seL4_NoError) {
+        microkit_dbg_puts("microkit_x86_write_msr: error writing data\n");
+        microkit_internal_crash(ret.error);
+    }
+}
+
+static inline void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit_ioport ioport_id, seL4_Word port_addr,
+                                                   seL4_Word length)
+{
+    if (ioport_id > MICROKIT_MAX_IOPORT_ID || (microkit_ioports & (1ULL << ioport_id)) == 0) {
+        microkit_dbg_puts(microkit_name);
+        microkit_dbg_puts(" microkit_vcpu_x86_enable_ioport: invalid I/O Port ID given '");
+        microkit_dbg_put32(ioport_id);
+        microkit_dbg_puts("'\n");
+        return;
+    }
+
+    int ret;
+    ret = seL4_X86_VCPU_EnableIOPort(BASE_VCPU_CAP + vcpu, BASE_IOPORT_CAP + ioport_id, port_addr, port_addr + length - 1);
+    if (ret != seL4_NoError) {
+        microkit_dbg_puts("microkit_vcpu_x86_enable_ioport: error enabling I/O Port\n");
+        microkit_internal_crash(ret);
+    }
+}
+
+static inline void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Word port_addr, seL4_Word length)
+{
+    int ret;
+    ret = seL4_X86_VCPU_DisableIOPort(BASE_VCPU_CAP + vcpu, port_addr, port_addr + length - 1);
+    if (ret != seL4_NoError) {
+        microkit_dbg_puts("microkit_vcpu_x86_disable_ioport: error disabling I/O Port\n");
+        microkit_internal_crash(ret);
+    }
+}
+
+static inline void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUContext *regs)
+{
+    int ret;
+    ret = seL4_X86_VCPU_WriteRegisters(BASE_VCPU_CAP + vcpu, regs);
+    if (ret != seL4_NoError) {
+        microkit_dbg_puts("microkit_vcpu_x86_write_regs: error writing vCPU registers\n");
+        microkit_internal_crash(ret);
+    }
+}
+
 #endif
 
 static inline void microkit_deferred_notify(microkit_channel ch)
