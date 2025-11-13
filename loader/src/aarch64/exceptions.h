@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+/** Called from assembly **/
+void exception_handler(uintptr_t ex);
+
 static inline const char *ex_to_string(uintptr_t ex)
 {
     switch (ex) {

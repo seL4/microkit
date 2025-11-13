@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "../arch.h"
 #include "../uart.h"
 
 #include <kernel/gen_config.h>

@@ -10,6 +10,7 @@
 #include <kernel/gen_config.h>
 
 #include "el.h"
+#include "../arch.h"
 #include "../cutil.h"
 #include "../loader.h"
 #include "../uart.h"
@@ -17,7 +18,7 @@
 extern char arm_vector_table[1];
 
 
-void arch_set_exception_handler()
+void arch_set_exception_handler(void)
 {
     enum el el = current_el();
     if (el == EL2) {

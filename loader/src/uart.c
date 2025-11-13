@@ -19,7 +19,7 @@ static void putc(uint8_t ch);
 #define TRANSMIT 0x1c
 #define STAT_TDRE (1 << 23)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -34,7 +34,7 @@ void putc(uint8_t ch)
 #define TRANSMIT 0x40
 #define STAT_TDRE (1 << 14)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -70,7 +70,7 @@ void putc(uint8_t ch)
 #define TRANSMIT 0x40
 #define STAT_TDRE (1 << 14)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -84,7 +84,7 @@ void putc(uint8_t ch)
 #define UART_STATUS 0xC
 #define UART_TX_FULL (1 << 21)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -97,7 +97,7 @@ void putc(uint8_t ch)
 #define UART_STATUS 0xC
 #define UART_TX_FULL (1 << 21)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -130,7 +130,7 @@ void putc(uint8_t ch)
 #define PL011_CR_UART_EN          (1 << 0)
 #define PL011_CR_TX_EN            (1 << 8)
 
-void uart_init()
+void uart_init(void)
 {
     /* Enable the device and transmit */
     *UART_REG(PL011_TCR) |= (PL011_CR_TX_EN | PL011_CR_UART_EN);
@@ -149,7 +149,7 @@ void putc(uint8_t ch)
 #define MU_LSR 0x14
 #define MU_LSR_TXIDLE (1 << 6)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -162,7 +162,7 @@ void putc(uint8_t ch)
 #define ULSR        0x14
 #define ULSR_THRE   (1 << 5)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
@@ -188,7 +188,7 @@ void putc(uint8_t ch)
 
 #define SBI_CALL_1(which, arg0) SBI_CALL(which, arg0, 0, 0)
 
-void uart_init()
+void uart_init(void)
 {
     /* Nothing to do, OpenSBI will do UART init for us. */
 }
