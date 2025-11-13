@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "../arch.h"
 #include "../cutil.h"
 
 /* Paging structures for kernel mapping */

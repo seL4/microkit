@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "el.h"
+#include "../arch.h"
 #include "../cutil.h"
 #include "../uart.h"
 

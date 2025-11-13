@@ -47,7 +47,10 @@ else ifeq ($(ARCH),riscv64)
 	ARCH_DIR := riscv
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -MP -MD $(CFLAGS_ARCH) -Wall -Werror -I$(SEL4_SDK)/include
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding \
+					-MP -MD $(CFLAGS_ARCH) -I$(SEL4_SDK)/include \
+					-Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
+					-Wundef -Wno-nonnull -Wnested-externs
 
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
 

@@ -32,3 +32,7 @@ struct loader_data {
 };
 
 extern const struct loader_data *loader_data;
+
+/* Called from assembly */
+void relocation_failed(void);
+void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);

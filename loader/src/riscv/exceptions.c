@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "../arch.h"
+
 void arch_set_exception_handler(void)
 {
     /* Don't do anything on RISC-V since we always are in S-mode so M-mode
