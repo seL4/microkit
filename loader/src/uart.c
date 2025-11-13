@@ -175,7 +175,7 @@ void putc(uint8_t ch)
 #define ULSR        0x14
 #define ULSR_THRE   (1 << 5)
 
-void uart_init() {}
+void uart_init(void) {}
 
 void putc(uint8_t ch)
 {
