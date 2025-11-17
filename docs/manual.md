@@ -853,21 +853,23 @@ The following fields can be written to:
 
 ## `seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Word field)`
 
-Read a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by,
+Read a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by
 `field` from hardware using the `rdmsr` instruction. The following registers can be written to:
-`IA32_LSTAR_MSR`,
-`IA32_STAR_MSR`,
-`IA32_CSTAR_MSR` and
-`IA32_FMASK_MSR`.
+
+* `IA32_LSTAR_MSR`
+* `IA32_STAR_MSR`
+* `IA32_CSTAR_MSR`
+* `IA32_FMASK_MSR`
 
 ## `void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value)`
 
-Write a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by,
+Write a 64-bit Model Specific Register of a given virtual CPU with ID `vcpu` specified by
 `field` to hardware using the `wrmsr` instruction. The following registers can be read from:
-`IA32_LSTAR_MSR`,
-`IA32_STAR_MSR`,
-`IA32_CSTAR_MSR` and
-`IA32_FMASK_MSR`.
+
+* `IA32_LSTAR_MSR`
+* `IA32_STAR_MSR`
+* `IA32_CSTAR_MSR`
+* `IA32_FMASK_MSR`
 
 ## `void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word length)`
 
