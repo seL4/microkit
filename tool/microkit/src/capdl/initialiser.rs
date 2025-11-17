@@ -39,7 +39,7 @@ impl CapDLInitialiser {
         self.elf.lowest_vaddr()..round_up(self.elf.highest_vaddr(), INITIALISER_GRANULE_SIZE as u64)
     }
 
-    pub fn add_spec(&mut self, payload: AlignedVec) {
+    pub fn add_spec(&mut self, spec_payload: AlignedVec, embedded_frame_data: Vec<u8>) {
         if self.spec_metadata.is_some() {
             self.elf.segments.pop();
             self.elf.segments.pop();
@@ -47,16 +47,32 @@ impl CapDLInitialiser {
         }
 
         let spec_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
-        let spec_size = payload.len() as u64;
+        let spec_size = spec_payload.len() as u64;
         self.elf.add_segment(
             true,
             false,
             false,
             spec_vaddr,
-            ElfSegmentData::RealData(payload.into()),
+            ElfSegmentData::RealData(spec_payload.into()),
+        );
+
+        let embedded_frame_data_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
+        self.elf.add_segment(
+            true,
+            false,
+            false,
+            embedded_frame_data_vaddr,
+            ElfSegmentData::RealData(embedded_frame_data),
         );
 
         // These symbol names must match rust-sel4/crates/sel4-capdl-initializer/src/main.rs
+        self.elf
+            .write_symbol(
+                "sel4_capdl_initializer_embedded_frames_data_start",
+                &embedded_frame_data_vaddr.to_le_bytes(),
+            )
+            .unwrap();
+
         self.elf
             .write_symbol(
                 "sel4_capdl_initializer_serialized_spec_data_start",
