@@ -17,18 +17,24 @@ pub fn pack_spec_into_initial_task(
     system_elfs: &[ElfFile],
     capdl_initialiser: &mut CapDLInitialiser,
 ) {
-    let compress_frame = true;
+    let compress_frames = true;
+    let embed_frames = true;
 
-    let (mut output_spec, _) = spec_container.spec.embed_fill(
+    let (mut output_spec, embedded_frame_data_list) = spec_container.spec.embed_fill(
         PageSize::Small.fixed_size_bits(sel4_config) as u8,
-        |_| false,
+        |_| embed_frames,
         |d, buf| {
             buf.copy_from_slice(
                 &system_elfs[d.elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
             );
-            compress_frame
+            compress_frames
         },
     );
+
+    let embedded_frame_data = embedded_frame_data_list
+        .into_iter()
+        .flatten()
+        .collect::<Vec<u8>>();
 
     for named_obj in output_spec.objects.iter_mut() {
         match build_config {
@@ -38,6 +44,8 @@ pub fn pack_spec_into_initial_task(
             _ => panic!("unknown configuration {build_config}"),
         };
     }
+
+    output_spec.cache_orig_cap_slots();
 
     let initialiser_payload = output_spec.to_bytes().unwrap();
 
