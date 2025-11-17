@@ -11,7 +11,7 @@ use microkit_tool::capdl::allocation::{
     simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel,
 };
 use microkit_tool::capdl::build_capdl_spec;
-use microkit_tool::capdl::initialiser::{CapDLInitialiser, DEFAULT_INITIALISER_HEAP_MULTIPLIER};
+use microkit_tool::capdl::initialiser::CapDLInitialiser;
 use microkit_tool::capdl::packaging::pack_spec_into_initial_task;
 use microkit_tool::elf::ElfFile;
 use microkit_tool::loader::Loader;
@@ -26,6 +26,7 @@ use microkit_tool::util::{
     human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down, round_up,
 };
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
+use std::collections::HashMap;
 use std::fs::{self, metadata};
 use std::path::{Path, PathBuf};
 
@@ -68,7 +69,6 @@ struct Args<'a> {
     capdl_spec: Option<&'a str>,
     output: &'a str,
     search_paths: Vec<&'a String>,
-    initialiser_heap_size_multiplier: f64,
 }
 
 impl<'a> Args<'a> {
@@ -82,7 +82,6 @@ impl<'a> Args<'a> {
         let mut system = None;
         let mut board = None;
         let mut config = None;
-        let mut initialiser_heap_size_multiplier = DEFAULT_INITIALISER_HEAP_MULTIPLIER;
 
         if args.len() <= 1 {
             print_usage();
@@ -148,22 +147,6 @@ impl<'a> Args<'a> {
                         std::process::exit(1);
                     }
                 }
-                "--initialiser_heap_size_multiplier" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        match args[i + 1].parse::<f64>() {
-                            Ok(multiplier) => initialiser_heap_size_multiplier = multiplier,
-                            Err(e) => {
-                                eprintln!("microkit: error: argument --initialiser_heap_size_multiplier: failed to parse as float: {e}");
-                                std::process::exit(1);
-                            }
-                        }
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument --initialiser_heap_size_multiplier: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
                 "--search-path" => {
                     in_search_path = true;
                 }
@@ -220,7 +203,6 @@ impl<'a> Args<'a> {
             capdl_spec,
             output,
             search_paths,
-            initialiser_heap_size_multiplier,
         }
     }
 }
@@ -563,8 +545,7 @@ fn main() -> Result<(), String> {
     // The monitor is just a special PD
     system_elfs.push(monitor_elf);
 
-    let mut capdl_initialiser =
-        CapDLInitialiser::new(capdl_initialiser_elf, args.initialiser_heap_size_multiplier);
+    let mut capdl_initialiser = CapDLInitialiser::new(capdl_initialiser_elf);
 
     // Now build the capDL spec and final image. We may need to do this in >1 iterations on ARM and RISC-V
     // if there are Memory Regions without a paddr but subject to setvar region_paddr.
@@ -580,8 +561,14 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
 
-        let mut spec = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
-        pack_spec_into_initial_task(args.config, &spec, &system_elfs, &mut capdl_initialiser);
+        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
+        pack_spec_into_initial_task(
+            &kernel_config,
+            args.config,
+            &spec_container,
+            &system_elfs,
+            &mut capdl_initialiser,
+        );
 
         match kernel_config.arch {
             Arch::X86_64 => {
@@ -657,7 +644,7 @@ fn main() -> Result<(), String> {
                     // On the first iteration where the spec have not been refined, simulate the capDL allocation algorithm
                     // to double check that all kernel objects of the system as described by SDF can be successfully allocated.
                     if !simulate_capdl_object_alloc_algorithm(
-                        &mut spec,
+                        &mut spec_container,
                         &kernel_boot_info,
                         &kernel_config,
                         CapDLAllocEmulationErrorLevel::PrintStderr,
@@ -675,7 +662,7 @@ fn main() -> Result<(), String> {
                     // This is highly unlikely to happen unless the spec size increase causes the initial task size to cross
                     // a 4K page boundary.
                     if !simulate_capdl_object_alloc_algorithm(
-                        &mut spec,
+                        &mut spec_container,
                         &kernel_boot_info,
                         &kernel_config,
                         CapDLAllocEmulationErrorLevel::Suppressed,
@@ -686,6 +673,7 @@ fn main() -> Result<(), String> {
                         }) {
                             tool_allocate_mr.phys_addr = SysMemoryRegionPaddr::ToolAllocated(None);
                         }
+                        spec_container.expected_allocations = HashMap::new();
                     }
                 }
 
@@ -785,10 +773,15 @@ fn main() -> Result<(), String> {
         if !spec_need_refinement {
             // All is well in the universe, write the image out.
             println!(
-                "MICROKIT|CAPDL SPEC: number of root objects = {}, spec footprint = {}, initialiser heap size = {}",
-                spec.objects.len(),
-                human_size_strict(capdl_initialiser.spec_metadata().as_ref().unwrap().spec_size),
-                human_size_strict(capdl_initialiser.spec_metadata().as_ref().unwrap().heap_size)
+                "MICROKIT|CAPDL SPEC: number of root objects = {}, spec footprint = {}",
+                spec_container.spec.objects.len(),
+                human_size_strict(
+                    capdl_initialiser
+                        .spec_metadata()
+                        .as_ref()
+                        .unwrap()
+                        .spec_size
+                ),
             );
             let initialiser_vaddr_range = capdl_initialiser.image_bound();
             println!(
@@ -829,11 +822,11 @@ fn main() -> Result<(), String> {
             };
 
             if args.capdl_spec.is_some() {
-                let serialised = serde_json::to_string_pretty(&spec).unwrap();
+                let serialised = serde_json::to_string_pretty(&spec_container.spec).unwrap();
                 fs::write(args.capdl_spec.unwrap(), &serialised).unwrap();
             };
 
-            write_report(&spec, &kernel_config, args.report);
+            write_report(&spec_container, &kernel_config, args.report);
             system_built = true;
             break;
         } else {

@@ -18,8 +18,8 @@ path = "src/main.rs"
 roxmltree = "0.19.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.117"
-postcard = { version = "1.0.2", default-features = false, features = ["alloc"] }
-sel4-capdl-initializer-types = { git = "https://github.com/au-ts/rust-seL4", rev = "0186e53991b48118b39d9a048c526baabdf6f5d4", features = ["alloc", "serde", "deflate", "std"] }
+rkyv = { version = "0.8.12", default-features = false, features = ["alloc", "bytecheck", "pointer_width_32"] }
+sel4-capdl-initializer-types = { git = "https://github.com/au-ts/rust-seL4", rev = "5cd50c6e94745700ec8438277ed87db532d88feb", features = ["serde", "deflate", "fill-utils"] }
 
 [profile.release]
 strip = true

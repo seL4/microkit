@@ -500,7 +500,7 @@ impl PageSize {
 
 // @merge: I would rather have the duplication of ARM and RISC-V
 // rather than a type that tries to unify both.
-#[repr(u64)]
+#[repr(u8)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// The same values apply to ARM and RISC-V
 pub enum ArmRiscvIrqTrigger {
@@ -508,8 +508,8 @@ pub enum ArmRiscvIrqTrigger {
     Edge = 1,
 }
 
-impl From<u64> for ArmRiscvIrqTrigger {
-    fn from(item: u64) -> ArmRiscvIrqTrigger {
+impl From<u8> for ArmRiscvIrqTrigger {
+    fn from(item: u8) -> ArmRiscvIrqTrigger {
         match item {
             0 => ArmRiscvIrqTrigger::Level,
             1 => ArmRiscvIrqTrigger::Edge,
