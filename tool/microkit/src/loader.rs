@@ -193,11 +193,7 @@ impl<'a> Loader<'a> {
         let inittask_p_v_offset = initial_task_vaddr_range.start - initial_task_phy_base;
         let inittask_v_entry = initial_task_elf.entry;
 
-        // initialiser.rs will always place the heap as the last region in the initial task's address space.
-        // So instead of copying a bunch of useless zeroes into the image, we can just leave it uninitialised.
-        assert!(initial_task_segments.last().unwrap().is_uninitialised());
-        // Skip heap segment
-        for segment in initial_task_segments[..initial_task_segments.len() - 1].iter() {
+        for segment in initial_task_segments.iter() {
             if segment.mem_size() > 0 {
                 let segment_paddr =
                     initial_task_phy_base + (segment.virt_addr - initial_task_vaddr_range.start);

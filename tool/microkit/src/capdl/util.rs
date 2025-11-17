@@ -4,18 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::capdl::{
-    builder::PD_CAP_SIZE,
-    spec::{
-        capdl_object::{CNode, Frame},
-        CapDLObject, FrameInit, NamedObject,
-    },
-    CapDLSpec,
-};
+use crate::capdl::{builder::PD_CAP_SIZE, CapDLNamedObject, CapDLSpecContainer, FrameFill};
 use sel4_capdl_initializer_types::{
-    cap,
-    object::{IOPorts, SchedContext, SchedContextExtraInfo},
-    Cap, CapTableEntry, ObjectId, Rights,
+    cap, object, Cap, CapSlot, CapTableEntry, Object, ObjectId, Rights, Word,
 };
 
 // This module contains utility functions used by higher-level
@@ -23,26 +14,32 @@ use sel4_capdl_initializer_types::{
 // all arguments given to it as it is only meant to be used internally
 // in the CapDL implementation.
 
+pub fn capdl_util_make_cte(slot: u32, cap: Cap) -> CapTableEntry {
+    CapTableEntry {
+        slot: CapSlot(slot),
+        cap,
+    }
+}
+
 /// Create a frame object and add it to the spec, returns the
 /// object number.
 pub fn capdl_util_make_frame_obj(
-    spec: &mut CapDLSpec,
-    frame_init: FrameInit,
+    spec_container: &mut CapDLSpecContainer,
+    frame_init: FrameFill,
     name: &str,
-    paddr: Option<usize>,
-    size_bits: usize,
+    paddr: Option<Word>,
+    size_bits: u8,
 ) -> ObjectId {
-    let frame_inner_obj = CapDLObject::Frame(Frame {
+    let frame_inner_obj = Object::Frame(object::Frame {
         size_bits,
         paddr,
         init: frame_init,
     });
-    let frame_obj = NamedObject {
-        name: format!("frame_{name}"),
+    let frame_obj = CapDLNamedObject {
+        name: format!("frame_{name}").into(),
         object: frame_inner_obj,
-        expected_alloc: None,
     };
-    spec.add_root_object(frame_obj)
+    spec_container.add_root_object(frame_obj)
 }
 
 /// Create a frame capability from a frame object for mapping the frame in a VSpace
@@ -78,13 +75,16 @@ pub fn capdl_util_make_page_table_cap(pt_obj_id: ObjectId) -> Cap {
 }
 
 // Given a TCB object ID, return that TCB's VSpace object ID.
-pub fn capdl_util_get_vspace_id_from_tcb_id(spec: &CapDLSpec, tcb_obj_id: ObjectId) -> ObjectId {
-    let tcb = match spec.get_root_object(tcb_obj_id) {
+pub fn capdl_util_get_vspace_id_from_tcb_id(
+    spec_container: &CapDLSpecContainer,
+    tcb_obj_id: ObjectId,
+) -> ObjectId {
+    let tcb = match spec_container.get_root_object(tcb_obj_id) {
         Some(named_object) => {
-            if let CapDLObject::Tcb(tcb) = &named_object.object {
+            if let Object::Tcb(tcb) = &named_object.object {
                 Some(tcb)
             } else {
-                unreachable!("get_vspace_id_from_tcb_id(): internal bug: got a non TCB object id {} with name '{}'", tcb_obj_id, named_object.name);
+                unreachable!("get_vspace_id_from_tcb_id(): internal bug: got a non TCB object id {} with name '{}'", usize::from(tcb_obj_id), named_object.name.as_ref().unwrap());
             }
         }
         None => {
@@ -97,12 +97,15 @@ pub fn capdl_util_get_vspace_id_from_tcb_id(spec: &CapDLSpec, tcb_obj_id: Object
         .unwrap()
         .slots
         .iter()
-        .find(|&cte| matches!(&cte.1, Cap::PageTable(_)));
-    vspace_cap.unwrap().1.obj()
+        .find(|&cte| matches!(&cte.cap, Cap::PageTable(_)));
+    vspace_cap.unwrap().cap.obj()
 }
 
-pub fn capdl_util_get_frame_size_bits(spec: &CapDLSpec, frame_obj_id: ObjectId) -> usize {
-    if let CapDLObject::Frame(frame) = &spec.get_root_object(frame_obj_id).unwrap().object {
+pub fn capdl_util_get_frame_size_bits(
+    spec_container: &CapDLSpecContainer,
+    frame_obj_id: ObjectId,
+) -> u8 {
+    if let Object::Frame(frame) = &spec_container.get_root_object(frame_obj_id).unwrap().object {
         frame.size_bits
     } else {
         unreachable!(
@@ -112,16 +115,15 @@ pub fn capdl_util_get_frame_size_bits(spec: &CapDLSpec, frame_obj_id: ObjectId) 
 }
 
 pub fn capdl_util_make_endpoint_obj(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     pd_name: &str,
     is_fault: bool,
 ) -> ObjectId {
-    let fault_ep_obj = NamedObject {
-        name: format!("ep_{}{}", if is_fault { "fault_" } else { "" }, pd_name),
-        object: CapDLObject::Endpoint,
-        expected_alloc: None,
+    let fault_ep_obj = CapDLNamedObject {
+        name: format!("ep_{}{}", if is_fault { "fault_" } else { "" }, pd_name).into(),
+        object: Object::Endpoint,
     };
-    spec.add_root_object(fault_ep_obj)
+    spec_container.add_root_object(fault_ep_obj)
 }
 
 pub fn capdl_util_make_endpoint_cap(
@@ -133,7 +135,7 @@ pub fn capdl_util_make_endpoint_cap(
 ) -> Cap {
     Cap::Endpoint(cap::Endpoint {
         object: ep_obj_id,
-        badge,
+        badge: Word(badge),
         rights: Rights {
             read,
             write,
@@ -143,19 +145,21 @@ pub fn capdl_util_make_endpoint_cap(
     })
 }
 
-pub fn capdl_util_make_ntfn_obj(spec: &mut CapDLSpec, pd_name: &str) -> ObjectId {
-    let ntfn_obj = NamedObject {
-        name: format!("ntfn_{pd_name}"),
-        object: CapDLObject::Notification,
-        expected_alloc: None,
+pub fn capdl_util_make_ntfn_obj(
+    spec_container: &mut CapDLSpecContainer,
+    pd_name: &str,
+) -> ObjectId {
+    let ntfn_obj = CapDLNamedObject {
+        name: format!("ntfn_{pd_name}").into(),
+        object: Object::Notification,
     };
-    spec.add_root_object(ntfn_obj)
+    spec_container.add_root_object(ntfn_obj)
 }
 
 pub fn capdl_util_make_ntfn_cap(ntfn_obj_id: ObjectId, read: bool, write: bool, badge: u64) -> Cap {
     Cap::Notification(cap::Notification {
         object: ntfn_obj_id,
-        badge,
+        badge: Word(badge),
         rights: Rights {
             read,
             write,
@@ -166,13 +170,15 @@ pub fn capdl_util_make_ntfn_cap(ntfn_obj_id: ObjectId, read: bool, write: bool, 
     })
 }
 
-pub fn capdl_util_make_reply_obj(spec: &mut CapDLSpec, pd_name: &str) -> ObjectId {
-    let reply_obj = NamedObject {
-        name: format!("reply_{pd_name}"),
-        object: CapDLObject::Reply,
-        expected_alloc: None,
+pub fn capdl_util_make_reply_obj(
+    spec_container: &mut CapDLSpecContainer,
+    pd_name: &str,
+) -> ObjectId {
+    let reply_obj = CapDLNamedObject {
+        name: format!("reply_{pd_name}").into(),
+        object: Object::Reply,
     };
-    spec.add_root_object(reply_obj)
+    spec_container.add_root_object(reply_obj)
 }
 
 pub fn capdl_util_make_reply_cap(reply_obj_id: ObjectId) -> Cap {
@@ -182,27 +188,26 @@ pub fn capdl_util_make_reply_cap(reply_obj_id: ObjectId) -> Cap {
 }
 
 pub fn capdl_util_make_sc_obj(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     pd_name: &str,
-    size_bits: usize,
+    size_bits: u8,
     period: u64,
     budget: u64,
     badge: u64,
 ) -> ObjectId {
-    let sc_inner_obj = CapDLObject::SchedContext(SchedContext {
+    let sc_inner_obj = Object::SchedContext(object::SchedContext {
         size_bits,
-        extra: SchedContextExtraInfo {
+        extra: object::SchedContextExtraInfo {
             period,
             budget,
-            badge,
+            badge: Word(badge),
         },
     });
-    let sc_obj = NamedObject {
-        name: format!("sched_context_{pd_name}"),
+    let sc_obj = CapDLNamedObject {
+        name: format!("sched_context_{pd_name}").into(),
         object: sc_inner_obj,
-        expected_alloc: None,
     };
-    spec.add_root_object(sc_obj)
+    spec_container.add_root_object(sc_obj)
 }
 
 pub fn capdl_util_make_sc_cap(sc_obj_id: ObjectId) -> Cap {
@@ -210,46 +215,43 @@ pub fn capdl_util_make_sc_cap(sc_obj_id: ObjectId) -> Cap {
 }
 
 pub fn capdl_util_make_cnode_obj(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     pd_name: &str,
-    size_bits: usize,
+    size_bits: u8,
     slots: Vec<CapTableEntry>,
 ) -> ObjectId {
-    let cnode_inner_obj = CapDLObject::CNode(CNode { size_bits, slots });
-    let cnode_obj = NamedObject {
-        name: format!("cnode_{pd_name}"),
+    let cnode_inner_obj = Object::CNode(object::CNode { size_bits, slots });
+    let cnode_obj = CapDLNamedObject {
+        name: format!("cnode_{pd_name}").into(),
         object: cnode_inner_obj,
-        expected_alloc: None,
     };
     // Move monitor CSpace into spec and make a cap for it to insert into TCB later.
-    spec.add_root_object(cnode_obj)
+    spec_container.add_root_object(cnode_obj)
 }
 
-pub fn capdl_util_make_cnode_cap(cnode_obj_id: ObjectId, guard: u64, guard_size: u64) -> Cap {
+pub fn capdl_util_make_cnode_cap(cnode_obj_id: ObjectId, guard: u64, guard_size: u8) -> Cap {
     Cap::CNode(cap::CNode {
         object: cnode_obj_id,
-        guard,
-
+        guard: Word(guard),
         guard_size,
     })
 }
 
 pub fn capdl_util_make_ioport_obj(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     pd_name: &str,
     start_addr: u64,
     size: u64,
 ) -> ObjectId {
-    let ioport_inner_obj = CapDLObject::IOPorts(IOPorts {
-        start_port: start_addr,
-        end_port: start_addr + size - 1,
+    let ioport_inner_obj = Object::IOPorts(object::IOPorts {
+        start_port: Word(start_addr),
+        end_port: Word(start_addr + size - 1),
     });
-    let ioport_obj = NamedObject {
-        name: format!("ioports_0x{start_addr:x}_{pd_name}"),
+    let ioport_obj = CapDLNamedObject {
+        name: format!("ioports_0x{start_addr:x}_{pd_name}").into(),
         object: ioport_inner_obj,
-        expected_alloc: None,
     };
-    spec.add_root_object(ioport_obj)
+    spec_container.add_root_object(ioport_obj)
 }
 
 pub fn capdl_util_make_ioport_cap(ioport_obj_id: ObjectId) -> Cap {
@@ -259,28 +261,30 @@ pub fn capdl_util_make_ioport_cap(ioport_obj_id: ObjectId) -> Cap {
 }
 
 pub fn capdl_util_insert_cap_into_cspace(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     cspace_obj_id: ObjectId,
-    idx: usize,
+    idx: u32,
     cap: Cap,
 ) {
-    assert!(idx < PD_CAP_SIZE as usize);
-    let cspace_obj = spec.get_root_object_mut(cspace_obj_id).unwrap();
-    if let CapDLObject::CNode(cspace_inner_obj) = &mut cspace_obj.object {
-        cspace_inner_obj.slots.push((idx, cap));
+    assert!(idx < PD_CAP_SIZE);
+    let cspace_obj = spec_container.get_root_object_mut(cspace_obj_id).unwrap();
+    if let Object::CNode(cspace_inner_obj) = &mut cspace_obj.object {
+        cspace_inner_obj.slots.push(capdl_util_make_cte(idx, cap));
     } else {
-        unreachable!("capdl_util_insert_cap_into_cspace(): internal bug: got a non CNode object id {} with name '{}'", cspace_obj_id, cspace_obj.name);
+        unreachable!("capdl_util_insert_cap_into_cspace(): internal bug: got a non CNode object id {} with name '{}'", usize::from(cspace_obj_id), cspace_obj.name.as_ref().unwrap());
     }
 }
 
-pub fn capdl_util_make_vcpu_obj(spec: &mut CapDLSpec, name: &String) -> ObjectId {
-    let vcpu_inner_obj = CapDLObject::VCpu;
-    let vcpu_obj = NamedObject {
-        name: format!("vcpu_{name}"),
+pub fn capdl_util_make_vcpu_obj(
+    spec_container: &mut CapDLSpecContainer,
+    name: &String,
+) -> ObjectId {
+    let vcpu_inner_obj = Object::VCpu;
+    let vcpu_obj = CapDLNamedObject {
+        name: format!("vcpu_{name}").into(),
         object: vcpu_inner_obj,
-        expected_alloc: None,
     };
-    spec.add_root_object(vcpu_obj)
+    spec_container.add_root_object(vcpu_obj)
 }
 
 pub fn capdl_util_make_vcpu_cap(vcpu_obj_id: ObjectId) -> Cap {

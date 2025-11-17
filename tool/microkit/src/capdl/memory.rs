@@ -4,13 +4,10 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 use crate::{
-    capdl::{
-        spec::{capdl_object::PageTable, CapDLObject, NamedObject},
-        CapDLSpec,
-    },
+    capdl::{util::capdl_util_make_cte, CapDLNamedObject, CapDLSpecContainer},
     sel4::{Arch, Config, PageSize},
 };
-use sel4_capdl_initializer_types::{cap, Cap, ObjectId};
+use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
 use std::ops::Range;
 
 /// For naming and debugging purposes only, no functional purpose.
@@ -48,7 +45,7 @@ fn get_pt_level_name(sel4_config: &Config, level: usize) -> &str {
     }
 }
 
-fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> u64 {
+fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> usize {
     let levels = sel4_config.num_page_table_levels();
 
     assert!(level < levels);
@@ -73,7 +70,7 @@ fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> u64 {
     let width = index_bits(level);
     let mask = (1u64 << width) - 1;
 
-    (vaddr >> shift) & mask
+    ((vaddr >> shift) & mask) as usize
 }
 
 fn get_pt_level_coverage(sel4_config: &Config, level: usize, vaddr: u64) -> Range<u64> {
@@ -110,33 +107,35 @@ fn top_pt_level_number(sel4_config: &Config) -> usize {
 }
 
 fn insert_cap_into_page_table_level(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     cur_level_obj_id: ObjectId,
     cur_level: usize,
-    cur_level_slot: u64,
+    cur_level_slot: usize,
     cap: Cap,
 ) -> Result<(), String> {
-    let page_table_level_obj_wrapper = spec.get_root_object_mut(cur_level_obj_id).unwrap();
-    if let CapDLObject::PageTable(page_table_object) = &mut page_table_level_obj_wrapper.object {
+    let page_table_level_obj_wrapper = spec_container
+        .get_root_object_mut(cur_level_obj_id)
+        .unwrap();
+    if let Object::PageTable(page_table_object) = &mut page_table_level_obj_wrapper.object {
         // Sanity check that this slot is free
         match page_table_object
             .slots
             .iter()
-            .find(|cte| cte.0 == cur_level_slot as usize)
+            .find(|cte| usize::from(cte.slot) == cur_level_slot)
         {
             Some(_) => Err(format!(
                 "insert_cap_into_page_table_level(): internal bug: slot {} at PT level {} with name '{}' already filled",
-                cur_level_slot, cur_level, spec.get_root_object(cur_level_obj_id).unwrap().name
+                cur_level_slot, cur_level, spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap()
             )),
             None => {
-                page_table_object.slots.push((cur_level_slot as usize, cap));
+                page_table_object.slots.push(capdl_util_make_cte(cur_level_slot as u32, cap));
                 Ok(())
             }
         }
     } else {
         Err(format!(
             "insert_cap_into_page_table_level(): internal bug: received a non-Page Table object id {} with name '{}'",
-            cur_level_obj_id, spec.get_root_object(cur_level_obj_id).unwrap().name
+            usize::from(cur_level_obj_id), spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap()
         ))
     }
 }
@@ -144,26 +143,26 @@ fn insert_cap_into_page_table_level(
 // Just this one time pinky promise
 #[allow(clippy::too_many_arguments)]
 fn map_intermediary_level_helper(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
     next_level_name_prefix: &str,
     vspace_obj_id: ObjectId,
     cur_level_obj_id: ObjectId,
     cur_level: usize,
-    cur_level_slot: u64,
+    cur_level_slot: usize,
     vaddr: u64,
 ) -> Result<ObjectId, String> {
-    let page_table_level_obj_wrapper = spec.get_root_object(cur_level_obj_id).unwrap();
-    if let CapDLObject::PageTable(page_table_object) = &page_table_level_obj_wrapper.object {
+    let page_table_level_obj_wrapper = spec_container.get_root_object(cur_level_obj_id).unwrap();
+    if let Object::PageTable(page_table_object) = &page_table_level_obj_wrapper.object {
         match page_table_object
             .slots
             .iter()
-            .find(|cte| cte.0 == cur_level_slot as usize)
+            .find(|cte| usize::from(cte.slot) == cur_level_slot)
         {
             Some(cte_unwrapped) => {
                 // Next level object already created, nothing to do here
-                return Ok(cte_unwrapped.1.obj());
+                return Ok(cte_unwrapped.cap.obj());
             }
             None => {
                 // We need to create the next level paging structure, get out of this scope for now
@@ -172,41 +171,41 @@ fn map_intermediary_level_helper(
         }
     } else {
         return Err(format!("map_intermediary_level_helper(): internal bug: received a non-Page Table object id {} with name '{}', for mapping at level {}, to pd {}.",
-            cur_level_obj_id, spec.get_root_object(cur_level_obj_id).unwrap().name, cur_level, pd_name));
+            usize::from(cur_level_obj_id), spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap(), cur_level, pd_name));
     }
 
     // Next level object not already created, create it.
-    let vspace_obj = match &spec.get_root_object(vspace_obj_id).unwrap().object {
-        CapDLObject::PageTable(o) => o,
+    let vspace_obj = match &spec_container.get_root_object(vspace_obj_id).unwrap().object {
+        Object::PageTable(o) => o,
         _ => unreachable!(
             "map_intermediary_level_helper(): internal bug: received a non VSpace object id {} with name '{}'",
-            vspace_obj_id, spec.get_root_object(vspace_obj_id).unwrap().name
+            usize::from(vspace_obj_id), spec_container.get_root_object(vspace_obj_id).unwrap().name.as_ref().unwrap()
         ),
     };
     let next_level_coverage = get_pt_level_coverage(sel4_config, cur_level + 1, vaddr);
-    let next_level_inner_obj = PageTable {
+    let next_level_inner_obj = object::PageTable {
         x86_ept: vspace_obj.x86_ept,
         is_root: false, // because the VSpace has already been created separately
         level: Some(cur_level as u8 + 1),
         slots: [].to_vec(),
     };
     // We create name with this PT level coverage so that every object names are unique
-    let next_level_object = NamedObject {
+    let next_level_object = CapDLNamedObject {
         name: format!(
             "{}_{}_vaddr_0x{:x}",
             next_level_name_prefix, pd_name, next_level_coverage.start
-        ),
-        object: CapDLObject::PageTable(next_level_inner_obj),
-        expected_alloc: None,
+        )
+        .into(),
+        object: Object::PageTable(next_level_inner_obj),
     };
-    let next_level_obj_id = spec.add_root_object(next_level_object);
+    let next_level_obj_id = spec_container.add_root_object(next_level_object);
     let next_level_cap = Cap::PageTable(cap::PageTable {
         object: next_level_obj_id,
     });
 
     // Then insert into the correct slot at the current level, return and continue mapping
     match insert_cap_into_page_table_level(
-        spec,
+        spec_container,
         cur_level_obj_id,
         cur_level,
         cur_level_slot,
@@ -217,41 +216,48 @@ fn map_intermediary_level_helper(
     }
 }
 
-pub fn create_vspace(spec: &mut CapDLSpec, sel4_config: &Config, pd_name: &str) -> ObjectId {
-    spec.add_root_object(NamedObject {
+pub fn create_vspace(
+    spec_container: &mut CapDLSpecContainer,
+    sel4_config: &Config,
+    pd_name: &str,
+) -> ObjectId {
+    spec_container.add_root_object(CapDLNamedObject {
         name: format!(
             "{}_{}",
             get_pt_level_name(sel4_config, top_pt_level_number(sel4_config)),
             pd_name
-        ),
-        object: CapDLObject::PageTable(PageTable {
+        )
+        .into(),
+        object: Object::PageTable(object::PageTable {
             x86_ept: false,
             is_root: true,
             level: Some(top_pt_level_number(sel4_config) as u8),
             slots: [].to_vec(),
         }),
-        expected_alloc: None,
     })
 }
 
-pub fn create_vspace_ept(spec: &mut CapDLSpec, sel4_config: &Config, vm_name: &str) -> ObjectId {
+pub fn create_vspace_ept(
+    spec_container: &mut CapDLSpecContainer,
+    sel4_config: &Config,
+    vm_name: &str,
+) -> ObjectId {
     assert!(sel4_config.arch == Arch::X86_64);
 
-    spec.add_root_object(NamedObject {
-        name: format!("{}_{}", get_pt_level_name(sel4_config, 0), vm_name),
-        object: CapDLObject::PageTable(PageTable {
+    spec_container.add_root_object(CapDLNamedObject {
+        name: format!("{}_{}", get_pt_level_name(sel4_config, 0), vm_name).into(),
+        object: Object::PageTable(object::PageTable {
             x86_ept: true,
             is_root: true,
             level: Some(top_pt_level_number(sel4_config) as u8),
             slots: [].to_vec(),
         }),
-        expected_alloc: None,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn map_recursive(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
     vspace_obj_id: ObjectId,
@@ -269,12 +275,18 @@ fn map_recursive(
 
     if cur_level == get_pt_level_to_insert(sel4_config, frame_size_bytes) {
         // Base case: we got to the target level to insert the frame cap.
-        insert_cap_into_page_table_level(spec, pt_obj_id, cur_level, this_level_index, frame_cap)
+        insert_cap_into_page_table_level(
+            spec_container,
+            pt_obj_id,
+            cur_level,
+            this_level_index,
+            frame_cap,
+        )
     } else {
         // Recursive case: we have not gotten to the correct level, create the next level and recurse down.
         let next_level_name_prefix = get_pt_level_name(sel4_config, cur_level + 1);
         match map_intermediary_level_helper(
-            spec,
+            spec_container,
             sel4_config,
             pd_name,
             next_level_name_prefix,
@@ -285,7 +297,7 @@ fn map_recursive(
             vaddr,
         ) {
             Ok(next_level_pt_obj_id) => map_recursive(
-                spec,
+                spec_container,
                 sel4_config,
                 pd_name,
                 vspace_obj_id,
@@ -301,7 +313,7 @@ fn map_recursive(
 }
 
 pub fn map_page(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
     vspace_obj_id: ObjectId,
@@ -310,7 +322,7 @@ pub fn map_page(
     vaddr: u64,
 ) -> Result<(), String> {
     map_recursive(
-        spec,
+        spec_container,
         sel4_config,
         pd_name,
         vspace_obj_id,

@@ -6,8 +6,10 @@
 
 use std::ops::Range;
 
+use sel4_capdl_initializer_types::ObjectId;
+
 use crate::{
-    capdl::{spec::ExpectedAllocation, CapDLSpec},
+    capdl::{spec::capdl_obj_physical_size_bits, CapDLSpecContainer, ExpectedAllocation},
     sel4::{BootInfo, Config},
     util::human_size_strict,
     UntypedObject,
@@ -25,7 +27,7 @@ pub enum CapDLAllocEmulationErrorLevel {
 ///
 /// Returns `true` if all objects can be allocated, `false` otherwise.
 pub fn simulate_capdl_object_alloc_algorithm(
-    spec: &mut CapDLSpec,
+    spec_container: &mut CapDLSpecContainer,
     kernel_boot_info: &BootInfo,
     kernel_config: &Config,
     error_reporting_level: CapDLAllocEmulationErrorLevel,
@@ -44,14 +46,16 @@ pub fn simulate_capdl_object_alloc_algorithm(
     // where each window contains all objects of the array index size bits.
     let mut object_windows_by_size: Vec<Option<Range<usize>>> =
         vec![None; kernel_config.word_size as usize];
-    let first_obj_id_without_paddr = spec
+    let first_obj_id_without_paddr = spec_container
+        .spec
         .objects
         .partition_point(|named_obj| named_obj.object.paddr().is_some());
-    for (id, named_object) in spec.objects[first_obj_id_without_paddr..]
+    for (id, named_object) in spec_container.spec.objects[first_obj_id_without_paddr..]
         .iter()
         .enumerate()
     {
-        let phys_size_bit = named_object.object.physical_size_bits(kernel_config) as usize;
+        let phys_size_bit =
+            capdl_obj_physical_size_bits(&named_object.object, kernel_config) as usize;
         if phys_size_bit > 0 {
             let window_maybe = object_windows_by_size.get_mut(phys_size_bit).unwrap();
             match window_maybe {
@@ -68,10 +72,11 @@ pub fn simulate_capdl_object_alloc_algorithm(
     // Step 3: Sanity check that all objects with a paddr attached can be allocated.
     let mut phys_addrs_ok = true;
     for obj_with_paddr_id in 0..first_obj_id_without_paddr {
-        let named_obj = spec.objects.get(obj_with_paddr_id).unwrap();
-        let paddr_base = named_obj.object.paddr().unwrap() as u64;
+        let named_obj = &spec_container.spec.objects[obj_with_paddr_id];
+        let paddr_base = u64::from(named_obj.object.paddr().unwrap());
 
-        let obj_size_bytes = 1 << named_obj.object.physical_size_bits(kernel_config);
+        let obj_size_bytes =
+            1 << capdl_obj_physical_size_bits(&named_obj.object, kernel_config) as usize;
         let paddr_range = paddr_base..paddr_base + obj_size_bytes;
 
         // Binary search for the UT that is next to the UT that might fit.
@@ -94,7 +99,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
                     error_reporting_level,
                     CapDLAllocEmulationErrorLevel::PrintStderr
                 ) {
-                    eprintln!("ERROR: object '{}', with paddr 0x{:0>12x}..0x{:0>12x} is not in any valid memory region.", named_obj.name, paddr_range.start, paddr_range.end);
+                    eprintln!("ERROR: object '{}', with paddr 0x{:0>12x}..0x{:0>12x} is not in any valid memory region.", named_obj.name.as_ref().unwrap(), paddr_range.start, paddr_range.end);
                 }
                 phys_addrs_ok = false;
             }
@@ -128,14 +133,16 @@ pub fn simulate_capdl_object_alloc_algorithm(
             // If this untyped covers frames that specify a paddr, don't allocate ordinary objects
             // past the lowest frame's paddr.
             let target = if next_obj_id_with_paddr < num_objs_with_paddr {
-                ut.end().min(
-                    spec.objects
+                ut.end().min(u64::from(
+                    spec_container
+                        .spec
+                        .objects
                         .get(next_obj_id_with_paddr)
                         .unwrap()
                         .object
                         .paddr()
-                        .unwrap() as u64,
-                )
+                        .unwrap(),
+                ))
             } else {
                 ut.end()
             };
@@ -159,20 +166,31 @@ pub fn simulate_capdl_object_alloc_algorithm(
                             if obj_id_range_maybe.as_ref().unwrap().start
                                 < obj_id_range_maybe.as_ref().unwrap().end
                             {
-                                let named_obj = spec
-                                    .get_root_object_mut(obj_id_range_maybe.as_ref().unwrap().start)
-                                    .unwrap();
+                                let obj_id: ObjectId =
+                                    obj_id_range_maybe.as_ref().unwrap().start.into();
 
-                                // Should not have touched this object before
-                                assert!(named_obj.expected_alloc.is_none());
-                                // Book-keep where this object will be allocated so we can write the details out to the report later.
-                                named_obj.expected_alloc = Some(ExpectedAllocation {
-                                    ut_idx: *ut_orig_idx,
-                                    paddr: cur_paddr,
-                                });
+                                {
+                                    // Should not have touched this object before
+                                    assert!(!spec_container
+                                        .expected_allocations
+                                        .contains_key(&obj_id));
+                                    // Book-keep where this object will be allocated so we can write the details out to the report later.
+                                    spec_container.expected_allocations.insert(
+                                        obj_id,
+                                        ExpectedAllocation {
+                                            ut_idx: *ut_orig_idx,
+                                            paddr: cur_paddr,
+                                        },
+                                    );
+                                }
 
-                                cur_paddr +=
-                                    1 << named_obj.object.physical_size_bits(kernel_config);
+                                let named_obj = spec_container.get_root_object(obj_id).unwrap();
+
+                                cur_paddr += 1
+                                    << capdl_obj_physical_size_bits(
+                                        &named_obj.object,
+                                        kernel_config,
+                                    ) as usize;
                                 obj_id_range_maybe.as_mut().unwrap().start += 1;
                                 created = true;
                                 break;
@@ -190,19 +208,30 @@ pub fn simulate_capdl_object_alloc_algorithm(
                 }
             }
             if target_is_obj_with_paddr {
+                {
+                    // Should not have touched this object before
+                    assert!(!spec_container
+                        .expected_allocations
+                        .contains_key(&next_obj_id_with_paddr.into()));
+                    // Book-keep where this object will be allocated so we can write the details out to the report later.
+                    spec_container.expected_allocations.insert(
+                        next_obj_id_with_paddr.into(),
+                        ExpectedAllocation {
+                            ut_idx: *ut_orig_idx,
+                            paddr: cur_paddr,
+                        },
+                    );
+                }
+
                 // Watermark now at the correct level, make the actual object
-                let named_obj = spec.get_root_object_mut(next_obj_id_with_paddr).unwrap();
+                let named_obj = spec_container
+                    .get_root_object(next_obj_id_with_paddr.into())
+                    .unwrap();
 
-                assert_eq!(named_obj.object.paddr().unwrap() as u64, cur_paddr);
-                // Should not have touched this object before
-                assert!(named_obj.expected_alloc.is_none());
-                // Book-keep where this object will be allocated so we can write the details out to the report later.
-                named_obj.expected_alloc = Some(ExpectedAllocation {
-                    ut_idx: *ut_orig_idx,
-                    paddr: cur_paddr,
-                });
+                assert_eq!(u64::from(named_obj.object.paddr().unwrap()), cur_paddr);
 
-                cur_paddr += 1 << named_obj.object.physical_size_bits(kernel_config);
+                cur_paddr +=
+                    1 << capdl_obj_physical_size_bits(&named_obj.object, kernel_config) as usize;
                 next_obj_id_with_paddr += 1;
             } else {
                 break;
