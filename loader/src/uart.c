@@ -169,7 +169,7 @@ void putc(uint8_t ch)
     while ((*UART_REG(ULSR) & ULSR_THRE) == 0);
     *UART_REG(UTHR) = ch;
 }
-#elif defined(BOARD_rock3b)
+#elif defined(CONFIG_PLAT_RK3568)
 #define UART_BASE   0xfe660000
 #define UTHR        0x0
 #define ULSR        0x14
