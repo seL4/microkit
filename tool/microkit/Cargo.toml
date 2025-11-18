@@ -19,7 +19,7 @@ roxmltree = "0.19.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.117"
 rkyv = { version = "0.8.12", default-features = false, features = ["alloc", "bytecheck", "pointer_width_32"] }
-sel4-capdl-initializer-types = { git = "https://github.com/seL4/rust-seL4", rev = "25896f74efb0f97777f7fc705646e2337613f141", features = ["serde", "deflate", "transform"] }
+sel4-capdl-initializer-types = { git = "https://github.com/seL4/rust-seL4", rev = "0ac1c27ee6cb9edac7a1a41a69b0d421e170d6a4", features = ["serde", "deflate", "transform"] }
 
 [profile.release]
 strip = true
