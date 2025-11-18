@@ -8,6 +8,7 @@
 name = "microkit-tool"
 version = "2.0.1-dev"
 edition = "2021"
+# TODO: remove?
 rust-version = "1.88.0"
 
 [[bin]]
@@ -19,7 +20,22 @@ roxmltree = "0.19.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.117"
 rkyv = { version = "0.8.12", default-features = false, features = ["alloc", "bytecheck", "pointer_width_32"] }
-sel4-capdl-initializer-types = { git = "https://github.com/seL4/rust-seL4", rev = "25896f74efb0f97777f7fc705646e2337613f141", features = ["serde", "deflate", "transform"] }
+sel4-capdl-initializer-types = { workspace = true }
 
 [profile.release]
 strip = true
+
+[workspace]
+resolver = "3"
+members = [
+    "initialiser",
+]
+
+[workspace.dependencies.sel4-capdl-initializer]
+git = "https://github.com/seL4/rust-seL4"
+rev = "25896f74efb0f97777f7fc705646e2337613f141"
+
+[workspace.dependencies.sel4-capdl-initializer-types]
+git = "https://github.com/seL4/rust-seL4"
+rev = "25896f74efb0f97777f7fc705646e2337613f141"
+features = ["serde", "deflate", "transform"]

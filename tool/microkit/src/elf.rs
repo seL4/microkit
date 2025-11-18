@@ -299,7 +299,6 @@ impl ElfFile {
             ));
         }
 
-        assert!(symtab_shent.is_some());
         if symtab_shent.is_none() {
             return Err(format!(
                 "ELF '{}': unable to find symbol table section",
