@@ -101,7 +101,6 @@ fn create_irq_obj(
     let irq_obj = CapDLNamedObject {
         name: format!("irq_{}_{}", irq_desc.irq_num(), pd_name).into(),
         object: irq_inner_obj,
-        // expected_alloc: None,
     };
     spec_container.add_root_object(irq_obj)
 }

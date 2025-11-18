@@ -96,7 +96,7 @@ const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 
 pub const PD_CAP_SIZE: u32 = 512;
-const PD_CAP_BITS: u64 = PD_CAP_SIZE.ilog2() as u64;
+const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
 const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() as u64;
 
@@ -113,6 +113,7 @@ pub struct ExpectedAllocation {
 
 pub struct CapDLSpecContainer {
     pub spec: Spec<FrameFill>,
+    /// Track allocations as we build the system for later use by the report.
     pub expected_allocations: HashMap<ObjectId, ExpectedAllocation>,
 }
 
@@ -423,14 +424,14 @@ pub fn build_capdl_spec(
     let mon_cnode_obj_id = capdl_util_make_cnode_obj(
         &mut spec_container,
         MONITOR_PD_NAME,
-        PD_CAP_BITS as u8,
+        PD_CAP_BITS,
         [
             capdl_util_make_cte(MON_FAULT_EP_CAP_IDX as u32, mon_fault_ep_cap),
             capdl_util_make_cte(MON_REPLY_CAP_IDX as u32, mon_reply_cap),
         ]
         .to_vec(),
     );
-    let mon_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS;
+    let mon_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
     let mon_cnode_cap = capdl_util_make_cnode_cap(mon_cnode_obj_id, 0, mon_guard_size as u8);
 
     // Create monitor stack frame
@@ -826,10 +827,10 @@ pub fn build_capdl_spec(
                     let vm_cnode_obj_id = capdl_util_make_cnode_obj(
                         &mut spec_container,
                         &format!("{}_{}", virtual_machine.name, vcpu.id),
-                        PD_CAP_BITS as u8,
+                        PD_CAP_BITS,
                         [].to_vec(),
                     );
-                    let vm_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS;
+                    let vm_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
                     let vm_cnode_cap =
                         capdl_util_make_cnode_cap(vm_cnode_obj_id, 0, vm_guard_size as u8);
                     caps_to_bind_to_vm_tcbs.push(capdl_util_make_cte(
@@ -947,10 +948,10 @@ pub fn build_capdl_spec(
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &pd.name,
-            PD_CAP_BITS as u8,
+            PD_CAP_BITS,
             caps_to_insert_to_pd_cspace,
         );
-        let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS;
+        let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
