@@ -124,6 +124,7 @@ fn get_arch_n_paging(config: &Config, region: MemoryRegion) -> u64 {
     }
 }
 
+/// Refer to `calculate_rootserver_size()` in src/kernel/boot.c of seL4
 fn calculate_rootserver_size(config: &Config, initial_task_region: MemoryRegion) -> u64 {
     // FIXME: These constants should ideally come from the config / kernel
     // binary not be hard coded here.
@@ -145,7 +146,6 @@ fn calculate_rootserver_size(config: &Config, initial_task_region: MemoryRegion)
     size += 1 << vspace_bits;
     size += get_arch_n_paging(config, initial_task_region) * (1 << page_table_bits);
     size += 1 << min_sched_context_bits;
-
     size
 }
 
@@ -164,15 +164,22 @@ pub fn emulate_kernel_boot(
     config: &Config,
     kernel_elf: &ElfFile,
     initial_task_phys_region: MemoryRegion,
-    initial_task_virt_region: MemoryRegion,
+    user_image_virt_region: MemoryRegion,
 ) -> BootInfo {
-    assert!(initial_task_phys_region.size() == initial_task_virt_region.size());
+    assert!(initial_task_phys_region.size() == user_image_virt_region.size());
     let partial_info = kernel_partial_boot(config, kernel_elf);
     let mut normal_memory = partial_info.normal_memory;
     let device_memory = partial_info.device_memory;
     let boot_region = partial_info.boot_region;
 
     normal_memory.remove_region(initial_task_phys_region.base, initial_task_phys_region.end);
+
+    let mut initial_task_virt_region = user_image_virt_region;
+    // Refer to `try_init_kernel()` of src/arch/[arm,riscv]/kernel/boot.c
+    let ipc_size = PageSize::Small as u64; // seL4_PageBits
+    let bootinfo_size = PageSize::Small as u64; // seL4_BootInfoFrameBits
+    initial_task_virt_region.end += ipc_size;
+    initial_task_virt_region.end += bootinfo_size;
 
     // Now, the tricky part! determine which memory is used for the initial task objects
     let initial_objects_size = calculate_rootserver_size(config, initial_task_virt_region);
