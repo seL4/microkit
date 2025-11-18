@@ -503,18 +503,18 @@ def get_tool_target_triple() -> str:
 
 def test_tool() -> None:
     r = system(
-        f"cd tool/microkit && cargo test -p microkit-tool"
+        f"cargo test -p microkit-tool"
     )
     assert r == 0
 
 
 def build_tool(tool_target: Path, target_triple: str) -> None:
     r = system(
-        f"cd tool/microkit && cargo build --release --locked --target {target_triple} -p microkit-tool"
+        f"cargo build --release --locked --target {target_triple} -p microkit-tool"
     )
     assert r == 0
 
-    tool_output = f"./tool/microkit/target/{target_triple}/release/microkit"
+    tool_output = f"./target/{target_triple}/release/microkit"
 
     copy(tool_output, tool_target)
 
@@ -755,17 +755,16 @@ def build_initialiser(
     component_build_dir = build_dir / board.name / config.name / component_name
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
-    capdl_init_elf = Path("tool/microkit") / rust_target_dir / cargo_target / "release" / "initialiser.elf"
+    capdl_init_elf = rust_target_dir / cargo_target / "release" / "initialiser.elf"
     r = system(f"""
-        cd tool/microkit && \
-            RUSTC_BOOTSTRAP=1 \
-            RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
+        RUSTC_BOOTSTRAP=1 \
+        RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
             cargo build {cargo_cross_options} \
-            --target {cargo_target} \
-            --locked \
-            --target-dir {rust_target_dir} \
-            --release \
-            -p initialiser
+                --target {cargo_target} \
+                --locked \
+                --target-dir {rust_target_dir} \
+                --release \
+                -p initialiser
     """)
     if r != 0:
         raise Exception(
