@@ -5,9 +5,9 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <protection_domain name="restarter" priority="253">
+    <protection_domain name="restarter" priority="254">
         <program_image path="restarter.elf" />
-        <protection_domain name="crasher" priority="252" id="1">
+        <protection_domain name="crasher" priority="253" id="1">
             <program_image path="crasher.elf" />
         </protection_domain>
         <protection_domain name="hello" priority="1" id="2">

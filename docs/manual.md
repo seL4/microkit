@@ -168,7 +168,7 @@ The overall computational model for a Microkit system is a set of isolated compo
 
 The PD has a number of scheduling attributes that are configured in the system description:
 
-* priority (0 -- 253)
+* priority (0 -- 254)
 * period (microseconds)
 * budget (microseconds)
 * passive (boolean)

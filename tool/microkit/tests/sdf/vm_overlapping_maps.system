@@ -7,7 +7,7 @@
 <system>
     <memory_region name="mr1" size="0x1000" />
     <memory_region name="mr2" size="0x1000" />
-    <protection_domain name="hello" priority="253">
+    <protection_domain name="hello" priority="254">
         <program_image path="hello.elf" />
         <virtual_machine name="guest">
             <vcpu id="0" />
