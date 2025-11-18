@@ -801,6 +801,7 @@ def main() -> None:
     parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
     parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
     parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
+    parser.add_argument("--skip-run-time", action="store_true", help="Run-time targets will not be built")
     parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
     parser.add_argument("--skip-initialiser", action="store_true", help="Initialiser will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
@@ -897,21 +898,22 @@ def main() -> None:
     if not args.skip_docs:
         build_doc(root_dir)
 
-    build_dir = Path("build")
-    for board in selected_boards:
-        for config in selected_configs:
-            if not args.skip_sel4:
-                sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
-            loader_printing = 1 if config.name == "debug" else 0
-            loader_defines = []
-            if not board.arch.is_x86():
-                loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
-                build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
+    if not args.skip_run_time:
+        build_dir = Path("build")
+        for board in selected_boards:
+            for config in selected_configs:
+                if not args.skip_sel4:
+                    sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
+                loader_printing = 1 if config.name == "debug" else 0
+                loader_defines = []
+                if not board.arch.is_x86():
+                    loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
+                    build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
 
-            build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
-            build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
-            if not args.skip_initialiser:
-                build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
+                build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
+                build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
+                if not args.skip_initialiser:
+                    build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
