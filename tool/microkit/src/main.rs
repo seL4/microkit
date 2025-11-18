@@ -639,7 +639,7 @@ fn main() -> Result<(), String> {
                     initial_task_phys_base,
                     initial_task_phys_base + initial_task_size,
                 );
-                let initial_task_virt_region = MemoryRegion::new(
+                let user_image_virt_region = MemoryRegion::new(
                     capdl_initialiser.elf.lowest_vaddr(),
                     initialiser_vaddr_range.end,
                 );
@@ -650,7 +650,7 @@ fn main() -> Result<(), String> {
                     &kernel_config,
                     kernel_elf_maybe.as_ref().unwrap(),
                     initial_task_phys_region,
-                    initial_task_virt_region,
+                    user_image_virt_region,
                 );
 
                 if iteration == 0 {
