@@ -528,7 +528,7 @@ def build_sel4(
     board: BoardInfo,
     config: ConfigInfo,
     llvm: bool
-) -> Dict[str, Any]:
+):
     """Build seL4"""
     build_dir = build_dir / board.name / config.name / "sel4"
     build_dir.mkdir(exist_ok=True, parents=True)
@@ -623,11 +623,6 @@ def build_sel4(
         dest.unlink(missing_ok=True)
         copy(platform_gen, dest)
         dest.chmod(0o744)
-
-    gen_config_path = sel4_install_dir / "libsel4/include/kernel/gen_config.json"
-    with open(gen_config_path, "r") as f:
-        gen_config = json.load(f)
-        return gen_config
 
 
 def build_elf_component(
@@ -903,7 +898,7 @@ def main() -> None:
         for board in selected_boards:
             for config in selected_configs:
                 if not args.skip_sel4:
-                    sel4_gen_config = build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
+                    build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
                 loader_printing = 1 if config.name == "debug" else 0
                 loader_defines = []
                 if not board.arch.is_x86():
