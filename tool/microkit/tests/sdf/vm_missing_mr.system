@@ -5,7 +5,7 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <protection_domain name="hello" priority="253">
+    <protection_domain name="hello" priority="254">
         <program_image path="hello.elf" />
         <virtual_machine name="guest">
             <vcpu id="0" />
