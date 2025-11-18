@@ -13,7 +13,7 @@ use crate::util::round_up;
 use crate::{elf::ElfFile, sel4::PageSize};
 use crate::{serialise_ut, UntypedObject};
 
-// Page size used for allocating the spec and heap segments.
+// Page size used for allocating the spec and embedded frames segments.
 pub const INITIALISER_GRANULE_SIZE: PageSize = PageSize::Small;
 
 pub struct CapDLInitialiserSpecMetadata {
@@ -112,7 +112,8 @@ impl CapDLInitialiser {
             uts_desc.extend(serialise_ut(ut));
         }
 
-        // This feature is currently not in mainline rust-seL4.
+        // This feature is currently not in mainline rust-seL4, keep it around for potential
+        // debugging purposes.
         if self
             .elf
             .find_symbol("sel4_capdl_initializer_expected_untypeds_list_num_entries")
