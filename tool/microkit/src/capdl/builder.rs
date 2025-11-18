@@ -135,7 +135,8 @@ impl CapDLSpecContainer {
                     end: 0.into(),
                 },
                 untyped_covers: Vec::new(),
-                orig_cap_slots: None,
+                cached_orig_cap_slots: None,
+                log_level: None,
             },
             expected_allocations: HashMap::new(),
         }

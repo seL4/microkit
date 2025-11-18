@@ -47,6 +47,8 @@ pub fn pack_spec_into_initial_task(
 
     output_spec.cache_orig_cap_slots();
 
+    output_spec.set_log_level(capdl_initialiser.log_level as u8);
+
     let initialiser_payload = output_spec.to_bytes().unwrap();
 
     capdl_initialiser.add_spec(initialiser_payload, embedded_frame_data);

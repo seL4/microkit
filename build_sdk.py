@@ -763,7 +763,7 @@ def build_initialiser(
             cargo install {cargo_cross_options} \
             --target {cargo_target} \
             --locked \
-            --git https://github.com/seL4/rust-seL4 sel4-capdl-initializer --rev 25896f74efb0f97777f7fc705646e2337613f141 \
+            --git https://github.com/seL4/rust-seL4 sel4-capdl-initializer --rev 0ac1c27ee6cb9edac7a1a41a69b0d421e170d6a4 \
             --target-dir {rust_target_dir} \
             --root {component_build_dir}
         """

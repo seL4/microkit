@@ -20,10 +20,22 @@ pub struct CapDLInitialiserSpecMetadata {
     pub spec_size: u64,
 }
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum LogLevel {
+    Error = 1,
+    Warn = 2,
+    Info = 3,
+    Debug = 4,
+    Trace = 5,
+}
+
 pub struct CapDLInitialiser {
     pub elf: ElfFile,
     pub phys_base: Option<u64>,
     pub spec_metadata: Option<CapDLInitialiserSpecMetadata>,
+    /// Log level of initialiser printing in debug mode.
+    pub log_level: LogLevel,
 }
 
 impl CapDLInitialiser {
@@ -32,6 +44,7 @@ impl CapDLInitialiser {
             elf,
             phys_base: None,
             spec_metadata: None,
+            log_level: LogLevel::Info,
         }
     }
 
