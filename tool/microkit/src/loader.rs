@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-use crate::elf::ElfFile;
+use crate::elf::{ElfFile, ElfSegmentData};
 use crate::sel4::{Arch, Config};
 use crate::util::{mask, mb, round_up, struct_to_bytes};
 use std::fs::File;
@@ -119,6 +119,9 @@ pub struct Loader<'a> {
     header: LoaderHeader64,
     region_metadata: Vec<LoaderRegion64>,
     regions: Vec<(u64, &'a [u8])>,
+    word_size: usize,
+    elf_machine: u16,
+    entry: u64,
 }
 
 impl<'a> Loader<'a> {
@@ -288,7 +291,30 @@ impl<'a> Loader<'a> {
             header,
             region_metadata,
             regions,
+            word_size: kernel_elf.word_size,
+            elf_machine: kernel_elf.machine,
+            entry: loader_elf.entry,
         }
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+
+        // First copy image data, which includes the Microkit bootloader's code, etc
+        bytes.extend_from_slice(&self.image);
+        // Then we copy the loader metadata (known as the 'header')
+        bytes.extend_from_slice(unsafe { struct_to_bytes(&self.header) });
+        // For each region, we need to copy the region metadata as well
+        for region in &self.region_metadata {
+            let region_metadata_bytes = unsafe { struct_to_bytes(region) };
+            bytes.extend_from_slice(region_metadata_bytes);
+        }
+        // Now we can copy all the region data
+        for (_, data) in &self.regions {
+            bytes.extend_from_slice(data);
+        }
+
+        bytes
     }
 
     pub fn write_image(&self, path: &Path) {
@@ -301,30 +327,32 @@ impl<'a> Loader<'a> {
 
         // First write out all the image data
         loader_buf
-            .write_all(self.image.as_slice())
+            .write_all(&self.to_bytes())
             .expect("Failed to write image data to loader");
 
-        // Then we write out the loader metadata (known as the 'header')
-        let header_bytes = unsafe { struct_to_bytes(&self.header) };
-        loader_buf
-            .write_all(header_bytes)
-            .expect("Failed to write header data to loader");
-        // For each region, we need to write out the region metadata as well
-        for region in &self.region_metadata {
-            let region_metadata_bytes = unsafe { struct_to_bytes(region) };
-            loader_buf
-                .write_all(region_metadata_bytes)
-                .expect("Failed to write region metadata to loader");
-        }
-
-        // Now we can write out all the region data
-        for (_, data) in &self.regions {
-            loader_buf
-                .write_all(data)
-                .expect("Failed to write region data to loader");
-        }
-
         loader_buf.flush().unwrap();
+    }
+
+    pub fn write_elf(&self, path: &Path) {
+        let mut loader_elf = ElfFile::new(
+            path.to_path_buf(),
+            self.word_size,
+            self.entry,
+            self.elf_machine,
+        );
+
+        loader_elf.add_segment(
+            true,
+            true,
+            true,
+            self.entry,
+            ElfSegmentData::RealData(self.to_bytes()),
+        );
+
+        match loader_elf.reserialise(path) {
+            Ok(_) => {}
+            Err(e) => panic!("Could not create '{}': {}", path.display(), e),
+        }
     }
 
     fn riscv64_setup_pagetables(

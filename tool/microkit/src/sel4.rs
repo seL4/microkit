@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-use std::cmp::max;
+use std::{cmp::max, fmt::Display};
 
 use serde::Deserialize;
 
@@ -376,11 +376,21 @@ impl Config {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Clone, Copy, Eq)]
 pub enum Arch {
     Aarch64,
     Riscv64,
     X86_64,
+}
+
+impl Display for Arch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Arch::Aarch64 => write!(f, "AArch64"),
+            Arch::Riscv64 => write!(f, "RISC-V (64-bit)"),
+            Arch::X86_64 => write!(f, "x86-64"),
+        }
+    }
 }
 
 /// RISC-V supports multiple virtual memory systems and so we use this enum

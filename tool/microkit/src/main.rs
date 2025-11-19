@@ -52,7 +52,7 @@ fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
 }
 
 fn print_usage() {
-    println!("usage: microkit [-h] [-o OUTPUT] [-r REPORT] --board BOARD --config CONFIG [--capdl-spec CAPDL_SPEC --search-path [SEARCH_PATH ...]] system")
+    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-spec CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
 }
 
 fn print_help(available_boards: &[String]) {
@@ -63,10 +63,38 @@ fn print_help(available_boards: &[String]) {
     println!("  -h, --help, show this help message and exit");
     println!("  -o, --output OUTPUT");
     println!("  -r, --report REPORT");
+    println!("  --image-type {{binary,elf}}");
     println!("  --board {}", available_boards.join("\n          "));
     println!("  --config CONFIG");
     println!("  --capdl-spec CAPDL_SPEC (outputs as JSON)");
     println!("  --search-path [SEARCH_PATH ...]");
+}
+
+enum ImageOutputType {
+    Binary,
+    Elf,
+}
+
+impl ImageOutputType {
+    fn default_from_arch(arch: &Arch) -> Self {
+        match arch {
+            Arch::Aarch64 | Arch::Riscv64 => ImageOutputType::Binary,
+            Arch::X86_64 => ImageOutputType::Elf,
+        }
+    }
+
+    fn parse(str: &str, arch: Arch) -> Result<Self, String> {
+        match str {
+            "binary" => match arch {
+                Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
+                Arch::X86_64 => Err(format!(
+                    "invalid value '{str}' for target architecture '{arch}'"
+                )),
+            },
+            "elf" => Ok(ImageOutputType::Elf),
+            _ => Err(format!("unknown value '{str}'")),
+        }
+    }
 }
 
 struct Args<'a> {
@@ -77,6 +105,7 @@ struct Args<'a> {
     capdl_spec: Option<&'a str>,
     output: &'a str,
     search_paths: Vec<&'a String>,
+    output_image_type: Option<&'a str>,
 }
 
 impl<'a> Args<'a> {
@@ -90,6 +119,7 @@ impl<'a> Args<'a> {
         let mut system = None;
         let mut board = None;
         let mut config = None;
+        let mut output_image_type = None;
 
         if args.len() <= 1 {
             print_usage();
@@ -158,6 +188,15 @@ impl<'a> Args<'a> {
                 "--search-path" => {
                     in_search_path = true;
                 }
+                "--image-type" => {
+                    if i < args.len() - 1 {
+                        output_image_type = Some(args[i + 1].as_str());
+                        i += 1;
+                    } else {
+                        eprintln!("microkit: error: argument --image-type: expected one argument");
+                        std::process::exit(1);
+                    }
+                }
                 _ => {
                     if in_search_path {
                         search_paths.push(&args[i]);
@@ -211,6 +250,7 @@ impl<'a> Args<'a> {
             capdl_spec,
             output,
             search_paths,
+            output_image_type,
         }
     }
 }
@@ -379,6 +419,18 @@ fn main() -> Result<(), String> {
         "riscv64" => Arch::Riscv64,
         "x86_64" => Arch::X86_64,
         _ => panic!("Unsupported kernel config architecture"),
+    };
+
+    let image_output_type = if let Some(image_type) = args.output_image_type {
+        match ImageOutputType::parse(image_type, arch) {
+            Ok(output_image_type) => output_image_type,
+            Err(reason) => {
+                eprintln!("microkit: error: argument --image-type: {reason}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        ImageOutputType::default_from_arch(&arch)
     };
 
     let (device_regions, normal_regions) = match arch {
@@ -843,7 +895,10 @@ fn main() -> Result<(), String> {
                         &initialiser_vaddr_range,
                     );
 
-                    loader.write_image(Path::new(image_out_path));
+                    match image_output_type {
+                        ImageOutputType::Binary => loader.write_image(image_out_path),
+                        ImageOutputType::Elf => loader.write_elf(image_out_path),
+                    };
 
                     println!(
                         "MICROKIT|LOADER: image file size = {}",
