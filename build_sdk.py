@@ -732,7 +732,6 @@ def build_lib_component(
 
 def build_initialiser(
     component_name: str,
-    custom_rust_sel4_dir: Path,
     root_dir: Path,
     build_dir: Path,
     board: BoardInfo,
@@ -780,7 +779,6 @@ def build_initialiser(
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
-    parser.add_argument("--rust-sel4", type=Path, required=False, default=None, help="Compile capDL initialiser from local repository")
     parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
     parser.add_argument("--llvm", action="store_true", help="Cross-compile seL4 and Microkit's run-time targets with LLVM")
     parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
@@ -898,7 +896,7 @@ def main() -> None:
                 build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
                 build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
                 if not args.skip_initialiser:
-                    build_initialiser("initialiser", args.rust_sel4, root_dir, build_dir, board, config)
+                    build_initialiser("initialiser", root_dir, build_dir, board, config)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
