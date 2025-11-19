@@ -379,6 +379,20 @@ The *debug* configuration includes a debug build of the seL4 kernel to allow con
 The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, initialiser and
 kernel do *not* perform any serial output.
 
+### Proofs
+
+The formal verification of seL4 applies to a specific set of seL4 configuration only. This means that making a 'release' build
+of a Microkit system does not imply that the seL4 kernel being used is verified.
+
+Currently Microkit always uses the MCS configuration of seL4 which is still undergoing verification, scheduled to complete
+for RISC-V in 2026 and AArch64 in 2027. The design proofs for MCS are done but the work to show that the kernel code conforms
+to the design is still undergoing.
+
+You can find more information about what verified seL4 configurations do exist
+[here](https://docs.sel4.systems/projects/sel4/verified-configurations.html)
+
+A roadmap for upcoming verification is available [here](https://sel4.systems/roadmap.html).
+
 ## Benchmark
 
 The *benchmark* configuration uses a build of the seL4 kernel that exports the hardware's performance monitoring unit (PMU) to PDs.
