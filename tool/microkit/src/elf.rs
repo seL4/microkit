@@ -185,6 +185,17 @@ pub struct ElfFile {
 }
 
 impl ElfFile {
+    pub fn new(path: PathBuf, word_size: usize, entry: u64, machine: u16) -> Self {
+        ElfFile {
+            path,
+            word_size,
+            entry,
+            machine,
+            segments: [].into(),
+            symbols: HashMap::new(),
+        }
+    }
+
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
@@ -462,11 +473,7 @@ impl ElfFile {
         self.segments.iter().filter(|s| s.loadable).collect()
     }
 
-    /// Re-create a minimal ELF file with all the segments such that it can be loaded
-    /// by seL4 on a x86 platform as a boot module. This is the kernel code that does the
-    /// loading of what we generate here: seL4/src/arch/x86/64/kernel/elf.c
-    /// We use this function after patching the spec into the CapDL initialiser.
-    /// We don't guarantee that this ELF can be loaded by other kinds of ELF loader.
+    /// Re-create a minimal ELF file with all the segments.
     pub fn reserialise(&self, out: &std::path::Path) -> Result<u64, String> {
         let phnum = self.loadable_segments().len();
         let phentsize = size_of::<ElfProgramHeader64>();
