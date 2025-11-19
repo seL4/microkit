@@ -88,7 +88,7 @@ The [System Description File](#sysdesc) chapter describes the format of the syst
 
 The [Board Support Packages](#bsps) chapter describes each of the board support packages included in the SDK.
 
-The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of in Microkit.
+The [Rationale](#rationale) chapter documents the rationale for some of the key design choices of Microkit.
 
 The [Internals](#internals) chapter documents some of the internal details for how Microkit works.
 
