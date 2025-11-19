@@ -23,6 +23,6 @@ If you are a system designer and want to *use* the Microkit SDK please download 
 [the latest release](https://github.com/seL4/microkit/releases).
 
 If you need help getting started see the [seL4 documentation website](https://docs.sel4.systems/projects/microkit/)
-as well as the manual in the SDK (`doc/manual.md`).
+as well as the manual in the SDK (`docs/manual.md`).
 
 If you are *developing* Microkit itself see [DEVELOPER.md](./DEVELOPER.md).
