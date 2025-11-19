@@ -423,8 +423,8 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT] --board [BOARD] --config CONFIG
-             [--search-path [SEARCH_PATH ...]] system
+    microkit [-h] [--image-type {binary,elf}] [-o OUTPUT] [-r REPORT] [--capdl-spec CAPDL_SPEC] --board [BOARD]
+              --config CONFIG [--search-path [SEARCH_PATH ...]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
@@ -432,11 +432,12 @@ The search paths provided tell the tool where to find any program images specifi
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
-In the case of success, a loadable image file and a report shall be produced.
+In the case of success, a loadable image file and a report shall be produced. The
+type of image is specified by the `--image-type` argument.
 The output paths for these can be specified by `-o` and `-r` respectively.
 The default output paths are `loader.img` and `report.txt`.
 
-On ARM and RISC-V, the loadable image will be a binary that can be loaded by the board's bootloader.
+On ARM and RISC-V, the loadable image can either be a binary or ELF that can be loaded by the board's bootloader.
 On x86, the image will be an ELF containing the capDL initialiser to be loaded as a Multiboot boot module.
 
 The report is a plain text file describing important information about the system.
