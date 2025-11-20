@@ -243,8 +243,6 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "qemu-riscv-virt",
             "QEMU_MEMORY": "2048",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
@@ -303,8 +301,6 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "hifive-p550",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
@@ -314,8 +310,6 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x60000000,
         kernel_options={
             "KernelPlatform": "star64",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
@@ -325,8 +319,6 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "ariane",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
@@ -336,8 +328,6 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "cheshire",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
@@ -347,8 +337,6 @@ SUPPORTED_BOARDS = (
         loader_link_address=0x90000000,
         kernel_options={
             "KernelPlatform": "cheshire",
-            "KernelRiscvExtD": True,
-            "KernelRiscvExtF": True,
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
     ),
     BoardInfo(
