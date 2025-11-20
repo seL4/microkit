@@ -106,6 +106,14 @@ const PF_X: u32 = 0x1;
 const PF_W: u32 = 0x2;
 const PF_R: u32 = 0x4;
 
+/// ELF section-header type (`sh_type`)
+const SHT_PROGBITS: u32 = 0x1;
+
+/// ELF section-header flags (`sh_flags`)
+const SHF_WRITE: u64 = 0x1;
+const SHF_ALLOC: u64 = 0x2;
+const SHF_EXECINSTR: u64 = 0x3;
+
 #[derive(Eq, PartialEq, Clone)]
 pub enum ElfSegmentData {
     RealData(Vec<u8>),
@@ -171,6 +179,19 @@ impl ElfSegment {
 
     pub fn is_executable(&self) -> bool {
         self.attrs & PF_X == PF_X
+    }
+
+    pub fn section_flags(&self) -> u64 {
+        let mut flags = SHF_ALLOC;
+
+        if self.is_writable() {
+            flags |= SHF_WRITE;
+        }
+        if self.is_executable() {
+            flags |= SHF_EXECINSTR;
+        }
+
+        flags
     }
 }
 
@@ -475,9 +496,13 @@ impl ElfFile {
 
     /// Re-create a minimal ELF file with all the segments.
     pub fn reserialise(&self, out: &std::path::Path) -> Result<u64, String> {
+        let ehsize = size_of::<ElfHeader64>();
+
         let phnum = self.loadable_segments().len();
         let phentsize = size_of::<ElfProgramHeader64>();
-        let ehsize = size_of::<ElfHeader64>();
+
+        let shnum = self.loadable_segments().len() + 1; // First entry is reserved
+        let shentsize = size_of::<ElfSectionHeader64>();
 
         let mut elf_file = match File::create(out) {
             Ok(file) => file,
@@ -506,13 +531,14 @@ impl ElfFile {
             entry: self.entry,
             // Program headers starts after main header
             phoff: ehsize as u64,
-            shoff: 0, // no section headers!
+            // Section headers starts after main header and program headers
+            shoff: (ehsize + phnum * phentsize) as u64,
             flags: 0,
             ehsize: ehsize as u16,
             phentsize: phentsize as u16,
             phnum: phnum as u16,
-            shentsize: 0,
-            shnum: 0,
+            shentsize: shentsize as u16,
+            shnum: shnum as u16,
             shstrndx: 0,
         };
         elf_file
@@ -521,36 +547,78 @@ impl ElfFile {
             })
             .unwrap_or_else(|_| panic!("Failed to write ELF header for '{}'", out.display()));
 
-        // keep a running file offset where segment data will be written
-        let mut data_off = (ehsize as u64) + (phnum as u64) * (phentsize as u64);
+        // Keep a running file offset where segment data will be written, which is after
+        // all the various headers.
+        let mut data_off_watermark = (ehsize as u64)
+            + (phnum as u64) * (phentsize as u64)
+            + (shnum as u64) * (shentsize as u64);
+        let mut data_offs = [].to_vec();
 
-        // first write out the headers table
+        // First write out the program headers table
         for (i, seg) in self.loadable_segments().iter().enumerate() {
-            let seg_serialised = ElfProgramHeader64 {
-                type_: PHENT_TYPE_LOADABLE, // loadable segment
+            let ph_serialised = ElfProgramHeader64 {
+                type_: PHENT_TYPE_LOADABLE, // loadable
                 flags: seg.attrs,
-                offset: data_off,
+                offset: data_off_watermark,
                 vaddr: seg.virt_addr,
                 paddr: seg.phys_addr,
                 filesz: seg.file_size(),
                 memsz: seg.mem_size(),
                 align: 0,
             };
+            data_offs.push(data_off_watermark);
 
             elf_file
-                .write_all(unsafe { struct_to_bytes(&seg_serialised) })
+                .write_all(unsafe { struct_to_bytes(&ph_serialised) })
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Failed to write ELF segment header #{} for '{}'",
+                        "Failed to write ELF program header #{} for '{}'",
                         i,
                         out.display()
                     )
                 });
 
-            data_off += seg.file_size();
+            data_off_watermark += seg.file_size();
         }
 
-        // then the data for each segment will follow
+        // Then the section headers table, which describe the same thing as the program headers.
+        // This is needed for U-Boot's `bootelf` command to work properly without adding the `-p` flag
+        // when booting the loader image on ARM and RISC-V platforms.
+        // First entry is reserved!
+        elf_file
+            .write_all(vec![0u8; shentsize].as_slice())
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to write ELF reserved segment header for '{}'",
+                    out.display()
+                )
+            });
+        for (i, seg) in self.loadable_segments().iter().enumerate() {
+            let sh_serialised = ElfSectionHeader64 {
+                name: 0,
+                type_: SHT_PROGBITS,
+                flags: seg.section_flags(),
+                addr: seg.phys_addr,
+                offset: data_offs[i],
+                size: seg.file_size(),
+                link: 0,
+                info: 0,
+                addralign: 0,
+                entsize: 0,
+            };
+
+            elf_file
+                .write_all(unsafe { struct_to_bytes(&sh_serialised) })
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Failed to write ELF section header #{} for '{}'",
+                        i,
+                        out.display()
+                    )
+                });
+        }
+
+        // Finally the data for each segment will follow
         for (i, seg) in self
             .loadable_segments()
             .iter()
