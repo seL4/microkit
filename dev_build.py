@@ -90,7 +90,7 @@ def main():
     make_env["MICROKIT_BOARD"] = args.board
     make_env["MICROKIT_CONFIG"] = args.config
     make_env["MICROKIT_SDK"] = str(release)
-    make_env["MICROKIT_TOOL"] = (CWD / "tool/microkit/target/release/microkit").absolute()
+    make_env["MICROKIT_TOOL"] = (CWD / "target/release/microkit").absolute()
     make_env["LLVM"] = str(args.llvm)
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
