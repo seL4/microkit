@@ -45,4 +45,4 @@ void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);
 
 extern char _stack[NUM_ACTIVE_CPUS][STACK_SIZE];
 
-void start_kernel(int logical_id);
+void start_kernel(int logical_cpu);

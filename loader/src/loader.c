@@ -107,24 +107,18 @@ static void copy_data(void)
 static int print_lock = 0;
 #endif
 
-void start_kernel(int logical_id)
+void start_kernel(int logical_cpu)
 {
-    puts("LDR(CPU");
-    puts((const char[]){'0' + logical_id, '\0'});
-    puts(")|INFO: enabling MMU\n");
-    int r = arch_mmu_enable();
+    LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
+    int r = arch_mmu_enable(logical_cpu);
     if (r != 0) {
-        puts("LDR(CPU");
-        puts((const char[]){'0' + logical_id, '\0'});
-        puts(")|ERROR: enabling MMU failed: ");
+        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
         puthex32(r);
         puts("\n");
         for (;;) {}
     }
 
-    puts("LDR(CPU");
-    puts((const char[]){'0' + logical_id, '\0'});
-    puts(")|INFO: jumping to kernel\n");
+    LDR_PRINT("INFO", logical_cpu, "jumping to kernel\n");
 
 #ifdef CONFIG_PRINTING
     __atomic_store_n(&print_lock, 1, __ATOMIC_RELEASE);
@@ -139,9 +133,7 @@ void start_kernel(int logical_id)
         0
     );
 
-    puts("LDR(CPU");
-    puts((const char[]){'0' + logical_id, '\0'});
-    puts(")|ERROR: seL4 kernel entry returned\n");
+    LDR_PRINT("ERROR", logical_cpu, "seL4 kernel entry returned\n");
     for (;;) {}
 }
 
@@ -187,15 +179,15 @@ int main(void)
      */
     copy_data();
 
-    puts("LDR|INFO: starting ");
+    LDR_PRINT("INFO", 0, "Active CPUs to start: ");
     puthex32(plat_get_active_cpus());
-    puts(" CPUs\n");
+    puts("\n");
 
     for (int cpu = 1; cpu < plat_get_active_cpus(); cpu++) {
         r = plat_start_cpu(cpu);
         if (r != 0) {
-            puts("LDR(CPU0)|ERROR: starting CPU");
-            puts((const char[]){'0' + cpu, '\0'});
+            LDR_PRINT("ERROR", 0, "unable to start CPU ");
+            puthex32(cpu);
             puts(" returned error: ");
             puthex32(r);
             goto fail;

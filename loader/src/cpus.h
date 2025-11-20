@@ -36,10 +36,10 @@ const int plat_get_available_cpus(void);
  * to the logical ID.
  * This will often be MPIDR on ARM.
  **/
-void plat_save_hw_id(int logical_id, size_t hw_id);
+void plat_save_hw_id(int logical_cpu, size_t hw_id);
 
 /**
  * Start the CPU with the given logical ID.
  * Returns a non-zero integer on failure.
  **/
-int plat_start_cpu(int logical_id);
+int plat_start_cpu(int logical_cpu);
