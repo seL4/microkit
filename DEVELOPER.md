@@ -25,6 +25,7 @@ This section attempts to list the packages or external development tools which a
 * qemu-system-x86_64
 
 To build the documentation you also need
+
 * pandoc
 * pdflatex
 * texlive-latex-recommended
