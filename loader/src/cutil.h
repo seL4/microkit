@@ -4,12 +4,15 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include <stddef.h>
+#pragma once
 
+#include <stddef.h>
 
 #define ALIGN(n)  __attribute__((__aligned__(n)))
 
-#define MASK(x) ((1UL << x) - 1)
+#define BIT(n)  (1UL << (n))
+#define MASK(x) (BIT(x) - 1UL)
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
 #define is_set(macro) _is_set_(macro)
 #define _macrotest_1 ,

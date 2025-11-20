@@ -50,7 +50,8 @@ endif
 CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding \
 					-MP -MD $(CFLAGS_ARCH) -I$(SEL4_SDK)/include \
 					-Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
-					-Wundef -Wno-nonnull -Wnested-externs
+					-Wundef -Wno-nonnull -Wnested-externs \
+					-mno-outline-atomics
 
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
 
@@ -58,7 +59,7 @@ PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o
 
 ifeq ($(ARCH),aarch64)
-	OBJECTS += util64.o el.o exceptions.o init.o mmu.o
+	OBJECTS += util64.o el.o exceptions.o init.o mmu.o cpus.o
 else ifeq ($(ARCH),riscv64)
 	OBJECTS += exceptions.o init.o mmu.o
 endif

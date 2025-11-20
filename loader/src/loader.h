@@ -5,8 +5,12 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 #include <stdint.h>
 #include <stddef.h>
+
+#include "cpus.h"
 
 #define REGION_TYPE_DATA 1
 #define REGION_TYPE_ZERO 2
@@ -36,3 +40,9 @@ extern const struct loader_data *loader_data;
 /* Called from assembly */
 void relocation_failed(void);
 void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);
+
+#define STACK_SIZE 4096
+
+extern char _stack[NUM_ACTIVE_CPUS][STACK_SIZE];
+
+void start_kernel(int logical_id);

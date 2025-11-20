@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#pragma once
+
 /**
   * The layout and naming scheme of the functions in these files has meaning:
   *

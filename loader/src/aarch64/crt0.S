@@ -10,16 +10,6 @@
 .global _start;
 .type _start, %function;
 _start:
-
-     mrs    x0, mpidr_el1
-     and    x0, x0,#0xFF        // Check processor id
-     cbz    x0, master        // Hang for all non-primary CPU
-
-proc_hang:
-     wfe
-     b proc_hang
-
-master:
     adrp    x1, _stack
     add     x1, x1, #0xff0
     mov     sp, x1
