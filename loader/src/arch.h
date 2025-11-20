@@ -34,3 +34,4 @@
 void arch_init(void);
 void arch_set_exception_handler(void);
 int arch_mmu_enable(int logical_cpu);
+void arch_jump_to_kernel(int logical_cpu);

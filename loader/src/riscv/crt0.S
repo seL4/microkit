@@ -17,6 +17,7 @@
 
 #define STACK_SIZE 4096
 
+// TODO: defined in sbi.h instead
 /* SBI commands for the HSM extension */
 #define SBI_HSM_BASE_EID 0x48534DULL
 #define SBI_HSM_BASE_HART_START_FID 0
@@ -103,7 +104,9 @@ hsm_switch_hart:
    * secondary hart
    */
   mv a0, s0 /* restore a0 to hold hart ID passed by OpenSBI */
-  j spin_hart /* Spin any hart that isn't FIRST_HART_ID since we only support single-core right now. */
+  li a7, SBI_HSM_BASE_EID
+  li a6, 0x1
+  ecall
 
 relocate:
   /* Save the return address */
@@ -226,3 +229,16 @@ secondary_harts:
 spin_hart:
   wfi
   j spin_hart
+
+.global riscv_secondary_cpu_entry_asm
+riscv_secondary_cpu_entry_asm:
+
+.option push
+.option norelax
+1:auipc gp, %pcrel_hi(__global_pointer$)
+  addi  gp, gp, %pcrel_lo(1b)
+.option pop
+
+  mv sp, a1
+  la s0, riscv_secondary_cpu_entry
+  jr s0

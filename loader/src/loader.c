@@ -26,15 +26,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #define MAGIC 0x5e14dead14de5ead
 #endif
 
-typedef void (*sel4_entry)(
-    uintptr_t ui_p_reg_start,
-    uintptr_t ui_p_reg_end,
-    intptr_t pv_offset,
-    uintptr_t v_entry,
-    uintptr_t dtb_addr_p,
-    uintptr_t dtb_size
-);
-
 extern char _text;
 extern char _bss_end;
 const struct loader_data *loader_data = (void *) &_bss_end;
@@ -124,14 +115,7 @@ void start_kernel(int logical_cpu)
     __atomic_store_n(&print_lock, 1, __ATOMIC_RELEASE);
 #endif
 
-    ((sel4_entry)(loader_data->kernel_entry))(
-        loader_data->ui_p_reg_start,
-        loader_data->ui_p_reg_end,
-        loader_data->pv_offset,
-        loader_data->v_entry,
-        0,
-        0
-    );
+    arch_jump_to_kernel(logical_cpu);
 
     LDR_PRINT("ERROR", logical_cpu, "seL4 kernel entry returned\n");
     for (;;) {}
@@ -193,12 +177,12 @@ int main(void)
             goto fail;
         }
 
-    #ifdef CONFIG_PRINTING
+#ifdef CONFIG_PRINTING
         /* wait for boot */
-        while(__atomic_load_n(&print_lock, __ATOMIC_ACQUIRE) != 1);
+        while (__atomic_load_n(&print_lock, __ATOMIC_ACQUIRE) != 1);
         /* allow the next CPU to boot */
         __atomic_store_n(&print_lock, 0, __ATOMIC_RELEASE);
-    #endif
+#endif
     }
 
     start_kernel(0);

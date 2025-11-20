@@ -39,6 +39,11 @@ const int plat_get_available_cpus(void);
 void plat_save_hw_id(int logical_cpu, size_t hw_id);
 
 /**
+ * Get the hardware ID from a logical ID from platform specific code
+ **/
+size_t plat_get_hw_id(int logical_cpu);
+
+/**
  * Start the CPU with the given logical ID.
  * Returns a non-zero integer on failure.
  **/

@@ -26,6 +26,11 @@ void plat_save_hw_id(int logical_cpu, size_t hw_id)
     cpu_mpidrs[logical_cpu] = hw_id;
 }
 
+uint64_t plat_get_hw_id(int logical_cpu)
+{
+    return cpu_mpidrs[logical_cpu];
+}
+
 /**
  * This is the 'target_cpu' of the CPU_ON, which is *supposed* to be the MPIDR
  * value, but is not always (e.g. in the ODROID boards). This value is derived
@@ -189,9 +194,6 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
     }
 
     plat_save_hw_id(logical_cpu, mpidr_el1);
-
-    /* seL4 always expects the current logical CPU number in TPIDR_EL1 */
-    asm volatile("msr TPIDR_EL1, %0" :: "r"(logical_cpu));
 
     start_kernel(logical_cpu);
 
