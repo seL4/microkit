@@ -157,6 +157,16 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="maaxboard_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x50000000,
+        kernel_options={
+            "KernelPlatform": "maaxboard",
+            "KernelMaxNumNodes": 4,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="imx8mm_evk",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
@@ -230,6 +240,20 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "qemu-arm-virt",
             "QEMU_MEMORY": "2048",
+            # There is no peripheral timer, so we use the ARM
+            # architectural timer
+            "KernelArmExportPTMRUser": True,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
+        name="qemu_virt_aarch64_4_cores",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x70000000,
+        kernel_options={
+            "KernelPlatform": "qemu-arm-virt",
+            "QEMU_MEMORY": "2048",
+            "KernelMaxNumNodes": 4,
             # There is no peripheral timer, so we use the ARM
             # architectural timer
             "KernelArmExportPTMRUser": True,
