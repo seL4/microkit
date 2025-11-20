@@ -36,7 +36,7 @@ else
 endif
 
 ifeq ($(ARCH),aarch64)
-	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
+	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align -mno-outline-atomics
 	CFLAGS_ARCH := $(CFLAGS_AARCH64) -DARCH_aarch64
 	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 	ARCH_DIR := aarch64
@@ -50,8 +50,7 @@ endif
 CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding \
 					-MP -MD $(CFLAGS_ARCH) -I$(SEL4_SDK)/include \
 					-Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
-					-Wundef -Wno-nonnull -Wnested-externs \
-					-mno-outline-atomics
+					-Wundef -Wno-nonnull -Wnested-externs
 
 ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
 
@@ -61,7 +60,7 @@ OBJECTS := loader.o crt0.o uart.o cutil.o
 ifeq ($(ARCH),aarch64)
 	OBJECTS += util64.o el.o exceptions.o init.o mmu.o cpus.o
 else ifeq ($(ARCH),riscv64)
-	OBJECTS += exceptions.o init.o mmu.o
+	OBJECTS += exceptions.o init.o mmu.o cpus.o sbi.o
 endif
 
 LINKSCRIPT_INPUT := $(ARCH).ld
