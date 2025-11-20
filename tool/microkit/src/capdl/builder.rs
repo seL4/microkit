@@ -24,7 +24,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME, MONITOR_PRIORITY,
+        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
+        MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -179,6 +180,7 @@ impl CapDLSpecContainer {
         &mut self,
         sel4_config: &Config,
         pd_name: &str,
+        pd_cpu: CpuCore,
         elf_id: usize,
         elf: &ElfFile,
     ) -> Result<ObjectId, String> {
@@ -316,7 +318,7 @@ impl CapDLSpecContainer {
 
         let tcb_extra_info = object::TcbExtraInfo {
             ipc_buffer_addr: ipcbuf_vaddr.into(),
-            affinity: 0.into(),
+            affinity: Word(pd_cpu.0.into()),
             prio: 0,
             max_prio: 0,
             resume: false,
@@ -397,7 +399,7 @@ pub fn build_capdl_spec(
     let monitor_tcb_obj_id = {
         let monitor_elf = elfs.get(mon_elf_id).unwrap();
         spec_container
-            .add_elf_to_spec(kernel_config, MONITOR_PD_NAME, mon_elf_id, monitor_elf)
+            .add_elf_to_spec(kernel_config, MONITOR_PD_NAME, CpuCore(0), mon_elf_id, monitor_elf)
             .unwrap()
     };
 
@@ -552,7 +554,7 @@ pub fn build_capdl_spec(
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
         let pd_tcb_obj_id = spec_container
-            .add_elf_to_spec(kernel_config, &pd.name, pd_global_idx, elf_obj)
+            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj)
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
@@ -740,6 +742,7 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 kernel_config,
                 &pd.name,
+                pd.cpu,
                 pd_ntfn_obj_id,
                 irq,
             );
@@ -899,7 +902,7 @@ pub fn build_capdl_spec(
                         slots: caps_to_bind_to_vm_tcbs,
                         extra: Box::new(object::TcbExtraInfo {
                             ipc_buffer_addr: Word(0),
-                            affinity: Word(0), // @billn revisit for SMP, need a way to specify node id in the XML
+                            affinity: Word(vcpu.cpu.0.into()),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
                             resume: false,

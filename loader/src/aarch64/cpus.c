@@ -80,17 +80,28 @@ _Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(psci_target_cpus),
 static inline const char *psci_return_as_string(uint32_t ret)
 {
     switch (ret) {
-        case PSCI_RETURN_SUCCESS: return "SUCCESS";
-        case PSCI_RETURN_NOT_SUPPORTED: return "NOT_SUPPORTED";
-        case PSCI_RETURN_INVALID_PARAMETERS: return "INVALID_PARAMETERS";
-        case PSCI_RETURN_DENIED: return "DENIED";
-        case PSCI_RETURN_ALREADY_ON: return "ALREADY_ON";
-        case PSCI_RETURN_ON_PENDING: return "ON_PENDING";
-        case PSCI_RETURN_INTERNAL_FAILURE: return "INTERNAL_FAILURE";
-        case PSCI_RETURN_NOT_PRESENT: return "NOT_PRESENT";
-        case PSCI_RETURN_DISABLED: return "DISABLED";
-        case PSCI_RETURN_INVALID_ADDRESS: return "INVALID_ADDRESS";
-        default: return "<unknown return>";
+    case PSCI_RETURN_SUCCESS:
+        return "SUCCESS";
+    case PSCI_RETURN_NOT_SUPPORTED:
+        return "NOT_SUPPORTED";
+    case PSCI_RETURN_INVALID_PARAMETERS:
+        return "INVALID_PARAMETERS";
+    case PSCI_RETURN_DENIED:
+        return "DENIED";
+    case PSCI_RETURN_ALREADY_ON:
+        return "ALREADY_ON";
+    case PSCI_RETURN_ON_PENDING:
+        return "ON_PENDING";
+    case PSCI_RETURN_INTERNAL_FAILURE:
+        return "INTERNAL_FAILURE";
+    case PSCI_RETURN_NOT_PRESENT:
+        return "NOT_PRESENT";
+    case PSCI_RETURN_DISABLED:
+        return "DISABLED";
+    case PSCI_RETURN_INVALID_ADDRESS:
+        return "INVALID_ADDRESS";
+    default:
+        return "<unknown return>";
     }
 }
 
@@ -123,7 +134,7 @@ uint64_t arm_smc64_call(uint32_t function_id, uint64_t arg0, uint64_t arg1, uint
         : "=r"(x0)
         : "r"(x0), "r"(x1), "r"(x2), "r"(x3)
         : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17",
-          "memory"
+        "memory"
     );
 
     return x0;
@@ -151,7 +162,7 @@ uint32_t arm_smc32_call(uint32_t function_id, uint32_t arg0, uint32_t arg1, uint
         : "=r"(w0)
         : "r"(w0), "r"(w1), "r"(w2), "r"(w3)
         : "w4", "w5", "w6", "w7", "w8", "w9", "w10", "w11", "w12", "w13", "w14", "w15", "w16", "w17",
-          "memory"
+        "memory"
     );
 
     return w0;
@@ -191,7 +202,9 @@ fail:
 int plat_start_cpu(int logical_cpu)
 {
     LDR_PRINT("INFO", 0, "Starting CPU ");
-    puts((const char[]){'0' + logical_cpu, '\0'});
+    puts((const char[]) {
+        '0' + logical_cpu, '\0'
+    });
     puts("\n");
 
     if (logical_cpu >= NUM_ACTIVE_CPUS) {
@@ -213,7 +226,7 @@ int plat_start_cpu(int logical_cpu)
         "stp %[v0], %[v1], [%[sp], #-16]!"
         : [sp] "+r"(sp)
         : [v0] "r"(logical_cpu),
-          [v1] "r"(/* dummy */ 0)
+        [v1] "r"(/* dummy */ 0)
         : "memory"
     );
 
@@ -226,11 +239,11 @@ int plat_start_cpu(int logical_cpu)
        - context_id is passed in the x0 register
     */
     uint64_t ret = arm_smc64_call(
-        PSCI_FUNCTION_CPU_ON,
-        /* target_cpu */ psci_target_cpus[logical_cpu],
-        /* entry_point_address */ (uint64_t)arm_secondary_cpu_entry_asm,
-        /* context_id */ sp
-    );
+                       PSCI_FUNCTION_CPU_ON,
+                       /* target_cpu */ psci_target_cpus[logical_cpu],
+                       /* entry_point_address */ (uint64_t)arm_secondary_cpu_entry_asm,
+                       /* context_id */ sp
+                   );
 
     if (ret != PSCI_RETURN_SUCCESS) {
         LDR_PRINT("ERROR", 0, "could not start CPU, PSCI returned: ");
