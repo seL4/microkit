@@ -523,6 +523,13 @@ fn main() -> Result<(), String> {
         )?,
         hypervisor,
         benchmark: args.config == "benchmark",
+        num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
+            json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?
+                .try_into()
+                .expect("number of cores fits in u8")
+        } else {
+            1
+        },
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
         arm_pa_size_bits,
         arm_smc,

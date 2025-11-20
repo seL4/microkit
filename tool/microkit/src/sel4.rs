@@ -273,6 +273,7 @@ pub struct Config {
     pub max_num_bootinfo_untypeds: u64,
     pub hypervisor: bool,
     pub benchmark: bool,
+    pub num_cores: u8,
     pub fpu: bool,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,

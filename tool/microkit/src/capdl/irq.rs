@@ -11,7 +11,7 @@ use crate::{
         util::{capdl_util_make_cte, capdl_util_make_ntfn_cap},
         CapDLNamedObject, CapDLSpecContainer,
     },
-    sdf::{SysIrq, SysIrqKind},
+    sdf::{CpuCore, SysIrq, SysIrqKind},
     sel4::{Arch, Config},
 };
 
@@ -21,12 +21,13 @@ pub fn create_irq_handler_cap(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
+    pd_cpu: CpuCore,
     pd_ntfn_obj_id: ObjectId,
     irq_desc: &SysIrq,
 ) -> Cap {
     // Create the IRQ object and add it to the special `irqs` vec in the spec.
     // This is a pseudo object so we can bind a cap to the IRQ
-    let irq_obj_id = create_irq_obj(spec_container, sel4_config, pd_name, irq_desc);
+    let irq_obj_id = create_irq_obj(spec_container, sel4_config, pd_name, pd_cpu, irq_desc);
 
     // Create the real IRQ in the separate IRQ vector.
     spec_container.spec.irqs.push(IrqEntry {
@@ -46,6 +47,7 @@ fn create_irq_obj(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
+    pd_cpu: CpuCore,
     irq_desc: &SysIrq,
 ) -> ObjectId {
     let irq_inner_obj = match irq_desc.kind {
@@ -54,13 +56,14 @@ fn create_irq_obj(
                 slots: [].to_vec(),
                 extra: Box::new(object::ArmIrqExtraInfo {
                     trigger: trigger as u8,
-                    target: Word(0), // @billn revisit for SMP
+                    target: Word(pd_cpu.0.into()),
                 }),
             }),
             Arch::Riscv64 => Object::RiscvIrq(object::RiscvIrq {
                 slots: [].to_vec(),
                 extra: object::RiscvIrqExtraInfo {
                     trigger: trigger as u8,
+                    // TODO: RISC-V does not support the equivalent of IrqHandlerTriggerCore
                 },
             }),
             Arch::X86_64 => unreachable!(
