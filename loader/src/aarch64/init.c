@@ -6,6 +6,7 @@
  */
 
 #include "../arch.h"
+#include "../loader.h"
 #include "../uart.h"
 #include "el.h"
 
@@ -94,4 +95,28 @@ void arch_init(void)
     } else {
         puts("LDR|ERROR: unknown EL level for MMU disable\n");
     }
+}
+
+typedef void (*sel4_entry)(
+    uintptr_t ui_p_reg_start,
+    uintptr_t ui_p_reg_end,
+    intptr_t pv_offset,
+    uintptr_t v_entry,
+    uintptr_t dtb_addr_p,
+    uintptr_t dtb_size
+);
+
+void arch_jump_to_kernel(int logical_cpu)
+{
+    /* seL4 always expects the current logical CPU number in TPIDR_EL1 */
+    asm volatile("msr TPIDR_EL1, %0" :: "r"(logical_cpu));
+
+    ((sel4_entry)(loader_data->kernel_entry))(
+        loader_data->ui_p_reg_start,
+        loader_data->ui_p_reg_end,
+        loader_data->pv_offset,
+        loader_data->v_entry,
+        0,
+        0
+    );
 }

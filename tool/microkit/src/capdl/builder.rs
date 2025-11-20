@@ -399,7 +399,13 @@ pub fn build_capdl_spec(
     let monitor_tcb_obj_id = {
         let monitor_elf = elfs.get(mon_elf_id).unwrap();
         spec_container
-            .add_elf_to_spec(kernel_config, MONITOR_PD_NAME, CpuCore(0), mon_elf_id, monitor_elf)
+            .add_elf_to_spec(
+                kernel_config,
+                MONITOR_PD_NAME,
+                CpuCore(0),
+                mon_elf_id,
+                monitor_elf,
+            )
             .unwrap()
     };
 
