@@ -27,49 +27,49 @@ enum el current_el(void)
 }
 
 
-int ensure_correct_el(void)
+int ensure_correct_el(int logical_cpu)
 {
     enum el el = current_el();
 
-    puts("LDR|INFO: CurrentEL=");
+    LDR_PRINT("INFO", logical_cpu, "CurrentEL=");
     puts(el_to_string(el));
     puts("\n");
 
     if (el == EL0) {
-        puts("LDR|ERROR: Unsupported initial exception level\n");
+        LDR_PRINT("ERROR", logical_cpu, "Unsupported initial exception level\n");
         return 1;
     }
 
     if (el == EL3) {
-        puts("LDR|INFO: Dropping from EL3 to EL2(NS)\n");
+        LDR_PRINT("INFO", logical_cpu, "Dropping from EL3 to EL2(NS)\n");
         switch_to_el2();
-        puts("LDR|INFO: Dropped from EL3 to EL2(NS)\n");
+        LDR_PRINT("INFO", logical_cpu, "Dropped from EL3 to EL2(NS)\n");
         el = EL2;
     }
 
     if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         if (el != EL2) {
-            puts("LDR|ERROR: seL4 configured as a hypervisor, but not in EL2\n");
+            LDR_PRINT("ERROR", logical_cpu, "seL4 configured as a hypervisor, but not in EL2\n");
             return 1;
         } else {
-            puts("LDR|INFO: Resetting CNTVOFF\n");
+            LDR_PRINT("INFO", logical_cpu, "Resetting CNTVOFF\n");
             asm volatile("msr cntvoff_el2, xzr");
         }
     } else {
         if (el == EL2) {
             /* seL4 relies on the timer to be set to a useful value */
-            puts("LDR|INFO: Resetting CNTVOFF\n");
+            LDR_PRINT("INFO", logical_cpu, "Resetting CNTVOFF\n");
             asm volatile("msr cntvoff_el2, xzr");
-            puts("LDR|INFO: Dropping from EL2 to EL1\n");
+            LDR_PRINT("INFO", logical_cpu, "Dropping from EL2 to EL1\n");
             switch_to_el1();
-            puts("LDR|INFO: CurrentEL=");
+            LDR_PRINT("INFO", logical_cpu, "CurrentEL=");
             el = current_el();
             puts(el_to_string(el));
             puts("\n");
             if (el == EL1) {
-                puts("LDR|INFO: Dropped to EL1 successfully\n");
+                LDR_PRINT("INFO", logical_cpu, "Dropped to EL1 successfully\n");
             } else {
-                puts("LDR|ERROR: Failed to switch to EL1\n");
+                LDR_PRINT("ERROR", logical_cpu, "Failed to switch to EL1\n");
                 return 1;
             }
         }

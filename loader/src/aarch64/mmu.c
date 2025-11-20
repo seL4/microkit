@@ -24,23 +24,23 @@ uint64_t boot_lvl2_upper[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl0_lower[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl1_lower[1 << 9] ALIGN(1 << 12);
 
-int arch_mmu_enable(void)
+int arch_mmu_enable(int logical_cpu)
 {
     int r;
     enum el el;
-    r = ensure_correct_el();
+    r = ensure_correct_el(logical_cpu);
     if (r != 0) {
         return r;
     }
 
-    puts("LDR|INFO: enabling MMU\n");
+    LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
     el = current_el();
     if (el == EL1) {
         el1_mmu_enable();
     } else if (el == EL2) {
         el2_mmu_enable();
     } else {
-        puts("LDR|ERROR: unknown EL level for MMU enable\n");
+        LDR_PRINT("ERROR", logical_cpu, "unknown EL for MMU enable\n");
     }
 
     return 0;

@@ -21,9 +21,9 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1);
 
 size_t cpu_mpidrs[NUM_ACTIVE_CPUS];
 
-void plat_save_hw_id(int logical_id, size_t hw_id)
+void plat_save_hw_id(int logical_cpu, size_t hw_id)
 {
-    cpu_mpidrs[logical_id] = hw_id;
+    cpu_mpidrs[logical_cpu] = hw_id;
 }
 
 /**
@@ -160,44 +160,42 @@ uint32_t arm_smc32_call(uint32_t function_id, uint32_t arg0, uint32_t arg1, uint
 /** defined in util64.S */
 extern void arm_secondary_cpu_entry_asm(void *sp);
 
-void arm_secondary_cpu_entry(int logical_id, uint64_t mpidr_el1)
+void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
 {
-    puts("LDR(CPU");
-    puts((const char[]){'0' + logical_id, '\0'});
-    puts(")|INFO: entry; mpidr_el1 is:");
+    LDR_PRINT("INFO", logical_cpu, "secondary CPU entry with MPIDR_EL1 ");
     puthex64(mpidr_el1);
     puts("\n");
 
-    if (logical_id == 0) {
-        puts("LDR|ERROR: secondary CPU should not have loader id 0!!!\n");
+    if (logical_cpu == 0) {
+        LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not have loader id 0!!!\n");
         goto fail;
-    } else if (logical_id >= NUM_ACTIVE_CPUS) {
-        puts("LDR|ERROR: secondary CPU should not be >NUM_ACTIVE_CPUS\n");
+    } else if (logical_cpu >= NUM_ACTIVE_CPUS) {
+        LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not be >NUM_ACTIVE_CPUS\n");
         goto fail;
     } else if (logical_cpu < 0) {
         LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not have negative logical id\n");
         goto fail;
     }
 
-    plat_save_hw_id(logical_id, mpidr_el1);
+    plat_save_hw_id(logical_cpu, mpidr_el1);
 
     /* seL4 always expects the current logical CPU number in TPIDR_EL1 */
-    asm volatile("msr TPIDR_EL1, %0" :: "r"(logical_id));
+    asm volatile("msr TPIDR_EL1, %0" :: "r"(logical_cpu));
 
-    start_kernel(logical_id);
+    start_kernel(logical_cpu);
 
 fail:
     for (;;) {}
 }
 
-int plat_start_cpu(int logical_id)
+int plat_start_cpu(int logical_cpu)
 {
-    puts("LDR(CPU0)|INFO: Starting CPU");
-    puts((const char[]){'0' + logical_id, '\0'});
+    LDR_PRINT("INFO", 0, "Starting CPU ");
+    puts((const char[]){'0' + logical_cpu, '\0'});
     puts("\n");
 
-    if (logical_id >= NUM_ACTIVE_CPUS) {
-        puts("LDR|ERROR: starting a CPU with number above the active CPU count\n");
+    if (logical_cpu >= NUM_ACTIVE_CPUS) {
+        LDR_PRINT("ERROR", 0, "starting a CPU with number above the active CPU count\n");
         return 1;
     }
 
@@ -205,7 +203,7 @@ int plat_start_cpu(int logical_id)
      * In correspondence with what arm_secondary_cpu_entry does, we push
      * some useful information to the stack.
      **/
-    uint64_t stack_base = (uint64_t)&_stack[logical_id][0];
+    uint64_t stack_base = (uint64_t)&_stack[logical_cpu][0];
     uint64_t stack_top = stack_base + STACK_SIZE;
     /* on aarch64 stack is pre-decrement/post-increment */
     uint64_t sp = stack_top;
@@ -214,7 +212,7 @@ int plat_start_cpu(int logical_id)
         /* use the pre-index variant of STP */
         "stp %[v0], %[v1], [%[sp], #-16]!"
         : [sp] "+r"(sp)
-        : [v0] "r"(logical_id),
+        : [v0] "r"(logical_cpu),
           [v1] "r"(/* dummy */ 0)
         : "memory"
     );
@@ -229,13 +227,13 @@ int plat_start_cpu(int logical_id)
     */
     uint64_t ret = arm_smc64_call(
         PSCI_FUNCTION_CPU_ON,
-        /* target_cpu */ psci_target_cpus[logical_id],
+        /* target_cpu */ psci_target_cpus[logical_cpu],
         /* entry_point_address */ (uint64_t)arm_secondary_cpu_entry_asm,
         /* context_id */ sp
     );
 
     if (ret != PSCI_RETURN_SUCCESS) {
-        puts("LDR(CPU0)|ERROR: could not start CPU, PSCI returned ");
+        LDR_PRINT("ERROR", 0, "could not start CPU, PSCI returned: ");
         puts(psci_return_as_string(ret));
         puts("\n");
     }
