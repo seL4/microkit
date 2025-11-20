@@ -115,9 +115,11 @@ Please clone seL4 from:
 
     https://github.com/seL4/seL4.git
 
-The correct branch to use is `microkit`.
+It should be noted that while Microkit uses mainline seL4, it is fairly tied to the
+specific version used.
 
-Testing has been performed using commit `3aafe9e0b9527794c547d12090117e1000302da0`.
+For this version of Microkit please use the following commit:
+`0f497ab3a0a25500b7dc70f3a2c2ad34b8453c24`.
 
 ## Building the SDK
 

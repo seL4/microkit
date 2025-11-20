@@ -15,6 +15,9 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  SEL4_VERSION: 0f497ab3a0a25500b7dc70f3a2c2ad34b8453c24
+
 # To reduce the load we cancel any older runs of this workflow for the current
 # PR. For deployment to the main branch, the workflow will run on each push,
 # and the `run_id` parameter will prevent cancellation.
@@ -36,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
             repository: seL4/seL4
-            ref: microkit
+            ref: ${{ env.SEL4_VERSION }}
             path: seL4
       - name: Install SDK dependencies
         run: |
@@ -95,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
         with:
             repository: seL4/seL4
-            ref: microkit
+            ref: ${{ env.SEL4_VERSION }}
             path: seL4
       - name: Get Nix dependencies
         run: nix develop -c bash -c 'echo Hello World'

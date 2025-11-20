@@ -33,9 +33,7 @@ typedef void (*sel4_entry)(
     intptr_t pv_offset,
     uintptr_t v_entry,
     uintptr_t dtb_addr_p,
-    uintptr_t dtb_size,
-    uintptr_t extra_device_addr_p,
-    uintptr_t extra_device_size
+    uintptr_t dtb_size
 );
 
 extern char _text;
@@ -113,8 +111,6 @@ static void start_kernel(void)
         loader_data->ui_p_reg_end,
         loader_data->pv_offset,
         loader_data->v_entry,
-        0,
-        0,
         0,
         0
     );
