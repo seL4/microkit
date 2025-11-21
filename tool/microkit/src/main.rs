@@ -35,7 +35,7 @@ const MAX_BUILD_ITERATION: usize = 3;
 // When building for x86, the kernel is copied from the SDK release package to the same
 // directory as the output boot module image, as Multiboot want them as
 // separate images.
-const KERNEL_COPY_FILENAME: &str = "sel4_64.elf";
+const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 // The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
 // also copy the 32-bit version that was prepared by build_sdk.py for convenience.
 const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
