@@ -47,8 +47,8 @@ size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #error "psci_target_cpus not defined for this board"
 #endif
 
-_Static_assert(sizeof(psci_target_cpus) / sizeof(psci_target_cpus[0]) >= NUM_ACTIVE_CPUS,
-               "active CPUs cannot be more than available CPUs");
+_Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(psci_target_cpus),
+              "active CPUs cannot be more than available CPUs");
 
 /**
  * The Power State Coordinate Interface (DEN0022F.b) document in §5.2.1
@@ -171,7 +171,7 @@ uint32_t arm_smc32_call(uint32_t function_id, uint32_t arg0, uint32_t arg1, uint
 }
 
 /** defined in util64.S */
-extern char arm_secondary_cpu_entry_asm[1];
+extern void arm_secondary_cpu_entry_asm(void *sp);
 
 void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
 {
