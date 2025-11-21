@@ -354,15 +354,15 @@ Additionally, for each supported board configuration the following are provided:
 
 * `libmicrokit.a`
 * `initialiser.elf`
-* `sel4.elf`
 * `monitor.elf`
+* seL4 kernel image
+     * On ARM/RISC-V: `sel4.elf`
+     * On x86-64: `sel4_64.elf` (64-bit) and `sel4_32.elf` (32-bit)
 
-On ARM and RISC-V, a `loader.elf` is provided, which acts as the system's bootloader.
+On ARM and RISC-V, an additional `loader.elf` is provided, which acts as the system's bootloader.
 
-On x86_64, the kernel as a 32-bit ELF named `sel4_32.elf` is provided. As qemu-system-x86_64's
--kernel option only accepts a 32-bit elf32-i386 kernel image. Since seL4's build process produces a
-64-bit ELF, we must convert the output into a 32-bit ELF file with the same code and data, allowing
-QEMU to load it via -kernel.
+On x86-64, 32-bit/64-bit variants of the kernel are provided as even on 64-bit platforms (e.g QEMU),
+a 32-bit kernel is required.
 
 There are also examples provided in the `example` directory.
 
@@ -1427,21 +1427,25 @@ On x86, Microkit produces 3 ELF images:
 - seL4 Kernel (32-bit ELF)
 - Initial Task image (Multiboot Boot Module ELF)
 
-The filenames of the two kernel variants are "sel4_64.elf" and "sel4_32.elf" respectively. The filename
+The filenames of the two kernel variants are `sel4_64.elf` and `sel4_32.elf` respectively. The filename
 of the Initial Task image is specified by the -o argument, or defaults to "loader.img".
 
-For simulating a x86_64 machine using QEMU, please use the 32-bit kernel ELF with the following command:
-```
-	$ qemu-system-x86_64                                \
-		-cpu qemu64,+fsgsbase,+pdpe1gb,+xsaveopt,+xsave \
-		-m "1G"                                         \
-		-display none                                   \
-		-serial mon:stdio                               \
-		-kernel sel4_32.elf                             \
-		-initrd loader.img
-```
+While this target is for 64-bit x86, your bootloader may require a 32-bit kernel ELF.
 
-If you use the 64-bit kernel ELF on QEMU, you will get the following error:
+When using QEMU, you must use the 32-bit kernel ELF with the following command:
+
+	$ qemu-system-x86_64 \
+		-cpu qemu64,+fsgsbase,+pdpe1gb,+xsaveopt,+xsave \
+		-m "1G" \
+		-display none \
+		-serial mon:stdio \
+		-kernel sel4_32.elf \
+		-initrd loader.img
+
+Note that unlike on ARM/RISC-V targets, the amount of memory that you give to QEMU is
+configurable with the `-m` argument.
+
+QEMU currently does not support 64-bit kernel ELFs and gives the following error:
 ```
 qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one.
 ```
