@@ -42,7 +42,7 @@ LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack
 LIBS := -lmicrokit -Tmicrokit.ld
 
 INITIAL_TASK = $(BUILD_DIR)/initialiser.elf
-KERNEL = $(BUILD_DIR)/sel4_64.elf
+KERNEL = $(BUILD_DIR)/sel4.elf
 KERNEL_32B = $(BUILD_DIR)/sel4_32.elf
 REPORT = $(BUILD_DIR)/report.txt
 SPEC = $(BUILD_DIR)/capdl_spec.json
