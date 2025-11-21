@@ -41,13 +41,14 @@ CFLAGS := -nostdlib -ffreestanding -g3 -O3 -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
 LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack
 LIBS := -lmicrokit -Tmicrokit.ld
 
-INITIAL_TASK = $(BUILD_DIR)/capdl_initialiser_with_spec.elf
-KERNEL = $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)/elf/sel4.elf
-COPIED_KERNEL = $(BUILD_DIR)/kernel.elf
+INITIAL_TASK = $(BUILD_DIR)/initialiser.elf
+KERNEL = $(BUILD_DIR)/sel4_64.elf
+KERNEL_32B = $(BUILD_DIR)/sel4_32.elf
 REPORT = $(BUILD_DIR)/report.txt
 SPEC = $(BUILD_DIR)/capdl_spec.json
 
-all qemu: $(COPIED_KERNEL) $(INITIAL_TASK)
+all: $(KERNEL) $(INITIAL_TASK)
+qemu: $(KERNEL_32B) $(INITIAL_TASK)
 
 $(BUILD_DIR)/x86_64_ioport.o: x86_64_ioport.c Makefile
 	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
@@ -55,12 +56,8 @@ $(BUILD_DIR)/x86_64_ioport.o: x86_64_ioport.c Makefile
 $(BUILD_DIR)/x86_64_ioport.elf: $(BUILD_DIR)/x86_64_ioport.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) x86_64_ioport.system
+$(KERNEL) $(KERNEL_32B) $(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) x86_64_ioport.system
 	$(MICROKIT_TOOL) x86_64_ioport.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(INITIAL_TASK) -r $(REPORT) --capdl-spec $(SPEC)
-
-# This step is required for 'qemu-system-x86_64' as the '-kernel' flag does not accept a 64-bit kernel.
-$(COPIED_KERNEL): $(KERNEL)
-	$(OBJCOPY) -O elf32-i386 $(KERNEL) $(COPIED_KERNEL)
 
 qemu:
 	qemu-system-x86_64                      \
@@ -68,5 +65,5 @@ qemu:
 			-m "1G"                         \
 			-display none                   \
 			-serial mon:stdio               \
-		-kernel $(COPIED_KERNEL) \
+		-kernel $(KERNEL_32B) \
 		-initrd $(INITIAL_TASK)
