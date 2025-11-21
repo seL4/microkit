@@ -33,7 +33,7 @@ typedef void (*sel4_entry)(
     uintptr_t v_entry,
     uintptr_t dtb_addr_p,
     uintptr_t dtb_size
-#if defined(CONFIG_ARCH_RISCV) || defined(CONFIG_ENABLE_SMP_SUPPORT)
+#if defined(CONFIG_ARCH_RISCV) && defined(CONFIG_ENABLE_SMP_SUPPORT)
     ,
     uint64_t hart_id,
     uint64_t core_id
