@@ -10,7 +10,7 @@
 
 #define ALIGN(n)  __attribute__((__aligned__(n)))
 
-#define BIT(n)  (1UL << n)
+#define BIT(n)  (1UL << (n))
 #define MASK(x) (BIT(x) - 1UL)
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
