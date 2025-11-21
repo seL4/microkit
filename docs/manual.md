@@ -1259,7 +1259,9 @@ on any specific SoC or hardware platform and is intended for simulating systems 
 development or testing.
 
 It should be noted that the platform support is configured with 2GB of main memory and a single
-Cortex-A53 CPU.
+Cortex-A53 CPU. seL4 needs to know the memory layout and CPU at build-time so if
+you want to change these parameters (e.g to allow more memory), you will have to change the kernel
+options for `qemu_virt_aarch64` in `build_sdk.py`.
 
 You can use the following command to simulate a Microkit system:
 
@@ -1281,6 +1283,8 @@ This is a platform that is not based on any specific SoC or hardware platform
 and is intended for simulating systems for development or testing.
 
 It should be noted that the platform support is configured with 2GB of main memory.
+seL4 has a static amount of memory at build-time, if you want allow for more memory,
+you will have to change the kernel options for `qemu_virt_riscv64` in `build_sdk.py`.
 
 You can use the following command to simulate a Microkit system:
 
@@ -1442,8 +1446,8 @@ When using QEMU, you must use the 32-bit kernel ELF with the following command:
 		-kernel sel4_32.elf \
 		-initrd loader.img
 
-Note that unlike on ARM/RISC-V targets, the amount of memory that you give to QEMU is
-configurable with the `-m` argument.
+Note that unlike on Microkit's QEMU ARM/RISC-V targets, the amount of memory that is provided to QEMU is
+configurable with the `-m` argument at run-time rather than at build-time.
 
 QEMU currently does not support 64-bit kernel ELFs and gives the following error:
 ```
