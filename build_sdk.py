@@ -577,13 +577,31 @@ def build_sel4(
         raise Exception(f"Error installing sel4: cmd={cmd}")
 
     elf = sel4_install_dir / "bin" / "kernel.elf"
-    dest = (
+    elf64_dest = (
         root_dir / "board" / board.name / config.name / "elf" / "sel4.elf"
     )
-    dest.unlink(missing_ok=True)
-    copy(elf, dest)
+    elf64_dest.unlink(missing_ok=True)
+    copy(elf, elf64_dest)
     # Make output read-only
-    dest.chmod(0o744)
+    elf64_dest.chmod(0o744)
+
+    # qemu-system-x86_64 -kernel option only accepts a 32-bit elf32-i386 kernel image. Since seL4's
+    # build process produces a 64-bit ELF, we must convert the output into a 32-bit ELF container
+    # with the same code and data, allowing QEMU to load it via -kernel.
+    # Otherwise, you get this "qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one."
+    if board.arch.is_x86():
+        elf32_dest = (
+            root_dir / "board" / board.name / config.name / "elf" / "sel4_32.elf"
+        )
+        objcopy_arg = f"-O elf32-i386 {str(elf64_dest)} {str(elf32_dest)}"
+        if llvm:
+            cmd = f"llvm-objcopy {objcopy_arg}"
+        else:
+            cmd = f"{board.arch.target_triple()}-objcopy {objcopy_arg}"
+        r = system(cmd)
+        if r != 0:
+            raise Exception(f"Error creating 32-bit sel4 image: cmd={cmd}")
+        elf32_dest.chmod(0o744)
 
     invocations_all = sel4_build_dir / "generated" / "invocations_all.json"
     dest = (root_dir / "board" / board.name / config.name / "invocations_all.json")
