@@ -755,14 +755,19 @@ static void monitor(void)
         if (label == seL4_Fault_NullFault && pd_id < MAX_PDS) {
             /* This is a request from our PD to become passive */
             err = seL4_SchedContext_UnbindObject(BASE_SCHED_CONTEXT_CAP + pd_id, tcb_cap);
-            err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + pd_id, BASE_NOTIFICATION_CAP + pd_id);
             if (err != seL4_NoError) {
-                puts("MON|ERROR: could not bind scheduling context to notification object");
+                puts("MON|ERROR: could not unbind scheduling context from thread control block\n");
             } else {
-                puts("MON|INFO: PD '");
-                puts(pd_names[pd_id]);
-                puts("' is now passive!\n");
+                err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + pd_id, BASE_NOTIFICATION_CAP + pd_id);
+                if (err != seL4_NoError) {
+                    puts("MON|ERROR: could not bind scheduling context to notification object\n");
+                } else {
+                    puts("MON|INFO: PD '");
+                    puts(pd_names[pd_id]);
+                    puts("' is now passive!\n");
+                }
             }
+
             continue;
         }
 
