@@ -36,7 +36,7 @@ else
 endif
 
 ifeq ($(ARCH),aarch64)
-	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align
+	CFLAGS_AARCH64 := -mcpu=$(GCC_CPU) -mgeneral-regs-only -mstrict-align -mno-outline-atomics
 	CFLAGS_ARCH := $(CFLAGS_AARCH64) -DARCH_aarch64
 	ASM_FLAGS_ARCH := -mcpu=$(GCC_CPU)
 	ARCH_DIR := aarch64
@@ -58,9 +58,9 @@ PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o
 
 ifeq ($(ARCH),aarch64)
-	OBJECTS += util64.o el.o exceptions.o init.o mmu.o
+	OBJECTS += util64.o el.o exceptions.o init.o mmu.o cpus.o
 else ifeq ($(ARCH),riscv64)
-	OBJECTS += exceptions.o init.o mmu.o
+	OBJECTS += exceptions.o init.o mmu.o cpus.o sbi.o
 endif
 
 LINKSCRIPT_INPUT := $(ARCH).ld

@@ -22,6 +22,7 @@ use crate::sel4::{
 use crate::util::{ranges_overlap, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
@@ -234,6 +235,15 @@ pub struct Channel {
     pub end_b: ChannelEnd,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CpuCore(pub u8);
+
+impl Display for CpuCore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("cpu{:02}", self.0))
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ProtectionDomain {
     /// Only populated for child protection domains
@@ -245,6 +255,7 @@ pub struct ProtectionDomain {
     pub passive: bool,
     pub stack_size: u64,
     pub smc: bool,
+    pub cpu: CpuCore,
     pub program_image: PathBuf,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
@@ -278,6 +289,7 @@ pub struct VirtualMachine {
 pub struct VirtualCpu {
     pub id: u64,
     pub setvar_id: Option<String>,
+    pub cpu: CpuCore,
 }
 
 /// To avoid code duplication for handling protection domains
@@ -443,6 +455,7 @@ impl ProtectionDomain {
             // The SMC field is only available in certain configurations
             // but we do the error-checking further down.
             "smc",
+            "cpu",
         ];
         if is_child {
             attrs.push("id");
@@ -529,6 +542,23 @@ impl ProtectionDomain {
                     )
                 }
             }
+        }
+
+        let cpu = CpuCore(
+            sdf_parse_number(node.attribute("cpu").unwrap_or("0"), node)?
+                .try_into()
+                .expect("cpu # fits in u8"),
+        );
+
+        if cpu.0 >= config.num_cores {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "cpu core must be less than {}, got {}",
+                    config.num_cores, cpu
+                ),
+            ));
         }
 
         #[allow(clippy::manual_range_contains)]
@@ -1042,6 +1072,7 @@ impl ProtectionDomain {
             passive,
             stack_size,
             smc,
+            cpu,
             program_image: program_image.unwrap(),
             maps,
             irqs,
@@ -1102,7 +1133,7 @@ impl VirtualMachine {
             let child_name = child.tag_name().name();
             match child_name {
                 "vcpu" => {
-                    check_attributes(xml_sdf, &child, &["id", "setvar_id"])?;
+                    check_attributes(xml_sdf, &child, &["id", "setvar_id", "cpu"])?;
                     let id = checked_lookup(xml_sdf, &child, "id")?
                         .parse::<u64>()
                         .unwrap();
@@ -1128,7 +1159,24 @@ impl VirtualMachine {
 
                     let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
 
-                    vcpus.push(VirtualCpu { id, setvar_id });
+                    let cpu = CpuCore(
+                        sdf_parse_number(child.attribute("cpu").unwrap_or("0"), node)?
+                            .try_into()
+                            .expect("cpu # fits in u8"),
+                    );
+
+                    if cpu.0 >= config.num_cores {
+                        return Err(value_error(
+                            xml_sdf,
+                            &child,
+                            format!(
+                                "cpu core must be less than {}, got {}",
+                                config.num_cores, cpu
+                            ),
+                        ));
+                    }
+
+                    vcpus.push(VirtualCpu { id, setvar_id, cpu });
                 }
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow

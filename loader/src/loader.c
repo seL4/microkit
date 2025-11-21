@@ -8,6 +8,7 @@
 #include <kernel/gen_config.h>
 
 #include "arch.h"
+#include "cpus.h"
 #include "cutil.h"
 #include "uart.h"
 
@@ -25,8 +26,6 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 #define MAGIC 0x5e14dead14de5ead
 #endif
 
-#define STACK_SIZE 4096
-
 typedef void (*sel4_entry)(
     uintptr_t ui_p_reg_start,
     uintptr_t ui_p_reg_end,
@@ -34,13 +33,18 @@ typedef void (*sel4_entry)(
     uintptr_t v_entry,
     uintptr_t dtb_addr_p,
     uintptr_t dtb_size
+#if defined(CONFIG_ARCH_RISCV) && defined(CONFIG_ENABLE_SMP_SUPPORT)
+    ,
+    uint64_t hart_id,
+    uint64_t core_id
+#endif
 );
 
 extern char _text;
 extern char _bss_end;
 const struct loader_data *loader_data = (void *) &_bss_end;
 
-char _stack[STACK_SIZE] ALIGN(16);
+char _stack[NUM_ACTIVE_CPUS][STACK_SIZE] ALIGN(16);
 
 /*
  * Print out the loader data structure.
@@ -104,8 +108,39 @@ static void copy_data(void)
     }
 }
 
-static void start_kernel(void)
+#ifdef CONFIG_PRINTING
+static int cpu_up = 0;
+#endif
+
+#ifdef CONFIG_ARCH_RISCV
+extern int logical_to_hart_id[];
+#endif
+
+void start_kernel(int logical_cpu)
 {
+    LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
+    int r = arch_mmu_enable(logical_cpu);
+    if (r != 0) {
+        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
+        puthex32(r);
+        puts("\n");
+        for (;;) {}
+    }
+
+    LDR_PRINT("INFO", logical_cpu, "jumping to kernel\n");
+
+#ifdef CONFIG_ARCH_RISCV
+    int hart_id = logical_to_hart_id[logical_cpu];
+    LDR_PRINT("INFO", logical_cpu, "hart id is ");
+    puthex32(hart_id);
+    puts("\n");
+#endif
+
+#ifdef CONFIG_PRINTING
+    __atomic_store_n(&cpu_up, 1, __ATOMIC_RELEASE);
+#endif
+
+#ifdef CONFIG_ARCH_AARCH64
     ((sel4_entry)(loader_data->kernel_entry))(
         loader_data->ui_p_reg_start,
         loader_data->ui_p_reg_end,
@@ -114,6 +149,23 @@ static void start_kernel(void)
         0,
         0
     );
+#elif defined(CONFIG_ARCH_RISCV)
+    ((sel4_entry)(loader_data->kernel_entry))(
+        loader_data->ui_p_reg_start,
+        loader_data->ui_p_reg_end,
+        loader_data->pv_offset,
+        loader_data->v_entry,
+        0,
+        0,
+        hart_id,
+        logical_cpu
+    );
+#else
+#error "Unknown seL4 entry architecture"
+#endif
+
+    LDR_PRINT("ERROR", logical_cpu, "seL4 kernel entry returned\n");
+    for (;;) {}
 }
 
 void relocation_failed(void)
@@ -158,16 +210,29 @@ int main(void)
      */
     copy_data();
 
-    puts("LDR|INFO: enabling MMU\n");
-    r = arch_mmu_enable();
-    if (r != 0) {
-        goto fail;
+    LDR_PRINT("INFO", 0, "Active CPUs to start: ");
+    puthex32(plat_get_active_cpus());
+    puts("\n");
+
+    for (int cpu = 1; cpu < plat_get_active_cpus(); cpu++) {
+        r = plat_start_cpu(cpu);
+        if (r != 0) {
+            LDR_PRINT("ERROR", 0, "unable to start CPU ");
+            puthex32(cpu);
+            puts(" returned error: ");
+            puthex32(r);
+            goto fail;
+        }
+
+#ifdef CONFIG_PRINTING
+        /* wait for boot */
+        while (__atomic_load_n(&cpu_up, __ATOMIC_ACQUIRE) != 1);
+        /* allow the next CPU to boot */
+        __atomic_store_n(&cpu_up, 0, __ATOMIC_RELEASE);
+#endif
     }
 
-    puts("LDR|INFO: jumping to kernel\n");
-    start_kernel();
-
-    puts("LDR|ERROR: seL4 Loader: Error - KERNEL RETURNED\n");
+    start_kernel(0);
 
 fail:
     /* Note: can't usefully return to U-Boot once we are here. */

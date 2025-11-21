@@ -13,8 +13,9 @@ than in make.
 
 """
 from argparse import ArgumentParser
+import copy
 from os import popen, system, environ
-from shutil import copy
+import shutil
 from pathlib import Path
 from dataclasses import dataclass
 from sys import executable
@@ -117,6 +118,7 @@ class BoardInfo:
     gcc_cpu: Optional[str]
     loader_link_address: Optional[int]
     kernel_options: KERNEL_OPTIONS
+    smp_cores: Optional[int] = None
 
 
 @dataclass
@@ -155,6 +157,7 @@ SUPPORTED_BOARDS = (
         kernel_options={
             "KernelPlatform": "maaxboard",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        smp_cores=4,
     ),
     BoardInfo(
         name="imx8mm_evk",
@@ -208,6 +211,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a55",
         loader_link_address=0x20000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "odroidc4",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -227,6 +231,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x70000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "qemu-arm-virt",
             "QEMU_MEMORY": "2048",
@@ -240,6 +245,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x90000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "qemu-riscv-virt",
             "QEMU_MEMORY": "2048",
@@ -299,6 +305,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x90000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "hifive-p550",
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
@@ -308,6 +315,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x60000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "star64",
         } | DEFAULT_KERNEL_OPTIONS_RISCV64,
@@ -388,13 +396,14 @@ SUPPORTED_BOARDS = (
     #     kernel_options={
     #         "KernelVTX": False,
     #         # No mitigation against Meltdown attack for non-vulnerable processors to
-    #         # prevent needless performance degredation
+    #         # prevent needless performance degradation
     #         "KernelSkimWindow": False,
     #     } | DEFAULT_KERNEL_OPTIONS_X86_64,
     # ),
     # # @billn Do we need a x86_64_generic_no_pcid_no_skim ??
 )
 
+# These then get elaborated into smp-release, smp-benchmark, and smp-debug
 SUPPORTED_CONFIGS = (
     ConfigInfo(
         name="release",
@@ -441,6 +450,21 @@ EXAMPLES = {
     "hierarchy": Path("example/hierarchy"),
     "timer": Path("example/timer"),
 }
+
+
+def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
+    elaborated_configs = list(SUPPORTED_CONFIGS)
+
+    if board.smp_cores is not None:
+        for config in SUPPORTED_CONFIGS:
+            config = copy.deepcopy(config)
+            config.name = f"smp-{config.name}"
+            config.kernel_options |= {
+                "KernelMaxNumNodes": str(board.smp_cores),
+            }
+            elaborated_configs.append(config)
+
+    return elaborated_configs
 
 
 def tar_filter(tarinfo: TarInfo) -> TarInfo:
@@ -504,7 +528,7 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
     tool_output = f"./target/{target_triple}/release/microkit"
 
-    copy(tool_output, tool_target)
+    shutil.copy(tool_output, tool_target)
 
     tool_target.chmod(0o755)
 
@@ -581,7 +605,7 @@ def build_sel4(
         root_dir / "board" / board.name / config.name / "elf" / "sel4.elf"
     )
     elf64_dest.unlink(missing_ok=True)
-    copy(elf, elf64_dest)
+    shutil.copy(elf, elf64_dest)
     # Make output read-only
     elf64_dest.chmod(0o744)
 
@@ -606,7 +630,7 @@ def build_sel4(
     invocations_all = sel4_build_dir / "generated" / "invocations_all.json"
     dest = (root_dir / "board" / board.name / config.name / "invocations_all.json")
     dest.unlink(missing_ok=True)
-    copy(invocations_all, dest)
+    shutil.copy(invocations_all, dest)
     dest.chmod(0o744)
 
     include_dir = root_dir / "board" / board.name / config.name / "include"
@@ -619,7 +643,7 @@ def build_sel4(
             dest = include_dir / rel
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.unlink(missing_ok=True)
-            copy(p, dest)
+            shutil.copy(p, dest)
             dest.chmod(0o744)
 
     if not board.arch.is_x86():
@@ -627,7 +651,7 @@ def build_sel4(
         platform_gen = sel4_build_dir / "gen_headers" / "plat" / "machine" / "platform_gen.json"
         dest = root_dir / "board" / board.name / config.name / "platform_gen.json"
         dest.unlink(missing_ok=True)
-        copy(platform_gen, dest)
+        shutil.copy(platform_gen, dest)
         dest.chmod(0o744)
 
 
@@ -666,7 +690,7 @@ def build_elf_component(
         root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
     )
     dest.unlink(missing_ok=True)
-    copy(elf, dest)
+    shutil.copy(elf, dest)
     # Make output read-only
     dest.chmod(0o744)
 
@@ -712,14 +736,14 @@ def build_lib_component(
     lib_dir = root_dir / "board" / board.name / config.name / "lib"
     dest = lib_dir / f"{component_name}.a"
     dest.unlink(missing_ok=True)
-    copy(lib, dest)
+    shutil.copy(lib, dest)
     # Make output read-only
     dest.chmod(0o744)
 
     link_script = Path(component_name) / "microkit.ld"
     dest = lib_dir / "microkit.ld"
     dest.unlink(missing_ok=True)
-    copy(link_script, dest)
+    shutil.copy(link_script, dest)
     # Make output read-only
     dest.chmod(0o744)
 
@@ -732,7 +756,7 @@ def build_lib_component(
         dest = include_dir / rel
         dest.parent.mkdir(exist_ok=True, parents=True)
         dest.unlink(missing_ok=True)
-        copy(p, dest)
+        shutil.copy(p, dest)
         dest.chmod(0o744)
 
 
@@ -777,7 +801,7 @@ def build_initialiser(
         )
 
     dest.unlink(missing_ok=True)
-    copy(capdl_init_elf, dest)
+    shutil.copy(capdl_init_elf, dest)
     # Make output read-only
     dest.chmod(0o744)
 
@@ -825,15 +849,23 @@ def main() -> None:
     else:
         selected_boards = SUPPORTED_BOARDS
 
-    if args.configs is not None:
-        supported_config_names = frozenset(config.name for config in SUPPORTED_CONFIGS)
-        selected_config_names = frozenset(args.configs.split(","))
-        for config_name in selected_config_names:
-            if config_name not in supported_config_names:
-                raise Exception(f"Trying to build a configuration: {config_name} that does not exist in supported list.")
-        selected_configs = [config for config in SUPPORTED_CONFIGS if config.name in selected_config_names]
-    else:
-        selected_configs = SUPPORTED_CONFIGS
+    build_goals: list[tuple[BoardInfo, list[ConfigInfo]]] = []
+    for board in selected_boards:
+        elaborated_configs = elaborate_all_board_configs(board)
+
+        if args.configs is not None:
+            elaborated_config_names = frozenset(config.name for config in elaborated_configs)
+            selected_config_names = frozenset(args.configs.split(","))
+
+            if invalid_config_names := selected_config_names.difference(elaborated_config_names):
+                raise Exception(
+                    "You asked for invalid config(s) '{}' but board '{}' only supports config(s) '{}'"
+                    .format(", ".join(invalid_config_names), board.name, ", ".join(elaborated_config_names))
+                )
+
+            elaborated_configs = [config for config in elaborated_configs if config.name in selected_config_names]
+
+        build_goals.append((board, elaborated_configs))
 
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
@@ -848,10 +880,10 @@ def main() -> None:
     ]
     if not args.skip_docs:
         dir_structure.append(root_dir / "doc")
-    for board in selected_boards:
+    for (board, configs) in build_goals:
         board_dir = root_dir / "board" / board.name
         dir_structure.append(board_dir)
-        for config in selected_configs:
+        for config in configs:
             config_dir = board_dir / config.name
             dir_structure.append(config_dir)
             dir_structure += [
@@ -866,7 +898,7 @@ def main() -> None:
     with open(root_dir / "VERSION", "w+") as f:
         f.write(version + "\n")
 
-    copy(Path("LICENSE.md"), root_dir)
+    shutil.copy(Path("LICENSE.md"), root_dir)
     licenses_dir = Path("LICENSES")
     licenses_dest_dir = root_dir / "LICENSES"
     for p in licenses_dir.rglob("*"):
@@ -876,7 +908,7 @@ def main() -> None:
         dest = licenses_dest_dir / rel
         dest.parent.mkdir(exist_ok=True, parents=True)
         dest.unlink(missing_ok=True)
-        copy(p, dest)
+        shutil.copy(p, dest)
         dest.chmod(0o744)
 
     if not args.skip_tool:
@@ -889,8 +921,8 @@ def main() -> None:
 
     if not args.skip_run_time:
         build_dir = Path("build")
-        for board in selected_boards:
-            for config in selected_configs:
+        for (board, configs) in build_goals:
+            for config in configs:
                 if not args.skip_sel4:
                     build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
                 loader_printing = 1 if config.name == "debug" else 0
@@ -915,7 +947,7 @@ def main() -> None:
             dest = include_dir / rel
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.unlink(missing_ok=True)
-            copy(p, dest)
+            shutil.copy(p, dest)
             dest.chmod(0o744)
 
     if not args.skip_tar:

@@ -6,6 +6,9 @@
  */
 
 #include "uart.h"
+#if defined(CONFIG_ARCH_RISCV)
+#include "riscv/sbi.h"
+#endif
 
 #if defined(CONFIG_PRINTING)
 
@@ -171,22 +174,6 @@ void putc(uint8_t ch)
 }
 
 #elif defined(CONFIG_ARCH_RISCV64)
-#define SBI_CONSOLE_PUTCHAR 1
-
-// TODO: remove, just do straight ASM
-#define SBI_CALL(which, arg0, arg1, arg2) ({            \
-    register uintptr_t a0 asm ("a0") = (uintptr_t)(arg0);   \
-    register uintptr_t a1 asm ("a1") = (uintptr_t)(arg1);   \
-    register uintptr_t a2 asm ("a2") = (uintptr_t)(arg2);   \
-    register uintptr_t a7 asm ("a7") = (uintptr_t)(which);  \
-    asm volatile ("ecall"                   \
-              : "+r" (a0)               \
-              : "r" (a1), "r" (a2), "r" (a7)        \
-              : "memory");              \
-    a0;                         \
-})
-
-#define SBI_CALL_1(which, arg0) SBI_CALL(which, arg0, 0, 0)
 
 void uart_init(void)
 {
@@ -195,7 +182,7 @@ void uart_init(void)
 
 void putc(uint8_t ch)
 {
-    SBI_CALL_1(SBI_CONSOLE_PUTCHAR, ch);
+    sbi_call(SBI_EXT_DEBUG_CONSOLE, SBI_DEBUG_CONSOLE_WRITE_BYTE, ch, 0, 0, 0, 0, 0);
 }
 #else
 #error Board not defined

@@ -25,7 +25,7 @@ uint64_t boot_lvl2_pt_elf[1 << 9] ALIGN(1 << 12);
 
 #define RISCV_PGSHIFT 12
 
-int arch_mmu_enable(void)
+int arch_mmu_enable(int logical_cpu)
 {
     // The RISC-V privileged spec (20211203), section 4.1.11 says that the
     // SFENCE.VMA instruction may need to be executed before or after writing
