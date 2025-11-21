@@ -41,5 +41,6 @@ enum sbi_error {
     SBI_ERR_DENIED_LOCKED = -14,
 };
 
-struct sbi_ret sbi_call(uint64_t eid, uint64_t fid, uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
+struct sbi_ret sbi_call(uint64_t eid, uint64_t fid, uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3,
+                        uint64_t arg4, uint64_t arg5);
 char *sbi_error_as_string(long error);
