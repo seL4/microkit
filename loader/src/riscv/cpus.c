@@ -26,7 +26,8 @@ int logical_to_hart_id[4] = {0x0, 0x1, 0x2, 0x3};
 int hart_id_to_logical(int hart_id);
 void riscv_secondary_cpu_entry(int hart_id);
 
-int hart_id_to_logical(int hart_id) {
+int hart_id_to_logical(int hart_id)
+{
     for (int i = 0; i < sizeof(logical_to_hart_id) / sizeof(int); i++) {
         if (hart_id == logical_to_hart_id[i]) {
             return i;
@@ -87,7 +88,8 @@ int plat_start_cpu(int logical_cpu)
     //     puts(sbi_error_as_string(ret.error));
     //     puts("\n");
     // }
-    struct sbi_ret ret = sbi_call(SBI_EXT_HSM, SBI_HSM_HART_START, hart_id, (uint64_t)riscv_secondary_cpu_entry_asm, sp, 0, 0, 0);
+    struct sbi_ret ret = sbi_call(SBI_EXT_HSM, SBI_HSM_HART_START, hart_id, (uint64_t)riscv_secondary_cpu_entry_asm, sp, 0,
+                                  0, 0);
 
     if (ret.error != SBI_SUCCESS) {
         LDR_PRINT("ERROR", 0, "could not start CPU, SBI call returned: ");

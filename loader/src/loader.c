@@ -224,12 +224,12 @@ int main(void)
             goto fail;
         }
 
-    #ifdef CONFIG_PRINTING
+#ifdef CONFIG_PRINTING
         /* wait for boot */
-        while(__atomic_load_n(&cpu_up, __ATOMIC_ACQUIRE) != 1);
+        while (__atomic_load_n(&cpu_up, __ATOMIC_ACQUIRE) != 1);
         /* allow the next CPU to boot */
         __atomic_store_n(&cpu_up, 0, __ATOMIC_RELEASE);
-    #endif
+#endif
     }
 
     start_kernel(0);
