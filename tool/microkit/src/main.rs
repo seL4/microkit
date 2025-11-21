@@ -32,6 +32,14 @@ use std::path::{Path, PathBuf};
 
 const MAX_BUILD_ITERATION: usize = 3;
 
+// When building for x86, the kernel is copied from the SDK release package to the same
+// directory as the output boot module image, as Multiboot want them as
+// separate images.
+const KERNEL_COPY_FILENAME: &str = "sel4_64.elf";
+// The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
+// also copy the 32-bit version that was prepared by build_sdk.py for convenience.
+const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
+
 fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
     for search_path in search_paths {
         let full_path = search_path.join(path);
@@ -789,9 +797,32 @@ fn main() -> Result<(), String> {
                 human_size_strict(initialiser_vaddr_range.end - initialiser_vaddr_range.start),
             );
 
+            let image_out_path = Path::new(args.output);
+
             match kernel_config.arch {
-                Arch::X86_64 => match capdl_initialiser.elf.reserialise(Path::new(args.output)) {
+                Arch::X86_64 => match capdl_initialiser.elf.reserialise(image_out_path) {
                     Ok(size) => {
+                        // Copy the kernel to the build directory as well so users doesn't have to dig through the SDK.
+                        if let Err(copy_err) = fs::copy(
+                            &kernel_elf_path,
+                            image_out_path.parent().unwrap().join(KERNEL_COPY_FILENAME),
+                        ) {
+                            eprintln!("ERROR: couldn't copy the kernel to image's output directory: {copy_err}");
+                            std::process::exit(1);
+                        }
+                        if let Err(copy_err) = fs::copy(
+                            kernel_elf_path
+                                .parent()
+                                .unwrap()
+                                .join(KERNEL32_COPY_FILENAME),
+                            image_out_path
+                                .parent()
+                                .unwrap()
+                                .join(KERNEL32_COPY_FILENAME),
+                        ) {
+                            eprintln!("ERROR: couldn't copy the 32-bit kernel to image's output directory: {copy_err}");
+                            std::process::exit(1);
+                        }
                         println!(
                             "MICROKIT|BOOT MODULE: image file size = {}",
                             human_size_strict(size)
@@ -812,11 +843,11 @@ fn main() -> Result<(), String> {
                         &initialiser_vaddr_range,
                     );
 
-                    loader.write_image(Path::new(args.output));
+                    loader.write_image(Path::new(image_out_path));
 
                     println!(
                         "MICROKIT|LOADER: image file size = {}",
-                        human_size_strict(metadata(args.output).unwrap().len())
+                        human_size_strict(metadata(image_out_path).unwrap().len())
                     );
                 }
             };
