@@ -423,8 +423,8 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [--image-type {binary,elf}] [-o OUTPUT] [-r REPORT] [--capdl-spec CAPDL_SPEC] --board [BOARD]
-              --config CONFIG [--search-path [SEARCH_PATH ...]] system
+    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-spec CAPDL_SPEC] [--image-type {binary,elf}]
+              --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
@@ -437,13 +437,31 @@ type of image is specified by the `--image-type` argument.
 The output paths for these can be specified by `-o` and `-r` respectively.
 The default output paths are `loader.img` and `report.txt`.
 
-On ARM and RISC-V, the loadable image can either be a binary or ELF that can be loaded by the board's bootloader.
-On x86, the image will be an ELF containing the capDL initialiser to be loaded as a Multiboot boot module.
-
 The report is a plain text file describing important information about the system.
 The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
+
+## Image format
+
+### ARM and RISC-V
+
+On ARM and RISC-V, the image produced by the Microkit tool is typically a raw binary that is intended
+to be loaded and jumped. There is a specified entry point of the image that is documented in the board-specific
+instructions in this manual, under [Board Support Packages](#bsps). If the image is not loaded at this address
+it should still work by relocating itself upon boot.
+
+This image is expected to be loaded via a previous bootloader, typically U-Boot using the `go` command for
+the binary image format and the `bootelf` command for ELFs. Note when using `bootelf` you may need to set
+the `autostart` environment variable with `setenv autostart yes` to have the image executed after `bootelf`.
+
+See the board-specific instructions for more details.
+
+### x86-64
+
+On x86-64, the image format is always ELF, it is expected to be loaded as a Multiboot boot module.
+
+See [x86-64 generic support](#x86_64_generic) for more details.
 
 # Language Support
 
@@ -1122,7 +1140,7 @@ booting. It is recommended to use the mainline OpenSBI.
 
 The IOT-GATE-IMX8PLUS is based on the NXP i.MX8MP SoC.
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x50000000
 
@@ -1175,19 +1193,19 @@ Using a GDB prompt via openOCD:
 
 ## i.MX8MM-EVK {#imx8mm_evk}
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
 ## i.MX8MP-EVK {#imx8mp_evk}
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
 ## i.MX8MQ-EVK {#imx8mq_evk}
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x41000000
 
@@ -1195,7 +1213,7 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
 The MaaXBoard is a low-cost ARM SBC based on the NXP i.MX8MQ system-on-chip.
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x50000000
 
@@ -1205,7 +1223,7 @@ The HardKernel Odroid-C2 is an ARM SBC based on the Amlogic Meson S905 system-on
 should be noted that the Odroid-C2 is no longer available for purchase but its successor,
 the Odroid-C4, is readily available at the time of writing.
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x20000000
 
@@ -1213,7 +1231,7 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
 The HardKernel Odroid-C4 is an ARM SBC based on the Amlogic Meson S905X3 system-on-chip.
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x20000000
 
@@ -1327,7 +1345,7 @@ U-Boot commands:
 
 ## Pine64 ROCKPro64 {#rockpro64}
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x30000000
 
@@ -1423,17 +1441,18 @@ ZynqMP> tftpboot 0x40000000 loader.img
 ZynqMP> go 0x40000000
 ```
 
-## x86-64 Generic {#x86_64_generic}
+## x86-64 generic {#x86_64_generic}
 
 Support is available for x86-64 with generic micro-architecture and no virtualisation (VTX).
 
-On x86, Microkit produces 3 ELF images:
-- seL4 Kernel (64-bit ELF)
-- seL4 Kernel (32-bit ELF)
+On x86-64, Microkit produces 3 ELF images in the output directory:
+
+- `sel4.elf`, seL4 kernel (64-bit ELF)
+- `sel4_32.elf`, seL4 kernel (32-bit ELF)
 - Initial Task image (Multiboot Boot Module ELF)
 
-The filenames of the two kernel variants are `sel4_64.elf` and `sel4_32.elf` respectively. The filename
-of the Initial Task image is specified by the -o argument, or defaults to "loader.img".
+The filename of the Initial Task image is specified by the -o argument, or defaults to "loader.img".
+The kernel ELFs will be placed in the same directory as the Initial Task image.
 
 While this target is for 64-bit x86, your bootloader may require a 32-bit kernel ELF.
 
@@ -1470,7 +1489,7 @@ PCIDs not supported by the processor
 
 The ZCU102 can run on a physical board or on an appropriate QEMU based emulator.
 
-Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+Microkit will default to outputting a raw binary file, so when using U-Boot you must execute the image using:
 
     => go 0x40000000
 
