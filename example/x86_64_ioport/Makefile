@@ -57,7 +57,7 @@ $(BUILD_DIR)/x86_64_ioport.elf: $(BUILD_DIR)/x86_64_ioport.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(KERNEL) $(KERNEL_32B) $(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) x86_64_ioport.system
-	$(MICROKIT_TOOL) x86_64_ioport.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(INITIAL_TASK) -r $(REPORT) --capdl-spec $(SPEC)
+	$(MICROKIT_TOOL) x86_64_ioport.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(INITIAL_TASK) -r $(REPORT) --capdl-json $(SPEC)
 
 qemu:
 	qemu-system-x86_64                      \
