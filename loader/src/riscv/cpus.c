@@ -20,7 +20,12 @@ static const uint64_t hart_ids[4] = {0x0, 0x1, 0x2, 0x3};
 #elif defined(CONFIG_PLAT_HIFIVE_P550)
 static const uint64_t hart_ids[4] = {0x0, 0x1, 0x2, 0x3};
 #else
-#error "hart_ids not defined for this board"
+
+_Static_assert(!is_set(CONFIG_ENABLE_SMP_SUPPORT),
+               "unknown board fallback not allowed for smp targets; " \
+               "please define hart_ids");
+
+static const size_t hart_ids[1] = { CONFIG_FIRST_HART_ID };
 #endif
 
 _Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(hart_ids),

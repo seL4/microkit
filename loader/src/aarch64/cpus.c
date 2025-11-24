@@ -46,7 +46,12 @@ static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 // TODO.
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #else
-#error "psci_target_cpus not defined for this board"
+
+_Static_assert(!is_set(CONFIG_ENABLE_SMP_SUPPORT),
+               "unknown board fallback not allowed for smp targets; " \
+               "please define psci_target_cpus");
+
+static const size_t psci_target_cpus[1] = {0x00};
 #endif
 
 _Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(psci_target_cpus),
