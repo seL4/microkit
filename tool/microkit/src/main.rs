@@ -52,7 +52,7 @@ fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
 }
 
 fn print_usage() {
-    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-json CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
+    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf,uimage}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-json CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
 }
 
 fn print_help(available_boards: &[String]) {
@@ -73,26 +73,37 @@ fn print_help(available_boards: &[String]) {
 enum ImageOutputType {
     Binary,
     Elf,
+    Uimage,
 }
 
 impl ImageOutputType {
     fn default_from_arch(arch: &Arch) -> Self {
         match arch {
-            Arch::Aarch64 | Arch::Riscv64 => ImageOutputType::Binary,
+            Arch::Aarch64 => ImageOutputType::Binary,
+            Arch::Riscv64 => ImageOutputType::Uimage,
             Arch::X86_64 => ImageOutputType::Elf,
         }
     }
 
-    fn parse(str: &str, arch: Arch) -> Result<Self, String> {
-        match str {
-            "binary" => match arch {
-                Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
-                Arch::X86_64 => Err(format!(
-                    "invalid value '{str}' for target architecture '{arch}'"
-                )),
+    fn parse(str: &str, board_name: &str, arch: Arch) -> Result<Self, String> {
+        match board_name {
+            "ariane" | "cheshire" | "serengeti" => Ok(ImageOutputType::Binary),
+            _ => match str {
+                "binary" => match arch {
+                    Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
+                    Arch::X86_64 => Err(format!(
+                        "building the output image as binary is unsupported for target architecture '{arch}'"
+                    )),
+                },
+                "elf" => Ok(ImageOutputType::Elf),
+                "uimage" => match arch {
+                    Arch::Riscv64 => Ok(ImageOutputType::Uimage),
+                    Arch::X86_64 | Arch::Aarch64 => Err(format!(
+                        "building the output image as uImage is unsupported for target architecture '{arch}'"
+                    )),
+                },
+                _ => Err(format!("unknown value '{str}'")),
             },
-            "elf" => Ok(ImageOutputType::Elf),
-            _ => Err(format!("unknown value '{str}'")),
         }
     }
 }
@@ -422,7 +433,7 @@ fn main() -> Result<(), String> {
     };
 
     let image_output_type = if let Some(image_type) = args.output_image_type {
-        match ImageOutputType::parse(image_type, arch) {
+        match ImageOutputType::parse(image_type, args.board, arch) {
             Ok(output_image_type) => output_image_type,
             Err(reason) => {
                 eprintln!("microkit: error: argument --image-type: {reason}");
@@ -898,6 +909,7 @@ fn main() -> Result<(), String> {
                     match image_output_type {
                         ImageOutputType::Binary => loader.write_image(image_out_path),
                         ImageOutputType::Elf => loader.write_elf(image_out_path),
+                        ImageOutputType::Uimage => loader.write_uimage(image_out_path),
                     };
 
                     println!(
