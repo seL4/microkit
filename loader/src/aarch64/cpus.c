@@ -36,22 +36,21 @@ uint64_t plat_get_hw_id(int logical_cpu)
  * value, but is not always (e.g. in the ODROID boards). This value is derived
  * from the device tree (cpu's <reg> argument), which is what Linux uses.
  **/
-extern size_t psci_target_cpus[];
 
 #if defined(CONFIG_PLAT_MAAXBOARD)
-size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ODROIDC4)
-size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 /* QEMU is special and can have arbitrary numbers of cores */
 // TODO.
-size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #else
 #error "psci_target_cpus not defined for this board"
 #endif
 
 _Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(psci_target_cpus),
-              "active CPUs cannot be more than available CPUs");
+               "active CPUs cannot be more than available CPUs");
 
 /**
  * The Power State Coordinate Interface (DEN0022F.b) document in §5.2.1
@@ -183,7 +182,7 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
     puts("\n");
 
     if (logical_cpu == 0) {
-        LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not have loader id 0!!!\n");
+        LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not have logical id 0!!!\n");
         goto fail;
     } else if (logical_cpu >= NUM_ACTIVE_CPUS) {
         LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not be >NUM_ACTIVE_CPUS\n");

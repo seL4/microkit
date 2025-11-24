@@ -6,9 +6,6 @@
  */
 
 #include "uart.h"
-#if defined(CONFIG_ARCH_RISCV)
-#include "riscv/sbi.h"
-#endif
 
 #if defined(CONFIG_PRINTING)
 
@@ -174,6 +171,8 @@ void putc(uint8_t ch)
 }
 
 #elif defined(CONFIG_ARCH_RISCV64)
+
+#include "riscv/sbi.h"
 
 void uart_init(void)
 {
