@@ -13,11 +13,20 @@
 #include "../uart.h"
 #include "sbi.h"
 
-#ifdef CONFIG_PLAT_STAR64
+/*
+ * On RISC-V the hart IDs represent any hardware thread in the system, including
+ * ones that we do not intend to run on.
+ * Typically the main CPU may have something like 4 cores that we intend to run
+ * seL4 on but an additional S-mode only monitor core, this is the case on certain
+ * CPUs such as the SiFive U74. The problematic part is that the monitor core has
+ * a hart ID of zero and hart IDs are not guaranteed to be contiguous.
+ * This is why we must explitly list all the hart IDs that we want to boot on.
+ * To figure this out for your platform, the best way is to look at the Device Tree,
+ * each CPU will have a 'reg' field where the value is the hart ID.
+ */
+#if defined(CONFIG_PLAT_STAR64)
 static const uint64_t hart_ids[4] = {0x1, 0x2, 0x3, 0x4};
-#elif defined(CONFIG_PLAT_QEMU_RISCV_VIRT)
-static const uint64_t hart_ids[4] = {0x0, 0x1, 0x2, 0x3};
-#elif defined(CONFIG_PLAT_HIFIVE_P550)
+#elif defined(CONFIG_PLAT_QEMU_RISCV_VIRT) || defined(CONFIG_PLAT_HIFIVE_P550)
 static const uint64_t hart_ids[4] = {0x0, 0x1, 0x2, 0x3};
 #else
 
@@ -101,12 +110,6 @@ int plat_start_cpu(int logical_cpu)
 
     uint64_t hart_id = plat_get_hw_id(logical_cpu);
 
-    // struct sbi_ret ret = sbi_call(SBI_EXT_HSM, SBI_HSM_HART_STOP, hart_id, 0, 0, 0, 0, 0);
-    // if (ret.error != SBI_SUCCESS) {
-    //     LDR_PRINT("ERROR", 0, "could not stop CPU, SBI call returned: ");
-    //     puts(sbi_error_as_string(ret.error));
-    //     puts("\n");
-    // }
     struct sbi_ret ret = sbi_call(
                              SBI_HSM_EID,
                              SBI_HSM_HART_START_FID,
