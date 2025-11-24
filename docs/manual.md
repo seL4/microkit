@@ -423,7 +423,7 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-spec CAPDL_SPEC] [--image-type {binary,elf}]
+    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-json CAPDL_SPEC] [--image-type {binary,elf}]
               --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.

@@ -52,7 +52,7 @@ fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
 }
 
 fn print_usage() {
-    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-spec CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
+    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-json CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
 }
 
 fn print_help(available_boards: &[String]) {
@@ -66,7 +66,7 @@ fn print_help(available_boards: &[String]) {
     println!("  --image-type {{binary,elf}}");
     println!("  --board {}", available_boards.join("\n          "));
     println!("  --config CONFIG");
-    println!("  --capdl-spec CAPDL_SPEC (outputs as JSON)");
+    println!("  --capdl-json CAPDL_SPEC (JSON format)");
     println!("  --search-path [SEARCH_PATH ...]");
 }
 
@@ -102,7 +102,7 @@ struct Args<'a> {
     board: &'a str,
     config: &'a str,
     report: &'a str,
-    capdl_spec: Option<&'a str>,
+    capdl_json: Option<&'a str>,
     output: &'a str,
     search_paths: Vec<&'a String>,
     output_image_type: Option<&'a str>,
@@ -113,7 +113,7 @@ impl<'a> Args<'a> {
         // Default arguments
         let mut output = "loader.img";
         let mut report = "report.txt";
-        let mut capdl_spec = None;
+        let mut capdl_json = None;
         let mut search_paths = Vec::new();
         // Arguments expected to be provided by the user
         let mut system = None;
@@ -175,13 +175,13 @@ impl<'a> Args<'a> {
                         std::process::exit(1);
                     }
                 }
-                "--capdl-spec" => {
+                "--capdl-json" => {
                     in_search_path = false;
                     if i < args.len() - 1 {
-                        capdl_spec = Some(args[i + 1].as_str());
+                        capdl_json = Some(args[i + 1].as_str());
                         i += 1;
                     } else {
-                        eprintln!("microkit: error: argument --capdl-spec: expected one argument");
+                        eprintln!("microkit: error: argument --capdl-json: expected one argument");
                         std::process::exit(1);
                     }
                 }
@@ -247,7 +247,7 @@ impl<'a> Args<'a> {
             board: board.unwrap(),
             config: config.unwrap(),
             report,
-            capdl_spec,
+            capdl_json,
             output,
             search_paths,
             output_image_type,
@@ -907,9 +907,9 @@ fn main() -> Result<(), String> {
                 }
             };
 
-            if args.capdl_spec.is_some() {
+            if let Some(capdl_json) = args.capdl_json {
                 let serialised = serde_json::to_string_pretty(&spec_container.spec).unwrap();
-                fs::write(args.capdl_spec.unwrap(), &serialised).unwrap();
+                fs::write(capdl_json, &serialised).unwrap();
             };
 
             write_report(&spec_container, &kernel_config, args.report);
