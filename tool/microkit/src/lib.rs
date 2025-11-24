@@ -12,12 +12,14 @@ use crate::{
 };
 
 pub mod capdl;
+pub mod crc32;
 pub mod elf;
 pub mod loader;
 pub mod report;
 pub mod sdf;
 pub mod sel4;
 pub mod symbols;
+pub mod uimage;
 pub mod util;
 
 // Note that these values are used in the monitor so should also be changed there

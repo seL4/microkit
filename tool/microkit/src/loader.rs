@@ -5,6 +5,7 @@
 //
 use crate::elf::{ElfFile, ElfSegmentData};
 use crate::sel4::{Arch, Config};
+use crate::uimage::uimage_serialise;
 use crate::util::{mask, mb, round_up, struct_to_bytes};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -115,7 +116,8 @@ struct LoaderHeader64 {
 }
 
 pub struct Loader<'a> {
-    image: Vec<u8>,
+    arch: Arch,
+    loader_image: Vec<u8>,
     header: LoaderHeader64,
     region_metadata: Vec<LoaderRegion64>,
     regions: Vec<(u64, &'a [u8])>,
@@ -231,7 +233,7 @@ impl<'a> Loader<'a> {
         // We have to clone here as the image executable is part of this function return object,
         // and the loader ELF is deserialised in this scope, so its lifetime will be shorter than
         // the return object.
-        let mut image = image_segment.data().clone();
+        let mut loader_image = image_segment.data().clone();
 
         if image_vaddr != loader_elf.entry {
             panic!("The loader entry point must be the first byte in the image");
@@ -241,8 +243,8 @@ impl<'a> Loader<'a> {
             let offset = var_addr - image_vaddr;
             assert!(var_size == var_data.len() as u64);
             assert!(offset > 0);
-            assert!(offset <= image.len() as u64);
-            image[offset as usize..(offset + var_size) as usize].copy_from_slice(&var_data);
+            assert!(offset <= loader_image.len() as u64);
+            loader_image[offset as usize..(offset + var_size) as usize].copy_from_slice(&var_data);
         }
 
         let kernel_entry = kernel_elf.entry;
@@ -255,7 +257,7 @@ impl<'a> Loader<'a> {
 
         // This clone isn't too bad as it is just a Vec<(u64, &[u8])>
         let mut all_regions_with_loader = regions.clone();
-        all_regions_with_loader.push((image_vaddr, &image));
+        all_regions_with_loader.push((image_vaddr, &loader_image));
         check_non_overlapping(&all_regions_with_loader);
 
         let mut region_metadata = Vec::new();
@@ -287,7 +289,8 @@ impl<'a> Loader<'a> {
         };
 
         Loader {
-            image,
+            arch: config.arch,
+            loader_image,
             header,
             region_metadata,
             regions,
@@ -301,7 +304,7 @@ impl<'a> Loader<'a> {
         let mut bytes = Vec::new();
 
         // First copy image data, which includes the Microkit bootloader's code, etc
-        bytes.extend_from_slice(&self.image);
+        bytes.extend_from_slice(&self.loader_image);
         // Then we copy the loader metadata (known as the 'header')
         bytes.extend_from_slice(unsafe { struct_to_bytes(&self.header) });
         // For each region, we need to copy the region metadata as well
@@ -333,7 +336,7 @@ impl<'a> Loader<'a> {
         loader_buf.flush().unwrap();
     }
 
-    pub fn write_elf(&self, path: &Path) {
+    fn convert_to_elf(&self, path: &Path) -> ElfFile {
         let mut loader_elf = ElfFile::new(
             path.to_path_buf(),
             self.word_size,
@@ -349,7 +352,30 @@ impl<'a> Loader<'a> {
             ElfSegmentData::RealData(self.to_bytes()),
         );
 
+        loader_elf
+    }
+
+    pub fn write_elf(&self, path: &Path) {
+        let loader_elf = self.convert_to_elf(path);
+
         match loader_elf.reserialise(path) {
+            Ok(_) => {}
+            Err(e) => panic!("Could not create '{}': {}", path.display(), e),
+        }
+    }
+
+    pub fn write_uimage(&self, path: &Path) {
+        let executable_payload = self.to_bytes();
+        let entry_32: u32 = match <u64 as TryInto<u32>>::try_into(self.entry) {
+            Ok(entry_32) => entry_32,
+            Err(_) => panic!(
+                "Could not create '{}': Loader link address 0x{:x} cannot be above 4G for uImage.",
+                path.display(),
+                self.entry
+            ),
+        };
+
+        match uimage_serialise(&self.arch, entry_32, executable_payload, path) {
             Ok(_) => {}
             Err(e) => panic!("Could not create '{}': {}", path.display(), e),
         }
