@@ -18,8 +18,6 @@
 
 .section ".text.start"
 
-#define STACK_SIZE 4096
-
 /* Unfortunately, the latest version of the SBI (v1.0.0) specification does not
  * specify the starting state of supervisor software.
  * OpenSBI gives the following:
@@ -94,12 +92,14 @@ hsm_switch_hart:
   la a1, _start1 /* where to start the hart */
   ecall /* call SBI to start hart FIRST_HART_ID */
 
-  /* Since we are not the designated primary hart, continue the boot process as
-   * secondary hart
+  /*
+   * We are not the intended boot hart, we turn the hart off by doing a SBI call.
+   * In the case of booting seL4 with multiple harts, this hart will be turned on
+   * explicitly later on in the booting process.
    */
   mv a0, s0 /* restore a0 to hold hart ID passed by OpenSBI */
   li a7, SBI_HSM_EID
-  li a6, 0x1
+  li a6, SBI_HSM_HART_STOP_FID
   ecall
 
 relocate:
