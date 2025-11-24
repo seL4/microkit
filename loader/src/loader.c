@@ -30,7 +30,7 @@ extern char _text;
 extern char _bss_end;
 const struct loader_data *loader_data = (void *) &_bss_end;
 
-char _stack[NUM_ACTIVE_CPUS][STACK_SIZE] ALIGN(16);
+uint64_t _stack[NUM_ACTIVE_CPUS][STACK_SIZE / sizeof(uint64_t)] ALIGN(16);
 
 /*
  * Print out the loader data structure.
