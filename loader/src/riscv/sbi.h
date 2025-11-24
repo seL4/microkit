@@ -6,17 +6,24 @@
 
 #pragma once
 
+#define SBI_BASE_EID 0x10
+#define SBI_HSM_EID 0x48534DULL
+#define SBI_DEBUG_CONSOLE_EID 0x4442434E
+
+/* SBI commands for the base extension */
+#define SBI_BASE_PROBE_EXT_FID 3
+
+/* SBI commands for the HSM extension */
+#define SBI_HSM_HART_START_FID 0
+#define SBI_HSM_HART_STOP_FID 1
+
+/* SBI commands for the DEBUG_CONSOLE extension */
+#define SBI_DEBUG_CONSOLE_WRITE_BYTE_FID 0x2
+
+#ifndef __ASSEMBLER__
+
 #include <stddef.h>
 #include <stdint.h>
-
-#define SBI_EXT_BASE 0x10
-#define SBI_EXT_HSM 0x48534D
-#define SBI_EXT_DEBUG_CONSOLE 0x4442434E
-
-#define SBI_HSM_HART_START 0x0
-#define SBI_HSM_HART_STOP 0x1
-
-#define SBI_DEBUG_CONSOLE_WRITE_BYTE 0x2
 
 struct sbi_ret {
     uint64_t error;
@@ -44,3 +51,5 @@ enum sbi_error {
 struct sbi_ret sbi_call(uint64_t eid, uint64_t fid, uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3,
                         uint64_t arg4, uint64_t arg5);
 char *sbi_error_as_string(long error);
+
+#endif

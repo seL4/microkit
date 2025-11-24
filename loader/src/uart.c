@@ -181,7 +181,7 @@ void uart_init(void)
 
 void putc(uint8_t ch)
 {
-    sbi_call(SBI_EXT_DEBUG_CONSOLE, SBI_DEBUG_CONSOLE_WRITE_BYTE, ch, 0, 0, 0, 0, 0);
+    sbi_call(SBI_DEBUG_CONSOLE_EID, SBI_DEBUG_CONSOLE_WRITE_BYTE_FID, ch, 0, 0, 0, 0, 0);
 }
 #else
 #error Board not defined
