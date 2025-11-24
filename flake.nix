@@ -96,6 +96,7 @@
             ninja
             libxml2
             qemu
+            gnutar
           ];
 
           # Necessary for Rust bindgen
