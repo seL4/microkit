@@ -10,6 +10,7 @@
 .global _start;
 .type _start, %function;
 _start:
+    /* This assumes that the entry CPU is logical CPU0, the base of the stack*/
     adrp    x1, _stack
     add     x1, x1, #0xff0
     mov     sp, x1
