@@ -9,6 +9,7 @@
 #include "../loader.h"
 #include "../uart.h"
 #include "el.h"
+#include "smc.h"
 
 #include <kernel/gen_config.h>
 
@@ -94,6 +95,22 @@ void arch_init(void)
         el2_mmu_disable();
     } else {
         puts("LDR|ERROR: unknown EL level for MMU disable\n");
+    }
+
+    uint32_t ret = arm_smc32_call(PSCI_FUNCTION_VERSION, /* unused */ 0, 0, 0);
+    /* the return value has no error codes, but if we get it wrong this is what we will get */
+    if (ret == PSCI_RETURN_NOT_SUPPORTED) {
+        puts("LDR|ERROR: could not determine PSCI version: ");
+        puts(psci_return_as_string(ret));
+        puts("\n");
+    } else {
+        uint16_t major = (ret >> 16) & 0xffff;
+        uint16_t minor = (ret >>  0) & 0xffff;
+        puts("LDR|INFO: PSCI version is ");
+        putdecimal(major);
+        puts(".");
+        putdecimal(minor);
+        puts("\n");
     }
 }
 
