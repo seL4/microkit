@@ -423,7 +423,7 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-json CAPDL_SPEC] [--image-type {binary,elf}]
+    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-json CAPDL_SPEC] [--image-type {binary,elf,uimage}]
               --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
@@ -444,10 +444,12 @@ It is not intended to be machine readable.
 
 ## Image format
 
-### ARM and RISC-V
+### ARM
 
-On ARM and RISC-V, the image produced by the Microkit tool is typically a raw binary that is intended
-to be loaded and jumped. There is a specified entry point of the image that is documented in the board-specific
+On ARM, the Microkit tool will produce either a raw binary that is intended to be loaded and jumped or
+an ELF. By default, the tool will produce a raw binary unless the format is specified using the `--image-type` argument.
+
+For the raw binary format, there is a specified entry point of the image that is documented in the board-specific
 instructions in this manual, under [Board Support Packages](#bsps). If the image is not loaded at this address
 it should still work by relocating itself upon boot.
 
@@ -456,6 +458,19 @@ the binary image format and the `bootelf` command for ELFs. Note when using `boo
 the `autostart` environment variable with `setenv autostart yes` to have the image executed after `bootelf`.
 
 See the board-specific instructions for more details.
+
+### RISC-V
+
+On RISC-V, the Microkit tool can produce either a raw binary that is intended to be loaded and jumped,
+a uImage with the Linux header or an ELF. Typically the tool will produce a uImage by default, for
+board-specific details see [Board Support Packages](#bsps).
+
+For the raw binary format, there is a specified entry point of the image that is documented in the board-specific
+instructions in this manual, under [Board Support Packages](#bsps). If the image is not loaded at this address
+it should still work by relocating itself upon boot.
+
+For the uImage format. You may load this image anywhere in memory along with your platform's DTB, then use
+the `bootm` command in U-Boot. It will copy the loader to the correct location in memory and jump to it.
 
 ### x86-64
 
@@ -1249,27 +1264,25 @@ For running on Serengeti, please see [Cheshire](#cheshire) for instructions.
 
 The SiFive Premier P550 is a development board based on the ESWIN EIC7700X system-on-chip.
 
-Right now Microkit will always produce raw binary file, however when using U-Boot on the
-P550 it is recommended to instead convert the image to the `uImage` format.
-
-This can be done with the `mkimage` tool:
-```sh
-mkimage -A riscv -O linux -T kernel -C none -a 0x90000000 -e 0x90000000 -d loader.img loader.uimg
-```
-
-To load the image you will need to use the `bootm` command. `bootm` expects an address of where
+Microkit will produce a uImage. To load the image you will need to use
+the `bootm` command. `bootm` expects an address of where
 the Device Tree Blob (DTB) will be as well as the image.
 
-If you do not have a DTB for the P550 you can get it from the seL4 source code with:
+If you do not have a DTB for this platform you can obtain it from the seL4 source code with:
 ```sh
-dtc -I dts -O dtb seL4/tools/dts/hifive-p550.dts > hifive_p550.dtb
+dtc -I dts -O dtb seL4/tools/dts/hifive-p550.dts > hifive-p550.dtb
 ```
 
 Now you can load the images into U-Boot at the appropriate addresses, for example via TFTP:
 
-     => tftpboot 0x90000000 /path/to/loader.uimg
-     => tftpboot 0xa0000000 /path/to/hifive_p550.dtb
-     => bootm 0x90000000 - 0xa0000000
+    => setenv imgaddr "0xB0000000"
+    => setenv dtbaddr "0xA0000000"
+    => tftpboot ${imgaddr} /path/to/loader.img
+    => tftpboot ${dtbaddr} /path/to/hifive-p550.dtb
+    => bootm ${imgaddr} - ${dtbaddr}
+
+`imgaddr` and `dtbaddr` are arbitrarily chosen addresses in main memory for this platform,
+you can load the image and DTB at another address.
 
 ## QEMU virt (AArch64) {#qemu_virt_aarch64}
 
@@ -1364,9 +1377,25 @@ The default boot flow of the Star64 is:
 This means that the system image that Microkit produces does not need to be explicitly
 packaged with an SBI implementation such as OpenSBI.
 
-Microkit will produce a raw binary file by default, so when using U-Boot run the following command:
+Microkit will produce a uImage. To load the image you will need to use
+the `bootm` command. `bootm` expects an address of where
+the Device Tree Blob (DTB) will be as well as the image.
 
-    => go 0x60000000
+If you do not have a DTB for this platform you can obtain it from the seL4 source code with:
+```sh
+dtc -I dts -O dtb seL4/tools/dts/star64.dts > star64.dtb
+```
+
+Now you can load the images into U-Boot at the appropriate addresses, for example via TFTP:
+
+    => setenv imgaddr "0xE0000000"
+    => setenv dtbaddr "0xD0000000"
+    => tftpboot ${imgaddr} /path/to/loader.img
+    => tftpboot ${dtbaddr} /path/to/star64.dtb
+    => bootm ${imgaddr} - ${dtbaddr}
+
+`imgaddr` and `dtbaddr` are arbitrarily chosen addresses in main memory for this platform,
+you can load the image and DTB at another address.
 
 ## TQMa8XQP 1GB {#tqma8xqp1gb}
 
