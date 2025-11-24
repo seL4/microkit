@@ -239,6 +239,9 @@ riscv_secondary_cpu_entry_asm:
   addi  gp, gp, %pcrel_lo(1b)
 .option pop
 
+  /* the HSM passes a0 as hartid, and a1 the 'opaque' value (our stack) */
   mv sp, a1
+  /* retrieve our saved logical cpu and put in a1 */
+  ld a1, 0(sp)
   la s0, riscv_secondary_cpu_entry
   jr s0

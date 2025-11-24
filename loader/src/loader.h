@@ -43,6 +43,6 @@ void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);
 
 #define STACK_SIZE 4096
 
-extern char _stack[NUM_ACTIVE_CPUS][STACK_SIZE];
+extern uint64_t _stack[NUM_ACTIVE_CPUS][STACK_SIZE / sizeof(uint64_t)];
 
 void start_kernel(int logical_cpu);

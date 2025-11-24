@@ -217,19 +217,14 @@ int plat_start_cpu(int logical_cpu)
      * In correspondence with what arm_secondary_cpu_entry does, we push
      * some useful information to the stack.
      **/
-    uint64_t stack_base = (uint64_t)&_stack[logical_cpu][0];
-    uint64_t stack_top = stack_base + STACK_SIZE;
-    /* on aarch64 stack is pre-decrement/post-increment */
-    uint64_t sp = stack_top;
-    /* write the logical id to the stack, and a dummy (since we don't use it) */
-    asm volatile(
-        /* use the pre-index variant of STP */
-        "stp %[v0], %[v1], [%[sp], #-16]!"
-        : [sp] "+r"(sp)
-        : [v0] "r"(logical_cpu),
-        [v1] "r"(/* dummy */ 0)
-        : "memory"
-    );
+    uint64_t *stack_base = _stack[logical_cpu];
+    /* aarch64 expects stack to be 16-byte aligned, and we push to the stack
+       to have space for the arguments to the entrypoint */
+    uint64_t *sp = (uint64_t *)((uintptr_t)stack_base + STACK_SIZE - 2 * sizeof(uint64_t));
+    /* store the logical cpu on the stack */
+    sp[0] = logical_cpu;
+    /* zero out what was here before */
+    sp[1] = 0;
 
     /* Arguments as per 5.1.4 CPU_ON of the PSCI spec.
 
@@ -243,7 +238,7 @@ int plat_start_cpu(int logical_cpu)
                        PSCI_FUNCTION_CPU_ON,
                        /* target_cpu */ psci_target_cpus[logical_cpu],
                        /* entry_point_address */ (uint64_t)arm_secondary_cpu_entry_asm,
-                       /* context_id */ sp
+                       /* context_id */ (uint64_t)sp
                    );
 
     if (ret != PSCI_RETURN_SUCCESS) {

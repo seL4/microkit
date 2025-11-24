@@ -425,13 +425,13 @@ END_FUNC(el2_mmu_enable)
  * The Power State Coordinate Interface (DEN0022F.b) says that we will
  * initially be given x0, our context_id as a parameter.
  * We choose to pass the appropriate stack value in x0.
- * We have put on this stack:
+ * We have these arguments on the stack:
  *  - the logical core ID
  **/
 BEGIN_FUNC(arm_secondary_cpu_entry_asm)
     mov sp, x0
-    /* retrieve values from the stack (x0=logical id, x1=dummy) */
-    ldp x0, x1, [sp], #16
+    /* grab the core ID off the stack */
+    ldr x0, [sp]
     /* which we then overwrite */
     mrs x1, mpidr_el1
     /* x0 and x1 are arguments */

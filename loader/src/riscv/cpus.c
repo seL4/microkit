@@ -52,9 +52,9 @@ uint64_t plat_get_hw_id(int logical_cpu)
 /** defined in crt0.S */
 extern char riscv_secondary_cpu_entry_asm[1];
 /** called from crt0.S */
-void riscv_secondary_cpu_entry(int logical_cpu, uint64_t hart_id);
+void riscv_secondary_cpu_entry(uint64_t hart_id, int logical_cpu);
 
-void riscv_secondary_cpu_entry(int logical_cpu, uint64_t hart_id)
+void riscv_secondary_cpu_entry(uint64_t hart_id, int logical_cpu)
 {
     LDR_PRINT("INFO", logical_cpu, "secondary CPU entry with hart id ");
     puthex64(hart_id);
@@ -87,19 +87,30 @@ int plat_start_cpu(int logical_cpu)
         return 1;
     }
 
-    uint64_t stack_base = (uint64_t)&_stack[logical_cpu][0];
-    uint64_t stack_top = stack_base + STACK_SIZE;
-    uint64_t sp = stack_top;
+    uint64_t *stack_base = _stack[logical_cpu];
+    /* riscv expects stack to be 128-bit (16 byte) aligned, and we push to the stack
+       to have space for the arguments to the entrypoint */
+    uint64_t *sp = (uint64_t *)((uintptr_t)stack_base + STACK_SIZE - 2 * sizeof(uint64_t));
+    /* store the logical cpu on the stack */
+    sp[0] = logical_cpu;
+    /* zero out what was here before */
+    sp[1] = 0;
 
     uint64_t hart_id = plat_get_hw_id(logical_cpu);
+
     // struct sbi_ret ret = sbi_call(SBI_EXT_HSM, SBI_HSM_HART_STOP, hart_id, 0, 0, 0, 0, 0);
     // if (ret.error != SBI_SUCCESS) {
     //     LDR_PRINT("ERROR", 0, "could not stop CPU, SBI call returned: ");
     //     puts(sbi_error_as_string(ret.error));
     //     puts("\n");
     // }
-    struct sbi_ret ret = sbi_call(SBI_EXT_HSM, SBI_HSM_HART_START, hart_id, (uint64_t)riscv_secondary_cpu_entry_asm, sp, 0,
-                                  0, 0);
+    struct sbi_ret ret = sbi_call(
+                             SBI_EXT_HSM,
+                             SBI_HSM_HART_START,
+                             /* hartid */ hart_id,
+                             /* start_addr */ (uint64_t)riscv_secondary_cpu_entry_asm,
+                             /* opaque */ (uint64_t)sp,
+                             /* unused for this call */ 0, 0, 0);
 
     if (ret.error != SBI_SUCCESS) {
         LDR_PRINT("ERROR", 0, "could not start CPU, SBI call returned: ");
