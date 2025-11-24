@@ -35,7 +35,9 @@ typedef void (*sel4_entry)(
 
 void arch_jump_to_kernel(int logical_cpu)
 {
+#if defined(CONFIG_ENABLE_SMP_SUPPORT)
     uint64_t hart_id = plat_get_hw_id(logical_cpu);
+#endif
 
     ((sel4_entry)(loader_data->kernel_entry))(
         loader_data->ui_p_reg_start,
