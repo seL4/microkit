@@ -16,7 +16,7 @@ on:
     branches: [ "main" ]
 
 env:
-  SEL4_VERSION: 0f497ab3a0a25500b7dc70f3a2c2ad34b8453c24
+  SEL4_VERSION: 11c5d5052780a5156c345355567612b35d685a78
 
 # To reduce the load we cancel any older runs of this workflow for the current
 # PR. For deployment to the main branch, the workflow will run on each push,
