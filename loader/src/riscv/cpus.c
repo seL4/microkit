@@ -110,8 +110,8 @@ int plat_start_cpu(int logical_cpu)
     //     puts("\n");
     // }
     struct sbi_ret ret = sbi_call(
-                             SBI_EXT_HSM,
-                             SBI_HSM_HART_START,
+                             SBI_HSM_EID,
+                             SBI_HSM_HART_START_FID,
                              /* hartid */ hart_id,
                              /* start_addr */ (uint64_t)riscv_secondary_cpu_entry_asm,
                              /* opaque */ (uint64_t)sp,

@@ -13,18 +13,12 @@
 #error "Loader must be defined with FIRST_HART_ID"
 #endif
 
+#include "../loader.h"
+#include "sbi.h"
+
 .section ".text.start"
 
 #define STACK_SIZE 4096
-
-// TODO: defined in sbi.h instead
-/* SBI commands for the HSM extension */
-#define SBI_HSM_BASE_EID 0x48534DULL
-#define SBI_HSM_BASE_HART_START_FID 0
-#define SBI_HSM_BASE_HART_STOP_FID 1
-/* SBI commands for the base extension */
-#define SBI_EXT_BASE_EID 0x10
-#define SBI_EXT_BASE_PROBE_EXT_FID 3
 
 /* Unfortunately, the latest version of the SBI (v1.0.0) specification does not
  * specify the starting state of supervisor software.
@@ -76,9 +70,9 @@ _start:
    * error code if not. On SBI_SUCCESS the value in a1 is 0 if the extension is
    * not available or an extension-specific non-zero value if it is available.
    */
-  li a7, SBI_EXT_BASE_EID
-  li a6, SBI_EXT_BASE_PROBE_EXT_FID
-  li a0, SBI_HSM_BASE_EID
+  li a7, SBI_BASE_EID
+  li a6, SBI_BASE_PROBE_EXT_FID
+  li a0, SBI_BASE_EID
   ecall /* call SBI to probe for HSM extension */
   mv a2, a0 /* move SBI call generic return code to a2 as we need a0 */
   mv a3, a1 /* move SBI call error return code to a3 as we need a1 */
@@ -93,8 +87,8 @@ _start:
 
   /* Use HSM extension to start hart FIRST_HART_ID. */
 hsm_switch_hart:
-  li a7, SBI_HSM_BASE_EID
-  li a6, SBI_HSM_BASE_HART_START_FID
+  li a7, SBI_HSM_EID
+  li a6, SBI_HSM_HART_START_FID
   li a0, CONFIG_FIRST_HART_ID
   mv a2, s2 /* dtb address to be passed in a1 when new hart starts is 3rd parameter */
   la a1, _start1 /* where to start the hart */
@@ -104,7 +98,7 @@ hsm_switch_hart:
    * secondary hart
    */
   mv a0, s0 /* restore a0 to hold hart ID passed by OpenSBI */
-  li a7, SBI_HSM_BASE_EID
+  li a7, SBI_HSM_EID
   li a6, 0x1
   ecall
 

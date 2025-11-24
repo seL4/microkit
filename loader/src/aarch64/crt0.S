@@ -5,6 +5,8 @@
  */
 .extern main
 
+#include "../loader.h"
+
 .section ".text.start"
 
 .global _start;
@@ -12,7 +14,7 @@
 _start:
     /* This assumes that the entry CPU is logical CPU0, the base of the stack*/
     adrp    x1, _stack
-    add     x1, x1, #0xff0
+    add     x1, x1, STACK_SIZE
     mov     sp, x1
     /* May not have been loaded in the right location.
      * Try and move ourselves so we're in the right place

@@ -7,13 +7,18 @@
 
 #pragma once
 
+#define STACK_SIZE 4096
+
+#define REGION_TYPE_DATA 1
+#define REGION_TYPE_ZERO 2
+
+#ifndef __ASSEMBLER__
+
 #include <stdint.h>
 #include <stddef.h>
 
 #include "cpus.h"
 
-#define REGION_TYPE_DATA 1
-#define REGION_TYPE_ZERO 2
 
 struct region {
     uintptr_t load_addr;
@@ -41,8 +46,8 @@ extern const struct loader_data *loader_data;
 void relocation_failed(void);
 void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);
 
-#define STACK_SIZE 4096
-
 extern uint64_t _stack[NUM_ACTIVE_CPUS][STACK_SIZE / sizeof(uint64_t)];
 
 void start_kernel(int logical_cpu);
+
+#endif
