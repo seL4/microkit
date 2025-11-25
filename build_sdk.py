@@ -40,6 +40,8 @@ TRIPLE_X86_64 = "x86_64-linux-gnu"
 KERNEL_CONFIG_TYPE = Union[bool, str]
 KERNEL_OPTIONS = Dict[str, Union[bool, str]]
 
+DEFAULT_X86_NUM_CPUS = 16
+
 DEFAULT_KERNEL_OPTIONS = {
     "KernelIsMCS": True,
     "KernelRootCNodeSizeBits": "17",
@@ -367,6 +369,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.X86_64,
         gcc_cpu="generic",
         loader_link_address=None,
+        smp_cores=DEFAULT_X86_NUM_CPUS,
         kernel_options={
             "KernelSupportPCID": False,
             "KernelVTX": False,
@@ -377,6 +380,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.X86_64,
         gcc_cpu="generic",
         loader_link_address=None,
+        smp_cores=DEFAULT_X86_NUM_CPUS,
         kernel_options={
             "KernelSupportPCID": False,
             "KernelVTX": True,
