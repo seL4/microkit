@@ -93,8 +93,8 @@ you'll instead see this:
 
 ```
 Booting all finished, dropped to user space
-INFO  [sel4_capdl_initializer_core] Starting CapDL initializer
-INFO  [sel4_capdl_initializer_core] CapDL initializer done, suspending
+INFO  [sel4_capdl_initializer::initialize] Starting CapDL initializer
+INFO  [sel4_capdl_initializer::initialize] Starting threads
 MON|INFO: Microkit Monitor started!
 ```
 
