@@ -135,6 +135,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
         loader_link_address=0x80280000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "tqma8xqp1gb",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -144,6 +145,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "zcu102",
@@ -154,16 +156,17 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x50000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "maaxboard",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
-        smp_cores=4,
     ),
     BoardInfo(
         name="imx8mm_evk",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "imx8mm-evk",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -173,6 +176,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "imx8mp-evk",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -182,6 +186,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "imx8mq-evk",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -191,6 +196,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x50000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "imx8mp-evk",
             "KernelCustomDTS": "custom_dts/iot-gate.dts",
@@ -202,6 +208,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x20000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "odroidc2",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
@@ -221,6 +228,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "ultra96v2",
@@ -256,6 +264,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 1024,
@@ -266,6 +275,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 2048,
@@ -276,6 +286,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 4096,
@@ -286,6 +297,7 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 8192,
@@ -296,6 +308,9 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x30000000,
+        # ROCKPRO64 has 4 Cortex-A53 cores and 2 Cortex-A72 cores,
+        # we always run on the Cortex-A53s.
+        smp_cores=4,
         kernel_options={
             "KernelPlatform": "rockpro64",
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,

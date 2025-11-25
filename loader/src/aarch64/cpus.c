@@ -38,9 +38,25 @@ uint64_t plat_get_hw_id(int logical_cpu)
  * from the device tree (cpu's <reg> argument), which is what Linux uses.
  **/
 
-#if defined(CONFIG_PLAT_MAAXBOARD)
+#if defined(CONFIG_PLAT_TQMA8XQP1GB)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_ZYNQMP_ZCU102)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_IMX8MM_EVK)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_IMX8MQ_EVK) || defined(CONFIG_PLAT_MAAXBOARD)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_IMX8MP_EVK)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_ODROIDC2)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ODROIDC4)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_BCM2711)
+static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_ROCKPRO64)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 /* QEMU is special and can have arbitrary numbers of cores */
