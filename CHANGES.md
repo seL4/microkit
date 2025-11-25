@@ -1,5 +1,105 @@
 # Revision History for Microkit
 
+## Release 2.1.0
+
+This release contains various bug fixes, quality-of-life changes, features, and new board support.
+
+There are no breaking changes.
+
+### Feature changes
+
+* Initial x86-64 support.
+    * This means that Microkit now supports all 64-bit architectures of seL4.
+* Transition to using capDL for system initialisation.
+    * While this is a significant internal change, there should be no
+      difference for users of Microkit.
+    * However, this does mean we can now mark the seL4 RFC for Microkit as
+      'implemented'!
+* Update to 14.0.0 of seL4.
+    * With the changes for the transition to capDL, we no longer need patches to the kernel.
+* Add support for multi-core systems on all platforms.
+    * For now, the default configurations of Microkit are still using the uni-core
+      variant of seL4. A different value to `--config` is required to use the
+      SMP variant.
+    * See the [manual section](https://github.com/seL4/microkit/blob/2.1.0/docs/manual.md#multi-core-smp-configurations-multicore_config)
+      for more details.
+* Add new `setvar_id` attribute similar to `setvar_vaddr` but for any system description
+  elements that have an identifier asscoiated with them (e.g channel ends).
+* Add new `--image-type` argument to the tool to specify system image format
+  that will be produced.
+    * For ARM and RISC-V support we have only supported emitting a raw binary. We now support
+      ELFs and (on RISC-V) the uImage format.
+    * On RISC-V platforms, when booting with U-Boot (e.g on the Star64) the binary format does
+      not receive the expected arguments for booting (hart ID). The binary was working by co-incidence
+      and only for the uImage Linux format does U-Boot pass the hart ID when booting the image. For
+      this reason all RISC-V hardware platforms (other than our supported FPGA platforms) default to
+      uImage now to prevent booting issues.
+    * See the [manual section](https://github.com/seL4/microkit/blob/2.1.0/docs/manual.md#image-format)
+      for all details.
+* Enable `KernelAllowSMCCalls` by default for all ARM platforms.
+    * This means that all Microkit systems can make use of the PD SMC feature by default
+      rather than having to change the kernel configuration and then build the SDK from source.
+* Increase the default PD stack size from 0x1000 to 0x2000.
+* Add different memory configurations for Raspberry Pi 4B.
+    * Previously only 1GB was supported, now 2GB, 4GB and 8GB variants are available.
+* Support building the SDK using LLVM instead of GCC.
+    * GCC still remains the default for now, but this does give the option
+      for people to use LLVM when building Microkit from source.
+* Default to using Python 3.12 when building from source.
+* Update Nix flake to use Nix 25.05.
+
+### Bug fixes
+
+* Fixed the libmicrokit linker script to avoid the IPC buffer symbol potentially
+  overlapping with loadable segments.
+* Fixes and improvements to error checking on the system description.
+* Add missing `inline` to certain libmicrokit calls to fix warnings on newer C
+  compilers.
+
+### Board support
+
+* Compulab IOT-GATE-IMX8PLUS
+* Serengeti
+* SiFive Premier P550
+* Ultra96v2
+* x86-64 generic targets
+
+### Upgrade notes
+
+There are no breaking changes in this release, but for users it is important to
+note that there was a significant internal change (transition to capDL) that may
+lead to regressions.
+
+We have fixed all regressions that we have found, but there may be some we
+have missed. If you notice any unexpected behaviour, please
+[open an issue on GitHub](https://github.com/seL4/microkit/issues).
+
+Due to the capDL changes, the boot log output has slightly changed, so if you have scripts
+that rely on the certain debug UART output you might have to update them.
+
+Instead of this boot log:
+
+```
+Booting all finished, dropped to user space
+MON|INFO: Microkit Bootstrap
+MON|INFO: bootinfo untyped list matches expected list
+MON|INFO: Number of bootstrap invocations: 0x0000000a
+MON|INFO: Number of system invocations:    0x00000228
+MON|INFO: completed bootstrap invocations
+MON|INFO: completed system invocations
+```
+
+you'll instead see this:
+
+```
+Booting all finished, dropped to user space
+INFO  [sel4_capdl_initializer_core] Starting CapDL initializer
+INFO  [sel4_capdl_initializer_core] CapDL initializer done, suspending
+MON|INFO: Microkit Monitor started!
+```
+
+before your Microkit system starts.
+
 ## Release 2.0.1
 
 This release contains various bug fixes. It does not include any new features.
