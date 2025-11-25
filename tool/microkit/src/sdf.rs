@@ -547,7 +547,7 @@ impl ProtectionDomain {
         let cpu = CpuCore(
             sdf_parse_number(node.attribute("cpu").unwrap_or("0"), node)?
                 .try_into()
-                .expect("cpu # fits in u8"),
+                .expect("cpu core must be between 0 and 255"),
         );
 
         if cpu.0 >= config.num_cores {
