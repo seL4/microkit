@@ -1483,7 +1483,7 @@ ZynqMP> go 0x40000000
 
 ## x86-64 generic {#x86_64_generic}
 
-Support is available for x86-64 with generic micro-architecture and no virtualisation (VTX).
+This board supports x86-64 platforms with generic microarchitecture and no virtualisation.
 
 On x86-64, Microkit produces 3 ELF images in the output directory:
 
@@ -1491,12 +1491,12 @@ On x86-64, Microkit produces 3 ELF images in the output directory:
 - `sel4_32.elf`, seL4 kernel (32-bit ELF)
 - Initial Task image (Multiboot Boot Module ELF)
 
-The filename of the Initial Task image is specified by the -o argument, or defaults to "loader.img".
-The kernel ELFs will be placed in the same directory as the Initial Task image.
+The filename of the initial task image is specified with the `-o` option, and defaults to loader.img.
+Both kernel ELF files are written to the same directory as the initial task image.
 
-While this target is for 64-bit x86, your bootloader may require a 32-bit kernel ELF.
+Although this target is for x86-64, your bootloader may require a 32-bit kernel ELF.
 
-When using QEMU, you must use the 32-bit kernel ELF with the following command:
+When using QEMU, you must use the 32-bit kernel ELF, for example:
 
 	$ qemu-system-x86_64 \
 		-cpu qemu64,+fsgsbase,+pdpe1gb,+xsaveopt,+xsave \
@@ -1506,24 +1506,35 @@ When using QEMU, you must use the 32-bit kernel ELF with the following command:
 		-kernel sel4_32.elf \
 		-initrd loader.img
 
-Note that unlike on Microkit's QEMU ARM/RISC-V targets, the amount of memory that is provided to QEMU is
-configurable with the `-m` argument at run-time rather than at build-time.
+Unlike Microkit’s `qemu_virt_aarch64` and `qemu_virt_riscv64`, the amount of memory provided to QEMU
+is configurable at run time with the `-m` option, rather than at build time.
 
 QEMU currently does not support 64-bit kernel ELFs and gives the following error:
 ```
 qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one.
 ```
 
-If you see the following message on boot:
+To obtain a bootable ISO image, a Multiboot 2-compliant bootloader must be used. Please refer to your
+bootloader's documentations.
+
+## x86_64 generic {#x86_64_generic_vtx}
+
+This board supports x86-64 platforms with generic microarchitecture and virtualisation.
+
+Note that this configuration:
+- is currently experimental,
+- requires that your CPU supports Intel VT-x, and
+- only support 1 vCPU per VM.
+
+The boot process is identical to [x86-64 generic](#x86_64_generic).
+
+This configuration exists because some x86 emulators (for example, QEMU on macOS) do not emulate Intel VT-x.
+If you see the following message at boot:
 ```
-PCIDs not supported by the processor
+vt-x: not supported
 ```
-
-@billn continue
-
-@billn directing the user to write grub stanzas and stuff is a bit complicated, how about we build a bootable ISO from the tool?
-
-@billn GRUB is also not Mac friendly, maybe recommend users to use something like Limine instead?
+Consider using the non VT-x configuration: [x86-64 generic](#x86_64_generic), or switch to a x86 emulator that
+emulates Intel VT-x, such as [Bochs](https://bochs.sourceforge.io/).
 
 ## ZCU102 {#zcu102}
 
