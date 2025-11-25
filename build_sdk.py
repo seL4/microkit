@@ -368,54 +368,21 @@ SUPPORTED_BOARDS = (
         gcc_cpu="generic",
         loader_link_address=None,
         kernel_options={
-            # @billn revisit
             "KernelSupportPCID": False,
             "KernelVTX": False,
         } | DEFAULT_KERNEL_OPTIONS_X86_64,
     ),
-    # This particular configuration requires support for Intel VT-x
-    # (plus nested virtualisation on your host if targeting QEMU).
-    # AMD SVM is currently unsupported by seL4.
     BoardInfo(
         name="x86_64_generic_vtx",
         arch=KernelArch.X86_64,
         gcc_cpu="generic",
         loader_link_address=None,
         kernel_options={
-            # @billn revisit
             "KernelSupportPCID": False,
             "KernelVTX": True,
             "KernelX86_64VTX64BitGuests": True,
         } | DEFAULT_KERNEL_OPTIONS_X86_64,
     ),
-    # BoardInfo(
-    #     name="x86_64_generic_no_pcid",
-    #     arch=KernelArch.X86_64,
-    #     gcc_cpu="generic",
-    #     loader_link_address=None,
-    #     kernel_options={
-    #         "KernelVTX": False,
-    #         # QEMU TCG and some CPUs doesn't support PCID, so we have a
-    #         # special configuration here for convenience.
-    #         # For the generic configs, we want that on, as it improve context switching
-    #         # performance by allowing seL4 to skip flushing the entire TLB when
-    #         # switching page tables.
-    #         "KernelSupportPCID": False,
-    #     } | DEFAULT_KERNEL_OPTIONS_X86_64,
-    # ),
-    # BoardInfo(
-    #     name="x86_64_generic_no_skim",
-    #     arch=KernelArch.X86_64,
-    #     gcc_cpu="generic",
-    #     loader_link_address=None,
-    #     kernel_options={
-    #         "KernelVTX": False,
-    #         # No mitigation against Meltdown attack for non-vulnerable processors to
-    #         # prevent needless performance degradation
-    #         "KernelSkimWindow": False,
-    #     } | DEFAULT_KERNEL_OPTIONS_X86_64,
-    # ),
-    # # @billn Do we need a x86_64_generic_no_pcid_no_skim ??
 )
 
 # These then get elaborated into smp-release, smp-benchmark, and smp-debug
