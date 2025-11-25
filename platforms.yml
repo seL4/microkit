@@ -16,25 +16,25 @@
 platforms:
   - name: serengeti
     cmake_plat: cheshire
-    since: dev
+    since: 2.1.0
   - name: imx8mp_iotgate
     cmake_plat: imx8mp-evk
-    since: dev
+    since: 2.1.0
   - name: rpi4b_2gb
     cmake_plat: rpi4
-    since: dev
+    since: 2.1.0
   - name: rpi4b_4gb
     cmake_plat: rpi4
-    since: dev
+    since: 2.1.0
   - name: rpi4b_8gb
     cmake_plat: rpi4
-    since: dev
+    since: 2.1.0
   - name: hifive_p550
     cmake_plat: hifive-p550
-    since: dev
+    since: 2.1.0
   - name: ultra96v2
     cmake_plat: ultra96v2
-    since: dev
+    since: 2.1.0
   - name: ariane
     cmake_plat: ariane
     since: 2.0.0
