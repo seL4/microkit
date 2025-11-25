@@ -1485,6 +1485,10 @@ ZynqMP> go 0x40000000
 
 This board supports x86-64 platforms with generic microarchitecture and no virtualisation.
 
+Up to 16 CPU cores are supported. If your platform's CPU count exceeds the maximum, the excess CPUs
+are ignored by seL4. This limitation is due to a build-time config option of seL4, to increase the
+limit, see the board configuration in `build_sdk.py`.
+
 On x86-64, Microkit produces 3 ELF images in the output directory:
 
 - `sel4.elf`, seL4 kernel (64-bit ELF)
