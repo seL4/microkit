@@ -375,18 +375,18 @@ The ELF files provided as program images should be standard ELF files and have b
 
 ## Configurations {#config}
 
-## Debug
+### Debug
 
 The *debug* configuration includes a debug build of the seL4 kernel to allow console debug output using the kernel's UART driver.
 
-## Release
+### Release
 
 The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, initialiser and
 kernel do *not* perform any serial output.
 
-### Proofs
+#### Proofs
 
-The formal verification of seL4 applies to a specific set of seL4 configuration only. This means that making a 'release' build
+The formal verification of seL4 applies to a specific set of seL4 configuration only. This means that making a *release* build
 of a Microkit system does not imply that the seL4 kernel being used is verified.
 
 Currently Microkit always uses the MCS configuration of seL4 which is still undergoing verification, scheduled to complete
@@ -398,11 +398,25 @@ You can find more information about what verified seL4 configurations do exist
 
 A roadmap for upcoming verification is available [here](https://sel4.systems/roadmap.html).
 
-## Benchmark
+### Benchmark
 
 The *benchmark* configuration uses a build of the seL4 kernel that exports the hardware's performance monitoring unit (PMU) to PDs.
 The kernel also tracks information about CPU utilisation. This benchmark configuration exists due a limitation of the seL4 kernel
 and is intended to be removed once [RFC-16 is implemented](https://github.com/seL4/rfcs/pull/22).
+
+### Multi-core (SMP) configurations {#multicore_config}
+
+The configurations listed above default to using the uni-core configuration of seL4/Microkit.
+Currently we do not want to default to using the multi-core configuration of the kernel so
+separate configurations exist for users wanting to use multi-core.
+
+The multi-core configurations are the same as the configurations listed above, except with the
+*smp-* prefix. For example, *smp-debug* for the multi-core variant of *debug*.
+
+On ARM/RISC-V, the number of cores available defaults to the number of cores the target board has.
+
+On x86-64, the number of cores available depends on how many are detected at run-time. Right now
+there is a fixed upper limit, see the board-specific documentation for details.
 
 ## System Requirements
 
@@ -967,6 +981,7 @@ It supports the following attributes:
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
+* `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 
 Additionally, it supports the following child elements:
@@ -1282,7 +1297,7 @@ Support is available for the virtual AArch64 QEMU platform. This is a platform t
 on any specific SoC or hardware platform and is intended for simulating systems for
 development or testing.
 
-It should be noted that the platform support is configured with 2GB of main memory and a single
+It should be noted that the platform support is configured with 2GB of main memory and the
 Cortex-A53 CPU. seL4 needs to know the memory layout and CPU at build-time so if
 you want to change these parameters (e.g to allow more memory), you will have to change the kernel
 options for `qemu_virt_aarch64` in `build_sdk.py`.
@@ -1296,6 +1311,8 @@ You can use the following command to simulate a Microkit system:
         -serial mon:stdio \
         -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0 \
         -m size=2G
+
+When using the [SMP configurations](#multicore_config) add the `-smp 4` argument to the QEMU command.
 
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
@@ -1318,6 +1335,8 @@ You can use the following command to simulate a Microkit system:
         -serial mon:stdio \
         -kernel [SYSTEM IMAGE] \
         -m size=2G
+
+When using the [SMP configurations](#multicore_config) add the `-smp 4` argument to the QEMU command.
 
 QEMU will start the system image using its packaged version of OpenSBI.
 
@@ -1523,6 +1542,8 @@ For simulating the ZCU102 using QEMU, use the following command:
        -device loader,file=[SYSTEM IMAGE],addr=0x40000000,cpu-num=0 \
        -serial mon:stdio
 
+When using the [SMP configurations](#multicore_config) add the `-smp 4` argument to the QEMU command.
+
 It should be noted that when using U-Boot to load and run a Microkit system image,
 that there may be additional setup needed.
 
@@ -1547,6 +1568,8 @@ You can find information on how to do so [here](https://docs.sel4.systems/projec
 
 ### Getting Microkit Components Working
 
+#### build_sdk.py
+
 The first step to adding Microkit support is to modify the `build_sdk.py` script in order to build the required
 artefacts for the new platform. This involves adding to the `SUPPORTED_BOARDS` list with the `BoardInfo` options
 containing the platform specific attributes. This should be fairly self-explanatory by looking at the existing
@@ -1557,11 +1580,29 @@ is responsible for setting up the system before seL4 starts) is going to be load
 match where in main memory the final system image is actually loaded (e.g where a previous bootloader such as U-Boot
 loads the image to). This means that the address is restricted to the platform's main memory region.
 
+#### Loader
+
+##### UART
+
 The other component of Microkit that is platform dependent is the loader itself. The loader will attempt to access
 the UART for debug output which requires a basic `putc` implementation. The UART device used in the loader should be
 the same as what is used for the seL4 kernel debug output.
 
 It should be noted that on RISC-V platforms, the SBI will be used for `putc` so no porting is necessary.
+
+##### CPU configuration
+
+For supporting multi-core systems on Microkit, the loader needs to know the platform-specific CPU identifiers
+that we want to make use of.
+
+For ARM platforms, a `psci_target_cpus` array needs to be defined which contains the PSCI `target_cpu` value for
+each CPU. This value can be found by looking at the `reg` field for each CPU in the Device Tree.
+
+For RISC-V platforms, a `hart_ids` array needs to be defined which contains the Hart ID for
+each CPU. This value can be found by looking at the `reg` field for each CPU in the Device Tree. The first value
+must be the same as `FIRST_HART_ID` defined in seL4.
+
+#### Next steps
 
 Once you have patched the loader and the SDK build script, there should be no other changes required to have a working
 platform port. It is a good idea at this point to boot a hello world system to confirm the port is working.
