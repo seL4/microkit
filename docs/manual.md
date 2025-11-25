@@ -1139,14 +1139,16 @@ on the Digilent Genesys2 board. CVA6 is an open-source RISC-V (rv64i) processor.
 Microkit support expects that a compatible RISC-V SBI (e.g OpenSBI) has executed before
 jumping to the beginning of the loader image.
 
-Note that the loader link address is 0x90000000 and this is where the binary must
-be located and where OpenSBI (or U-Boot) should begin execution.
+Microkit outputs an ELF for this platform.
 
 You may compile OpenSBI with the Microkit image as a payload, or alternately install
 OpenSBI (with U-Boot optionally) to the SD card.
 
 If you are booting from U-Boot, use the following command to start the system image:
-    => go 0x90000000
+
+    => bootelf ${image_addr}
+
+Where `image_addr` is the load address of the ELF image.
 
 Note that the OpenSBI version from the CVA6 SDK at the time of writing has issues when
 booting. It is recommended to use the mainline OpenSBI.
@@ -1164,23 +1166,13 @@ Microkit will produce a raw binary file by default, so when using U-Boot run the
 Support is available for [Cheshire](https://github.com/pulp-platform/cheshire).
 It is an SoC design based on the CVA6 core, implementing a 64-bit RISC-V CPU.
 
-Microkit outputs a raw binary for this device. Several steps are required in order to boot.
+Microkit outputs an ELF for this platform. Several steps are required in order to boot.
 
 A custom version of OpenSBI is required. It can be found
 [here](https://github.com/pulp-platform/opensbi/tree/cheshire).
 Build the firmware payload using platform `fpga/cheshire`.
 
-### Using U-Boot
-
-With a system pre-configured with the Cheshire ZSBL, OpenSBI and U-Boot:
-
-    => go 0x90000000
-
-### Raw system with no bootloader
-
-Without any firmware present on the SD card, it is still possible to boot Cheshire with a Microkit system.
-
-Using a GDB prompt via openOCD:
+To boot a Microkit image, use a GDB prompt via openOCD per [seL4 Docs](https://docs.sel4.systems/Hardware/cheshire.html):
 
 1. Reset board
 
@@ -1199,7 +1191,7 @@ Using a GDB prompt via openOCD:
 
 4.  Load the Microkit image:
 
-        (gdb) restore /path/to/loader.img binary 0x90000000
+        (gdb) restore /path/to/loader.img
 
 4. Allow OpenSBI and Microkit to boot:
 
