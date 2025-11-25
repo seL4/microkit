@@ -257,6 +257,7 @@ pub struct ProtectionDomain {
     pub smc: bool,
     pub cpu: CpuCore,
     pub program_image: PathBuf,
+    pub program_image_for_symbols: Option<PathBuf>,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
@@ -590,6 +591,7 @@ impl ProtectionDomain {
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
+        let mut program_image_for_symbols = None;
         let mut virtual_machine = None;
 
         // Default to minimum priority
@@ -614,7 +616,7 @@ impl ProtectionDomain {
 
             match child.tag_name().name() {
                 "program_image" => {
-                    check_attributes(xml_sdf, &child, &["path"])?;
+                    check_attributes(xml_sdf, &child, &["path", "path_for_symbols"])?;
                     if program_image.is_some() {
                         return Err(value_error(
                             xml_sdf,
@@ -625,6 +627,9 @@ impl ProtectionDomain {
 
                     let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
                     program_image = Some(Path::new(program_image_path).to_path_buf());
+
+                    program_image_for_symbols =
+                        child.attribute("path_for_symbols").map(PathBuf::from);
                 }
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
@@ -1074,6 +1079,7 @@ impl ProtectionDomain {
             smc,
             cpu,
             program_image: program_image.unwrap(),
+            program_image_for_symbols,
             maps,
             irqs,
             ioports,
