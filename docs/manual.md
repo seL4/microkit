@@ -1525,14 +1525,14 @@ bootloader's documentations.
 
 This board supports x86-64 platforms with generic microarchitecture and virtualisation.
 
-Note that this configuration:
-- is currently experimental,
-- requires that your CPU supports Intel VT-x, and
-- only support 1 vCPU per VM.
+This configuration assumes Intel VT-x support. Currently, only 1 vCPU is supported per virtual machine
+on x86-64.
 
 The boot process is identical to [x86-64 generic](#x86_64_generic).
 
-This configuration exists because some x86 emulators (for example, QEMU on macOS) do not emulate Intel VT-x.
+This configuration exists because some x86 emulators (for example, QEMU on macOS on Apple Silicon) do
+not emulate Intel VT-x.
+
 If you see the following message at boot:
 ```
 vt-x: not supported
@@ -1740,7 +1740,7 @@ Once the kernel has done its own initialisation, it will begin the
 'initial task'. On seL4, this is a thread that contains all the initial
 capabilities to resources and free memory that are used to setup the rest of the system.
 
-Within a Microkit environment, the 'initial task' is the capDL initialiser. It's main
+Within a Microkit environment, the 'initial task' is the capDL initialiser. Its main
 job is to initialises and starts the system in conformance with the capDL specification.
 
 At build-time, the Microkit tool embeds the capDL specification that describe
