@@ -77,33 +77,33 @@ enum ImageOutputType {
 }
 
 impl ImageOutputType {
-    fn default_from_arch(arch: &Arch) -> Self {
-        match arch {
-            Arch::Aarch64 => ImageOutputType::Binary,
-            Arch::Riscv64 => ImageOutputType::Uimage,
-            Arch::X86_64 => ImageOutputType::Elf,
+    fn default_from_arch_and_board(arch: &Arch, board_name: &str) -> Self {
+        match board_name {
+            "ariane" | "cheshire" | "serengeti" => ImageOutputType::Elf,
+            _ => match arch {
+                Arch::Aarch64 => ImageOutputType::Binary,
+                Arch::Riscv64 => ImageOutputType::Uimage,
+                Arch::X86_64 => ImageOutputType::Elf,
+            },
         }
     }
 
-    fn parse(str: &str, board_name: &str, arch: Arch) -> Result<Self, String> {
-        match board_name {
-            "ariane" | "cheshire" | "serengeti" => Ok(ImageOutputType::Binary),
-            _ => match str {
-                "binary" => match arch {
-                    Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
-                    Arch::X86_64 => Err(format!(
-                        "building the output image as binary is unsupported for target architecture '{arch}'"
-                    )),
-                },
-                "elf" => Ok(ImageOutputType::Elf),
-                "uimage" => match arch {
-                    Arch::Riscv64 => Ok(ImageOutputType::Uimage),
-                    Arch::X86_64 | Arch::Aarch64 => Err(format!(
-                        "building the output image as uImage is unsupported for target architecture '{arch}'"
-                    )),
-                },
-                _ => Err(format!("unknown value '{str}'")),
+    fn parse(str: &str, arch: Arch) -> Result<Self, String> {
+        match str {
+            "binary" => match arch {
+                Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
+                Arch::X86_64 => Err(format!(
+                    "building the output image as binary is unsupported for target architecture '{arch}'"
+                )),
             },
+            "elf" => Ok(ImageOutputType::Elf),
+            "uimage" => match arch {
+                Arch::Riscv64 => Ok(ImageOutputType::Uimage),
+                Arch::X86_64 | Arch::Aarch64 => Err(format!(
+                    "building the output image as uImage is unsupported for target architecture '{arch}'"
+                )),
+            },
+            _ => Err(format!("unknown value '{str}'")),
         }
     }
 }
@@ -433,7 +433,7 @@ fn main() -> Result<(), String> {
     };
 
     let image_output_type = if let Some(image_type) = args.output_image_type {
-        match ImageOutputType::parse(image_type, args.board, arch) {
+        match ImageOutputType::parse(image_type, arch) {
             Ok(output_image_type) => output_image_type,
             Err(reason) => {
                 eprintln!("microkit: error: argument --image-type: {reason}");
@@ -441,7 +441,7 @@ fn main() -> Result<(), String> {
             }
         }
     } else {
-        ImageOutputType::default_from_arch(&arch)
+        ImageOutputType::default_from_arch_and_board(&arch, args.board)
     };
 
     let (device_regions, normal_regions) = match arch {
