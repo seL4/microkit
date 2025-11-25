@@ -46,5 +46,6 @@ size_t plat_get_hw_id(int logical_cpu);
 /**
  * Start the CPU with the given logical ID.
  * Returns a non-zero integer on failure.
+ * Note this logical_cpu is the *target* CPU.
  **/
 int plat_start_cpu(int logical_cpu);

@@ -432,7 +432,6 @@ BEGIN_FUNC(arm_secondary_cpu_entry_asm)
     mov sp, x0
     /* grab the core ID off the stack */
     ldr x0, [sp]
-    /* which we then overwrite */
     mrs x1, mpidr_el1
     /* x0 and x1 are arguments */
     b arm_secondary_cpu_entry

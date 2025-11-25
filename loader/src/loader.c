@@ -48,13 +48,13 @@ static void print_flags(void)
 
 static void print_loader_data(void)
 {
-    puts("LDR|INFO: Flags:\n");
+    puts("LDR|INFO: flags:\n");
     print_flags();
-    puts("LDR|INFO: Kernel:      entry:   ");
+    puts("LDR|INFO: kernel:      entry:   ");
     puthex64(loader_data->kernel_entry);
     puts("\n");
 
-    puts("LDR|INFO: Root server: physmem: ");
+    puts("LDR|INFO: root server: physmem: ");
     puthex64(loader_data->ui_p_reg_start);
     puts(" -- ");
     puthex64(loader_data->ui_p_reg_end);
@@ -163,7 +163,7 @@ int main(void)
      */
     copy_data();
 
-    LDR_PRINT("INFO", 0, "Active CPUs to start: ");
+    LDR_PRINT("INFO", 0, "active CPUs to start: ");
     puthex32(plat_get_active_cpus());
     puts("\n");
 
@@ -171,7 +171,7 @@ int main(void)
         r = plat_start_cpu(cpu);
         if (r != 0) {
             LDR_PRINT("ERROR", 0, "unable to start CPU ");
-            puthex32(cpu);
+            putdecimal(cpu);
             puts(" returned error: ");
             puthex32(r);
             goto fail;

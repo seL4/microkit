@@ -229,4 +229,14 @@ void puthex64(uint64_t val)
     puts(buffer);
 }
 
+void putdecimal(uint8_t val)
+{
+    if (0 <= val && val <= 9) {
+        putc('0' + val);
+    } else {
+        /* fallback, shouldn't really happen */
+        puthex32(val);
+    }
+}
+
 #endif /* CONFIG_PRINTING */
