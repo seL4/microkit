@@ -1684,22 +1684,26 @@ The diagram above aims to show the general flow of a Microkit system from
 build-time to run-time.
 
 The user provides the SDF (System Description File) and the ELFs that
-correspond to PD program images to the Microkit tool which is responsible to
-for packaging everything together into a single bootable image for the target
+correspond to PD program images to the Microkit tool which is responsible
+for packaging everything together into a single image for the target
 platform.
 
-On ARM and RISC-V, this final image contains a couple different things:
+### ARM and RISC-V
+
+The final image is a bootable image which contains a couple different things:
 
 * the Microkit loader
 * seL4
 * the capDL initialiser (and associated capDL specification)
 
 When booting the image, the Microkit loader starts, jumps to the kernel, which
-starts the capDL initialiser, which then sets up the entire system and starts all the PDs, including the Monitor.
+starts the capDL initialiser, which then sets up the entire system and starts
+all the PDs, including the Monitor.
 
-On x86, the tool produces a boot module that only contains the capDL initialiser.
-The seL4 kernel image is distributed as part of the SDK. You must bring your own
-Multiboot 2 compliant bootloader which then loads the kernel and boot module.
+### x86
+
+The tool produces the kernel image and boot module image that contains the capDL initialiser.
+You must bring your own Multiboot 2 compliant bootloader which then loads the kernel and boot module.
 
 Now, we will go into a bit more detail about each of these stages of the
 booting process as well as what exactly the Microkit tool is doing.
@@ -1726,29 +1730,31 @@ that will not be done by a previous booting stage, such as:
 Once this is all completed, the loader jumps to seL4 which starts executing.
 The loader will never be executed again.
 
-@bill continue fixing below
-## Monitor
+## capDL Initialiser
 
 Once the kernel has done its own initialisation, it will begin the
 'initial task'. On seL4, this is a thread that contains all the initial
-capabilities to resources that are used to setup the rest of the system.
+capabilities to resources and free memory that are used to setup the rest of the system.
 
-Within a Microkit environment, we call the initial task the 'monitor'.
+Within a Microkit environment, the 'initial task' is the capDL initialiser. It's main
+job is to initialises and starts the system in conformance with the capDL specification.
 
-The monitor has two main jobs:
+At build-time, the Microkit tool embeds the capDL specification that describe
+all kernel objects that needs to be created. Then for each kernel object, the spec
+describe what state they need to be in and what capabilities exist to that object
+(i.e. who has access to this kernel object). For example, the spec would specify the:
+- starting Instruction Pointer (IP), Stack Pointer (SP) and IPC buffer pointer of a Thread Control Block (TCB),
+- page table structure and mapping attributes of an address space (VSpace),
+- interrupts (IRQ),
+- scheduling parameters (Scheduling Context),
+- and so on...
 
-1. Setup all system resources (memory regions, channels, interrupts) and start
-   the user's protection domains.
-2. Receive any faults caused by protection domains crashing or causing
-   exceptions.
+## Monitor
 
-At build-time, the Microkit tool embeds all the system calls that the monitor
-needs to make in order to setup the user's system. More details about *how*
-this is done is in the section on the Microkit tool below. But from the
-monitor's perspective, it just iterates over an array of system calls to make
-and performs each one.
+The Monitor is a special PD that executes at the highest priority. It's job
+is to receive any faults caused by protection domains crashing or causing exceptions.
 
-After the system has been setup, the monitor goes to sleep and waits for any
+After the monitor initialises itself, goes to sleep and waits for any
 faults from protection domains. On debug mode, this results in a message about
 which PD caused an exception and details on the PD's state at the time of the fault.
 
@@ -1773,14 +1779,19 @@ returns the PD goes back to sleep, waiting on any more events.
 The Microkit tool's ultimate job is to take in the description of the user's system,
 the SDF, and convert into an seL4 system that boots and executes.
 
-There are obvious steps such as parsing the SDF and PD ELFs but the majority of
-the work done by the tool is converting the system description into a list of
-seL4 system calls that need to happen.
+There are obvious steps such as parsing the SDF and PD ELFs. But the majority of
+the work done by the tool is converting the system description into the capDL specification
+then embedding it into the capDL initialiser image.
 
-In order to do this however, the Microkit tool needs to perform o a decent amount of
-'emulation' to know exactly what system calls and with which arguments to make.
-This requires keeping track of what memory is allocated and where, the layout of
-each capability space, what the initial untypeds list will look like, etc.
+### ARM & RISC-V specific
+Since the physical memory layout of ARM and RISC-V platforms can be determined at boot
+time by reading the device tree. The Microkit tool goes one step further and statically
+check that the produced capDL specification is bootable on the target board. For example,
+we check that there are no frames outside of device or normal memory, and that there are
+enough memory to create all required kernel objects.
+
+In order to do this however, the Microkit tool needs to emulate how the seL4 kernel boot
+to obtain the list of free untyped objects that the kernel would give to the initial task.
 
 While this is non-trivial to do, it comes with the useful property that if the tool
 produces a valid image, there should be no errors upon initialising the system
