@@ -24,13 +24,13 @@ There are no breaking changes.
     * See the [manual section](https://github.com/seL4/microkit/blob/2.1.0/docs/manual.md#multi-core-smp-configurations-multicore_config)
       for more details.
 * Add new `setvar_id` attribute similar to `setvar_vaddr` but for any system description
-  elements that have an identifier asscoiated with them (e.g channel ends).
+  elements that have an identifier associated with them (e.g channel ends).
 * Add new `--image-type` argument to the tool to specify system image format
   that will be produced.
     * For ARM and RISC-V support we have only supported emitting a raw binary. We now support
       ELFs and (on RISC-V) the uImage format.
     * On RISC-V platforms, when booting with U-Boot (e.g on the Star64) the binary format does
-      not receive the expected arguments for booting (hart ID). The binary was working by co-incidence
+      not receive the expected arguments for booting (hart ID). The binary was working by coincidence
       and only for the uImage Linux format does U-Boot pass the hart ID when booting the image. For
       this reason all RISC-V hardware platforms (other than our supported FPGA platforms) default to
       uImage now to prevent booting issues.
