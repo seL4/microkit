@@ -437,7 +437,8 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT] [--capdl-json CAPDL_SPEC] [--image-type {binary,elf,uimage}]
+    microkit [-h] [-o OUTPUT] [-r REPORT]
+              [--capdl-json CAPDL_SPEC] [--image-type {binary,elf,uimage}]
               --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
@@ -545,9 +546,12 @@ If the protection domain has children it must also implement:
     seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
     void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
     void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
-    void microkit_x86_ioport_write_8(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data);
-    void microkit_x86_ioport_write_16(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data);
-    void microkit_x86_ioport_write_32(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data);
+    void microkit_x86_ioport_write_8(microkit_ioport ioport_id,
+                                     seL4_Word port_addr, seL4_Word data);
+    void microkit_x86_ioport_write_16(microkit_ioport ioport_id,
+                                      seL4_Word port_addr, seL4_Word data);
+    void microkit_x86_ioport_write_32(microkit_ioport ioport_id,
+                                      seL4_Word port_addr, seL4_Word data);
     seL4_Uint8 microkit_x86_ioport_read_8(microkit_ioport ioport_id, seL4_Word port_addr);
     seL4_Uint16 microkit_x86_ioport_read_16(microkit_ioport ioport_id, seL4_Word port_addr);
     seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id, seL4_Word port_addr);
@@ -557,7 +561,8 @@ If the protection domain has children it must also implement:
     void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value);
     void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit_ioport ioport_id,
                                          seL4_Word port_addr, seL4_Word length);
-    void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Word port_addr, seL4_Word length);
+    void microkit_vcpu_x86_disable_ioport(microkit_child vcpu,
+                                          seL4_Word port_addr, seL4_Word length);
     void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUContext *regs);
 
 
@@ -1121,6 +1126,7 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 This chapter describes the board support packages that are available in the SDK.
 
 The currently supported platforms are:
+
 * ariane
 * cheshire
 * hifive_p550
