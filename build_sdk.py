@@ -395,7 +395,15 @@ SUPPORTED_CONFIGS = (
         name="release",
         debug=False,
         kernel_options={},
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                # Currently the kernel does not allow KernelAllowSMCCalls to be
+                # enabled unless the verification build is also turned off.
+                # This will be changed in the near future.
+                "KernelDebugBuild": False,
+                "KernelVerificationBuild": False
+            },
+        },
     ),
     ConfigInfo(
         name="debug",
