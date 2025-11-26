@@ -805,6 +805,7 @@ def main() -> None:
     parser.add_argument("--skip-initialiser", action="store_true", help="Initialiser will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
+    parser.add_argument("--release-packaging", action="store_true", help="All SDKs for distribution will be produced")
     # Read from the version file as unless someone has specified
     # a version, that is the source of truth
     with open("VERSION", "r") as f:
@@ -950,6 +951,25 @@ def main() -> None:
         with tar_open(source_tar_file, "w:gz") as tar:
             for filename in filenames:
                 tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
+
+    RELEASE_TARGETS = [
+        ("linux-aarch64", "aarch64-unknown-linux-musl"),
+        ("linux-x86-64", "x86_64-unknown-linux-musl"),
+        ("macos-aarch64", "aarch64-apple-darwin"),
+        ("macos-x86-64", "x86_64-apple-darwin"),
+    ]
+    if args.release_packaging:
+        for (target, tool_target) in RELEASE_TARGETS:
+            dest = Path("release") / f"{NAME}-sdk-{version}-{target}"
+            dest.parent.mkdir(exist_ok=True, parents=True)
+            dest.unlink(missing_ok=True)
+            shutil.copytree(Path("release") / f"{NAME}-sdk-{version}", dest)
+            build_tool(dest / "bin" / "microkit", tool_target)
+
+            tar_file = f"{dest}.tar.gz"
+            print(f"Generating {tar_file}")
+            with tar_open(tar_file, "w:gz") as tar:
+                tar.add(dest, arcname=f"{NAME}-sdk-{version}", filter=tar_filter)
 
 
 if __name__ == "__main__":
