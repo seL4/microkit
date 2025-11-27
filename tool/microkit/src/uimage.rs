@@ -51,7 +51,7 @@ struct UbootLegacyImgHeader {
 
 // Bits 0:15 minor, bits 16:31 major
 // Linux defines this to be 0.2 currently
-const LINUX_RISCV_HEADER_VERSION: u32 = 2 << 16;
+const LINUX_RISCV_HEADER_VERSION: u32 = 2;
 
 const LINUX_RISCV_HEADER_MAGIC: u64 = 0x5643534952;
 const LINUX_RISCV_HEADER_MAGIC2: u32 = 0x05435352;
