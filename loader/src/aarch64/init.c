@@ -97,6 +97,8 @@ void arch_init(void)
         puts("LDR|ERROR: unknown EL level for MMU disable\n");
     }
 
+    // TODO: handle non-PSCI platforms better, see https://github.com/seL4/microkit/issues/401.
+#if !defined(CONFIG_PLAT_BCM2711)
     uint32_t ret = arm_smc32_call(PSCI_FUNCTION_VERSION, /* unused */ 0, 0, 0);
     /* the return value has no error codes, but if we get it wrong this is what we will get */
     if (ret == PSCI_RETURN_NOT_SUPPORTED) {
@@ -112,6 +114,7 @@ void arch_init(void)
         putdecimal(minor);
         puts("\n");
     }
+#endif
 }
 
 typedef void (*sel4_entry)(
