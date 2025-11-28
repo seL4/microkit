@@ -525,6 +525,15 @@ mod protection_domain {
             "Error: size must be > 0 on element 'ioport':",
         )
     }
+
+    #[test]
+    fn test_invalid_cpu() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_invalid_cpu.system",
+            "Error: cpu core must be less than 1, got 10 on element 'protection_domain':",
+        )
+    }
 }
 
 #[cfg(test)]

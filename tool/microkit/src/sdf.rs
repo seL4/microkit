@@ -556,7 +556,7 @@ impl ProtectionDomain {
                 node,
                 format!(
                     "cpu core must be less than {}, got {}",
-                    config.num_cores, cpu
+                    config.num_cores, cpu.0
                 ),
             ));
         }
