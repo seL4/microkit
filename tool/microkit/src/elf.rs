@@ -108,6 +108,7 @@ const PF_R: u32 = 0x4;
 
 /// ELF section-header type (`sh_type`)
 const SHT_PROGBITS: u32 = 0x1;
+const SHT_STRTAB: u32 = 0x3;
 
 /// ELF section-header flags (`sh_flags`)
 const SHF_WRITE: u64 = 0x1;
@@ -481,14 +482,15 @@ impl ElfFile {
         self.segments.iter().filter(|s| s.loadable).collect()
     }
 
-    /// Re-create a minimal ELF file with all the segments.
+    /// Re-create a minimal ELF file with all the program and section headers.
     pub fn reserialise(&self, out: &std::path::Path) -> Result<u64, String> {
         let ehsize = size_of::<ElfHeader64>();
 
         let phnum = self.loadable_segments().len();
         let phentsize = size_of::<ElfProgramHeader64>();
 
-        let shnum = self.loadable_segments().len() + 1; // First entry is reserved
+        // First entry is reserved, last entry is dummy strtab
+        let shnum = self.loadable_segments().len() + 2;
         let shentsize = size_of::<ElfSectionHeader64>();
 
         let mut elf_file = match File::create(out) {
@@ -526,7 +528,7 @@ impl ElfFile {
             phnum: phnum as u16,
             shentsize: shentsize as u16,
             shnum: shnum as u16,
-            shstrndx: 0,
+            shstrndx: (shnum - 1) as u16,
         };
         elf_file
             .write_all(unsafe {
@@ -604,6 +606,31 @@ impl ElfFile {
                     )
                 });
         }
+        let strtab_seg = ElfSectionHeader64 {
+            name: 0,
+            type_: SHT_STRTAB,
+            flags: 0,
+            addr: 0,
+            offset: data_off_watermark,
+            size: 1,
+            link: 0,
+            info: 0,
+            addralign: 0,
+            entsize: 0,
+        };
+        #[allow(unused_assignments)]
+        {
+            data_off_watermark += 1;
+        }
+
+        elf_file
+            .write_all(unsafe { struct_to_bytes(&strtab_seg) })
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to write ELF string table section header for '{}'",
+                    out.display()
+                )
+            });
 
         // Finally the data for each segment will follow
         for (i, seg) in self
@@ -620,6 +647,16 @@ impl ElfFile {
                 )
             });
         }
+
+        // Then the null byte for string table
+        elf_file
+            .write_all(vec![0u8; 1].as_slice())
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to write ELF string table byte for '{}'",
+                    out.display()
+                )
+            });
 
         elf_file.flush().unwrap();
 
