@@ -262,6 +262,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
+    pub tcb_cap_maps: Vec<TcbCapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -274,6 +275,12 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TcbCapMap {
+    pub pd_name: String,
+    pub dest_cspace_slot: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -589,6 +596,7 @@ impl ProtectionDomain {
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
+        let mut tcb_cap_maps = Vec::new();
 
         let mut program_image = None;
         let mut program_image_for_symbols = None;
@@ -1036,6 +1044,9 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
+                "tcb_cap_map" => {
+                    tcb_cap_maps.push(TcbCapMap::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1073,6 +1084,7 @@ impl ProtectionDomain {
             irqs,
             ioports,
             setvars,
+            tcb_cap_maps,
             child_pds,
             virtual_machine,
             has_children,
@@ -1205,6 +1217,31 @@ impl VirtualMachine {
             priority: priority as u8,
             budget,
             period,
+        })
+    }
+}
+
+impl TcbCapMap {
+      fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+    ) -> Result<TcbCapMap, String> {
+        check_attributes(xml_sdf, node, &["src_pd_name", "dest_cspace_slot"])?;
+
+        let pd_name = checked_lookup(xml_sdf, node, "src_pd_name")?.to_string();
+        let dest_cspace_slot = sdf_parse_number(checked_lookup(xml_sdf, node, "dest_cspace_slot")?, node)?;
+
+        if dest_cspace_slot >= 64 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "There are only 64 destination cspace slots available. Max slot allowed is 63".to_string(),
+            ));
+        }
+
+        Ok(TcbCapMap {
+            pd_name,
+            dest_cspace_slot,
         })
     }
 }
@@ -1625,7 +1662,6 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
-
     let system = doc
         .root()
         .children()
