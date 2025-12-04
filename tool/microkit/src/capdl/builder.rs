@@ -541,10 +541,16 @@ pub fn build_capdl_spec(
         None
     };
 
+    // Mapping between pd name and id for faster lookups
+    let mut pd_name_to_id: HashMap<String, usize> = HashMap::new();
+
     // Keep tabs on each PD's CSpace, Notification and Endpoint objects so we can create channels between them at a later step.
     let mut pd_id_to_cspace_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ntfn_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
+
+    // Keep tabs on caps such as TCB so that we can create additional mappings for the cap into other PD's cspaces.
+    let mut pd_id_to_tcb_id: HashMap<usize, ObjectId> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -556,6 +562,8 @@ pub fn build_capdl_spec(
     for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
         let elf_obj = &elfs[pd_global_idx];
 
+        pd_name_to_id.insert(pd.name.clone(), pd_global_idx);
+
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
 
@@ -564,6 +572,9 @@ pub fn build_capdl_spec(
             .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj)
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
+
+        pd_id_to_tcb_id.insert(pd_global_idx, pd_tcb_obj_id);
+
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
         // This is necessary for accessing kernel's benchmark API.
@@ -684,9 +695,9 @@ pub fn build_capdl_spec(
 
             // Allow the parent PD to access the child's SC:
             capdl_util_insert_cap_into_cspace(
-                &mut spec,
+                &mut spec_container,
                 *parent_cspace_obj_id,
-                (PD_BASE_PD_SC_CAP + pd.id.unwrap()) as usize,
+                (PD_BASE_PD_SC_CAP + pd.id.unwrap()) as u32,
                 capdl_util_make_sc_cap(pd_sc_obj_id),
             );
 
@@ -1088,7 +1099,31 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Sort the root objects
+    // Step 5. Handle extra cap mappings
+    // *********************************
+
+    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
+        let pd_dest_cspace_id = *pd_id_to_cspace_id.get(&pd_dest_idx).unwrap();
+
+        for cap_map in pd.tcb_cap_maps.iter() {
+            // Get the TCB of the pd referenced in cap_map name
+            let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name)
+            .ok_or(format!("PD: {}, does not exist when trying to map extra TCB cap into PD: {}", cap_map.pd_name, pd.name))?;
+            let pd_tcb_id = *pd_id_to_tcb_id.get(&pd_src_idx).unwrap();
+
+            // Map this into the destination pd's cspace and the specified slot.
+            let pd_tcb_cap = capdl_util_make_tcb_cap(pd_tcb_id);
+            capdl_util_insert_cap_into_cspace(
+                &mut spec_container,
+                pd_dest_cspace_id,
+                (PD_BASE_PD_TCB_CAP + cap_map.dest_cspace_slot) as u32,
+                pd_tcb_cap,
+            );
+        }
+    }
+
+    // *********************************
+    // Step 6. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.
