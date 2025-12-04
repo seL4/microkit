@@ -96,8 +96,14 @@ const PD_BASE_PD_SC_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_SC_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
+// The following region can be used for whatever the user wants to map into their
+// cspace. We restrict them to use this region so that they don't accidently
+// overwrite other parts of the cspace. The cspace slot that the users provide
+// for mapping in extra caps such as TCBs and SCs will be as an offset to this
+// index. We are bounding this to 128 slots for now.
+const PD_BASE_USER_CAPS: u64 = PD_BASE_IOPORT_CAP + 64;
 
-pub const PD_CAP_SIZE: u32 = 512;
+pub const PD_CAP_SIZE: u32 = 1024;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
 const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() as u64;
@@ -1108,7 +1114,7 @@ pub fn build_capdl_spec(
         for cap_map in pd.tcb_cap_maps.iter() {
             // Get the TCB of the pd referenced in cap_map name
             let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name)
-            .ok_or(format!("PD: {}, does not exist when trying to map extra TCB cap into PD: {}", cap_map.pd_name, pd.name))?;
+            .ok_or(format!("PD: '{}', does not exist when trying to map extra TCB cap into PD: '{}'", cap_map.pd_name, pd.name))?;
             let pd_tcb_id = *pd_id_to_tcb_id.get(&pd_src_idx).unwrap();
 
             // Map this into the destination pd's cspace and the specified slot.
@@ -1116,7 +1122,7 @@ pub fn build_capdl_spec(
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 pd_dest_cspace_id,
-                (PD_BASE_PD_TCB_CAP + cap_map.dest_cspace_slot) as u32,
+                (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
                 pd_tcb_cap,
             );
         }

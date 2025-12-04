@@ -261,7 +261,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
-    pub tcb_cap_maps: Vec<TcbCapMap>,
+    pub tcb_cap_maps: Vec<CapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -277,7 +277,7 @@ pub struct ProtectionDomain {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct TcbCapMap {
+pub struct CapMap {
     pub pd_name: String,
     pub dest_cspace_slot: u64,
 }
@@ -1051,7 +1051,7 @@ impl ProtectionDomain {
                     virtual_machine = Some(vm);
                 }
                 "tcb_cap_map" => {
-                    tcb_cap_maps.push(TcbCapMap::from_xml(xml_sdf, &child)?);
+                    tcb_cap_maps.push(CapMap::from_xml(xml_sdf, &child)?);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -1226,25 +1226,25 @@ impl VirtualMachine {
     }
 }
 
-impl TcbCapMap {
+impl CapMap {
       fn from_xml(
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-    ) -> Result<TcbCapMap, String> {
+    ) -> Result<CapMap, String> {
         check_attributes(xml_sdf, node, &["src_pd_name", "dest_cspace_slot"])?;
 
         let pd_name = checked_lookup(xml_sdf, node, "src_pd_name")?.to_string();
         let dest_cspace_slot = sdf_parse_number(checked_lookup(xml_sdf, node, "dest_cspace_slot")?, node)?;
 
-        if dest_cspace_slot >= 64 {
+        if dest_cspace_slot >= 128 {
             return Err(value_error(
                 xml_sdf,
                 node,
-                "There are only 64 destination cspace slots available. Max slot allowed is 63".to_string(),
+                "There are only 128 destination cspace slots available. Max slot allowed is 63".to_string(),
             ));
         }
 
-        Ok(TcbCapMap {
+        Ok(CapMap {
             pd_name,
             dest_cspace_slot,
         })
@@ -1923,6 +1923,31 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
         if let Some(vm) = &pd.virtual_machine {
             check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+        }
+    }
+
+    // Ensure that there are no overlapping extra cap maps in the user caps region
+    for pd in &pds {
+        let mut user_cap_slots = Vec::new();
+        let mut user_tcb_names = Vec::new();
+        for tcb_cap_map in pd.tcb_cap_maps.iter() {
+            if user_cap_slots.contains(&tcb_cap_map.dest_cspace_slot) {
+                return Err(format!(
+                    "Error: Overlapping cap slot: {} in protection domain: '{}'",
+                    tcb_cap_map.dest_cspace_slot,
+                    pd.name));
+            } else {
+                user_cap_slots.push(tcb_cap_map.dest_cspace_slot);
+            }
+
+            if user_tcb_names.contains(&tcb_cap_map.pd_name) {
+                return Err(format!(
+                    "Error: Duplicate tcb cap mapping. Src PD: '{}', dest PD: '{}'",
+                    tcb_cap_map.pd_name,
+                    pd.name));
+            } else {
+                user_tcb_names.push(tcb_cap_map.pd_name.clone());
+            }
         }
     }
 

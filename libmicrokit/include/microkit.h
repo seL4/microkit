@@ -31,6 +31,9 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_VCPU_CAP 394
 #define BASE_IOPORT_CAP 458
 
+// @kwinter: Bounding user caps to 128. Is this restriction ok for now?
+#define BASE_USER_CAPS 522
+
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_MAX_CHANNEL_ID (MICROKIT_MAX_CHANNELS - 1)
 #define MICROKIT_MAX_IOPORT_ID MICROKIT_MAX_CHANNELS
