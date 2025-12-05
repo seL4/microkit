@@ -263,6 +263,7 @@ pub struct ProtectionDomain {
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
     pub tcb_cap_maps: Vec<CapMap>,
+    pub sc_cap_maps: Vec<CapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -597,6 +598,7 @@ impl ProtectionDomain {
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
         let mut tcb_cap_maps = Vec::new();
+        let mut sc_cap_maps = Vec::new();
 
         let mut program_image = None;
         let mut program_image_for_symbols = None;
@@ -1047,6 +1049,9 @@ impl ProtectionDomain {
                 "tcb_cap_map" => {
                     tcb_cap_maps.push(CapMap::from_xml(xml_sdf, &child)?);
                 }
+                "sc_cap_map" => {
+                    sc_cap_maps.push(CapMap::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1085,6 +1090,7 @@ impl ProtectionDomain {
             ioports,
             setvars,
             tcb_cap_maps,
+            sc_cap_maps,
             child_pds,
             virtual_machine,
             has_children,
@@ -1925,6 +1931,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     for pd in &pds {
         let mut user_cap_slots = Vec::new();
         let mut user_tcb_names = Vec::new();
+        let mut user_sc_names = Vec::new();
+
         for tcb_cap_map in pd.tcb_cap_maps.iter() {
             if user_cap_slots.contains(&tcb_cap_map.dest_cspace_slot) {
                 return Err(format!(
@@ -1942,6 +1950,26 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     pd.name));
             } else {
                 user_tcb_names.push(tcb_cap_map.pd_name.clone());
+            }
+        }
+
+        for sc_cap_map in pd.sc_cap_maps.iter() {
+            if user_cap_slots.contains(&sc_cap_map.dest_cspace_slot) {
+                return Err(format!(
+                    "Error: Overlapping cap slot: {} in protection domain: '{}'",
+                    sc_cap_map.dest_cspace_slot,
+                    pd.name));
+            } else {
+                user_cap_slots.push(sc_cap_map.dest_cspace_slot);
+            }
+
+            if user_sc_names.contains(&sc_cap_map.pd_name) {
+                return Err(format!(
+                    "Error: Duplicate sc cap mapping. Src PD: '{}', dest PD: '{}'",
+                    sc_cap_map.pd_name,
+                    pd.name));
+            } else {
+                user_sc_names.push(sc_cap_map.pd_name.clone());
             }
         }
     }
