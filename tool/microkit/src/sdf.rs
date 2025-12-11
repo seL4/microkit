@@ -257,6 +257,8 @@ pub struct ProtectionDomain {
     pub smc: bool,
     pub cpu: CpuCore,
     pub program_image: PathBuf,
+    /// Enable FPU for this PD.
+    pub fpu: bool,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
@@ -456,6 +458,7 @@ impl ProtectionDomain {
             // but we do the error-checking further down.
             "smc",
             "cpu",
+            "fpu",
         ];
         if is_child {
             attrs.push("id");
@@ -606,6 +609,13 @@ impl ProtectionDomain {
                 format!("priority must be between 0 and {PD_MAX_PRIORITY}"),
             ));
         }
+
+        // FPU is enabled by default
+        let fpu = if let Some(xml_fpu) = node.attribute("fpu") {
+            !(xml_fpu == "false")
+        } else {
+            true
+        };
 
         for child in node.children() {
             if !child.is_element() {
@@ -1074,6 +1084,7 @@ impl ProtectionDomain {
             smc,
             cpu,
             program_image: program_image.unwrap(),
+            fpu,
             maps,
             irqs,
             ioports,

@@ -322,6 +322,7 @@ impl CapDLSpecContainer {
             prio: 0,
             max_prio: 0,
             resume: false,
+            fpu: true,
             ip: entry_point.into(),
             sp: 0.into(),
             gprs: Vec::new(),
@@ -468,7 +469,7 @@ pub fn build_capdl_spec(
     )
     .unwrap();
 
-    // At this point, all of the required objects for the monitor have been created and it caps inserted into
+    // At this point, all of the required objects for the monitor have been created and its caps inserted into
     // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
     // In addition, `add_elf_to_spec()` doesn't fill most the details in the TCB.
     // Now fill them in: stack ptr, priority, ipc buf vaddr, etc.
@@ -911,6 +912,7 @@ pub fn build_capdl_spec(
                             affinity: Word(vcpu.cpu.0.into()),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
+                            fpu: true,
                             resume: false,
                             // VMs do not have program images associated with them so these are always zero.
                             ip: Word(0),
