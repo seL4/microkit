@@ -988,6 +988,7 @@ It supports the following attributes:
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
+* `fpu`: (optional) disable the FPU support for this PD. Defaults to true.
 
 Additionally, it supports the following child elements:
 
