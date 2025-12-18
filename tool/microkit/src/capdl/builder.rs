@@ -981,6 +981,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.master_fault_ep = None; // Not used on MCS kernel.
             pd_tcb.extra.prio = pd.priority;
             pd_tcb.extra.max_prio = pd.priority;
+            pd_tcb.extra.fpu = pd.fpu;
             pd_tcb.extra.resume = true;
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);

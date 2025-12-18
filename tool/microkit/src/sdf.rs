@@ -612,8 +612,14 @@ impl ProtectionDomain {
 
         // FPU is enabled by default
         let fpu = if let Some(xml_fpu) = node.attribute("fpu") {
-            !(xml_fpu == "false")
+            match str_to_bool(xml_fpu) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(xml_sdf, node, "fpu must be 'true' or 'false'".to_string(),))
+                }
+            }
         } else {
+            // Default to fpu enabled
             true
         };
 
