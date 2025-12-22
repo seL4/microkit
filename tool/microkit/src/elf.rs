@@ -220,12 +220,12 @@ impl ElfFile {
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
-            Err(err) => return Err(format!("Failed to read ELF '{}': {}", path.display(), err)),
+            Err(err) => return Err(format!("failed to read ELF: {}", err)),
         };
 
         let magic = &bytes[0..4];
         if magic != ELF_MAGIC {
-            return Err(format!("ELF '{}': magic check failed", path.display()));
+            return Err("magic check failed".to_string());
         }
 
         let word_size;
@@ -241,13 +241,7 @@ impl ElfFile {
                 hdr_size = std::mem::size_of::<ElfHeader64>();
                 word_size = 64;
             }
-            _ => {
-                return Err(format!(
-                    "ELF '{}': invalid class '{}'",
-                    path.display(),
-                    class
-                ))
-            }
+            _ => return Err(format!("invalid class '{}'", class)),
         };
 
         // Now need to read the header into a struct
@@ -260,17 +254,16 @@ impl ElfFile {
         assert!(hdr.ident_class == *class);
 
         if hdr.ident_data != 1 {
-            return Err(format!(
-                "ELF '{}': incorrect endianness, only little endian architectures are supported",
-                path.display()
-            ));
+            return Err(
+                "incorrect endianness, only little endian architectures are supported".to_string(),
+            );
         }
 
         let entry = hdr.entry;
 
         // Read all the segments
         if hdr.phnum == 0 {
-            return Err(format!("ELF '{}': has no program headers", path.display()));
+            return Err("has no program headers".to_string());
         }
 
         let mut segments = Vec::with_capacity(hdr.phnum as usize);
@@ -325,18 +318,12 @@ impl ElfFile {
         }
 
         if shstrtab_shent.is_none() {
-            return Err(format!(
-                "ELF '{}': unable to find string table section",
-                path.display()
-            ));
+            return Err("unable to find string table section".to_string());
         }
 
         assert!(symtab_shent.is_some());
         if symtab_shent.is_none() {
-            return Err(format!(
-                "ELF '{}': unable to find symbol table section",
-                path.display()
-            ));
+            return Err("unable to find symbol table section".to_string());
         }
 
         // Reading the symbol table

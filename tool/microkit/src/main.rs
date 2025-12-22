@@ -568,7 +568,14 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let capdl_initialiser_elf = ElfFile::from_path(&capdl_init_elf_path).unwrap();
+    let capdl_initialiser_elf = ElfFile::from_path(&capdl_init_elf_path).unwrap_or_else(|e| {
+        eprintln!(
+            "ERROR: failed to parse initialiser ELF ({}): {}",
+            capdl_init_elf_path.display(),
+            e
+        );
+        std::process::exit(1);
+    });
 
     // Only relevant for ARM and RISC-V.
     // Determine how much physical memory is available to the kernel after it boots but before dropping
@@ -581,7 +588,14 @@ fn main() -> Result<(), String> {
         match kernel_config.arch {
             Arch::X86_64 => (None, None, None),
             Arch::Aarch64 | Arch::Riscv64 => {
-                let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
+                let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap_or_else(|e| {
+                    eprintln!(
+                        "ERROR: failed to parse kernel ELF ({}): {}",
+                        kernel_elf_path.display(),
+                        e
+                    );
+                    std::process::exit(1);
+                });
 
                 // Now determine how much memory we have after the kernel boots.
                 let (available_memory, kernel_boot_region) =
@@ -594,7 +608,14 @@ fn main() -> Result<(), String> {
             }
         };
 
-    let monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
+    let monitor_elf = ElfFile::from_path(&monitor_elf_path).unwrap_or_else(|e| {
+        eprintln!(
+            "ERROR: failed to parse monitor ELF ({}): {}",
+            monitor_elf_path.display(),
+            e
+        );
+        std::process::exit(1);
+    });
 
     let mut search_paths = vec![std::env::current_dir().unwrap()];
     for path in args.search_paths {
@@ -608,9 +629,18 @@ fn main() -> Result<(), String> {
     // Get the elf files for each pd:
     for pd in &system.protection_domains {
         match get_full_path(&pd.program_image, &search_paths) {
-            Some(path) => {
-                system_elfs.push(ElfFile::from_path(&path)?);
-            }
+            Some(path) => match ElfFile::from_path(&path) {
+                Ok(elf) => system_elfs.push(elf),
+                Err(e) => {
+                    eprintln!(
+                        "ERROR: failed to parse ELF '{}' for PD '{}': {}",
+                        path.display(),
+                        pd.name,
+                        e
+                    );
+                    std::process::exit(1);
+                }
+            },
             None => {
                 return Err(format!(
                     "unable to find program image: '{}'",
