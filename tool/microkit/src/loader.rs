@@ -139,7 +139,14 @@ impl<'a> Loader<'a> {
             unreachable!("internal error: x86_64 does not support creating a loader image");
         }
 
-        let loader_elf = ElfFile::from_path(loader_elf_path).unwrap();
+        let loader_elf = ElfFile::from_path(loader_elf_path).unwrap_or_else(|e| {
+            eprintln!(
+                "ERROR: failed to parse loader ELF ({}): {}",
+                loader_elf_path.display(),
+                e
+            );
+            std::process::exit(1);
+        });
         let sz = loader_elf.word_size;
         let magic = match sz {
             32 => 0x5e14dead,
