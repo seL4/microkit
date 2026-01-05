@@ -24,8 +24,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY,
+        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT,
+        MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -582,7 +582,6 @@ pub fn build_capdl_spec(
 
         pd_id_to_tcb_id.insert(pd_global_idx, pd_tcb_obj_id);
 
-
         // In the benchmark configuration, we allow PDs to access their own TCB.
         // This is necessary for accessing kernel's benchmark API.
         if kernel_config.benchmark {
@@ -1115,39 +1114,42 @@ pub fn build_capdl_spec(
     for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
         let pd_dest_cspace_id = *pd_id_to_cspace_id.get(&pd_dest_idx).unwrap();
 
-        for cap_map in pd.tcb_cap_maps.iter() {
-            // Get the TCB of the pd referenced in cap_map name
-            let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name)
-            .ok_or(format!("PD: '{}', does not exist when trying to map extra TCB cap into PD: '{}'", cap_map.pd_name, pd.name))?;
-            let pd_tcb_id = *pd_id_to_tcb_id.get(&pd_src_idx).unwrap();
+        for cap_map in pd.cap_maps.iter() {
+            let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name).ok_or(format!(
+                "PD: '{}', does not exist when trying to map extra TCB cap into PD: '{}'",
+                cap_map.pd_name, pd.name
+            ))?;
 
-            // Map this into the destination pd's cspace and the specified slot.
-            let pd_tcb_cap = capdl_util_make_tcb_cap(pd_tcb_id);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_dest_cspace_id,
-                (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
-                pd_tcb_cap,
-            );
-        }
+            if cap_map.cap_type == CapMapType::Tcb {
+                // Get the TCB of the pd referenced in cap_map name
+                let pd_tcb_id = *pd_id_to_tcb_id.get(pd_src_idx).unwrap();
 
-        for cap_map in pd.sc_cap_maps.iter() {
-            let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name)
-            .ok_or(format!("PD: '{}', does not exist when trying to map extra SC cap into PD: '{}'", cap_map.pd_name, pd.name))?;
+                // Map this into the destination pd's cspace and the specified slot.
+                let pd_tcb_cap = capdl_util_make_tcb_cap(pd_tcb_id);
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_dest_cspace_id,
+                    (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
+                    pd_tcb_cap,
+                );
+            } else if cap_map.cap_type == CapMapType::Sc {
+                if system.protection_domains[*pd_src_idx].passive {
+                    return Err(format!(
+                        "Trying to map scheduling context of a passive PD: '{}' into PD: '{}'",
+                        cap_map.pd_name, pd.name
+                    ));
+                }
 
-            if system.protection_domains[*pd_src_idx].passive {
-                return Err(format!("Trying to map scheduling context of a passive PD: '{}' into PD: '{}'", cap_map.pd_name, pd.name));
+                let pd_sc_id = *pd_id_to_sc_id.get(pd_src_idx).unwrap();
+
+                let pd_sc_cap = capdl_util_make_tcb_cap(pd_sc_id);
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_dest_cspace_id,
+                    (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
+                    pd_sc_cap,
+                );
             }
-
-            let pd_sc_id = *pd_id_to_sc_id.get(&pd_src_idx).unwrap();
-
-            let pd_sc_cap = capdl_util_make_tcb_cap(pd_sc_id);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_dest_cspace_id,
-                (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
-                pd_sc_cap,
-            );
         }
     }
 
