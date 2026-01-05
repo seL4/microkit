@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   build_linux:
-    name: Build SDK (Linux x86-64, ARM64)
+    name: Build SDK (Linux x86-64)
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Microkit repository
@@ -47,8 +47,6 @@ jobs:
           rustup default 1.90.0
           rustup target add x86_64-unknown-linux-musl
           rustup component add rust-src --toolchain 1.90.0-x86_64-unknown-linux-gnu
-          rustup target add aarch64-unknown-linux-musl
-          rustup component add rust-src --toolchain 1.90.0-aarch64-unknown-linux-musl
           sudo apt update
           sudo apt install software-properties-common
           sudo add-apt-repository ppa:deadsnakes/ppa
@@ -73,20 +71,11 @@ jobs:
         run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
       - name: Build SDK (x86-64)
         run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-linux-x86-64 --tool-target-triple="x86_64-unknown-linux-musl"
-      - name: Upload SDK (x86-64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64.tar.gz
-      - name: Build SDK (ARM64)
-        run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-linux-aarch64 --tool-target-triple="aarch64-unknown-linux-musl"
-      - name: Upload SDK (ARM64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
+  # The macOS run is slightly different to Linux since it also produces the
+  # per-commit builds of the SDK and uploads them to GitHub for all supported
+  # targets.
   build_macos:
-    name: Build SDK (macOS x86-64, ARM64)
+    name: Build SDK (macOS, all targets)
     runs-on: [self-hosted, macos, ARM64]
     steps:
       - name: Checkout Microkit repository
@@ -104,17 +93,25 @@ jobs:
         run: nix develop -c bash -c 'echo Hello World'
       - name: Set version
         run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
-      - name: Build SDK (x86-64)
-        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-x86-64 --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --tool-target-triple=x86_64-apple-darwin"
-      - name: Upload SDK (x86-64)
-        uses: actions/upload-artifact@v4
-        with:
-          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
-          path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
-      - name: Build SDK (ARM64)
-        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-macos-aarch64 --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --tool-target-triple=aarch64-apple-darwin"
-      - name: Upload SDK (ARM64)
+      - name: Build SDK
+        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --release-packaging"
+      - name: Upload SDK (macos-aarch64)
         uses: actions/upload-artifact@v4
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64.tar.gz
+      - name: Upload SDK (macos-x86-64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
+      - name: Upload SDK (linux-aarch64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
+      - name: Upload SDK (linux-x86-64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
+          path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64.tar.gz
