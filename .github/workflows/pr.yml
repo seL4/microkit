@@ -14,36 +14,16 @@ jobs:
     uses: seL4/ci-actions/.github/workflows/pr.yml@master
 
   clippy_check:
-    runs-on: ubuntu-latest
-    # Make sure CI fails on all warnings, including Clippy lints
-    env:
-      RUSTFLAGS: "-Dwarnings"
+    runs-on: [self-hosted, macos, ARM64]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run Clippy
-        run: cd tool/microkit && cargo clippy --all-targets --all-features
+        # Make sure CI fails on all warnings, including Clippy lints
+        run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-clippy --all-targets --all-features -- -D warnings"
 
   rustfmt_check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, ARM64]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Run rustfmt
-        run: cd tool/microkit && cargo fmt --check
+        run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-fmt --check"
