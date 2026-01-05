@@ -446,6 +446,20 @@ BEGIN_FUNC(arm_secondary_cpu_entry_asm)
     b arm_secondary_cpu_entry
 END_FUNC(arm_secondary_cpu_entry_asm)
 
+BEGIN_FUNC(arm_spin_table_secondary_cpu_entry_asm)
+    ldr x1, =arm_spin_table_secondary_cpu_data
+    ldr x0, [x1]
+    mov sp, x0
+    /* Reset secondary CPU data to zero, so other secondary CPUs can start booting. */
+    str xzr, [x1]
+    dsb sy
+    /* grab the core ID off the stack */
+    ldr x0, [sp]
+    mrs x1, mpidr_el1
+    /* x0 and x1 are arguments */
+    b arm_secondary_cpu_entry
+END_FUNC(arm_spin_table_secondary_cpu_entry_asm)
+
 .extern exception_handler
 .extern exception_register_state
 
