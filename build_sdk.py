@@ -477,22 +477,30 @@ def tar_filter(tarinfo: TarInfo) -> TarInfo:
     return tarinfo
 
 
+SUPPORTED_HOST_TARGETS = {
+    "linux-x86-64": "x86_64-unknown-linux-musl",
+    "linux-aarch64": "aarch64-unknown-linux-musl",
+    "macos-aarch64": "aarch64-apple-darwin",
+    "macos-x86-64": "x86_64-apple-darwin",
+}
+
+
 def get_tool_target_triple() -> str:
     host_system = host_platform.system()
     if host_system == "Linux":
         host_arch = host_platform.machine()
         if host_arch == "x86_64":
-            return "x86_64-unknown-linux-musl"
+            return SUPPORTED_HOST_TARGETS["linux-x86-64"]
         elif host_arch == "aarch64":
-            return "aarch64-unknown-linux-musl"
+            return SUPPORTED_HOST_TARGETS["linux-aarch64"]
         else:
             raise Exception(f"Unexpected Linux architecture: {host_arch}")
     elif host_system == "Darwin":
         host_arch = host_platform.machine()
         if host_arch == "x86_64":
-            return "x86_64-apple-darwin"
+            return SUPPORTED_HOST_TARGETS["macos-x86-64"]
         elif host_arch == "arm64":
-            return "aarch64-apple-darwin"
+            return SUPPORTED_HOST_TARGETS["macos-aarch64"]
         else:
             raise Exception(f"Unexpected Darwin architecture: {host_arch}")
     else:
@@ -952,14 +960,8 @@ def main() -> None:
             for filename in filenames:
                 tar.add(filename, arcname=source_prefix / filename, filter=tar_filter)
 
-    RELEASE_TARGETS = [
-        ("linux-aarch64", "aarch64-unknown-linux-musl"),
-        ("linux-x86-64", "x86_64-unknown-linux-musl"),
-        ("macos-aarch64", "aarch64-apple-darwin"),
-        ("macos-x86-64", "x86_64-apple-darwin"),
-    ]
     if args.release_packaging:
-        for (target, tool_target) in RELEASE_TARGETS:
+        for (target, tool_target) in SUPPORTED_HOST_TARGETS.items():
             dest = Path("release") / f"{NAME}-sdk-{version}-{target}"
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.unlink(missing_ok=True)
