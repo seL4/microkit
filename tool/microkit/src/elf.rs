@@ -220,7 +220,7 @@ impl ElfFile {
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
-            Err(err) => return Err(format!("failed to read ELF: {}", err)),
+            Err(err) => return Err(format!("failed to read ELF: {err}")),
         };
 
         let magic = &bytes[0..4];
@@ -241,7 +241,7 @@ impl ElfFile {
                 hdr_size = std::mem::size_of::<ElfHeader64>();
                 word_size = 64;
             }
-            _ => return Err(format!("invalid class '{}'", class)),
+            _ => return Err(format!("invalid class '{class}'")),
         };
 
         // Now need to read the header into a struct
