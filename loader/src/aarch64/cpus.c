@@ -13,12 +13,19 @@
 #include "../loader.h"
 #include "../uart.h"
 
+/**
+ * This code handles booting secondary CPUs via the ARM PSCI standard
+ * and spin tables (e.g for the BCM2711).
+ * For PSCI, we reference version 1.3 issue F.b.
+ **/
+
 void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1);
 
-/**
- * For the moment this code assumes that CPUs are booted using the ARM PSCI
- * standard. We reference Version 1.3 issue F.b.
- **/
+/*
+ * Unlike PSCI, we cannot give arguments to the entry point of the secondary CPU,
+ * so we use this global to set the secondary CPU's stack pointer.
+ */
+uintptr_t arm_spin_table_secondary_cpu_data;
 
 size_t cpu_mpidrs[NUM_ACTIVE_CPUS];
 
@@ -54,14 +61,16 @@ static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ODROIDC4)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
-#elif defined(CONFIG_PLAT_BCM2711)
-static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ROCKPRO64)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 /* QEMU is special and can have arbitrary numbers of cores */
 // TODO.
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_BCM2711)
+/* BCM2711 does not use PSCI for CPU bring-up. */
+#define SMP_USE_SPIN_TABLE
+static const size_t cpus_release_addr[4] = {0xd8, 0xe0, 0xe8, 0xf0};
 #else
 
 _Static_assert(!is_set(CONFIG_ENABLE_SMP_SUPPORT),
@@ -71,8 +80,13 @@ _Static_assert(!is_set(CONFIG_ENABLE_SMP_SUPPORT),
 static const size_t psci_target_cpus[1] = {0x00};
 #endif
 
+#if defined(SMP_USE_SPIN_TABLE)
+_Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(cpus_release_addr),
+               "active CPUs cannot be more than available CPUs");
+#else
 _Static_assert(NUM_ACTIVE_CPUS <= ARRAY_SIZE(psci_target_cpus),
                "active CPUs cannot be more than available CPUs");
+#endif
 
 /** defined in util64.S */
 extern void arm_secondary_cpu_entry_asm(void *sp);
@@ -101,6 +115,41 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
 fail:
     for (;;) {}
 }
+
+#if defined(SMP_USE_SPIN_TABLE)
+/** defined in util64.S */
+extern void arm_spin_table_secondary_cpu_entry_asm(void *sp);
+
+static void arm_spin_table_cpu_start(int logical_cpu, uintptr_t sp)
+{
+    volatile uint64_t *release_addr = (uint64_t *)cpus_release_addr[logical_cpu];
+
+    arm_spin_table_secondary_cpu_data = sp;
+    /*
+     * DMB to ensure there is no re-ordering between the write to secondary
+     * CPU data and the write to the release address. This is to prevent the case
+     * where the secondary CPU observes the write to the release address before the
+     * write to secondary CPU data.
+     */
+    asm volatile("dmb sy" ::: "memory");
+
+    *release_addr = (uint64_t)arm_spin_table_secondary_cpu_entry_asm;
+    /*
+     * Ensure that the write to release address finishes before waking up the secondary CPU.
+     * The ARM manual [1] also says:
+     *      Arm recommends that software includes a DSB instruction before any SEV
+     *      instruction. DSB instruction ensures that no instructions, including any SEV
+     *      instructions, that appear in program order after the DSB instruction,
+     *      can execute until the DSB instruction has completed
+     *
+     * [1]: Reference I DVZXD of https://developer.arm.com/documentation/ddi0487/maa/-Part-D-The-AArch64-System-Level-Architecture/-Chapter-D1-The-AArch64-System-Level-Programmers--Model/-D1-7-Mechanisms-for-entering-a-low-power-state/-D1-7-1-Wait-for-Event
+     */
+    asm volatile("dsb sy" ::: "memory");
+
+    /* Send an event to the target CPU so that is is woken up if it is in a WFI/WFE loop. */
+    asm volatile("sev" ::: "memory");
+}
+#endif
 
 int plat_start_cpu(int logical_cpu)
 {
@@ -134,6 +183,13 @@ int plat_start_cpu(int logical_cpu)
        - the PSCI implementation handles cache invalidation and coherency
        - context_id is passed in the x0 register
     */
+#if defined(SMP_USE_SPIN_TABLE)
+    /* Do not start another secondary CPU unless the secondary CPU data has been reset,
+     * to prevent the data being over-written. */
+    while (__atomic_load_n(&arm_spin_table_secondary_cpu_data, __ATOMIC_ACQUIRE) != 0);
+    arm_spin_table_cpu_start(logical_cpu, (uint64_t)sp);
+    return 0;
+#else
     uint64_t ret = arm_smc64_call(
                        PSCI_FUNCTION_CPU_ON,
                        /* target_cpu */ psci_target_cpus[logical_cpu],
@@ -148,4 +204,5 @@ int plat_start_cpu(int logical_cpu)
     }
 
     return ret;
+#endif
 }
