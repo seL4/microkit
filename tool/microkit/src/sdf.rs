@@ -261,6 +261,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
+    pub cap_maps: Vec<CapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -273,6 +274,19 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CapMapType {
+    Tcb = 1,
+    Sc = 2,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CapMap {
+    pub cap_type: CapMapType,
+    pub pd_name: String,
+    pub dest_cspace_slot: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -588,6 +602,7 @@ impl ProtectionDomain {
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
+        let mut cap_maps = Vec::new();
 
         let mut program_image = None;
         let mut virtual_machine = None;
@@ -1042,6 +1057,9 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
+                "cap" => {
+                    cap_maps.push(CapMap::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1078,6 +1096,7 @@ impl ProtectionDomain {
             irqs,
             ioports,
             setvars,
+            cap_maps,
             child_pds,
             virtual_machine,
             has_children,
@@ -1210,6 +1229,43 @@ impl VirtualMachine {
             priority: priority as u8,
             budget,
             period,
+        })
+    }
+}
+
+impl CapMap {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<CapMap, String> {
+        check_attributes(xml_sdf, node, &["type", "pd", "dest_cspace_slot"])?;
+
+        let cap_type = match checked_lookup(xml_sdf, node, "type")? {
+            "tcb" => CapMapType::Tcb,
+            "sc" => CapMapType::Sc,
+            _ => {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    "type must be 'tcb' or 'sc' ".to_string(),
+                ))
+            }
+        };
+
+        let pd_name = checked_lookup(xml_sdf, node, "pd")?.to_string();
+        let dest_cspace_slot =
+            sdf_parse_number(checked_lookup(xml_sdf, node, "dest_cspace_slot")?, node)?;
+
+        if dest_cspace_slot >= 128 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "There are only 128 destination cspace slots available. Max slot allowed is 63"
+                    .to_string(),
+            ));
+        }
+
+        Ok(CapMap {
+            cap_type,
+            pd_name,
+            dest_cspace_slot,
         })
     }
 }
@@ -1630,7 +1686,6 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
-
     let system = doc
         .root()
         .children()
@@ -1887,6 +1942,45 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
         if let Some(vm) = &pd.virtual_machine {
             check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+        }
+    }
+
+    // Ensure that there are no overlapping extra cap maps in the user caps region
+    // and we are not mapping in the same tcb/sc
+    for pd in &pds {
+        let mut user_cap_slots = Vec::new();
+        let mut user_tcb_names = Vec::new();
+        let mut user_sc_names = Vec::new();
+
+        for cap_map in pd.cap_maps.iter() {
+            if user_cap_slots.contains(&cap_map.dest_cspace_slot) {
+                return Err(format!(
+                    "Error: Overlapping cap slot: {} in protection domain: '{}'",
+                    cap_map.dest_cspace_slot, pd.name
+                ));
+            } else {
+                user_cap_slots.push(cap_map.dest_cspace_slot);
+            }
+
+            if cap_map.cap_type == CapMapType::Tcb {
+                if user_tcb_names.contains(&cap_map.pd_name) {
+                    return Err(format!(
+                        "Error: Duplicate tcb cap mapping. Src PD: '{}', dest PD: '{}'",
+                        cap_map.pd_name, pd.name
+                    ));
+                } else {
+                    user_tcb_names.push(cap_map.pd_name.clone());
+                }
+            } else if cap_map.cap_type == CapMapType::Sc {
+                if user_sc_names.contains(&cap_map.pd_name) {
+                    return Err(format!(
+                        "Error: Duplicate sc cap mapping. Src PD: '{}', dest PD: '{}'",
+                        cap_map.pd_name, pd.name
+                    ));
+                } else {
+                    user_sc_names.push(cap_map.pd_name.clone());
+                }
+            }
         }
     }
 
