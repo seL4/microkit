@@ -29,6 +29,8 @@ void arch_set_exception_handler(void)
     if (el != EL0) {
         asm volatile("msr vbar_el1, %0" :: "r"(arm_vector_table));
     }
+
+    asm volatile("isb" ::: "memory");
 }
 
 uintptr_t exception_register_state[32];
