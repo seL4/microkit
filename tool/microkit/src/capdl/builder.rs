@@ -11,8 +11,8 @@ use std::{
 };
 
 use sel4_capdl_initializer_types::{
-    object, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec,
-    Word,
+    object, Cap, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId,
+    Spec, Word,
 };
 
 use crate::{
@@ -556,8 +556,7 @@ pub fn build_capdl_spec(
     let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
 
     // Keep tabs on caps such as TCB and SC so that we can create additional mappings for the cap into other PD's cspaces.
-    let mut pd_id_to_tcb_id: HashMap<usize, ObjectId> = HashMap::new();
-    let mut pd_id_to_sc_id: HashMap<usize, ObjectId> = HashMap::new();
+    let mut pd_shadow_cspace: HashMap<usize, Vec<Option<Cap>>> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -580,15 +579,18 @@ pub fn build_capdl_spec(
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
-        pd_id_to_tcb_id.insert(pd_global_idx, pd_tcb_obj_id);
+        let pd_tcb_obj = capdl_util_make_tcb_cap(pd_tcb_obj_id);
+
+        pd_shadow_cspace
+            .entry(pd_global_idx)
+            .or_insert_with(|| vec![None; CapMapType::__Len as usize])[CapMapType::Tcb as usize] =
+            Some(pd_tcb_obj.clone());
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
         // This is necessary for accessing kernel's benchmark API.
         if kernel_config.benchmark {
-            caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
-                PD_TCB_CAP_IDX as u32,
-                capdl_util_make_tcb_cap(pd_tcb_obj_id),
-            ));
+            caps_to_insert_to_pd_cspace
+                .push(capdl_util_make_cte(PD_TCB_CAP_IDX as u32, pd_tcb_obj));
         }
 
         // Allow PD to access their own VSpace for ops such as cache cleaning on ARM.
@@ -672,10 +674,11 @@ pub fn build_capdl_spec(
             pd.budget,
             0x100 + pd_global_idx as u64,
         );
-
-        pd_id_to_sc_id.insert(pd_global_idx, pd_sc_obj_id);
-
         let pd_sc_cap = capdl_util_make_sc_cap(pd_sc_obj_id);
+
+        pd_shadow_cspace.get_mut(&pd_global_idx).unwrap()[CapMapType::Sc as usize] =
+            Some(pd_sc_cap.clone());
+
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::SchedContext as u32,
             pd_sc_cap,
@@ -1120,36 +1123,16 @@ pub fn build_capdl_spec(
                 cap_map.pd_name, pd.name
             ))?;
 
-            if cap_map.cap_type == CapMapType::Tcb {
-                // Get the TCB of the pd referenced in cap_map name
-                let pd_tcb_id = *pd_id_to_tcb_id.get(pd_src_idx).unwrap();
-
-                // Map this into the destination pd's cspace and the specified slot.
-                let pd_tcb_cap = capdl_util_make_tcb_cap(pd_tcb_id);
-                capdl_util_insert_cap_into_cspace(
-                    &mut spec_container,
-                    pd_dest_cspace_id,
-                    (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
-                    pd_tcb_cap,
-                );
-            } else if cap_map.cap_type == CapMapType::Sc {
-                if system.protection_domains[*pd_src_idx].passive {
-                    return Err(format!(
-                        "Trying to map scheduling context of a passive PD: '{}' into PD: '{}'",
-                        cap_map.pd_name, pd.name
-                    ));
-                }
-
-                let pd_sc_id = *pd_id_to_sc_id.get(pd_src_idx).unwrap();
-
-                let pd_sc_cap = capdl_util_make_tcb_cap(pd_sc_id);
-                capdl_util_insert_cap_into_cspace(
-                    &mut spec_container,
-                    pd_dest_cspace_id,
-                    (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
-                    pd_sc_cap,
-                );
-            }
+            let pd_obj = pd_shadow_cspace.get(pd_src_idx).unwrap()[cap_map.cap_type as usize]
+                .as_ref()
+                .unwrap();
+            // Map this into the destination pd's cspace and the specified slot.
+            capdl_util_insert_cap_into_cspace(
+                &mut spec_container,
+                pd_dest_cspace_id,
+                (PD_BASE_USER_CAPS + cap_map.dest_cspace_slot) as u32,
+                pd_obj.clone(),
+            );
         }
     }
 

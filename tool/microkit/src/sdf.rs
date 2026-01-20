@@ -276,10 +276,11 @@ pub struct ProtectionDomain {
     text_pos: Option<roxmltree::TextPos>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CapMapType {
-    Tcb = 1,
-    Sc = 2,
+    Tcb = 0,
+    Sc,
+    __Len,
 }
 
 #[derive(Debug, PartialEq, Eq)]
