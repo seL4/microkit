@@ -1951,13 +1951,10 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     }
 
     // Ensure that there are no overlapping extra cap maps in the user caps region
-    // and we are not mapping in the same tcb/sc
+    // and we are not mapping in the same cap from the same source more than once
     for pd in &pds {
         let mut user_cap_slots = Vec::new();
-        let mut user_tcb_names = Vec::new();
-        let mut user_sc_names = Vec::new();
-        let mut user_vspace_names = Vec::new();
-        let mut user_cnode_names = Vec::new();
+        let mut seen_pd_cap_maps: Vec<(CapMapType, String)> = Vec::new();
 
         for cap_map in pd.cap_maps.iter() {
             if user_cap_slots.contains(&cap_map.dest_cspace_slot) {
@@ -1969,42 +1966,13 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 user_cap_slots.push(cap_map.dest_cspace_slot);
             }
 
-            if cap_map.cap_type == CapMapType::Tcb {
-                if user_tcb_names.contains(&cap_map.pd_name) {
-                    return Err(format!(
-                        "Error: Duplicate tcb cap mapping. Src PD: '{}', dest PD: '{}'",
-                        cap_map.pd_name, pd.name
+            if seen_pd_cap_maps.contains(&(cap_map.cap_type, cap_map.pd_name.clone())) {
+                return Err(format!(
+                        "Error: Duplicate cap mapping of type '{:?}'. Src PD: '{}', dest PD: '{}'.",
+                        cap_map.cap_type, cap_map.pd_name, pd.name
                     ));
-                } else {
-                    user_tcb_names.push(cap_map.pd_name.clone());
-                }
-            } else if cap_map.cap_type == CapMapType::Sc {
-                if user_sc_names.contains(&cap_map.pd_name) {
-                    return Err(format!(
-                        "Error: Duplicate sc cap mapping. Src PD: '{}', dest PD: '{}'",
-                        cap_map.pd_name, pd.name
-                    ));
-                } else {
-                    user_sc_names.push(cap_map.pd_name.clone());
-                }
-            } else if cap_map.cap_type == CapMapType::Vspace {
-                if user_vspace_names.contains(&cap_map.pd_name) {
-                    return Err(format!(
-                        "Error: Duplicate vspace cap mapping. Src PD: '{}', dest PD: '{}'",
-                        cap_map.pd_name, pd.name
-                    ));
-                } else {
-                    user_vspace_names.push(cap_map.pd_name.clone());
-                }
-            } else if cap_map.cap_type == CapMapType::Cnode {
-                if user_cnode_names.contains(&cap_map.pd_name) {
-                    return Err(format!(
-                        "Error: Duplicate cnode cap mapping. Src PD: '{}', dest PD: '{}'",
-                        cap_map.pd_name, pd.name
-                    ));
-                } else {
-                    user_cnode_names.push(cap_map.pd_name.clone());
-                }
+            } else {
+                seen_pd_cap_maps.push((cap_map.cap_type.clone(), cap_map.pd_name.clone()))
             }
         }
     }
