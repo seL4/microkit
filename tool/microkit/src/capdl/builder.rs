@@ -580,11 +580,14 @@ pub fn build_capdl_spec(
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
         let pd_tcb_obj = capdl_util_make_tcb_cap(pd_tcb_obj_id);
+        let pd_vspace_obj = capdl_util_make_page_table_cap(pd_vspace_obj_id);
 
         pd_shadow_cspace
             .entry(pd_global_idx)
             .or_insert_with(|| vec![None; CapMapType::__Len as usize])[CapMapType::Tcb as usize] =
             Some(pd_tcb_obj.clone());
+        pd_shadow_cspace.get_mut(&pd_global_idx).unwrap()[CapMapType::Vspace as usize] =
+            Some(pd_vspace_obj.clone());
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
         // This is necessary for accessing kernel's benchmark API.
@@ -596,7 +599,7 @@ pub fn build_capdl_spec(
         // Allow PD to access their own VSpace for ops such as cache cleaning on ARM.
         caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
             PD_VSPACE_CAP_IDX as u32,
-            capdl_util_make_page_table_cap(pd_vspace_obj_id),
+            pd_vspace_obj,
         ));
 
         // Step 3-2: Map in all Memory Regions
@@ -995,6 +998,8 @@ pub fn build_capdl_spec(
         );
         let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
+        pd_shadow_cspace.get_mut(&pd_global_idx).unwrap()[CapMapType::Cnode as usize] =
+            Some(pd_cnode_cap.clone());
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
             pd_cnode_cap,

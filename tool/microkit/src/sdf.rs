@@ -280,6 +280,8 @@ pub struct ProtectionDomain {
 pub enum CapMapType {
     Tcb = 0,
     Sc,
+    Vspace,
+    Cnode,
     __Len,
 }
 
@@ -1241,6 +1243,8 @@ impl CapMap {
         let cap_type = match checked_lookup(xml_sdf, node, "type")? {
             "tcb" => CapMapType::Tcb,
             "sc" => CapMapType::Sc,
+            "vspace" => CapMapType::Vspace,
+            "cnode" => CapMapType::Cnode,
             _ => {
                 return Err(value_error(
                     xml_sdf,
@@ -1952,6 +1956,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         let mut user_cap_slots = Vec::new();
         let mut user_tcb_names = Vec::new();
         let mut user_sc_names = Vec::new();
+        let mut user_vspace_names = Vec::new();
+        let mut user_cnode_names = Vec::new();
 
         for cap_map in pd.cap_maps.iter() {
             if user_cap_slots.contains(&cap_map.dest_cspace_slot) {
@@ -1980,6 +1986,24 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     ));
                 } else {
                     user_sc_names.push(cap_map.pd_name.clone());
+                }
+            } else if cap_map.cap_type == CapMapType::Vspace {
+                if user_vspace_names.contains(&cap_map.pd_name) {
+                    return Err(format!(
+                        "Error: Duplicate vspace cap mapping. Src PD: '{}', dest PD: '{}'",
+                        cap_map.pd_name, pd.name
+                    ));
+                } else {
+                    user_vspace_names.push(cap_map.pd_name.clone());
+                }
+            } else if cap_map.cap_type == CapMapType::Cnode {
+                if user_cnode_names.contains(&cap_map.pd_name) {
+                    return Err(format!(
+                        "Error: Duplicate cnode cap mapping. Src PD: '{}', dest PD: '{}'",
+                        cap_map.pd_name, pd.name
+                    ));
+                } else {
+                    user_cnode_names.push(cap_map.pd_name.clone());
                 }
             }
         }
