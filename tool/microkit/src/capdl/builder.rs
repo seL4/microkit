@@ -24,7 +24,7 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT,
+        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, CAP_MAP_TYPES,
         MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
@@ -584,7 +584,7 @@ pub fn build_capdl_spec(
 
         pd_shadow_cspace
             .entry(pd_global_idx)
-            .or_insert_with(|| vec![None; CapMapType::__Len as usize])[CapMapType::Tcb as usize] =
+            .or_insert_with(|| vec![None; CAP_MAP_TYPES])[CapMapType::Tcb as usize] =
             Some(pd_tcb_obj.clone());
         pd_shadow_cspace.get_mut(&pd_global_idx).unwrap()[CapMapType::Vspace as usize] =
             Some(pd_vspace_obj.clone());
@@ -597,10 +597,8 @@ pub fn build_capdl_spec(
         }
 
         // Allow PD to access their own VSpace for ops such as cache cleaning on ARM.
-        caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
-            PD_VSPACE_CAP_IDX as u32,
-            pd_vspace_obj,
-        ));
+        caps_to_insert_to_pd_cspace
+            .push(capdl_util_make_cte(PD_VSPACE_CAP_IDX as u32, pd_vspace_obj));
 
         // Step 3-2: Map in all Memory Regions
         for map in pd.maps.iter() {
@@ -1120,7 +1118,7 @@ pub fn build_capdl_spec(
     // *********************************
 
     for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
-        let pd_dest_cspace_id = *pd_id_to_cspace_id.get(&pd_dest_idx).unwrap();
+        let pd_dest_cspace_id = pd_id_to_cspace_id[&pd_dest_idx];
 
         for cap_map in pd.cap_maps.iter() {
             let pd_src_idx = pd_name_to_id.get(&cap_map.pd_name).ok_or(format!(
@@ -1128,7 +1126,7 @@ pub fn build_capdl_spec(
                 cap_map.pd_name, pd.name
             ))?;
 
-            let pd_obj = pd_shadow_cspace.get(pd_src_idx).unwrap()[cap_map.cap_type as usize]
+            let pd_obj = pd_shadow_cspace[pd_src_idx][cap_map.cap_type as usize]
                 .as_ref()
                 .unwrap();
             // Map this into the destination pd's cspace and the specified slot.
