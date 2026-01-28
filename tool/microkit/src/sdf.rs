@@ -280,10 +280,7 @@ pub struct ProtectionDomain {
     text_pos: Option<roxmltree::TextPos>,
 }
 
-/// Update CAP_MAP_TYPES whenever making changes to the CapMapType enum
-pub const CAP_MAP_TYPES: usize = 4;
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum CapMapType {
     Tcb = 0,
     Sc,
