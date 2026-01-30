@@ -828,4 +828,13 @@ mod system {
             "Error: too many protection domains (64) defined. Maximum is 63.",
         )
     }
+
+    #[test]
+    fn test_fpu_flag_wrong_value() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "wrong_fpu_flag_value.system",
+            "Error: fpu must be 'true' or 'false'",
+        )
+    }
 }
