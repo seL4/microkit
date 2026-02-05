@@ -1527,12 +1527,14 @@ qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one.
 To obtain a bootable ISO image, a Multiboot 2-compliant bootloader must be used. Please refer to your
 bootloader's documentations.
 
-## x86_64 generic {#x86_64_generic_vtx}
+## x86-64 generic (with VT-x) {#x86_64_generic_vtx}
 
 This board supports x86-64 platforms with generic microarchitecture and virtualisation.
 
-This configuration assumes Intel VT-x support. Currently, only 1 vCPU is supported per virtual machine
-on x86-64.
+This configuration assumes Intel VT-x support. AMD-V is (at this time) not supported by seL4,
+so running x86-64 virtual machines on Microkit will require an Intel CPU with VT-x.
+
+Currently, only 1 vCPU is supported per virtual machine on x86-64.
 
 The boot process is identical to [x86-64 generic](#x86_64_generic).
 
