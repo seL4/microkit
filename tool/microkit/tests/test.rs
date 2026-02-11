@@ -58,6 +58,20 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     normal_regions: None,
 };
 
+fn check_success(kernel_config: &sel4::Config, test_name: &str) {
+    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/sdf/");
+    path.push(test_name);
+    let sdf = std::fs::read_to_string(path).unwrap();
+    let parse = sdf::parse(test_name, &sdf, kernel_config);
+
+    if let Err(ref e) = parse {
+        eprintln!("Expected no error, instead got:\n{e}")
+    }
+
+    assert!(parse.is_ok());
+}
+
 fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str) {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/sdf/");
@@ -251,6 +265,20 @@ mod protection_domain {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "pd_duplicate_setvar.system",
             "Error: setvar on symbol 'test' already exists on element 'setvar': ",
+        )
+    }
+
+    #[test]
+    fn test_setvar_paddr_with_paddr() {
+        check_success(&DEFAULT_X86_64_KERNEL_CONFIG, "pd_setvar_with_paddr.system")
+    }
+
+    #[test]
+    fn test_setvar_paddr_no_paddr() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "pd_setvar_no_paddr.system",
+            "Error: setvar with 'region_paddr' for MR without a specified paddr is unsupported on x86-64 @",
         )
     }
 
