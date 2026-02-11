@@ -977,17 +977,6 @@ impl ProtectionDomain {
                     }
                 }
                 "setvar" => {
-                    match config.arch {
-                        Arch::Aarch64 | Arch::Riscv64 => {}
-                        Arch::X86_64 => {
-                            return Err(value_error(
-                                xml_sdf,
-                                node,
-                                "setvar with 'region_paddr' for MR without a specified paddr is unsupported on x86_64".to_string(),
-                            ));
-                        }
-                    };
-
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
                     let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
@@ -2006,8 +1995,19 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         if mr_names_with_setvar_paddr.contains(&mr.name)
             && mr.phys_addr == SysMemoryRegionPaddr::Unspecified
         {
-            // The actual allocation is done by another part of the tool.
-            mr.phys_addr = SysMemoryRegionPaddr::ToolAllocated(None);
+            match config.arch {
+                Arch::Aarch64 | Arch::Riscv64 => {
+                    // The actual allocation is done by another part of the tool.
+                    mr.phys_addr = SysMemoryRegionPaddr::ToolAllocated(None);
+                }
+                Arch::X86_64 => {
+                    return Err(format!(
+                        "Error: setvar with 'region_paddr' for MR without a specified paddr is unsupported on x86-64 @ '{}' {}",
+                        mr.name,
+                        loc_string(&xml_sdf, mr.text_pos.unwrap()),
+                    ));
+                }
+            };
         }
     }
 
