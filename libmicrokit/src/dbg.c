@@ -5,7 +5,6 @@
  */
 #include <microkit.h>
 
-#define __thread
 #include <sel4/sel4.h>
 
 void microkit_dbg_putc(int c)

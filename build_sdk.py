@@ -45,6 +45,13 @@ DEFAULT_X86_NUM_CPUS = 16
 DEFAULT_KERNEL_OPTIONS = {
     "KernelIsMCS": True,
     "KernelRootCNodeSizeBits": "17",
+    # Thread local storage is painful and annoying to configure.
+    # We'd really rather NOT use thread local storage (especially
+    # consider we never have more than one thread in a Vspace)
+    #
+    # Turning off this feature removes the __thread attribute on
+    # __sel4_ipc_buffer and makes it a true global.
+    "LibSel4UseThreadLocals": False,
 }
 
 DEFAULT_KERNEL_OPTIONS_AARCH64 = {
