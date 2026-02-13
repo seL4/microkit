@@ -1388,8 +1388,8 @@ Since the platform relies on some closed-source binary blobs for first stage boo
 
 Once the proper U-Boot image is in place, you can simply load the `loader.img` on the board and run it like that (this is assuming you have the TFTP server set up):
 
-    => tftp 0x02000000 loader.img
-    => go 0x02000000
+    => tftp 0x30000000 loader.img
+    => go 0x30000000
 
 For more booting options, please refer to the seL4 [board setup guide](https://docs.sel4.systems/Hardware/rock3b.html).
 
