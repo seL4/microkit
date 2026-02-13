@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define __thread
 #include <sel4/sel4.h>
 
 #include <microkit.h>

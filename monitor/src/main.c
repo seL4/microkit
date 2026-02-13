@@ -12,27 +12,6 @@
  *   Acting as the fault handler for protection domains.
  */
 
-/*
- * Why this you may ask? Well, the seL4 headers depend on
- * a global `__sel4_ipc_buffer` which is a pointer to the
- * thread's IPC buffer. Which is reasonable enough, passing
- * that explicitly to every function would be annoying.
- *
- * The seL4 headers make this global a thread-local global,
- * which is also reasonable, considering it applies to a
- * specific thread! But, for our purposes we don't have threads!
- *
- * Thread local storage is painful and annoying to configure.
- * We'd really rather NOT use thread local storage (especially
- * consider we never have more than one thread in a Vspace)
- *
- * So, by defining __thread to be empty it means the variable
- * becomes a true global rather than thread local storage
- * variable, which means, we don't need to waste a bunch
- * of effort and complexity on thread local storage implementation.
- */
-#define __thread
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <sel4/sel4.h>
