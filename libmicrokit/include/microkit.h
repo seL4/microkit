@@ -9,7 +9,6 @@
 
 #pragma once
 
-#define __thread
 #include <sel4/sel4.h>
 
 typedef unsigned int microkit_channel;
