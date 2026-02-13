@@ -4,6 +4,7 @@ Upstream-Contact: seL4 team <support@sel4.systems>
 Source: http://sel4.systems
 
 Files:
+  .linkcheck-ignore.yml
   Cargo.lock
   example/rust/Cargo.lock
   example/rust/support/*.json
