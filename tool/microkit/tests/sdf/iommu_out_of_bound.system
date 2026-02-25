@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2024, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="region" size="0x1000" />
+    <protection_domain name="test">
+        <program_image path="test" />
+        <!-- Bus ID:Device ID.Function ID, like 0:3.0 -->
+        <map mr="region" vaddr="0x5_000_000" />
+        <iomap mr="region" pcidev="0:3.0" addr="0x80_0000_0000" />
+    </protection_domain>
+</system>

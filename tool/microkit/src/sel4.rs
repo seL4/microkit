@@ -326,6 +326,14 @@ impl Config {
         }
     }
 
+    pub fn iommu_top(&self) -> u64 {
+        match self.arch {
+            Arch::Aarch64 => unreachable!("Internal bug: Aarch64 doesn't support IOMMU"),
+            Arch::Riscv64 => unreachable!("Internal bug: Risv64 doesn't support IOMMU"),
+            Arch::X86_64 => 1 << (12 + 9 + 9 + 9),
+        }
+    }
+
     /// Refers to the 'PPTR_BASE' define in kernel source
     pub fn virtual_base(&self) -> u64 {
         match self.arch {
@@ -444,6 +452,7 @@ pub enum ObjectType {
     SmallPage,
     LargePage,
     PageTable,
+    IOPageTable,
     Vcpu,
     AsidPool,
 }
@@ -469,6 +478,8 @@ impl ObjectType {
                 _ => panic!("Unexpected architecture asking for vCPU size bits"),
             },
             ObjectType::AsidPool => Some(object_sizes.asid_pool),
+            ObjectType::IOPageTable => Some(12),
+            // It would be best to avoid such catch all case so people might forget to add the size of new object type here.
             _ => None,
         }
     }

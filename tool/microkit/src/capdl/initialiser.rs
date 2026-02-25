@@ -44,7 +44,7 @@ impl CapDLInitialiser {
             elf,
             phys_base: None,
             spec_metadata: None,
-            log_level: LogLevel::Info,
+            log_level: LogLevel::Debug,
         }
     }
 

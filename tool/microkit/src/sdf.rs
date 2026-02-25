@@ -166,6 +166,15 @@ impl SysMemoryRegion {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct IOMemMap {
+    pub name: String,
+    pub pci_bus: u8,
+    pub pci_dev: u8,
+    pub dev_func: u8,
+    pub ioaddr: u64,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum SysIrqKind {
     Conventional {
@@ -276,6 +285,7 @@ pub struct ProtectionDomain {
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
+    pub iomaps: Vec<IOMemMap>,
     pub setvars: Vec<SysSetVar>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
@@ -424,6 +434,96 @@ impl SysMap {
             perms,
             cached,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+        })
+    }
+}
+
+// Things to check, make sure that there are no overlapping mappings per PCI device
+impl IOMemMap {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+    ) -> Result<IOMemMap, String> {
+        const PCI_DEV_MAX: u8 = 0x1F;
+        const DEV_FUNC_MAX: u8 = 0b111;
+        if config.arch != Arch::X86_64 {
+            return Err(value_error(
+                xml_sdf,
+                &node,
+                "IOMMU isn't supported on ARM and RISC-V".to_string(),
+            ));
+        }
+
+        check_attributes(xml_sdf, &node, &["mr", "pcidev", "addr"])?;
+
+        let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
+        let pcidev_str = checked_lookup(xml_sdf, node, "pcidev")?.to_string();
+        let ioaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "addr")?, node)?;
+
+        let max_ioaddr = config.iommu_top();
+
+        if ioaddr >= max_ioaddr {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("ioaddr (0x{ioaddr:x}) must be less than 0x{max_ioaddr:x}"),
+            ));
+        }
+
+        let pci_parts: Vec<i64> = pcidev_str
+            .split([':', '.'])
+            .map(str::trim)
+            .map(|x| {
+                i64::from_str_radix(x, 16)
+                    .expect("Error: Failed to parse parts of the PCI device address")
+            })
+            .collect();
+
+        if pci_parts.len() != 3 {
+            return Err(format!(
+                "Error: failed to parse PCI address '{}' on element '{}'",
+                pcidev_str,
+                node.tag_name().name()
+            ));
+        }
+
+        let pci_bus: u8 = pci_parts[0] as u8;
+
+        if pci_parts[0] != pci_bus as i64 {
+            return Err(value_error(
+                xml_sdf,
+                &node,
+                "Invalid value for PCI bus".to_string(),
+            ));
+        }
+
+        let pci_dev: u8 = pci_parts[1] as u8;
+
+        if pci_parts[1] != pci_dev as i64 || pci_dev > PCI_DEV_MAX {
+            return Err(value_error(
+                xml_sdf,
+                &node,
+                "Invalid value for PCI Device".to_string(),
+            ));
+        }
+
+        let dev_func: u8 = pci_parts[2] as u8;
+
+        if pci_parts[2] != dev_func as i64 || dev_func > DEV_FUNC_MAX {
+            return Err(value_error(
+                xml_sdf,
+                &node,
+                "Invalid value for PCI Device Function".to_string(),
+            ));
+        }
+
+        Ok(IOMemMap {
+            name: mr,
+            pci_bus: u8::try_from(pci_parts[0]).unwrap(),
+            pci_dev: u8::try_from(pci_parts[1]).unwrap(),
+            dev_func: u8::try_from(pci_parts[2]).unwrap(),
+            ioaddr,
         })
     }
 }
@@ -604,6 +704,7 @@ impl ProtectionDomain {
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
         let mut ioports = Vec::new();
+        let mut iomaps = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
 
@@ -1073,6 +1174,11 @@ impl ProtectionDomain {
                         ));
                     }
                 }
+                "iomap" => {
+                    let iomap = IOMemMap::from_xml(config, xml_sdf, &child)?;
+
+                    iomaps.push(iomap);
+                }
                 "setvar" => {
                     check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
@@ -1165,6 +1271,7 @@ impl ProtectionDomain {
             maps,
             irqs,
             ioports,
+            iomaps,
             setvars,
             child_pds,
             virtual_machine,

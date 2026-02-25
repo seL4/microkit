@@ -693,6 +693,15 @@ mod protection_domain {
             "Error: cpu core must be less than 1, got 10 on element 'protection_domain':",
         )
     }
+
+    #[test]
+    fn test_iommu_valid_on_x86() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_out_of_bound.system",
+            "Error: ioaddr (0x8000000000) must be less than 0x8000000000 on element 'iomap':",
+        )
+    }
 }
 
 #[cfg(test)]
