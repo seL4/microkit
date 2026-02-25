@@ -45,7 +45,7 @@ fn get_pt_level_name(sel4_config: &Config, level: usize) -> &str {
     }
 }
 
-fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> usize {
+pub(crate) fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> usize {
     let levels = sel4_config.num_page_table_levels();
 
     assert!(level < levels);
@@ -73,7 +73,7 @@ fn get_pt_level_index(sel4_config: &Config, level: usize, vaddr: u64) -> usize {
     ((vaddr >> shift) & mask) as usize
 }
 
-fn get_pt_level_coverage(sel4_config: &Config, level: usize, vaddr: u64) -> Range<u64> {
+pub(crate) fn get_pt_level_coverage(sel4_config: &Config, level: usize, vaddr: u64) -> Range<u64> {
     let levels = sel4_config.num_page_table_levels() as u64;
     let page_bits = 12;
     let bits_from_higher_lvls: u64 = (levels - (level as u64)) * 9;
@@ -86,7 +86,7 @@ fn get_pt_level_coverage(sel4_config: &Config, level: usize, vaddr: u64) -> Rang
     low..high
 }
 
-fn get_pt_level_to_insert(sel4_config: &Config, page_size_bytes: u64) -> usize {
+pub(crate) fn get_pt_level_to_insert(sel4_config: &Config, page_size_bytes: u64) -> usize {
     const SMALL_PAGE_BYTES: u64 = PageSize::Small as u64;
     const LARGE_PAGE_BYTES: u64 = PageSize::Large as u64;
     match page_size_bytes {

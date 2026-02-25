@@ -11,12 +11,13 @@ use std::{
 };
 
 use sel4_capdl_initializer_types::{
-    object, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec,
-    Word,
+    object::{self},
+    CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec, Word,
 };
 
 use crate::{
     capdl::{
+        iomem::{create_iospace, map_io_page},
         irq::create_irq_handler_cap,
         memory::{create_vspace, create_vspace_ept, map_page},
         spec::{capdl_obj_physical_size_bits, BytesContent, ElfContent, FillContent},
@@ -24,7 +25,7 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
+        CpuCore, IOMemMap, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
         MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
@@ -381,6 +382,33 @@ fn map_memory_region(
     }
 }
 
+/// Map frames to the IOSpace
+fn map_io_memory_region(
+    spec_container: &mut CapDLSpecContainer,
+    sel4_config: &Config,
+    pd_name: &str,
+    map: &IOMemMap,
+    target_iospace: ObjectId,
+    frames: &[ObjectId],
+) {
+    let mut cur_vaddr = map.ioaddr;
+    for frame_obj_id in frames.iter() {
+        // Make a cap for this frame. The perms should not matter in IOMMU
+        let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, true, true, false, false);
+        // Map it into this PD IOSpace.
+        map_io_page(
+            spec_container,
+            sel4_config,
+            pd_name,
+            target_iospace,
+            frame_cap,
+            cur_vaddr,
+        )
+        .unwrap();
+        cur_vaddr += PageSize::Small as u64;
+    }
+}
+
 /// Build a CapDL Spec according to the System Description File.
 pub fn build_capdl_spec(
     kernel_config: &Config,
@@ -673,7 +701,44 @@ pub fn build_capdl_spec(
             cur_stack_vaddr += PageSize::Small as u64;
         }
 
-        // Step 3-4 Create Scheduling Context
+        // Step 3-4 Create and Map IO Page Table Structure
+        {
+            let mut pci_to_iospace: HashMap<(u8, u8, u8), ObjectId> = HashMap::new();
+            for iomap in &pd.iomaps {
+                let iospace_id =
+                    match pci_to_iospace.get(&(iomap.pci_bus, iomap.pci_dev, iomap.dev_func)) {
+                        Some(iospace_id) => iospace_id.clone(),
+                        None => {
+                            let iospace_id = create_iospace(
+                                &mut spec_container,
+                                kernel_config,
+                                &pd.name,
+                                iomap.pci_bus,
+                                iomap.pci_dev,
+                                iomap.dev_func,
+                                pd_global_idx,
+                            );
+
+                            pci_to_iospace
+                                .insert((iomap.pci_bus, iomap.pci_dev, iomap.dev_func), iospace_id);
+                            iospace_id
+                        }
+                    };
+
+                let frames = mr_name_to_frames.get(&iomap.name).unwrap();
+
+                map_io_memory_region(
+                    &mut spec_container,
+                    kernel_config,
+                    &pd.name,
+                    iomap,
+                    iospace_id,
+                    frames,
+                );
+            }
+        }
+
+        // Step 3-5 Create Scheduling Context
         let pd_sc_obj_id = capdl_util_make_sc_obj(
             &mut spec_container,
             &pd.name,
@@ -688,7 +753,7 @@ pub fn build_capdl_spec(
             pd_sc_cap,
         ));
 
-        // Step 3-5 Create fault Endpoint cap to parent/monitor
+        // Step 3-6 Create fault Endpoint cap to parent/monitor
         let pd_fault_ep_cap = if let Some(pd_parent) = pd.parent {
             assert!(pd_global_idx > pd_parent);
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
@@ -720,7 +785,7 @@ pub fn build_capdl_spec(
             pd_fault_ep_cap.clone(),
         ));
 
-        // Step 3-6 Create cap to Monitor's endpoint for passive PDs.
+        // Step 3-7 Create cap to Monitor's endpoint for passive PDs.
         if pd.passive {
             let pd_monitor_ep_cap = capdl_util_make_endpoint_cap(
                 mon_fault_ep_obj_id,
@@ -735,7 +800,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-7 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
+        // Step 3-8 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
@@ -763,13 +828,13 @@ pub fn build_capdl_spec(
             pd_ntfn_cap,
         ));
 
-        // Step 3-8 Create Reply obj + cap and insert into CSpace
+        // Step 3-9 Create Reply obj + cap and insert into CSpace
         let pd_reply_obj_id = capdl_util_make_reply_obj(&mut spec_container, &pd.name);
         let pd_reply_cap = capdl_util_make_reply_cap(pd_reply_obj_id);
         caps_to_insert_to_pd_cspace
             .push(capdl_util_make_cte(PD_REPLY_CAP_IDX as u32, pd_reply_cap));
 
-        // Step 3-9 Create spec and caps to IRQs
+        // Step 3-10 Create spec and caps to IRQs
         for irq in pd.irqs.iter() {
             // Create a IRQ handler cap and insert into the requested CSpace's slot.
             let irq_handle_cap = create_irq_handler_cap(
@@ -785,7 +850,7 @@ pub fn build_capdl_spec(
                 .push(capdl_util_make_cte(irq_cap_idx as u32, irq_handle_cap));
         }
 
-        // Step 3-10 Create I/O port objects on x86 platform.
+        // Step 3-11 Create I/O port objects on x86 platform.
         for ioport in pd.ioports.iter() {
             let ioport_obj_id =
                 capdl_util_make_ioport_obj(&mut spec_container, &pd.name, ioport.addr, ioport.size);
@@ -796,7 +861,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-11 Create VM Spec.
+        // Step 3-12 Create VM Spec.
         if let Some(virtual_machine) = &pd.virtual_machine {
             // A VM really is just a collection of special threads, it has its own TCBs, Scheduling Contexts, etc...
             // The difference is that it have a vCPU for each TCB to store the virtual CPUs' states.
@@ -974,7 +1039,7 @@ pub fn build_capdl_spec(
             }
         }
 
-        // Step 3-12 Create ARM SMC cap if requested.
+        // Step 3-13 Create ARM SMC cap if requested.
         if pd.smc {
             caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
                 PD_ARM_SMC_CAP_IDX as u32,
@@ -982,7 +1047,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
+        // Step 3-14 Create CSpace and add all caps that the PD code and libmicrokit need to access.
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &pd.name,
@@ -997,7 +1062,7 @@ pub fn build_capdl_spec(
         ));
         pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
 
-        // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
+        // Step 3-15 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
             .get_root_object_mut(pd_tcb_obj_id)
             .unwrap()
@@ -1016,7 +1081,7 @@ pub fn build_capdl_spec(
             unreachable!("internal bug: build_capdl_spec() got a non TCB object ID when trying to set TCB parameters for the monitor.");
         }
 
-        // Step 3-15 bind this PD's TCB to the monitor, this accomplish two purposes:
+        // Step 3-16 bind this PD's TCB to the monitor, this accomplish two purposes:
         // 1. Allow PDs' TCBs to be named to their proper name in SDF in debug config.
         // 2. Allow passive PDs.
         capdl_util_insert_cap_into_cspace(
