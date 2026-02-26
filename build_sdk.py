@@ -169,9 +169,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a35",
         loader_link_address=0x90000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "tqma8xqp1gb",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="zcu102",
@@ -179,10 +179,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "zcu102",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="maaxboard",
@@ -190,9 +190,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x50000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "maaxboard",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="imx8mm_evk",
@@ -200,9 +200,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "imx8mm-evk",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="imx8mp_evk",
@@ -210,9 +210,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "imx8mp-evk",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="imx8mq_evk",
@@ -220,9 +220,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x41000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "imx8mq-evk",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="imx8mp_iotgate",
@@ -230,11 +230,11 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x50000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "imx8mp-evk",
             "KernelCustomDTS": Path("custom_dts/iot-gate.dts"),
             "KernelCustomDTSOverlay": KernelPath(path="src/plat/imx8m-evk/overlay-imx8mp-evk.dts"),
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="odroidc2",
@@ -242,9 +242,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x20000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "odroidc2",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="odroidc4",
@@ -252,9 +252,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a55",
         loader_link_address=0x20000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "odroidc4",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="ultra96v2",
@@ -262,10 +262,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x40000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "zynqmp",
             "KernelARMPlatform": "ultra96v2",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="qemu_virt_aarch64",
@@ -273,13 +273,13 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x70000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "qemu-arm-virt",
             "QEMU_MEMORY": "2048",
             # There is no peripheral timer, so we use the ARM
             # architectural timer
             "KernelArmExportPTMRUser": True,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="qemu_virt_aarch64_kvm",
@@ -287,14 +287,14 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a53",
         loader_link_address=0x70000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "qemu-arm-virt",
             "KernelArmHypervisorSupport": False,
             "QEMU_MEMORY": "2048",
             # There is no peripheral timer, so we use the ARM
             # architectural timer
             "KernelArmExportPTMRUser": True,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="qemu_virt_riscv64",
@@ -302,10 +302,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x90000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "qemu-riscv-virt",
             "QEMU_MEMORY": "2048",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="rpi4b_1gb",
@@ -313,10 +313,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 1024,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="rpi4b_2gb",
@@ -324,10 +324,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 2048,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="rpi4b_4gb",
@@ -335,10 +335,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 4096,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="rpi4b_8gb",
@@ -346,10 +346,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="cortex-a72",
         loader_link_address=0x10000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "bcm2711",
             "RPI4_MEMORY": 8192,
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="rockpro64",
@@ -359,18 +359,18 @@ SUPPORTED_BOARDS = (
         # ROCKPRO64 has 4 Cortex-A53 cores and 2 Cortex-A72 cores,
         # we always run on the Cortex-A53s.
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "rockpro64",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="rock3b",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a55",
         loader_link_address=0x30000000,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_AARCH64 | {
             "KernelPlatform": "rk3568",
-        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+        },
     ),
     BoardInfo(
         name="hifive_p550",
@@ -378,9 +378,9 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x90000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "hifive-p550",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="star64",
@@ -388,36 +388,36 @@ SUPPORTED_BOARDS = (
         gcc_cpu=None,
         loader_link_address=0x60000000,
         smp_cores=4,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "star64",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="ariane",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x90000000,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "ariane",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="cheshire",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x90000000,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "cheshire",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="serengeti",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
         loader_link_address=0x90000000,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_RISCV64 | {
             "KernelPlatform": "cheshire",
-        } | DEFAULT_KERNEL_OPTIONS_RISCV64,
+        },
     ),
     BoardInfo(
         name="x86_64_generic",
@@ -425,10 +425,10 @@ SUPPORTED_BOARDS = (
         gcc_cpu="generic",
         loader_link_address=None,
         smp_cores=DEFAULT_X86_NUM_CPUS,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_X86_64 | {
             "KernelSupportPCID": False,
             "KernelVTX": False,
-        } | DEFAULT_KERNEL_OPTIONS_X86_64,
+        },
     ),
     BoardInfo(
         name="x86_64_generic_vtx",
@@ -436,11 +436,11 @@ SUPPORTED_BOARDS = (
         gcc_cpu="generic",
         loader_link_address=None,
         smp_cores=DEFAULT_X86_NUM_CPUS,
-        kernel_options={
+        kernel_options=DEFAULT_KERNEL_OPTIONS_X86_64 | {
             "KernelSupportPCID": False,
             "KernelVTX": True,
             "KernelX86_64VTX64BitGuests": True,
-        } | DEFAULT_KERNEL_OPTIONS_X86_64,
+        },
     ),
 )
 
