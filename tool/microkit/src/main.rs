@@ -548,13 +548,6 @@ fn main() -> Result<(), String> {
         std::process::exit(1);
     }
 
-    if let Arch::Aarch64 = kernel_config.arch {
-        assert!(
-            kernel_config.hypervisor,
-            "Microkit tool expects a kernel with hypervisor mode enabled on AArch64."
-        );
-    }
-
     assert!(
         kernel_config.word_size == 64,
         "Microkit tool has various assumptions about the word size being 64-bits."
