@@ -260,6 +260,21 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="qemu_virt_aarch64_kvm",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x70000000,
+        smp_cores=4,
+        kernel_options={
+            "KernelPlatform": "qemu-arm-virt",
+            "KernelArmHypervisorSupport": False,
+            "QEMU_MEMORY": "2048",
+            # There is no peripheral timer, so we use the ARM
+            # architectural timer
+            "KernelArmExportPTMRUser": True,
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="qemu_virt_riscv64",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
