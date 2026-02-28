@@ -130,6 +130,7 @@ void arch_jump_to_kernel(int logical_cpu)
 {
     /* seL4 always expects the current logical CPU number in TPIDR_EL1 */
     asm volatile("msr TPIDR_EL1, %0" :: "r"(logical_cpu));
+    asm volatile("isb" ::: "memory");
 
     ((sel4_entry)(loader_data->kernel_entry))(
         loader_data->ui_p_reg_start,

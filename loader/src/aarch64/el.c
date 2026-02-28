@@ -54,12 +54,14 @@ int ensure_correct_el(int logical_cpu)
         } else {
             LDR_PRINT("INFO", logical_cpu, "Resetting CNTVOFF\n");
             asm volatile("msr cntvoff_el2, xzr");
+            asm volatile("isb" ::: "memory");
         }
     } else {
         if (el == EL2) {
             /* seL4 relies on the timer to be set to a useful value */
             LDR_PRINT("INFO", logical_cpu, "Resetting CNTVOFF\n");
             asm volatile("msr cntvoff_el2, xzr");
+            asm volatile("isb" ::: "memory");
             LDR_PRINT("INFO", logical_cpu, "Dropping from EL2 to EL1\n");
             switch_to_el1();
             LDR_PRINT("INFO", logical_cpu, "CurrentEL=");

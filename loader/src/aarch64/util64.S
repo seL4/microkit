@@ -249,6 +249,10 @@ BEGIN_FUNC(switch_to_el1)
 
     /* set ELR so that it's possible to perform ERET */
     msr     elr_el2, x30
+
+    /* barrier for writes to special register */
+    isb
+
     eret
 END_FUNC(switch_to_el1)
 
@@ -274,6 +278,10 @@ BEGIN_FUNC(switch_to_el2)
 
     /* set ELR so RET returns to caller */
     msr     elr_el3, x30
+
+    /* barrier for writes to special register */
+    isb
+
     eret
 END_FUNC(switch_to_el2)
 
