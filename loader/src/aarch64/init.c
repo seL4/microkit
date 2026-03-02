@@ -25,6 +25,10 @@
 #if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 static void configure_gicv2(void)
 {
+    if (current_el() == EL1) {
+        return;
+    }
+
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
      *
      * The GICv2 supports security extensions (as does the CPU).
