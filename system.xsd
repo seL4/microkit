@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+    <xs:element name="system">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="memory_region" minOccurs="0" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:attribute name="name" type="xs:string" use="required" />
+                        <xs:attribute name="size" type="xs:string" use="required" />
+                        <xs:attribute name="page_size" type="xs:string" use="optional" />
+                        <xs:attribute name="phys_addr" type="xs:string" use="optional" />
+                    </xs:complexType>
+                </xs:element>
+
+                <xs:element name="protection_domain" minOccurs="1" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="program_image" minOccurs="1" maxOccurs="1">
+                                <xs:complexType>
+                                    <xs:attribute name="path" type="xs:string" use="required" />
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                <xs:element name="map">
+                                    <xs:complexType>
+                                        <xs:attribute name="mr" type="xs:string" use="required" />
+                                        <xs:attribute name="vaddr" type="xs:string" use="required" />
+                                        <xs:attribute name="perms" type="xs:string" use="required" />
+                                        <xs:attribute name="cached" type="xs:boolean" use="optional" default="false" />
+                                        <xs:attribute name="setvar_vaddr" type="xs:string" use="optional" />
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="setvar">
+                                    <xs:complexType>
+                                        <xs:attribute name="symbol" type="xs:string" use="required" />
+                                        <xs:attribute name="region_paddr" type="xs:string" use="optional" />
+                                        <xs:attribute name="vaddr" type="xs:string" use="optional" />
+                                    </xs:complexType>
+                                </xs:element>
+                                <xs:element name="irq" minOccurs="0" maxOccurs="63">
+                                    <xs:complexType>
+                                        <xs:attribute name="irq" type="xs:integer" use="required" />
+                                        <xs:attribute name="id" type="xs:integer" use="required" />
+                                    </xs:complexType>
+                                </xs:element>
+                            </xs:choice>
+                        </xs:sequence>
+                        <xs:attribute name="name" type="xs:string" use="required" />
+                        <xs:attribute name="priority" use="required">
+                            <xs:simpleType>
+                                <xs:restriction base="xs:integer">
+                                    <xs:minInclusive value="0" />
+                                    <xs:maxInclusive value="254" />
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="pp" type="xs:boolean" use="optional" default="false" />
+                        <xs:attribute name="budget" use="optional">
+                            <xs:simpleType>
+                                <xs:restriction base="xs:string">
+                                    <xs:pattern value="(\d_?)+"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="period" use="optional">
+                            <xs:simpleType>
+                                <xs:restriction base="xs:string">
+                                    <xs:pattern value="(\d_?)+"/>
+                                </xs:restriction>
+                            </xs:simpleType>
+                        </xs:attribute>
+                        <xs:attribute name="passive" type="xs:boolean" use="optional" default="false" />
+                    </xs:complexType>
+                </xs:element>
+
+                <xs:element name="channel" minOccurs="0" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="end" minOccurs="2" maxOccurs="2">
+                                <xs:complexType>
+                                    <xs:attribute name="pd" type="xs:string" use="required" />
+                                    <xs:attribute name="id" type="xs:integer" use="required" />
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
