@@ -6,7 +6,7 @@
   description = "A flake for building microkit";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.11";
     utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     treefmt-nix = {
@@ -63,7 +63,7 @@
 
         rustTool = pkgs.rust-bin.stable.${microkitToolVersion}.default.override {
           extensions = [ "rust-src" ];
-          targets = [ pkgs.pkgsStatic.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets;
+          targets = [ pkgs.pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets;
         };
       in
       {
