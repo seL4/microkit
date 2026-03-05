@@ -75,6 +75,13 @@ void arch_init(void)
     configure_gicv2();
 #endif
 
+    /* Drop to correct EL before disabling MMU */
+    int r = ensure_correct_el(0);
+    if (r != 0) {
+        puts("LDR|ERROR: failed to ensure correct EL\n");
+        fail();
+    }
+
     /* Disable the MMU, as U-Boot will start in virtual memory on some platforms
      * (https://docs.u-boot.org/en/latest/arch/arm64.html), which means that
      * certain physical memory addresses contain page table information which
@@ -95,6 +102,7 @@ void arch_init(void)
         el2_mmu_disable();
     } else {
         puts("LDR|ERROR: unknown EL level for MMU disable\n");
+        fail();
     }
 
     // TODO: handle non-PSCI platforms better, see https://github.com/seL4/microkit/issues/401.
