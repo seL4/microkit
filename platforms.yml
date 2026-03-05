@@ -14,6 +14,9 @@
 # This list is ordered based on the order in what the platforms were added
 # in.
 platforms:
+  - name: kria_k26
+    cmake_plat: kria_k26
+    since: dev
   - name: rock3b
     cmake_plat: rk3568
     since: dev
