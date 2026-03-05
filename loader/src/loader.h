@@ -48,6 +48,9 @@ void relocation_log(uint64_t reloc_addr, uint64_t curr_addr);
 
 extern uint64_t _stack[NUM_ACTIVE_CPUS][STACK_SIZE / sizeof(uint64_t)];
 
+/* Fatal error, call to not continue execution of the loader. */
+void fail(void);
+
 void start_kernel(int logical_cpu);
 
 #endif
