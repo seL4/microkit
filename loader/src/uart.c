@@ -42,7 +42,13 @@ void putc(uint8_t ch)
     *UART_REG(TRANSMIT) = ch;
 }
 #elif defined(CONFIG_PLAT_ZYNQMP_ZCU102)
+
+#if defined(BOARD_kria_k26)
+#define UART_BASE 0xff010000
+#else
 #define UART_BASE 0xff000000
+#endif
+
 #define UART_CHANNEL_STS_TXEMPTY 0x8
 #define UART_CHANNEL_STS         0x2C
 #define UART_TX_RX_FIFO          0x30

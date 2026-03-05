@@ -1135,6 +1135,7 @@ The currently supported platforms are:
 * imx8mp_evk
 * imx8mp_iotgate
 * imx8mq_evk
+* kria_k26
 * maaxboard
 * odroidc2
 * odroidc4
@@ -1238,6 +1239,22 @@ Microkit will produce a raw binary file by default, so when using U-Boot run the
 Microkit will produce a raw binary file by default, so when using U-Boot run the following command:
 
     => go 0x41000000
+
+## Kria K26 {#kria_k26}
+
+The [Kria K26](https://www.amd.com/en/products/system-on-modules/kria/k26.html) is highly similar
+to the ZCU102, with slight differences in memory regions and the base UART controller.
+
+To run the built image on the board, you have to use properly patched U-Boot - please see the [section for ZCU102](#zcu102), for the details.
+
+You have to load the binary file into memory and run it:
+```
+ZynqMP> tftpboot 0x40000000 loader.img
+...
+ZynqMP> go 0x40000000
+```
+
+A QEMU emulator is not available for the Kria K26 at this stage.
 
 ## MaaXBoard {#maaxboard}
 
