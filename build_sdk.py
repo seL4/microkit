@@ -152,6 +152,17 @@ class KernelPath:
 
 SUPPORTED_BOARDS = (
     BoardInfo(
+        name="kria_k26",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options={
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "zcu102",
+            "KernelCustomDTSOverlay": Path("custom_dts/overlay-zynqmp-kria-k26.dts"),
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="tqma8xqp1gb",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
