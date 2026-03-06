@@ -957,21 +957,97 @@ pub fn build_capdl_spec(
         }
 
         // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
+        // If this pd is supposed to receive all remaining untypeds, do what
+        // https://github.com/Neutrality-ch/microkit/commit/34d4b8d2e246dd77bcd538027277e37a5ba97764
+        // proposed: create a new root CNode, and insert the Microkit CNode at index 0, (this means
+        // old CPtr's will still point to valid capabilities in the Microkit CNode), and create a
+        // placeholder CNode at index 1 of the new root CNode which will be receiving the untypeds.
+        // Mark the receiving CNode.
+        if pd.receive_all_untypeds {
+            let root_cnode_size_bits = 6; // XXX: for now 64 slots (2^{64})
+            let receiving_untyped_cnode_size_bits = 8; // TODO:
+                                                            // log2(MAX_NUM_BOOTINFO_UNTYPED_CAPS)?,
+                                                            // some other precalculated value?
+            // Populate the below with pd_cnode_cap and pd_receiving_untyped_cnode_cap or use
+            // capdl_util_insert_cap_into_cspace instead? (whats the benefit of the first
+            // approach?)
+            //let mut caps_to_insert_to_pd_root_cspace: Vec<CapTableEntry> = Vec::new();
+            // TODO: slots: for pd_root_cnode_obj will need to contain the original Microkit CNode
+            // and the to-be-populated untyped receiving CNode
+            let pd_cnode_obj_id = capdl_util_make_cnode_obj(
+                &mut spec_container,
+                &pd.name,
+                PD_CAP_BITS,
+                caps_to_insert_to_pd_cspace,
+                false,
+            );
+            let mut pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64 - root_cnode_size_bits as u64;
+            println!("pd cnode guard size: {}", pd_guard_size);
+            let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
 
-        let pd_cnode_obj_id = capdl_util_make_cnode_obj(
-            &mut spec_container,
-            &pd.name,
-            PD_CAP_BITS,
-            caps_to_insert_to_pd_cspace,
-            pd.receive_all_untypeds,
-        );
-        let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
-        let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
-        caps_to_bind_to_tcb.push(capdl_util_make_cte(
-            TcbBoundSlot::CSpace as u32,
-            pd_cnode_cap,
-        ));
-        pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
+            let pd_receiving_untyped_cnode_obj_id = capdl_util_make_cnode_obj(
+                &mut spec_container,
+                &(pd.name.clone() + "_receiving_untypeds"),
+                receiving_untyped_cnode_size_bits,
+                Vec::new(),
+                true,
+            );
+            // OLD: pd_guard_size = kernel_config.cap_address_bits - receiving_untyped_cnode_size_bits as u64 - root_cnode_size_bits as u64;
+            pd_guard_size = kernel_config.cap_address_bits - receiving_untyped_cnode_size_bits as u64 - root_cnode_size_bits as u64;
+            // XXX: for the cap, do guard size up to the size_bits, so when addressing from the
+            // receiving_untypeds_cnode_cap, one can use max depth
+            println!("receivning untyped guard size: {}", pd_guard_size);
+            let pd_receiving_untyped_cnode_cap = capdl_util_make_cnode_cap(pd_receiving_untyped_cnode_obj_id, 0, pd_guard_size as u8);
+            let pd_receiving_untyped_cnode_cap_self_ref = capdl_util_make_cnode_cap(pd_receiving_untyped_cnode_obj_id, 0, pd_guard_size as u8);
+            capdl_util_insert_cap_into_cspace(&mut spec_container, pd_receiving_untyped_cnode_obj_id, 0, pd_receiving_untyped_cnode_cap_self_ref);
+
+            // ------- FIGURE OUT
+            //caps_to_insert_to_pd_root_cspace.push(pd_cnode_cap);
+            //// XXX: INSTEAD do: pub fn capdl_util_insert_cap_into_cspace(?
+            //caps_to_insert_to_pd_root_cspace.push(capdl_util_make_cte(
+            //    PD_TCB_CAP_IDX as u32,
+            //    capdl_util_make_tcb_cap(pd_tcb_obj_id),
+            //));
+            // -------
+            let pd_root_cnode_obj_id = capdl_util_make_cnode_obj(
+                &mut spec_container,
+                &(pd.name.clone() + "_root"),
+                root_cnode_size_bits,
+                Vec::new(),
+                false,
+            );
+            pd_guard_size = 0; // so the old Microkit CNode indexes work as expected, but other
+                               // CNode's (such as receiving untyped one) can be addressed at the
+                               // root_cnode_size_bits most significant bits of the address.
+            println!("root cnode guard size: {}", pd_guard_size);
+            let pd_root_cnode_cap = capdl_util_make_cnode_cap(pd_root_cnode_obj_id, 0, pd_guard_size as u8);
+            // XXX: insert original Microkit CNode at idx 0, and receiving untyped Cnode at idx 1
+            capdl_util_insert_cap_into_cspace(&mut spec_container, pd_root_cnode_obj_id, 0, pd_cnode_cap);
+            capdl_util_insert_cap_into_cspace(&mut spec_container, pd_root_cnode_obj_id, 1, pd_receiving_untyped_cnode_cap);
+
+            caps_to_bind_to_tcb.push(capdl_util_make_cte(
+                TcbBoundSlot::CSpace as u32,
+                pd_root_cnode_cap,
+            ));
+            // XXX: change this to root? or is this fine
+            pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
+        } else {
+            let pd_cnode_obj_id = capdl_util_make_cnode_obj(
+                &mut spec_container,
+                &pd.name,
+                PD_CAP_BITS,
+                caps_to_insert_to_pd_cspace,
+                pd.receive_all_untypeds,
+            );
+            let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
+            let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
+            caps_to_bind_to_tcb.push(capdl_util_make_cte(
+                TcbBoundSlot::CSpace as u32,
+                pd_cnode_cap,
+            ));
+            pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
+        }
+
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
