@@ -13,7 +13,7 @@
 
 #include <kernel/gen_config.h>
 
-#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2)
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_ZYNQMP_KRIA_K26)
 #define GICD_BASE 0x00F9010000UL
 #define GICC_BASE 0x00F9020000UL
 #elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
@@ -21,7 +21,7 @@
 #define GICC_BASE 0x8010000UL
 #endif
 
-#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_ZYNQMP_KRIA_K26) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 static void configure_gicv2(void)
 {
     /* The ZCU102 start in EL3, and then we drop to EL1(NS).
@@ -71,7 +71,7 @@ void el2_mmu_disable(void);
 
 void arch_init(void)
 {
-#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
+#if defined(CONFIG_PLAT_ZYNQMP_ZCU102) || defined(CONFIG_PLAT_ZYNQMP_ULTRA96V2) || defined(CONFIG_PLAT_ZYNQMP_KRIA_K26) || defined(CONFIG_PLAT_QEMU_ARM_VIRT)
     configure_gicv2();
 #endif
 
@@ -98,7 +98,7 @@ void arch_init(void)
     }
 
     // TODO: handle non-PSCI platforms better, see https://github.com/seL4/microkit/issues/401.
-#if !defined(CONFIG_PLAT_BCM2711)
+#if !defined(CONFIG_PLAT_BCM2711) && !defined(CONFIG_PLAT_ZYNQMP_KRIA_K26)
     uint32_t ret = arm_smc32_call(PSCI_FUNCTION_VERSION, /* unused */ 0, 0, 0);
     /* the return value has no error codes, but if we get it wrong this is what we will get */
     if (ret == PSCI_RETURN_NOT_SUPPORTED) {

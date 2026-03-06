@@ -142,6 +142,16 @@ class ConfigInfo:
 
 SUPPORTED_BOARDS = (
     BoardInfo(
+        name="kria_k26",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x40000000,
+        kernel_options={
+            "KernelPlatform": "zynqmp",
+            "KernelARMPlatform": "kria_k26",
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="tqma8xqp1gb",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
