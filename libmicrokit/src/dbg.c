@@ -7,6 +7,8 @@
 
 #include <sel4/sel4.h>
 
+extern char microkit_name[];
+
 void microkit_dbg_putc(int c)
 {
 #if defined(CONFIG_PRINTING)
@@ -52,11 +54,13 @@ void microkit_dbg_put32(seL4_Uint32 x)
 
 void __assert_fail(const char  *str, const char *file, int line, const char *function)
 {
-    microkit_dbg_puts("assert failed: ");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts("|assert failed: ");
     microkit_dbg_puts(str);
     microkit_dbg_puts(" ");
     microkit_dbg_puts(file);
     microkit_dbg_puts(" ");
     microkit_dbg_puts(function);
     microkit_dbg_puts("\n");
+    __builtin_trap();
 }
