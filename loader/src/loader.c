@@ -138,6 +138,16 @@ void relocation_log(uint64_t reloc_addr, uint64_t curr_addr)
     puts("\n");
 }
 
+void fail(void)
+{
+    /* IMPROVEMENT: use SMC SVC call to try and power-off / reboot system.
+     * or at least go to a WFI loop
+     */
+    for (;;) {
+    }
+    __builtin_unreachable();
+}
+
 int main(void)
 {
     int r;
@@ -153,7 +163,7 @@ int main(void)
     /* Check that the loader magic number is set correctly */
     if (loader_data->magic != MAGIC) {
         puts("LDR|ERROR: mismatch on loader data structure magic number\n");
-        goto fail;
+        fail();
     }
 
     print_loader_data();
@@ -174,7 +184,7 @@ int main(void)
             putdecimal(cpu);
             puts(" returned error: ");
             puthex32(r);
-            goto fail;
+            fail();
         }
 
 #ifdef CONFIG_PRINTING
@@ -186,12 +196,9 @@ int main(void)
     }
 
     start_kernel(0);
-
-fail:
     /* Note: can't usefully return to U-Boot once we are here. */
-    /* IMPROVEMENT: use SMC SVC call to try and power-off / reboot system.
-     * or at least go to a WFI loop
-     */
-    for (;;) {
-    }
+    fail();
+
+    /* Unreachable, but here to keep the compiler happy */
+    return 1;
 }
