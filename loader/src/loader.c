@@ -145,6 +145,7 @@ void fail(void)
      */
     for (;;) {
     }
+    __builtin_unreachable();
 }
 
 int main(void)
@@ -197,4 +198,7 @@ int main(void)
     start_kernel(0);
     /* Note: can't usefully return to U-Boot once we are here. */
     fail();
+
+    /* Unreachable, but here to keep the compiler happy */
+    return 1;
 }
