@@ -7,6 +7,8 @@
 
 #include <sel4/sel4.h>
 
+extern char microkit_name[];
+
 void microkit_dbg_putc(int c)
 {
 #if defined(CONFIG_PRINTING)
@@ -50,13 +52,21 @@ void microkit_dbg_put32(seL4_Uint32 x)
     microkit_dbg_puts(&tmp[i]);
 }
 
-void __assert_fail(const char  *str, const char *file, int line, const char *function)
+/*
+ * We have to provide an implementation for libsel4 debug asserts, make it
+ * weak so users can override with their own libc etc.
+ */
+__attribute__((weak)) void __assert_fail(const char  *str, const char *file, int line, const char *function)
 {
-    microkit_dbg_puts("assert failed: ");
+    microkit_dbg_puts(microkit_name);
+    microkit_dbg_puts("|assert failed: ");
     microkit_dbg_puts(str);
     microkit_dbg_puts(" ");
     microkit_dbg_puts(file);
+    microkit_dbg_puts(":");
+    microkit_dbg_put32(line);
     microkit_dbg_puts(" ");
     microkit_dbg_puts(function);
     microkit_dbg_puts("\n");
+    microkit_internal_crash(0);
 }
