@@ -1845,11 +1845,11 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     for pd in &pds {
         for this_ioport in &pd.ioports {
             for (seen_pd_name, seen_ioport) in &seen_ioports {
-                let left_range = this_ioport.addr..this_ioport.addr + this_ioport.size - 1;
-                let right_range = seen_ioport.addr..seen_ioport.addr + seen_ioport.size - 1;
+                let left_range = this_ioport.addr..this_ioport.addr + this_ioport.size;
+                let right_range = seen_ioport.addr..seen_ioport.addr + seen_ioport.size;
                 if ranges_overlap(&left_range, &right_range) {
                     return Err(format!(
-                            "Error: I/O port id: {}, inclusive range: [{:#x}, {:#x}] in protection domain: '{}' @ {}:{}:{} overlaps with I/O port id: {}, inclusive range: [{:#x}, {:#x}] in protection domain: '{}' @ {}:{}:{}",
+                            "Error: I/O port id: {}, half-open range: [{:#x}, {:#x}) in protection domain: '{}' @ {}:{}:{} overlaps with I/O port id: {}, half-open range: [{:#x}, {:#x}) in protection domain: '{}' @ {}:{}:{}",
                             this_ioport.id,
                             left_range.start,
                             left_range.end,

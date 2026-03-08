@@ -533,7 +533,7 @@ mod protection_domain {
     fn test_overlapping_x86_io_ports_1() {
         check_error(&DEFAULT_X86_64_KERNEL_CONFIG,
             "pd_overlapping_x86_io_ports_1.system",
-            "Error: I/O port id: 1, inclusive range: [0x3ff, 0x406] in protection domain: 'test1' @ pd_overlapping_x86_io_ports_1.system:8:5 overlaps with I/O port id: 0, inclusive range: [0x3f8, 0x3ff] in protection domain: 'test1' @ pd_overlapping_x86_io_ports_1.system:8:5"
+            "Error: I/O port id: 1, half-open range: [0x3ff, 0x407) in protection domain: 'test1' @ pd_overlapping_x86_io_ports_1.system:8:5 overlaps with I/O port id: 0, half-open range: [0x3f8, 0x400) in protection domain: 'test1' @ pd_overlapping_x86_io_ports_1.system:8:5"
         )
     }
 
@@ -541,7 +541,7 @@ mod protection_domain {
     fn test_overlapping_x86_io_ports_2() {
         check_error(&DEFAULT_X86_64_KERNEL_CONFIG,
             "pd_overlapping_x86_io_ports_2.system",
-            "Error: I/O port id: 0, inclusive range: [0x3ff, 0x406] in protection domain: 'test2' @ pd_overlapping_x86_io_ports_2.system:13:5 overlaps with I/O port id: 0, inclusive range: [0x3f8, 0x3ff] in protection domain: 'test1' @ pd_overlapping_x86_io_ports_2.system:8:5"
+            "Error: I/O port id: 0, half-open range: [0x3ff, 0x407) in protection domain: 'test2' @ pd_overlapping_x86_io_ports_2.system:13:5 overlaps with I/O port id: 0, half-open range: [0x3f8, 0x400) in protection domain: 'test1' @ pd_overlapping_x86_io_ports_2.system:8:5"
         )
     }
 
