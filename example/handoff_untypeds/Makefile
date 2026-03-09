@@ -1,4 +1,5 @@
 #
+# Copyright 2026, UNSW
 # Copyright 2021, Breakaway Consulting Pty. Ltd.
 #
 # SPDX-License-Identifier: BSD-2-Clause
@@ -29,6 +30,9 @@ ifeq ($(ARCH),aarch64)
 else ifeq ($(ARCH),riscv64)
   TARGET_TRIPLE := riscv64-unknown-elf
   CFLAGS_ARCH := -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
+else ifeq ($(ARCH),x86_64)
+	TARGET_TRIPLE := x86_64-elf
+	CFLAGS_ARCH := -march=x86-64 -mtune=generic
 else
 $(error Unsupported ARCH)
 endif
@@ -45,34 +49,24 @@ endif
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
-RESTARTER_OBJS := restarter.o
-CRASHER_OBJS := crasher.o
 HELLO_OBJS := hello.o
 
-IMAGES := restarter.elf crasher.elf hello.elf
+IMAGES := hello.elf
 CFLAGS := -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
+SPEC = $(BUILD_DIR)/capdl_spec.json
 
 all: $(IMAGE_FILE)
 
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: %.s Makefile
-	$(AS) -g -mcpu=$(CPU) $< -o $@
-
-$(BUILD_DIR)/restarter.elf: $(addprefix $(BUILD_DIR)/, $(RESTARTER_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-$(BUILD_DIR)/crasher.elf: $(addprefix $(BUILD_DIR)/, $(CRASHER_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
 $(BUILD_DIR)/hello.elf: $(addprefix $(BUILD_DIR)/, $(HELLO_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hierarchy.system
-	$(MICROKIT_TOOL) hierarchy.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) handoff_untypeds.system
+	$(MICROKIT_TOOL) handoff_untypeds.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE) --capdl-json ${SPEC}

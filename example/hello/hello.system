@@ -5,19 +5,7 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="remaining_untypeds" size="0x2000" />
-    <memory_region name="dupa" size="0x1000" phys_addr="0xffd0f000"/>
-    <memory_region name="v_high_region" size="0x1000" phys_addr="0x6000000000" />
     <protection_domain name="hello">
         <program_image path="hello.elf" />
-        <map mr="remaining_untypeds" vaddr="0x20_000_000" setvar_vaddr="remaining_untypeds_vaddr" />
-        <map mr="dupa" vaddr="0x30_000_000" />
-        <map mr="v_high_region" vaddr="0x31_000_000" />
     </protection_domain>
-    <!--
-    <protection_domain name="hello2">
-        <program_image path="hello.elf" />
-        <map mr="dupa" vaddr="0x30_000_000" />
-    </protection_domain>
-    -->
 </system>

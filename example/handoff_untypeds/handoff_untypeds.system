@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="remaining_untypeds" size="0x2000" receive_all_untypeds="true"/>
+    <protection_domain name="hello">
+        <program_image path="hello.elf" />
+        <map mr="remaining_untypeds" vaddr="0x20_000_000" setvar_vaddr="remaining_untypeds_vaddr" />
+    </protection_domain>
+</system>
