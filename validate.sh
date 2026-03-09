@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 err=0
 
-for f in `find . -wholename "./example/*.system"` 
+for f in `find . -wholename "*.system"` 
 do
     xmllint --noout --schema system.xsd $f
     if (($? != 0)); then

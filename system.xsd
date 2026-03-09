@@ -1,93 +1,196 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:annotation>
+    <xs:documentation xml:lang="en">
+      Schema for the System Description Format, for seL4 Microkit .system files.
+    </xs:documentation>
+  </xs:annotation>
 
-    <xs:element name="system">
+  <!-- Main Schema -->
+  <xs:element name="system" type="SystemType" />
+
+  <!-- Types -->
+  <xs:simpleType name="mkitInteger">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="0x[0-9a-fA-F_]+|[0-9_]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="channelId">
+    <xs:restriction base="xs:nonNegativeInteger">
+      <xs:maxInclusive value="63" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="priorityInteger">
+    <xs:restriction base="xs:nonNegativeInteger">
+      <xs:maxInclusive value="254" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="SystemType">
+    <xs:choice maxOccurs="unbounded">
+      <xs:element name="memory_region" type="MemoryRegionType" minOccurs="0" maxOccurs="unbounded" />
+      <xs:element name="protection_domain" type="ProtectionDomainType" minOccurs="1" maxOccurs="unbounded" />
+      <xs:element name="channel" type="ChannelType" minOccurs="0" maxOccurs="unbounded" />
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="MemoryRegionType">
+    <xs:attribute name="name" type="xs:string" use="required" />
+    <xs:attribute name="size" type="xs:string" use="required" />
+    <xs:attribute name="page_size" type="xs:string" use="optional" />
+    <xs:attribute name="phys_addr" type="xs:string" use="optional" />
+  </xs:complexType>
+
+  <xs:complexType name="ChannelType">
+    <xs:sequence>
+      <xs:element name="end" minOccurs="2" maxOccurs="2">
         <xs:complexType>
-            <xs:sequence>
-                <xs:element name="memory_region" minOccurs="0" maxOccurs="unbounded">
-                    <xs:complexType>
-                        <xs:attribute name="name" type="xs:string" use="required" />
-                        <xs:attribute name="size" type="xs:string" use="required" />
-                        <xs:attribute name="page_size" type="xs:string" use="optional" />
-                        <xs:attribute name="phys_addr" type="xs:string" use="optional" />
-                    </xs:complexType>
-                </xs:element>
-
-                <xs:element name="protection_domain" minOccurs="1" maxOccurs="unbounded">
-                    <xs:complexType>
-                        <xs:sequence>
-                            <xs:element name="program_image" minOccurs="1" maxOccurs="1">
-                                <xs:complexType>
-                                    <xs:attribute name="path" type="xs:string" use="required" />
-                                </xs:complexType>
-                            </xs:element>
-                            <xs:choice minOccurs="0" maxOccurs="unbounded">
-                                <xs:element name="map">
-                                    <xs:complexType>
-                                        <xs:attribute name="mr" type="xs:string" use="required" />
-                                        <xs:attribute name="vaddr" type="xs:string" use="required" />
-                                        <xs:attribute name="perms" type="xs:string" use="required" />
-                                        <xs:attribute name="cached" type="xs:boolean" use="optional" default="false" />
-                                        <xs:attribute name="setvar_vaddr" type="xs:string" use="optional" />
-                                    </xs:complexType>
-                                </xs:element>
-                                <xs:element name="setvar">
-                                    <xs:complexType>
-                                        <xs:attribute name="symbol" type="xs:string" use="required" />
-                                        <xs:attribute name="region_paddr" type="xs:string" use="optional" />
-                                        <xs:attribute name="vaddr" type="xs:string" use="optional" />
-                                    </xs:complexType>
-                                </xs:element>
-                                <xs:element name="irq" minOccurs="0" maxOccurs="63">
-                                    <xs:complexType>
-                                        <xs:attribute name="irq" type="xs:integer" use="required" />
-                                        <xs:attribute name="id" type="xs:integer" use="required" />
-                                    </xs:complexType>
-                                </xs:element>
-                            </xs:choice>
-                        </xs:sequence>
-                        <xs:attribute name="name" type="xs:string" use="required" />
-                        <xs:attribute name="priority" use="required">
-                            <xs:simpleType>
-                                <xs:restriction base="xs:integer">
-                                    <xs:minInclusive value="0" />
-                                    <xs:maxInclusive value="254" />
-                                </xs:restriction>
-                            </xs:simpleType>
-                        </xs:attribute>
-                        <xs:attribute name="pp" type="xs:boolean" use="optional" default="false" />
-                        <xs:attribute name="budget" use="optional">
-                            <xs:simpleType>
-                                <xs:restriction base="xs:string">
-                                    <xs:pattern value="(\d_?)+"/>
-                                </xs:restriction>
-                            </xs:simpleType>
-                        </xs:attribute>
-                        <xs:attribute name="period" use="optional">
-                            <xs:simpleType>
-                                <xs:restriction base="xs:string">
-                                    <xs:pattern value="(\d_?)+"/>
-                                </xs:restriction>
-                            </xs:simpleType>
-                        </xs:attribute>
-                        <xs:attribute name="passive" type="xs:boolean" use="optional" default="false" />
-                    </xs:complexType>
-                </xs:element>
-
-                <xs:element name="channel" minOccurs="0" maxOccurs="unbounded">
-                    <xs:complexType>
-                        <xs:sequence>
-                            <xs:element name="end" minOccurs="2" maxOccurs="2">
-                                <xs:complexType>
-                                    <xs:attribute name="pd" type="xs:string" use="required" />
-                                    <xs:attribute name="id" type="xs:integer" use="required" />
-                                </xs:complexType>
-                            </xs:element>
-                        </xs:sequence>
-                    </xs:complexType>
-                </xs:element>
-            </xs:sequence>
+          <xs:attribute name="pd" type="xs:string" use="required" />
+          <xs:attribute name="id" type="channelId" use="required" />
+          <xs:attribute name="pp" type="xs:boolean" use="optional" default="false" />
+          <xs:attribute name="notify" type="xs:boolean" use="optional" default="true" />
+          <xs:attribute name="setvar_id" type="xs:string" use="optional" />
         </xs:complexType>
-    </xs:element>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
 
+  <xs:complexType name="BasicPDType">
+    <xs:attribute name="name" type="xs:string" use="required" />
+    <xs:attribute name="priority" type="priorityInteger" use="optional" default="0" />
+    <xs:attribute name="budget" type="xs:string" use="optional" default="1000" />
+    <!-- unrepresented constraint: defaults to the value of budget -->
+    <xs:attribute name="period" type="xs:string" use="optional" />
+  </xs:complexType>
+
+  <xs:complexType name="ProtectionDomainType">
+    <xs:complexContent>
+      <xs:extension base="BasicPDType">
+        <!-- Children -->
+      
+        <xs:sequence>
+          <xs:element name="program_image" type="ProgramImageType" minOccurs="1" maxOccurs="1" />
+          <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="map" type="MemoryMapType" />
+            <xs:element name="irq" type="IRQType" maxOccurs="63" />
+            <xs:element name="setvar" type="SetVarType" />
+            <xs:element name="protection_domain" type="ChildProtectionDomainType" />
+            <xs:element name="virtual_machine" type="VirtualMachineType" />
+            <xs:element name="ioport" type="IOPortType" />
+          </xs:choice>
+        </xs:sequence>
+      
+        <!-- Attributes -->
+
+        <xs:attribute name="passive" type="xs:boolean" use="optional" default="false"/>
+        <xs:attribute name="stack_size" type="mkitInteger" use="optional" default="8000" />
+        <xs:attribute name="cpu" type="xs:integer" use="optional" />
+        <!-- Only on ARM architectures -->
+        <xs:attribute name="smc" type="xs:boolean" use="optional" default="false" />
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="ProgramImageType">
+    <!-- Path to the ELF file -->
+    <xs:attribute name="path" type="xs:string" use="required" />
+  </xs:complexType>
+
+  <xs:complexType name="MemoryMapType">
+    <xs:attribute name="mr" type="xs:string" use="required" />
+    <xs:attribute name="vaddr" type="xs:string" use="required" />
+    <xs:attribute name="perms" use="optional" default="rw">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <!-- Technically should also restrict to just one of each, and no lone w. -->
+          <xs:pattern value="[rwx]+" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="cached" type="xs:boolean" use="optional" default="false" />
+    <xs:attribute name="setvar_vaddr" type="xs:string" use="optional" />
+  </xs:complexType>
+
+  <xs:complexType name="IRQType">
+    <!-- Common -->
+    <xs:attribute name="id" type="channelId" use="required" />
+    <xs:attribute name="setvar_id" type="xs:string" use="optional" />
+
+    <!-- Choice 1: ARM_RISCV -->
+    <!-- Required if this attribute set is used. -->
+    <xs:attribute name="irq" type="mkitInteger" use="optional" />
+    <xs:attribute name="trigger" use="optional" default="level">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:pattern value="edge|level" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+
+    <!-- Choice 2: X86_64 IOAPIC -->
+    <!-- Required if this attribute set is used. -->
+    <xs:attribute name="pin" type="mkitInteger" use="optional" />
+    <!-- Required if this attribute set is used. -->
+    <xs:attribute name="vector" type="xs:string" use="optional" />
+    <xs:attribute name="ioapic" type="mkitInteger" use="optional" default="0" />
+    <xs:attribute name="level" use="optional" default="1">
+      <xs:simpleType>
+        <xs:restriction base="xs:nonNegativeInteger">
+          <xs:maxInclusive value="1" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="polarity" use="optional" default="1">
+      <xs:simpleType>
+        <xs:restriction base="xs:nonNegativeInteger">
+          <xs:maxInclusive value="1" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+
+    <!-- Choice 3: X86_64_MSI -->
+    <!-- Required if this attribute set is used. -->
+    <xs:attribute name="pcidev" use="optional">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <!-- BUS:DEV:FUNC -->
+          <xs:pattern value="[0-9a-fA-F]+[:\.][0-9a-fA-F]+[:\.][0-9a-fA-F]+" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <!-- Required if this attribute set is used. -->
+    <xs:attribute name="handle" type="xs:string" use="optional" />
+    <!-- Required if this attribute set is used. -->
+    <!-- vector - defined in IOAPIC -->
+  </xs:complexType>
+
+  <xs:complexType name="SetVarType">
+    <xs:attribute name="symbol" type="xs:string" use="required" />
+    <xs:attribute name="region_paddr" type="xs:string" use="optional" />
+  </xs:complexType>
+
+  <xs:complexType name="VirtualMachineType">
+    <xs:complexContent>
+      <xs:extension base="BasicPDType" />
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="ChildProtectionDomainType">
+    <xs:complexContent>
+      <xs:extension base="ProtectionDomainType">
+        <xs:attribute name="id" type="mkitInteger"/>
+        <xs:attribute name="setvar_id" use="optional" type="mkitInteger"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="IOPortType">
+    <xs:attribute name="id" type="channelId" use="required" />
+    <xs:attribute name="addr" type="mkitInteger" use="required" />
+    <xs:attribute name="size" type="mkitInteger" use="required" />
+    <xs:attribute name="setvar_id" type="xs:string" use="optional" />
+    <xs:attribute name="setvar_addr" type="xs:string" use="optional" />
+  </xs:complexType>
 </xs:schema>
