@@ -125,6 +125,10 @@ pub struct SysMemoryRegion {
     /// due to the user's SDF or created by the tool for setting up the
     /// stack, ELF, etc.
     pub kind: SysMemoryRegionKind,
+    // Set to true means the PD which maps this memory region (only one allowed)
+    // will receive all untyped memory capabilities and this memory region will
+    // receive metadata on all of these untyped objects.
+    pub receive_all_untypeds: bool,
 }
 
 impl SysMemoryRegion {
@@ -459,7 +463,6 @@ impl ProtectionDomain {
             // but we do the error-checking further down.
             "smc",
             "cpu",
-            //"receive_all_untypeds",
         ];
         if is_child {
             attrs.push("id");
@@ -548,20 +551,6 @@ impl ProtectionDomain {
             }
         }
 
-        //let receive_all_untypeds = if let Some(xml_receive_all_untypeds)  = node.attribute("receive_all_untypeds") {
-        //    match str_to_bool(xml_receive_all_untypeds) {
-        //        Some(val) => val,
-        //        None => {
-        //            return Err(value_error(
-        //                xml_sdf,
-        //                node,
-        //                "receive_all_untypeds must be 'true' or 'false'".to_string(),
-        //            ))
-        //        }
-        //    }
-        //} else {
-        //    false
-        //};
 
         let cpu = CpuCore(
             sdf_parse_number(node.attribute("cpu").unwrap_or("0"), node)?
@@ -626,7 +615,6 @@ impl ProtectionDomain {
             ));
         }
 
-        let mut receive_all_untypeds = false;
         for child in node.children() {
             if !child.is_element() {
                 continue;
@@ -649,9 +637,6 @@ impl ProtectionDomain {
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
                     let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
-                    if map.mr == "remaining_untypeds" {
-                        receive_all_untypeds = true;
-                    }
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         let setvar = SysSetVar {
@@ -1106,7 +1091,7 @@ impl ProtectionDomain {
             has_children,
             parent: None,
             setvar_id,
-            receive_all_untypeds,
+            receive_all_untypeds: false,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
@@ -1244,7 +1229,7 @@ impl SysMemoryRegion {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
     ) -> Result<SysMemoryRegion, String> {
-        check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
+        check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr", "receive_all_untypeds"])?;
 
         let name = checked_lookup(xml_sdf, node, "name")?;
         let size = sdf_parse_number(checked_lookup(xml_sdf, node, "size")?, node)?;
@@ -1293,6 +1278,21 @@ impl SysMemoryRegion {
 
         let page_count = size / page_size;
 
+        let receive_all_untypeds = if let Some(xml_receive_all_untypeds)  = node.attribute("receive_all_untypeds") {
+            match str_to_bool(xml_receive_all_untypeds) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "receive_all_untypeds must be 'true' or 'false'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            false
+        };
+
         Ok(SysMemoryRegion {
             name: name.to_string(),
             size,
@@ -1302,6 +1302,7 @@ impl SysMemoryRegion {
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
             kind: SysMemoryRegionKind::User,
+            receive_all_untypeds: receive_all_untypeds,
         })
     }
 }
@@ -1738,7 +1739,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         ));
     }
     let mut pd_has_remaining_untypeds = false;
-    for pd in &pds {
+    let mut pd_receive_all_untypeds_idx = 0;
+    for (idx, pd) in pds.iter().enumerate() {
         if pds.iter().filter(|x| pd.name == x.name).count() > 1 {
             return Err(format!(
                 "Error: duplicate protection domain name '{}'.",
@@ -1750,17 +1752,30 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: the PD name 'monitor' is reserved for the Microkit Monitor.".to_string(),
             );
         }
+        // Mark whether this PD is receiving all untypeds, ensure no other PD is mapping the
+        // receiving memory region
         for map in &pd.maps {
-            if map.mr == "remaining_untypeds" && pd_has_remaining_untypeds {
-                return Err(
-                    "Error: only one PD can receive the remaining untypeds (Map the MR 'remaining_untypeds')".to_string()
-                );
-            } else {
-                pd_has_remaining_untypeds = true;
+            if let Some(mr) = mrs.iter().find(|mr| mr.name == map.mr) {
+                if mr.receive_all_untypeds && pd_has_remaining_untypeds {
+                    return Err(
+                        "Error: only one PD can receive the remaining untypeds (Map the MR with 'receive_all_untypeds' set to true)".to_string()
+                    );
+                } else {
+                    pd_has_remaining_untypeds = true;
+                    pd_receive_all_untypeds_idx = idx;
+                }
             }
         }
     }
+    if pd_has_remaining_untypeds {
+        pds[pd_receive_all_untypeds_idx].receive_all_untypeds = true;
+    }
 
+    if mrs.iter().filter(|x| x.receive_all_untypeds).count() > 1 {
+        return Err(
+            "Error: only one MR can receive the remaining untypeds".to_string()
+        );
+    }
     for mr in &mrs {
         if mrs.iter().filter(|x| mr.name == x.name).count() > 1 {
             return Err(format!(

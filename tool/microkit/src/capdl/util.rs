@@ -29,11 +29,13 @@ pub fn capdl_util_make_frame_obj(
     name: &str,
     paddr: Option<Word>,
     size_bits: u8,
+    receive_all_untypeds: bool,
 ) -> ObjectId {
     let frame_inner_obj = Object::Frame(object::Frame {
         size_bits,
         paddr,
         init: frame_init,
+        receive_all_untypeds,
     });
     let frame_obj = CapDLNamedObject {
         name: format!("frame_{name}").into(),

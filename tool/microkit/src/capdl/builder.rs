@@ -246,6 +246,7 @@ impl CapDLSpecContainer {
                     &format!("elf_{pd_name}_{frame_sequence:09}"),
                     None,
                     PageSize::Small.fixed_size_bits(sel4_config) as u8,
+                    false,
                 );
                 let frame_cap = capdl_util_make_frame_cap(
                     frame_obj_id,
@@ -286,6 +287,7 @@ impl CapDLSpecContainer {
             &format!("ipcbuf_{pd_name}"),
             None,
             PageSize::Small.fixed_size_bits(sel4_config) as u8,
+            false,
         );
         let ipcbuf_frame_cap =
             capdl_util_make_frame_cap(ipcbuf_frame_obj_id, true, true, false, true);
@@ -453,6 +455,7 @@ pub fn build_capdl_spec(
         &format!("{MONITOR_PD_NAME}_stack"),
         None,
         PageSize::Small.fixed_size_bits(kernel_config) as u8,
+        false,
     );
     let mon_stack_frame_cap =
         capdl_util_make_frame_cap(mon_stack_frame_obj_id, true, true, false, true);
@@ -507,6 +510,8 @@ pub fn build_capdl_spec(
         let mut frame_ids = Vec::new();
         let frame_size_bits = mr.page_size.fixed_size_bits(kernel_config);
 
+        // If this MR is supposed to receive untyped metadata, mark the first frame in the spec
+        let mut receive_all_untypeds = mr.receive_all_untypeds;
         for frame_sequence in 0..mr.page_count {
             let paddr = mr
                 .paddr()
@@ -519,7 +524,10 @@ pub fn build_capdl_spec(
                 &format!("mr_{}_{:09}", mr.name, frame_sequence),
                 paddr,
                 frame_size_bits as u8,
+                receive_all_untypeds,
             ));
+            // Only mark the first frame in the Memory Region
+            receive_all_untypeds = false;
         }
 
         mr_name_to_frames.insert(&mr.name, frame_ids);
@@ -630,6 +638,7 @@ pub fn build_capdl_spec(
                 &format!("{}_stack_{:09}", pd.name, stack_frame_seq),
                 None,
                 PageSize::Small.fixed_size_bits(kernel_config) as u8,
+                false,
             );
             let stack_frame_cap =
                 capdl_util_make_frame_cap(stack_frame_obj_id, true, true, false, true);
@@ -860,6 +869,7 @@ pub fn build_capdl_spec(
                         None,
                         // Must be consistent with the granule bits used in spec serialisation
                         PageSize::Small.fixed_size_bits(kernel_config) as u8,
+                        false,
                     );
                     let vm_ipcbuf_frame_cap =
                         capdl_util_make_frame_cap(vm_ipcbuf_frame_obj_id, true, true, false, true);
@@ -1001,14 +1011,6 @@ pub fn build_capdl_spec(
             let pd_receiving_untyped_cnode_cap_self_ref = capdl_util_make_cnode_cap(pd_receiving_untyped_cnode_obj_id, 0, pd_guard_size as u8);
             capdl_util_insert_cap_into_cspace(&mut spec_container, pd_receiving_untyped_cnode_obj_id, 0, pd_receiving_untyped_cnode_cap_self_ref);
 
-            // ------- FIGURE OUT
-            //caps_to_insert_to_pd_root_cspace.push(pd_cnode_cap);
-            //// XXX: INSTEAD do: pub fn capdl_util_insert_cap_into_cspace(?
-            //caps_to_insert_to_pd_root_cspace.push(capdl_util_make_cte(
-            //    PD_TCB_CAP_IDX as u32,
-            //    capdl_util_make_tcb_cap(pd_tcb_obj_id),
-            //));
-            // -------
             let pd_root_cnode_obj_id = capdl_util_make_cnode_obj(
                 &mut spec_container,
                 &(pd.name.clone() + "_root"),
@@ -1021,7 +1023,6 @@ pub fn build_capdl_spec(
                                // root_cnode_size_bits most significant bits of the address.
             println!("root cnode guard size: {}", pd_guard_size);
             let pd_root_cnode_cap = capdl_util_make_cnode_cap(pd_root_cnode_obj_id, 0, pd_guard_size as u8);
-            // XXX: insert original Microkit CNode at idx 0, and receiving untyped Cnode at idx 1
             capdl_util_insert_cap_into_cspace(&mut spec_container, pd_root_cnode_obj_id, 0, pd_cnode_cap);
             capdl_util_insert_cap_into_cspace(&mut spec_container, pd_root_cnode_obj_id, 1, pd_receiving_untyped_cnode_cap);
 
