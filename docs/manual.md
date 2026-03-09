@@ -624,6 +624,13 @@ To find the full list of possible faults that could occur and details regarding 
 kind of fault, please see the 'Faults' section of the
 [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
 
+For x86 VCPU fault specifically:
+Only the `child` argument will contain a valid value. The return value of `fault()` is ignored. To resume a VCPU from
+a fault, `fault()` must call `microkit_vcpu_x86_deferred_resume()` with the intended values before returning.
+
+To deduce the VM Exit reason, read the `SEL4_VMENTER_FAULT_REASON_MR` message register. For more details,
+please see the 'Virtualisation' section of the [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
 ## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
 Performs a call to a protected procedure in a different PD.
@@ -957,6 +964,15 @@ virtual CPU with ID `vcpu`.
 
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
+
+## `void microkit_vcpu_x86_deferred_resume(seL4_Word rip, seL4_Word ppc, seL4_Word irq)`
+
+Resume the bound vCPU when current execution returns to libmicrokit's event handler (see [Internals](#Internals)).
+It switches the PD's thread from regular execution mode into the guest execution mode whenever it is scheduled thereafter.
+
+This will set the program counter of the vCPU to `entry_point`, the Primary Processor-Based VM-Execution Controls to `ppc`
+and the VM-Entry Interruption-Information Field to `irq`. Any previous value of these vCPU fields set by
+`microkit_vcpu_x86_write_vmcs()` will be overwritten.
 
 # System Description File {#sysdesc}
 
