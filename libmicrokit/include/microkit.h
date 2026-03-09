@@ -10,6 +10,9 @@
 #pragma once
 
 #include <sel4/sel4.h>
+#ifdef CONFIG_VTX
+#include <sel4/arch/vmenter.h>
+#endif /* CONFIG_VTX */
 
 typedef unsigned int microkit_channel;
 typedef unsigned int microkit_child;
@@ -45,6 +48,9 @@ extern char microkit_name[MICROKIT_PD_NAME_LENGTH];
 extern seL4_Bool microkit_have_signal;
 extern seL4_CPtr microkit_signal_cap;
 extern seL4_MessageInfo_t microkit_signal_msg;
+#if defined(CONFIG_VTX)
+extern seL4_Bool microkit_x86_do_vcpu_resume;
+#endif
 
 /* Symbols for error checking libmicrokit API calls. Patched by the Microkit tool
  * to set bits corresponding to valid channels for this PD. */
@@ -188,13 +194,8 @@ static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_po
 {
     seL4_Error err;
     seL4_UserContext ctxt = {0};
-#if defined(CONFIG_ARCH_AARCH64)
     ctxt.pc = entry_point;
-#elif defined(CONFIG_ARCH_X86_64)
-    ctxt.rip = entry_point;
-#else
-#error "unknown architecture for 'microkit_vcpu_restart'"
-#endif
+
     err = seL4_TCB_WriteRegisters(
               BASE_VM_TCB_CAP + vcpu,
               seL4_True,
@@ -218,9 +219,7 @@ static inline void microkit_vcpu_stop(microkit_child vcpu)
         microkit_internal_crash(err);
     }
 }
-#endif
 
-#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static inline void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq, seL4_Uint8 priority,
                                                 seL4_Uint8 group, seL4_Uint8 index)
 {
@@ -263,7 +262,7 @@ static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word re
         microkit_internal_crash(err);
     }
 }
-#endif
+#endif /* CONFIG_ARM_HYPERVISOR_SUPPORT */
 
 #if defined(CONFIG_ALLOW_SMC_CALLS)
 static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)
@@ -275,7 +274,7 @@ static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMC
         microkit_internal_crash(err);
     }
 }
-#endif
+#endif /* CONFIG_ALLOW_SMC_CALLS */
 
 #if defined(CONFIG_ARCH_X86_64)
 static inline void microkit_x86_ioport_write_8(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data)
@@ -391,9 +390,8 @@ static inline seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id,
 
     return ret.result;
 }
-#endif
 
-#if defined(CONFIG_ARCH_X86_64) && defined(CONFIG_VTX)
+#if defined(CONFIG_VTX)
 static inline seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Word field)
 {
     seL4_X86_VCPU_ReadVMCS_t ret;
@@ -477,7 +475,15 @@ static inline void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUCo
     }
 }
 
-#endif
+static inline void microkit_vcpu_x86_deferred_resume(void)
+{
+    /* On x86, a TCB can only have one bound VCPU at any given time.
+     * So we don't take a `microkit_child vcpu` here. */
+    microkit_x86_do_vcpu_resume = seL4_True;
+}
+
+#endif /* CONFIG_VTX */
+#endif /* CONFIG_ARCH_X86_64 */
 
 static inline void microkit_deferred_notify(microkit_channel ch)
 {
