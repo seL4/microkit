@@ -1062,7 +1062,7 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 The `irq` element has the following attributes when registering x86-64 MSI interrupts:
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
-* `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
+* `pcidev`: The PCI device address of the device that will generate the interrupt in hexadecimal, in BUS:DEV.FUNC notation (e.g. 01:1f.2).
 * `handle`: Value of the handle programmed into the data portion of the MSI.
 * `vector`: CPU vector to deliver the interrupt to.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
