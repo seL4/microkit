@@ -155,8 +155,8 @@
     <xs:attribute name="pcidev" use="optional">
       <xs:simpleType>
         <xs:restriction base="xs:string">
-          <!-- BUS:DEV:FUNC -->
-          <xs:pattern value="[0-9a-fA-F]+[:\.][0-9a-fA-F]+[:\.][0-9a-fA-F]+" />
+          <!-- BUS:DEV.FUNC -->
+          <xs:pattern value="[0-9a-fA-F]+:[0-9a-fA-F]+\.[0-9a-fA-F]+" />
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>
