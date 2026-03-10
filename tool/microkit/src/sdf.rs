@@ -288,6 +288,7 @@ pub struct DomainTimeslice {
 pub struct DomainSchedule {
     pub domain_ids: HashMap<String, u8>,
     pub schedule: Vec<DomainTimeslice>,
+    pub domain_start_idx: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1129,58 +1130,80 @@ impl DomainSchedule {
         let mut next_domain_id = 0;
         let mut domain_ids = HashMap::new();
         let mut schedule = Vec::new();
+        let mut domain_start_idx: Option<u64> = None;
         for child in node.children() {
             if !child.is_element() {
                 continue;
             }
 
             let child_name = child.tag_name().name();
-            if child_name != "domain" {
-                return Err(format!(
-                    "Error: invalid XML element '{}': {}",
-                    child_name,
-                    loc_string(xml_sdf, pos)
-                ));
-            }
+            match child_name {
+                "domain" => {
+                    if schedule.len() == config.num_domain_schedules as usize {
+                        return Err(format!(
+                            "Error: length of domain schedule exceeds maximum of {}: {}",
+                            config.num_domain_schedules as usize,
+                            loc_string(xml_sdf, pos)
+                        ));
+                    }
 
-            if schedule.len() == config.num_domain_schedules as usize {
-                return Err(format!(
-                    "Error: length of domain schedule exceeds maximum of {}: {}",
-                    config.num_domain_schedules as usize,
-                    loc_string(xml_sdf, pos)
-                ));
-            }
+                    check_attributes(xml_sdf, &child, &["name", "length"])?;
+                    let name = checked_lookup(xml_sdf, &child, "name")?;
+                    let length = checked_lookup(xml_sdf, &child, "length")?.parse::<u64>();
+                    if length.is_err() {
+                        return Err(format!(
+                            "Error: invalid domain timeslice length '{}': {}",
+                            name,
+                            loc_string(xml_sdf, pos)
+                        ));
+                    }
 
-            check_attributes(xml_sdf, &child, &["name", "length"])?;
-            let name = checked_lookup(xml_sdf, &child, "name")?;
-            let length = checked_lookup(xml_sdf, &child, "length")?.parse::<u64>();
-            if length.is_err() {
-                return Err(format!(
-                    "Error: invalid domain timeslice length '{}': {}",
-                    name,
-                    loc_string(xml_sdf, pos)
-                ));
-            }
+                    let id = match domain_ids.get(name) {
+                        Some(&id) => id,
+                        None => {
+                            let id = next_domain_id;
+                            next_domain_id += 1;
+                            domain_ids.insert(name.to_string(), id);
+                            id
+                        }
+                    };
 
-            let id = match domain_ids.get(name) {
-                Some(&id) => id,
-                None => {
-                    let id = next_domain_id;
-                    next_domain_id += 1;
-                    domain_ids.insert(name.to_string(), id);
-                    id
+                    schedule.push(DomainTimeslice {
+                        id,
+                        length: length.unwrap(),
+                    });
                 }
-            };
+                "domain_start" => {
+                    if domain_start_idx.is_some() {
+                        return Err(format!(
+                            "Error: Duplicate setting of domain start index, already set to '{}'",
+                            domain_start_idx.unwrap()
+                        ))
+                    }
+                    check_attributes(xml_sdf, &child, &["index"])?;
+                    let start_index = checked_lookup(xml_sdf, &child, "index")?.parse::<u64>();
+                    if start_index.is_err() {
+                        return Err(format!(
+                            "Error: invalid domain start index",
+                        ))
+                    }
+                    domain_start_idx = Some(start_index.unwrap());
+                }
+                _ => {
+                    return Err(format!(
+                        "Error: invalid XML element '{}': {}",
+                        child_name,
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
 
-            schedule.push(DomainTimeslice {
-                id,
-                length: length.unwrap(),
-            });
+            }
         }
 
         Ok(DomainSchedule {
             domain_ids,
             schedule,
+            domain_start_idx,
         })
     }
 }
@@ -2131,6 +2154,20 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     ));
                 }
             };
+        }
+    }
+
+    // Ensure that the domain start index (if supplied) points to a valid index
+    if domain_schedule.is_some() {
+        let dom_sched = domain_schedule.as_ref().unwrap();
+        if dom_sched.domain_start_idx.is_some() &&
+            dom_sched.domain_start_idx.unwrap() >= dom_sched.schedule.len() as u64
+        {
+            return Err(format!(
+                "Error: Setting domain start index to '{}' when schedule is of length '{}'. Note that the domain start is 0 indexed.",
+                dom_sched.domain_start_idx.unwrap(),
+                dom_sched.schedule.len()
+            ))
         }
     }
 
