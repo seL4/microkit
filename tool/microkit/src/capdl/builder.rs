@@ -131,6 +131,7 @@ impl CapDLSpecContainer {
                 objects: Vec::new(),
                 irqs: Vec::new(),
                 domain_schedule: None,
+                domain_start_idx: None,
                 asid_slots: Vec::new(),
                 root_objects: Range {
                     start: 0.into(),
@@ -1087,10 +1088,8 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Pass domain schedule
+    // Step 5. Parse domain schedule
     // *********************************
-
-
 
     if system.domain_schedule.is_some() {
         let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
@@ -1105,6 +1104,10 @@ pub fn build_capdl_spec(
         }
 
         spec_container.spec.domain_schedule = Some(domain_schedule);
+        spec_container.spec.domain_start_idx = system.domain_schedule
+                                                .as_ref()
+                                                .unwrap()
+                                                .domain_start_idx.map(|idx| Word(idx));
     }
 
     // *********************************

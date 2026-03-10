@@ -189,7 +189,7 @@ Runnable PDs of the same priority are scheduled in a round-robin manner.
 
 #### Domain scheduling (experimental)
 
-If the SDK is built with a domain support config, the PD can be assigned to a scheduling **domain** in the system description. If a PD is assigned to a domain, then the PD will only be allowed to execute when that domain is active. Which domain is active at any given point in time is determined by the [domain schedule](#domain).
+If a Microkit system is built with a domain supported (`release_domain, debug_domain`) config, the PD can be assigned to a scheduling **domain** in the system description. If a PD is assigned to a domain, then the PD will only be allowed to execute when that domain is active. By default, PDs are assigned to domain 0. Which domain is active at any given point in time is determined by the [domain schedule](#domain).
 
 ## Virtual Machines {#vm}
 
@@ -1148,7 +1148,7 @@ The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functio
 
 ## `domain_schedule` (experimental)
 
-The `domain_schedule` element has has a list of up to 256 `domain` child elements. Each child specifies a particular timeslice in the domain schedule and the order of the child elements specifies the order in which the timeslices will be scheduled. A domain may be named more than once in the schedule, in which case the domain will have multiple timeslices in the schedule.
+The `domain_schedule` element, by default, has a list of up to 256 `domain` child elements. This can be configured by changing the number of schedule entries defined in the `release_domains` and `debug_domains` configs in `build_sdk.py`. Each child specifies a particular timeslice in the domain schedule and the order of the child elements specifies the order in which the timeslices will be scheduled. A domain may be named more than once in the schedule, in which case the domain will have multiple timeslices in the schedule.
 
 The `domain` element has the following attributes:
 
@@ -1156,6 +1156,9 @@ The `domain` element has the following attributes:
 * `length`: Length of time the domain will run each time it is active, in milliseconds.
 
 The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
+
+The `domain_start` element has the following attribute:
+* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again.
 
 The `domain_schedule` element is only valid if the using one of the domain configs (`release_domains`, `debug_domains`).
 
