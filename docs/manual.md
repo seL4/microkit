@@ -980,7 +980,7 @@ The `protection_domain` element describes a protection domain.
 It supports the following attributes:
 
 * `name`: A unique name for the protection domain
-* `priority`: The priority of the protection domain (integer 0 to 254).
+* `priority`: The priority of the protection domain (integer 0 to 254). Defaults to 0.
 * `budget`: (optional) The PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
@@ -1005,6 +1005,7 @@ The `map` element has the following attributes:
 * `mr`: Identifies the memory region to map.
 * `vaddr`: Identifies the virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute), with the exception of a write-only mapping (just `w`).
+           Defaults to read-write.
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 * `setvar_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the memory region.
