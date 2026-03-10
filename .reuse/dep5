@@ -15,6 +15,7 @@ Files:
   docs/assets/microkit_flow.svg
   docs/assets/microkit_flow.pdf
   tool/microkit/tests/prefills/small.bin
+  example/mr_prefill/fill.bin
 Copyright: 2024, UNSW
 License: BSD-2-Clause
 
