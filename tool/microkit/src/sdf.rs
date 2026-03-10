@@ -49,6 +49,11 @@ pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;
 const PD_MIN_STACK_SIZE: u64 = 0x1000;
 const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
 
+/// Maximum values for PCI bus, device, function numbers. Inclusive.
+const PCI_BUS_MAX: i64 = (1 << 8) - 1;
+const PCI_DEV_MAX: i64 = (1 << 5) - 1;
+const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -821,43 +826,94 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
 
-                        let pci_parts: Vec<i64> = pcidev_str
-                            .split([':', '.'])
-                            .map(str::trim)
-                            .map(|x| {
-                                i64::from_str_radix(x, 16).expect(
-                                    "Error: Failed to parse parts of the PCI device address",
-                                )
-                            })
-                            .collect();
-                        if pci_parts.len() != 3 {
+                        // A "pcidev" attribute is in a form of Bus:Dev.Func
+                        // Split by the colon then the dot.
+
+                        // If the input is valid, index 0 contains "Bus", index 1 contains
+                        // "Dev.Func"
+                        let pci_parts_by_colon: Vec<_> =
+                            pcidev_str.split(':').map(str::trim).collect();
+
+                        if pci_parts_by_colon.len() != 2 {
                             return Err(format!(
                                 "Error: failed to parse PCI address '{}' on element '{}'",
                                 pcidev_str,
                                 child.tag_name().name()
                             ));
                         }
-                        if pci_parts[0] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI bus must be >= 0".to_string(),
+
+                        // If the input is valid, index 0 contains "Dev", index 1 contains
+                        // "Func"
+                        let pci_parts_by_dot: Vec<_> =
+                            pci_parts_by_colon[1].split('.').map(str::trim).collect();
+                        if pci_parts_by_dot.len() != 2 {
+                            return Err(format!(
+                                "Error: failed to parse PCI address '{}' on element '{}'",
+                                pcidev_str,
+                                child.tag_name().name()
                             ));
                         }
-                        if pci_parts[1] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI device must be >= 0".to_string(),
-                            ));
-                        }
-                        if pci_parts[2] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI function must be >= 0".to_string(),
-                            ));
-                        }
+
+                        let pci_bus_maybe = i64::from_str_radix(pci_parts_by_colon[0], 16);
+                        let pci_dev_maybe = i64::from_str_radix(pci_parts_by_dot[0], 16);
+                        let pci_func_maybe = i64::from_str_radix(pci_parts_by_dot[1], 16);
+
+                        match pci_bus_maybe {
+                            Ok(pci_bus_unchecked) => {
+                                if !(0..=PCI_BUS_MAX).contains(&pci_bus_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI bus must be within [0..{PCI_BUS_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI bus of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
+
+                        match pci_dev_maybe {
+                            Ok(pci_dev_unchecked) => {
+                                if !(0..=PCI_DEV_MAX).contains(&pci_dev_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI device must be within [0..{PCI_DEV_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI device of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
+
+                        match pci_func_maybe {
+                            Ok(pci_func_unchecked) => {
+                                if !(0..=PCI_FUNC_MAX).contains(&pci_func_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI function must be within [0..{PCI_FUNC_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI function of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
 
                         let handle = checked_lookup(xml_sdf, &child, "handle")?
                             .parse::<i64>()
@@ -884,9 +940,9 @@ impl ProtectionDomain {
                         let irq = SysIrq {
                             id: id as u64,
                             kind: SysIrqKind::MSI {
-                                pci_bus: pci_parts[0] as u64,
-                                pci_dev: pci_parts[1] as u64,
-                                pci_func: pci_parts[2] as u64,
+                                pci_bus: pci_bus_maybe.unwrap() as u64,
+                                pci_dev: pci_dev_maybe.unwrap() as u64,
+                                pci_func: pci_func_maybe.unwrap() as u64,
                                 handle: handle as u64,
                                 vector: vector as u64,
                             },
