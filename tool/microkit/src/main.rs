@@ -23,7 +23,8 @@ use microkit_tool::sel4::{
 };
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{
-    human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down, round_up,
+    get_full_path, human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down,
+    round_up,
 };
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 use std::collections::HashMap;
@@ -39,17 +40,6 @@ const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 // The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
 // also copy the 32-bit version that was prepared by build_sdk.py for convenience.
 const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
-
-fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
-    for search_path in search_paths {
-        let full_path = search_path.join(path);
-        if full_path.exists() {
-            return Some(full_path.to_path_buf());
-        }
-    }
-
-    None
-}
 
 fn print_usage() {
     println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf,uimage}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-json CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
@@ -560,7 +550,12 @@ fn main() -> Result<(), String> {
         "Microkit tool has various assumptions about the word size being 64-bits."
     );
 
-    let mut system = match parse(args.system, &xml, &kernel_config) {
+    let mut search_paths = vec![std::env::current_dir().unwrap()];
+    for path in args.search_paths {
+        search_paths.push(PathBuf::from(path));
+    }
+
+    let mut system = match parse(args.system, &xml, &kernel_config, &search_paths) {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");
@@ -616,11 +611,6 @@ fn main() -> Result<(), String> {
         );
         std::process::exit(1);
     });
-
-    let mut search_paths = vec![std::env::current_dir().unwrap()];
-    for path in args.search_paths {
-        search_paths.push(PathBuf::from(path));
-    }
 
     // This list refers to all PD ELFs as well as the Monitor ELF.
     // The monitor is very similar to a PD so it is useful to pass around

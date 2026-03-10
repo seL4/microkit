@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="prefilled" size="0x1000" prefill_path="empty.bin" />
+
+    <protection_domain name="mr_prefill" priority="100" >
+        <program_image path="mr_prefill.elf" />
+        <map mr="prefilled" vaddr="0x20000000" setvar_vaddr="filled_mr" setvar_prefill_size="filled_mr_data_size"/>
+    </protection_domain>
+</system>
