@@ -236,6 +236,16 @@ The mapping has a number of attributes, which include:
 **Note:** When a memory region is mapped into multiple protection
 domains, the attributes used for different mappings may vary.
 
+### Prefilling
+
+A *memory region* may be prefilled with data from a file at build time
+by specifying the file's name in the [System Description File]{#sysdesc}.
+
+In this case, specifying the memory region's size become optional. If
+a size isn't specified, the memory region will be sized by the length
+of the prefill file, rounded up to the smallest page size or the user
+specified page size.
+
 ## Channels {#channels}
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
@@ -1009,6 +1019,7 @@ The `map` element has the following attributes:
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 * `setvar_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the memory region.
+* `setvar_prefill_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the prefilled data.
 
 The `irq` element has the following attributes on ARM and RISC-V:
 
@@ -1084,6 +1095,7 @@ It supports the following attributes:
 * `size`: Size of the memory region in bytes (must be a multiple of the page size)
 * `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the largest page size for the target architecture that the memory region is aligned to.
 * `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
+* `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at boot.
 
 The `memory_region` element does not support any child elements.
 
