@@ -55,6 +55,11 @@ const PCI_BUS_MAX: i64 = (1 << 8) - 1;
 const PCI_DEV_MAX: i64 = (1 << 5) - 1;
 const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
 
+/// Maximum x86 IRQ vector value. Inclusive.
+/// This value is calculated by the kernel as `irq_user_max - irq_user_min` in
+/// `src/arch/x86/object/interrupt.c`
+const X86_IRQ_VECTOR_MAX: i64 = 107;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -808,11 +813,11 @@ impl ProtectionDomain {
                         let vector = checked_lookup(xml_sdf, &child, "vector")?
                             .parse::<i64>()
                             .unwrap();
-                        if vector < 0 {
+                        if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
-                                "vector must be >= 0".to_string(),
+                                format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
 
@@ -946,11 +951,11 @@ impl ProtectionDomain {
                         let vector = checked_lookup(xml_sdf, &child, "vector")?
                             .parse::<i64>()
                             .unwrap();
-                        if vector < 0 {
+                        if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
-                                "vector must be >= 0".to_string(),
+                                format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
 

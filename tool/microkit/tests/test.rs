@@ -479,7 +479,16 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_ioapic_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_ioapic_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_ioapic_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
     }
 
@@ -551,7 +560,16 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
     }
 
