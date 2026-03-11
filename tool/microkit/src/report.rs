@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::path::Path;
 use std::{fs::File, io::Write};
 
 use sel4_capdl_initializer_types::Object;
@@ -22,7 +23,7 @@ use crate::{
 pub fn write_report(
     spec_container: &CapDLSpecContainer,
     kernel_config: &Config,
-    output_path: &str,
+    output_path: &Path,
 ) {
     let mut report_file = File::create(output_path).expect("Cannot create report file");
 
