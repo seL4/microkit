@@ -10,6 +10,9 @@ members = [
     "tool/microkit",
     "initialiser",
 ]
+exclude = [
+    "example/rust"
+]
 
 [workspace.dependencies.sel4-capdl-initializer]
 git = "https://github.com/au-ts/rust-seL4"
