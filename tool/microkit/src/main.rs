@@ -7,6 +7,8 @@
 // we want our asserts, even if the compiler figures out they hold true already during compile-time
 #![allow(clippy::assertions_on_constants)]
 
+use microkit_tool::argparse;
+use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
 use microkit_tool::capdl::allocation::{
     simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel,
 };
@@ -29,7 +31,7 @@ use microkit_tool::util::{
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 use std::collections::HashMap;
 use std::fs::{self, metadata};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const MAX_BUILD_ITERATION: usize = 3;
 
@@ -40,26 +42,6 @@ const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 // The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
 // also copy the 32-bit version that was prepared by build_sdk.py for convenience.
 const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
-
-fn print_usage() {
-    println!("usage: microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system")
-}
-
-fn print_help(available_boards: &[String]) {
-    print_usage();
-    println!("\npositional arguments:");
-    println!("  system");
-    println!("\noptions:");
-    println!("  -h, --help, show this help message and exit");
-    println!("  -o, --output OUTPUT");
-    println!("  -r, --report REPORT");
-    println!("  --image-type {{binary,elf}}");
-    println!("  --override-kernel KERNEL (for debugging purposes)");
-    println!("  --board {}", available_boards.join("\n          "));
-    println!("  --config CONFIG");
-    println!("  --capdl-json CAPDL_SPEC (JSON format)");
-    println!("  --search-path [SEARCH_PATH ...]");
-}
 
 enum ImageOutputType {
     Binary,
@@ -79,194 +61,23 @@ impl ImageOutputType {
         }
     }
 
-    fn parse(str: &str, arch: Arch) -> Result<Self, String> {
-        match str {
-            "binary" => match arch {
-                Arch::Aarch64 | Arch::Riscv64 => Ok(ImageOutputType::Binary),
-                Arch::X86_64 => Err(format!(
-                    "building the output image as binary is unsupported for target architecture '{arch}'"
-                )),
+    /// Resolve the optional user-specified image type with what is the default for the
+    /// platform.
+    /// Not all image types are supported for all platforms, so we check here.
+    fn resolve(requested: &RequestedImageType, arch: &Arch, board_name: &str) -> Option<Self> {
+        match requested {
+            RequestedImageType::Binary => match arch {
+                Arch::Aarch64 | Arch::Riscv64 => Some(Self::Binary),
+                Arch::X86_64 => None,
             },
-            "elf" => Ok(ImageOutputType::Elf),
-            "uimage" => match arch {
-                Arch::Riscv64 => Ok(ImageOutputType::Uimage),
-                Arch::X86_64 | Arch::Aarch64 => Err(format!(
-                    "building the output image as uImage is unsupported for target architecture '{arch}'"
-                )),
+            RequestedImageType::Elf => Some(Self::Elf),
+            RequestedImageType::Uimage => match arch {
+                Arch::Riscv64 => Some(Self::Uimage),
+                Arch::X86_64 | Arch::Aarch64 => None,
             },
-            _ => Err(format!("unknown value '{str}'")),
-        }
-    }
-}
-
-struct Args<'a> {
-    system: &'a str,
-    board: &'a str,
-    config: &'a str,
-    report: &'a str,
-    capdl_json: Option<&'a str>,
-    output: &'a str,
-    search_paths: Vec<&'a String>,
-    output_image_type: Option<&'a str>,
-    override_kernel: Option<&'a str>,
-}
-
-impl<'a> Args<'a> {
-    pub fn parse(args: &'a [String], available_boards: &[String]) -> Args<'a> {
-        // Default arguments
-        let mut output = "loader.img";
-        let mut report = "report.txt";
-        let mut capdl_json = None;
-        let mut search_paths = Vec::new();
-        // Arguments expected to be provided by the user
-        let mut system = None;
-        let mut board = None;
-        let mut config = None;
-        let mut output_image_type = None;
-        let mut override_kernel = None;
-
-        if args.len() <= 1 {
-            print_usage();
-            std::process::exit(1);
-        }
-
-        let mut i = 1;
-        let mut unknown = vec![];
-        let mut in_search_path = false;
-        while i < args.len() {
-            match args[i].as_str() {
-                "-h" | "--help" => {
-                    print_help(available_boards);
-                    std::process::exit(0);
-                }
-                "-o" | "--output" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        output = &args[i + 1];
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument -o/--output: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "-r" | "--report" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        report = &args[i + 1];
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument -r/--report: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "--board" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        board = Some(&args[i + 1]);
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument --board: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "--config" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        config = Some(&args[i + 1]);
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument --config: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "--capdl-json" => {
-                    in_search_path = false;
-                    if i < args.len() - 1 {
-                        capdl_json = Some(args[i + 1].as_str());
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument --capdl-json: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "--search-path" => {
-                    in_search_path = true;
-                }
-                "--image-type" => {
-                    if i < args.len() - 1 {
-                        output_image_type = Some(args[i + 1].as_str());
-                        i += 1;
-                    } else {
-                        eprintln!("microkit: error: argument --image-type: expected one argument");
-                        std::process::exit(1);
-                    }
-                }
-                "--override-kernel" => {
-                    if i < args.len() - 1 {
-                        override_kernel = Some(args[i + 1].as_str());
-                        i += 1;
-                    } else {
-                        eprintln!(
-                            "microkit: error: argument --override-kernel: expected one argument"
-                        );
-                        std::process::exit(1);
-                    }
-                }
-                _ => {
-                    if in_search_path {
-                        search_paths.push(&args[i]);
-                    } else if system.is_none() {
-                        system = Some(&args[i]);
-                    } else {
-                        // This call to clone is okay since having unknown
-                        // arguments is rare.
-                        unknown.push(args[i].clone());
-                    }
-                }
+            RequestedImageType::Unspecified => {
+                Some(Self::default_from_arch_and_board(arch, board_name))
             }
-
-            i += 1;
-        }
-
-        if !unknown.is_empty() {
-            print_usage();
-            eprintln!(
-                "microkit: error: unrecognised arguments: {}",
-                unknown.join(" ")
-            );
-            std::process::exit(1);
-        }
-
-        let mut missing_args = Vec::new();
-        if board.is_none() {
-            missing_args.push("--board");
-        }
-        if config.is_none() {
-            missing_args.push("--config");
-        }
-        if system.is_none() {
-            missing_args.push("system");
-        }
-
-        if !missing_args.is_empty() {
-            print_usage();
-            eprintln!(
-                "microkit: error: the following arguments are required: {}",
-                missing_args.join(", ")
-            );
-            std::process::exit(1);
-        }
-
-        Args {
-            system: system.unwrap(),
-            board: board.unwrap(),
-            config: config.unwrap(),
-            report,
-            capdl_json,
-            output,
-            search_paths,
-            output_image_type,
-            override_kernel,
         }
     }
 }
@@ -315,9 +126,26 @@ fn main() -> Result<(), String> {
     available_boards.sort();
 
     let env_args: Vec<_> = std::env::args().collect();
-    let args = Args::parse(&env_args, &available_boards);
+    let args = match Args::parse(&env_args, &available_boards) {
+        Ok(result) => result,
+        Err(ArgsError::HelpWanted) => {
+            argparse::print_help(&available_boards);
+            std::process::exit(0);
+        }
+        Err(err) => {
+            match err {
+                ArgsError::UnrecognizedArgument { arg: _ }
+                | ArgsError::MissingRequiredArguments { args: _ } => {
+                    argparse::print_usage();
+                }
+                _ => {}
+            };
+            eprintln!("microkit: error: {err}");
+            std::process::exit(1);
+        }
+    };
 
-    let board_path = boards_path.join(args.board);
+    let board_path = boards_path.join(&args.board);
     if !board_path.exists() {
         eprintln!(
             "Error: board path '{}' does not exist.",
@@ -350,12 +178,12 @@ fn main() -> Result<(), String> {
 
     let elf_path = sdk_dir
         .join("board")
-        .join(args.board)
-        .join(args.config)
+        .join(&args.board)
+        .join(&args.config)
         .join("elf");
     let loader_elf_path = elf_path.join("loader.elf");
     let kernel_elf_path = match args.override_kernel {
-        Some(path) => Path::new(path),
+        Some(ref path) => path,
         None => &elf_path.join("sel4.elf"),
     };
     let monitor_elf_path = elf_path.join("monitor.elf");
@@ -363,14 +191,14 @@ fn main() -> Result<(), String> {
 
     let kernel_config_path = sdk_dir
         .join("board")
-        .join(args.board)
-        .join(args.config)
+        .join(&args.board)
+        .join(&args.config)
         .join("include/kernel/gen_config.json");
 
     let invocations_all_path = sdk_dir
         .join("board")
-        .join(args.board)
-        .join(args.config)
+        .join(&args.board)
+        .join(&args.config)
         .join("invocations_all.json");
 
     if !elf_path.exists() {
@@ -416,7 +244,7 @@ fn main() -> Result<(), String> {
         std::process::exit(1);
     }
 
-    let system_path = Path::new(args.system);
+    let system_path = &args.sdf_path;
     if !system_path.exists() {
         eprintln!(
             "Error: system description file '{}' does not exist",
@@ -425,7 +253,7 @@ fn main() -> Result<(), String> {
         std::process::exit(1);
     }
 
-    let xml: String = fs::read_to_string(args.system).unwrap();
+    let xml: String = fs::read_to_string(system_path).unwrap();
 
     let kernel_config_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
@@ -440,16 +268,19 @@ fn main() -> Result<(), String> {
         _ => panic!("Unsupported kernel config architecture"),
     };
 
-    let image_output_type = if let Some(image_type) = args.output_image_type {
-        match ImageOutputType::parse(image_type, arch) {
-            Ok(output_image_type) => output_image_type,
-            Err(reason) => {
-                eprintln!("microkit: error: argument --image-type: {reason}");
-                std::process::exit(1);
-            }
+    let image_output_type = match ImageOutputType::resolve(
+        &args.requested_image_type,
+        &arch,
+        args.board.as_str(),
+    ) {
+        Some(image) => image,
+        None => {
+            eprintln!(
+                    "microkit: error: building the output image as '{0}' is unsupported for target architecture '{arch}'",
+                    args.requested_image_type
+                );
+            std::process::exit(1);
         }
-    } else {
-        ImageOutputType::default_from_arch_and_board(&arch, args.board)
     };
 
     let (device_regions, normal_regions) = match arch {
@@ -457,8 +288,8 @@ fn main() -> Result<(), String> {
         _ => {
             let kernel_platform_config_path = sdk_dir
                 .join("board")
-                .join(args.board)
-                .join(args.config)
+                .join(&args.board)
+                .join(&args.config)
                 .join("platform_gen.json");
 
             if !kernel_platform_config_path.exists() {
@@ -484,7 +315,7 @@ fn main() -> Result<(), String> {
         let object_sizes_path = sdk_dir
             .join("board")
             .join(args.board)
-            .join(args.config)
+            .join(&args.config)
             .join("object_sizes.json");
 
         if !object_sizes_path.exists() {
@@ -581,12 +412,12 @@ fn main() -> Result<(), String> {
         "Microkit tool has various assumptions about the word size being 64-bits."
     );
 
-    let mut search_paths = vec![std::env::current_dir().unwrap()];
-    for path in args.search_paths {
-        search_paths.push(PathBuf::from(path));
-    }
-
-    let mut system = match parse(args.system, &xml, &kernel_config, &search_paths) {
+    let mut system = match parse(
+        system_path.as_path(),
+        &xml,
+        &kernel_config,
+        &args.search_paths,
+    ) {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");
@@ -649,13 +480,13 @@ fn main() -> Result<(), String> {
     let mut system_elfs = Vec::with_capacity(system.protection_domains.len());
     // Get the elf files for each pd:
     for pd in &system.protection_domains {
-        match get_full_path(&pd.program_image, &search_paths) {
+        match get_full_path(&pd.program_image, &args.search_paths) {
             Some(path) => {
                 let path_for_symbols = pd
                     .program_image_for_symbols
                     .as_ref()
                     .map(|path_suffix| {
-                        get_full_path(path_suffix, &search_paths).ok_or_else(|| {
+                        get_full_path(path_suffix, &args.search_paths).ok_or_else(|| {
                             format!(
                                 "unable to find program image for symbols: '{}'",
                                 path_suffix.display()
@@ -707,7 +538,7 @@ fn main() -> Result<(), String> {
         let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,
-            args.config,
+            args.config.as_str(),
             &spec_container,
             &system_elfs,
             &mut capdl_initialiser,
@@ -932,7 +763,7 @@ fn main() -> Result<(), String> {
                 human_size_strict(initialiser_vaddr_range.end - initialiser_vaddr_range.start),
             );
 
-            let image_out_path = Path::new(args.output);
+            let image_out_path = args.output_path.as_path();
 
             match kernel_config.arch {
                 Arch::X86_64 => match capdl_initialiser.elf.reserialise(image_out_path) {
@@ -991,12 +822,12 @@ fn main() -> Result<(), String> {
                 }
             };
 
-            if let Some(capdl_json) = args.capdl_json {
+            if let Some(capdl_json) = args.capdl_json_path {
                 let serialised = serde_json::to_string_pretty(&spec_container.spec).unwrap();
                 fs::write(capdl_json, &serialised).unwrap();
             };
 
-            write_report(&spec_container, &kernel_config, args.report);
+            write_report(&spec_container, &kernel_config, &args.report_path);
             system_built = true;
             break;
         } else {

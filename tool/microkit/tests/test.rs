@@ -9,6 +9,7 @@ use microkit_tool::{
     sel4::{self},
 };
 use serde_json::json;
+use std::path::Path;
 
 const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -68,7 +69,12 @@ fn check_success(kernel_config: &sel4::Config, test_name: &str) {
     path.push("tests/sdf/");
     path.push(test_name);
     let sdf = std::fs::read_to_string(path).unwrap();
-    let parse = sdf::parse(test_name, &sdf, kernel_config, &[prefill_path].to_vec());
+    let parse = sdf::parse(
+        Path::new(test_name),
+        &sdf,
+        kernel_config,
+        &[prefill_path].to_vec(),
+    );
 
     if let Err(ref e) = parse {
         eprintln!("Expected no error, instead got:\n{e}")
@@ -87,8 +93,13 @@ fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str
     sdf_path.push("tests/sdf/");
     sdf_path.push(test_name);
     let sdf = std::fs::read_to_string(sdf_path).unwrap();
-    let parse_err =
-        sdf::parse(test_name, &sdf, kernel_config, &[prefill_path].to_vec()).unwrap_err();
+    let parse_err = sdf::parse(
+        Path::new(test_name),
+        &sdf,
+        kernel_config,
+        &[prefill_path].to_vec(),
+    )
+    .unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
         eprintln!("Expected error:\n{expected_err}\nGot error:\n{parse_err}\n");
