@@ -42,6 +42,8 @@ ifeq ($(ARCH),aarch64)
 	RUST_TARGET := aarch64-sel4-microkit-minimal
 else ifeq ($(ARCH),riscv64)
 	RUST_TARGET := riscv64gc-sel4-microkit-minimal
+else ifeq ($(ARCH),x86_64)
+	RUST_TARGET := x86_64-sel4-microkit-minimal
 else
 $(error Unsupported ARCH)
 endif
@@ -54,12 +56,13 @@ $(crate): $(crate).intermediate
 
 .INTERMDIATE: $(crate).intermediate
 $(crate).intermediate:
+	RUSTFLAGS=-Zunstable-options \
 	SEL4_INCLUDE_DIRS=$(abspath $(SEL4_INCLUDE_DIRS)) \
 		cargo build \
 			-Z build-std=core,alloc,compiler_builtins \
 			-Z build-std-features=compiler-builtins-mem \
 			--target-dir $(BUILD_DIR)/target \
-			--out-dir $(BUILD_DIR) \
+			--artifact-dir $(BUILD_DIR) \
 			--target $(RUST_TARGET) \
 			--release \
 			-p $(1)
