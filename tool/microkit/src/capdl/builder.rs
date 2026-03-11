@@ -1090,13 +1090,17 @@ pub fn build_capdl_spec(
     // Step 5. Pass domain schedule
     // *********************************
 
+
+
     if system.domain_schedule.is_some() {
         let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
-
+        // We need to convert from the milliseconds that the user defines in the
+        // sdf to the kernel scheduler ticks.
+        let ticks_in_ms = kernel_config.timer_freq.unwrap() / 1000;
         for sched_entry in system.domain_schedule.as_ref().unwrap().schedule.iter() {
             domain_schedule.push(DomainSchedEntry{
                 id: sched_entry.id,
-                time: sched_entry.length,
+                time: sched_entry.length * ticks_in_ms,
             })
         }
 

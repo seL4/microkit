@@ -502,6 +502,11 @@ fn main() -> Result<(), String> {
         _ => None,
     };
 
+    let timer_freq = match arch {
+        Arch::Aarch64 => Some(json_str_as_u64(&kernel_config_json, "TIMER_FREQUENCY")? as u64),
+        _ => None,
+    };
+
     let kernel_frame_size = match arch {
         Arch::Aarch64 => 1 << 12,
         Arch::Riscv64 => 1 << 21,
@@ -531,6 +536,7 @@ fn main() -> Result<(), String> {
             1
         },
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+        timer_freq,
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),

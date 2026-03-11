@@ -1765,13 +1765,11 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             },
             "domain_schedule" => {
                 if config.num_domain_schedules > 1 {
-                    println!("NUM DOMAINS IS GREATER THAN 1: {}", config.num_domain_schedules);
                     if let Some(domain_schedule_node) = system
                         .children()
                         .filter(|&child| child.is_element())
                         .find(|&child| child.tag_name().name() == "domain_schedule")
                     {
-                        println!("Doing the domain schedule!\n");
                         domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &config, &domain_schedule_node)?);
                     }
                 } else {

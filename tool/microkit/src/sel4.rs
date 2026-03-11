@@ -281,6 +281,8 @@ pub struct Config {
     pub benchmark: bool,
     pub num_cores: u8,
     pub fpu: bool,
+    /// Not used on x86 configs as timer freq is not defined
+    pub timer_freq: Option<u64>,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,
     /// ARM-specific, where or not SMC forwarding is allowed
