@@ -212,7 +212,8 @@ protection domain can only ever manage a single virtual machine.
 
 A *memory region* is a range of memory.
 
-A memory region has a *fixed* physical address if it:
+A memory region has a *fixed* physical address if it either:
+
 1. has an explicitly defined physical address, or
 2. is a subject of a `setvar` element with a `region_paddr` attribute
 (See [System Description File](#sysdesc)). In this case
@@ -1025,17 +1026,17 @@ The `irq` element has the following attributes on ARM and RISC-V:
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
-The `irq` element has the following attributes when registering X86_64 IOAPIC interrupts:
+The `irq` element has the following attributes when registering x86-64 IOAPIC interrupts:
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `pin`: IOAPIC pin that generates the interrupt.
 * `vector`: CPU vector to deliver the interrupt to.
 * `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
-* `level`: (optional) Whether the IRQ is level triggered (1) or edge triggered (0). Defaults to level (1).
-* `polarity`: (optional) Whether the line polarity is high (1) or low (0). Defaults to high (1).
+* `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
+* `polarity`: (optional) Whether the line polarity is high ("high") or low ("low"). Defaults to "high".
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
-The `irq` element has the following attributes when registering X86_64 MSI interrupts:
+The `irq` element has the following attributes when registering x86-64 MSI interrupts:
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
