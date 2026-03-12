@@ -140,6 +140,16 @@ class ConfigInfo:
     kernel_options_arch: KERNEL_OPTIONS_ARCH
 
 
+# There are some references to paths we need to make that are relative
+# to the kernel source, since the kernel source is supplied by the user,
+# we can't hard-code it.
+# This is necessary for particular kernel options such as, KernelCustomDTS
+# and KernelCustomDTSOverlay.
+@dataclass
+class KernelPath:
+    path: str
+
+
 SUPPORTED_BOARDS = (
     BoardInfo(
         name="tqma8xqp1gb",
@@ -210,8 +220,8 @@ SUPPORTED_BOARDS = (
         smp_cores=4,
         kernel_options={
             "KernelPlatform": "imx8mp-evk",
-            "KernelCustomDTS": "custom_dts/iot-gate.dts",
-            "KernelCustomDTSOverlay": "src/plat/imx8m-evk/overlay-imx8mp-evk.dts",
+            "KernelCustomDTS": Path("custom_dts/iot-gate.dts"),
+            "KernelCustomDTSOverlay": KernelPath(path="src/plat/imx8m-evk/overlay-imx8mp-evk.dts"),
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
@@ -577,8 +587,10 @@ def build_sel4(
     for arg, val in sorted(config_args):
         if isinstance(val, bool):
             str_val = "ON" if val else "OFF"
-        elif arg == "KernelCustomDTSOverlay":
-            str_val = f"{sel4_dir.absolute()}/{val}"
+        elif isinstance(val, KernelPath):
+            str_val = f"{sel4_dir.absolute()}/{val.path}"
+        elif isinstance(val, Path):
+            str_val = Path(__file__).parent / val
         else:
             str_val = str(val)
         s = f"-D{arg}={str_val}"
