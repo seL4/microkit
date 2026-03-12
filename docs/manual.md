@@ -210,10 +210,18 @@ protection domain can only ever manage a single virtual machine.
 
 ## Memory Regions {#mr}
 
-A *memory region* is a contiguous range of physical memory.
-A memory region may have a *fixed* physical address.
-For memory regions without a fixed physical address, the physical address is allocated as part of the build process.
-Typically, memory regions with a fixed physical address represent memory-mapped device registers.
+A *memory region* is a range of memory.
+
+A memory region has a *fixed* physical address if it:
+1. has an explicitly defined physical address, or
+2. is a subject of a `setvar` element with a `region_paddr` attribute
+(See [System Description File](#sysdesc)). In this case
+the tool will automatically choose a suitable physical address.
+
+For memory regions without a fixed physical address, it is not guaranteed for
+it to be contiguous in physical memory.
+
+Typically, memory regions with a fixed physical address represent memory-mapped device registers or DMA regions.
 
 Memory regions that are within main memory are zero-initialised.
 
