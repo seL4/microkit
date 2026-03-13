@@ -18,6 +18,7 @@ pub mod elf;
 pub mod loader;
 pub mod report;
 pub mod sdf;
+pub mod sdkparse;
 pub mod sel4;
 pub mod symbols;
 pub mod uimage;

@@ -28,6 +28,7 @@ use microkit_tool::util::{
     get_full_path, human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down,
     round_up,
 };
+use microkit_tool::sdkparse::{SdkInfo};
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 use std::collections::HashMap;
 use std::fs::{self, metadata};
@@ -82,54 +83,32 @@ impl ImageOutputType {
     }
 }
 
+fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        eprintln!(
+            "Error: {description} '{}' does not exist",
+            path.display()
+        );
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), String> {
-    let exe_path = std::env::current_exe().unwrap();
-    let sdk_env = std::env::var("MICROKIT_SDK");
-    let sdk_dir = match sdk_env {
-        Ok(ref value) => Path::new(value),
-        Err(err) => match err {
-            // If there is no MICROKIT_SDK explicitly set, use the one that the binary is in.
-            std::env::VarError::NotPresent => exe_path.parent().unwrap().parent().unwrap(),
-            _ => {
-                return Err(format!(
-                    "Could not read MICROKIT_SDK environment variable: {err}"
-                ))
-            }
-        },
+    let sdkinfo = match SdkInfo::discover() {
+        Ok(discovered_info) => { discovered_info }
+        Err(err) => {
+            argparse::print_usage();
+            eprintln!("microkit: error: {err}");
+            std::process::exit(1);
+        }
     };
 
-    if !sdk_dir.exists() {
-        eprintln!(
-            "Error: SDK directory '{}' does not exist.",
-            sdk_dir.display()
-        );
-        std::process::exit(1);
-    }
-
-    let boards_path = sdk_dir.join("board");
-    if !boards_path.exists() || !boards_path.is_dir() {
-        eprintln!(
-            "Error: SDK directory '{}' does not have a 'board' sub-directory.",
-            sdk_dir.display()
-        );
-        std::process::exit(1);
-    }
-
-    let mut available_boards = Vec::new();
-    for p in fs::read_dir(&boards_path).unwrap() {
-        let path_buf = p.unwrap().path();
-        let path = path_buf.as_path();
-        if path.is_dir() {
-            available_boards.push(path.file_name().unwrap().to_str().unwrap().to_string());
-        }
-    }
-    available_boards.sort();
-
     let env_args: Vec<_> = std::env::args().collect();
-    let args = match Args::parse(&env_args, &available_boards) {
-        Ok(result) => result,
+    let args = match Args::parse(&env_args, &sdkinfo) {
+        Ok(parsed_arguments) => { parsed_arguments }
         Err(ArgsError::HelpWanted) => {
-            argparse::print_help(&available_boards);
+            argparse::print_help(&sdkinfo);
             std::process::exit(0);
         }
         Err(err) => {
@@ -145,42 +124,12 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let board_path = boards_path.join(&args.board);
-    if !board_path.exists() {
-        eprintln!(
-            "Error: board path '{}' does not exist.",
-            board_path.display()
-        );
-        std::process::exit(1);
-    }
+    // NB safe unwrap: argparse would already have bailed if the config did not
+    // exist.
+    let current_config = sdkinfo.select(&args.board, &args.config).unwrap();
 
-    let mut available_configs = Vec::new();
-    for p in fs::read_dir(board_path).unwrap() {
-        let path_buf = p.unwrap().path();
-        let path = path_buf.as_path();
-
-        if path.file_name().unwrap() == "example" {
-            continue;
-        }
-
-        if path.is_dir() {
-            available_configs.push(path.file_name().unwrap().to_str().unwrap().to_string());
-        }
-    }
-
-    if !available_configs.contains(&args.config.to_string()) {
-        eprintln!(
-            "microkit: error: argument --config: invalid choice: '{}' (choose from: {})",
-            args.config,
-            available_configs.join(", ")
-        )
-    }
-
-    let elf_path = sdk_dir
-        .join("board")
-        .join(&args.board)
-        .join(&args.config)
-        .join("elf");
+    // the real work begins here
+    let elf_path = current_config.config_dir.join("elf");
     let loader_elf_path = elf_path.join("loader.elf");
     let kernel_elf_path = match args.override_kernel {
         Some(ref path) => path,
@@ -188,70 +137,19 @@ fn main() -> Result<(), String> {
     };
     let monitor_elf_path = elf_path.join("monitor.elf");
     let capdl_init_elf_path = elf_path.join("initialiser.elf");
-
-    let kernel_config_path = sdk_dir
-        .join("board")
-        .join(&args.board)
-        .join(&args.config)
-        .join("include/kernel/gen_config.json");
-
-    let invocations_all_path = sdk_dir
-        .join("board")
-        .join(&args.board)
-        .join(&args.config)
-        .join("invocations_all.json");
-
-    if !elf_path.exists() {
-        eprintln!(
-            "Error: board ELF directory '{}' does not exist",
-            elf_path.display()
-        );
-        std::process::exit(1);
-    }
-    if !kernel_elf_path.exists() {
-        eprintln!(
-            "Error: kernel ELF '{}' does not exist",
-            kernel_elf_path.display()
-        );
-        std::process::exit(1);
-    }
-    if !monitor_elf_path.exists() {
-        eprintln!(
-            "Error: monitor ELF '{}' does not exist",
-            monitor_elf_path.display()
-        );
-        std::process::exit(1);
-    }
-    if !capdl_init_elf_path.exists() {
-        eprintln!(
-            "Error: CapDL initialiser ELF '{}' does not exist",
-            capdl_init_elf_path.display()
-        );
-        std::process::exit(1);
-    }
-    if !kernel_config_path.exists() {
-        eprintln!(
-            "Error: kernel configuration file '{}' does not exist",
-            kernel_config_path.display()
-        );
-        std::process::exit(1);
-    }
-    if !invocations_all_path.exists() {
-        eprintln!(
-            "Error: invocations JSON file '{}' does not exist",
-            invocations_all_path.display()
-        );
-        std::process::exit(1);
-    }
+    let kernel_config_path =
+        current_config.config_dir.join("include/kernel/gen_config.json");
+    let invocations_all_path =
+        current_config.config_dir.join("invocations_all.json");
+    bail_if_not_exists("board ELF directory", &elf_path)?;
+    bail_if_not_exists("kernel ELF", &kernel_elf_path)?;
+    bail_if_not_exists("monitor ELF", &monitor_elf_path)?;
+    bail_if_not_exists("CapDL initialiser ELF", &capdl_init_elf_path)?;
+    bail_if_not_exists("kernel configuration file", &kernel_config_path)?;
+    bail_if_not_exists("invocations JSON file", &invocations_all_path)?;
 
     let system_path = &args.sdf_path;
-    if !system_path.exists() {
-        eprintln!(
-            "Error: system description file '{}' does not exist",
-            system_path.display()
-        );
-        std::process::exit(1);
-    }
+    bail_if_not_exists("system description file", &system_path)?;
 
     let xml: String = fs::read_to_string(system_path).unwrap();
 
@@ -286,22 +184,11 @@ fn main() -> Result<(), String> {
     let (device_regions, normal_regions) = match arch {
         Arch::X86_64 => (None, None),
         _ => {
-            let kernel_platform_config_path = sdk_dir
-                .join("board")
-                .join(&args.board)
-                .join(&args.config)
-                .join("platform_gen.json");
-
-            if !kernel_platform_config_path.exists() {
-                eprintln!(
-                    "Error: kernel platform configuration file '{}' does not exist",
-                    kernel_platform_config_path.display()
-                );
-                std::process::exit(1);
-            }
-
+            let platform_gen_path =
+                current_config.config_dir.join("platform_gen.json");
+            bail_if_not_exists("kernel configuration file", &platform_gen_path)?;
             let kernel_platform_config: PlatformConfig =
-                serde_json::from_str(&fs::read_to_string(kernel_platform_config_path).unwrap())
+                serde_json::from_str(&fs::read_to_string(platform_gen_path).unwrap())
                     .unwrap();
 
             (
