@@ -86,7 +86,7 @@ impl ImageOutputType {
 fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), String> {
     if !path.exists() {
         eprintln!(
-            "Error: {description} '{}' does not exist",
+            "microkit: error: {description} '{}' does not exist",
             path.display()
         );
         std::process::exit(1);
@@ -186,7 +186,7 @@ fn main() -> Result<(), String> {
         _ => {
             let platform_gen_path =
                 current_config.config_dir.join("platform_gen.json");
-            bail_if_not_exists("kernel configuration file", &platform_gen_path)?;
+            bail_if_not_exists("kernel platform configuration file", &platform_gen_path)?;
             let kernel_platform_config: PlatformConfig =
                 serde_json::from_str(&fs::read_to_string(platform_gen_path).unwrap())
                     .unwrap();
