@@ -997,6 +997,7 @@ Additionally, it supports the following child elements:
 * `setvar`: (zero or more) Describes variable rewriting.
 * `protection_domain`: (zero or more) Describes a child protection domain.
 * `virtual_machine`: (zero or one) Describes a child virtual machine.
+* `ioport`: (zero or more) Describes an I/O port, x86-64 only.
 
 The `program_image` element has a single `path` attribute describing the path to an ELF file.
 
