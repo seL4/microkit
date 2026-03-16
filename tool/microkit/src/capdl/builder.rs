@@ -19,7 +19,7 @@ use crate::{
     capdl::{
         irq::create_irq_handler_cap,
         memory::{create_vspace, create_vspace_ept, map_page},
-        spec::{capdl_obj_physical_size_bits, ElfContent},
+        spec::{capdl_obj_physical_size_bits, BytesContent, ElfContent, FillContent},
         util::*,
     },
     elf::ElfFile,
@@ -104,7 +104,7 @@ const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() 
 pub const SLOT_BITS: u64 = 5;
 pub const SLOT_SIZE: u64 = 1 << SLOT_BITS;
 
-pub type FrameFill = Fill<ElfContent>;
+pub type FrameFill = Fill<FillContent>;
 pub type CapDLNamedObject = NamedObject<FrameFill>;
 
 pub struct ExpectedAllocation {
@@ -230,12 +230,12 @@ impl CapDLSpecContainer {
                             start: dest_offset,
                             end: dest_offset + len_to_cpy,
                         },
-                        content: FillEntryContent::Data(ElfContent {
+                        content: FillEntryContent::Data(FillContent::ElfContent(ElfContent {
                             elf_id,
                             elf_seg_idx: seg_idx,
                             elf_seg_data_range: (section_offset as usize
                                 ..((section_offset + len_to_cpy) as usize)),
-                        }),
+                        })),
                     });
                 }
 
@@ -510,11 +510,39 @@ pub fn build_capdl_spec(
             let paddr = mr
                 .paddr()
                 .map(|base_paddr| Word(base_paddr + (frame_sequence * mr.page_size_bytes())));
+
+            let frame_fill = if let Some(prefill_bytes) = &mr.prefill_bytes {
+                let starting_byte_idx = frame_sequence * mr.page_size_bytes();
+                let remaining_bytes_to_fill = prefill_bytes.len() as u64 - starting_byte_idx;
+                let num_bytes_to_fill = min(mr.page_size_bytes(), remaining_bytes_to_fill);
+
+                let mut frame_bytes = vec![];
+                frame_bytes.extend_from_slice(
+                    &prefill_bytes[starting_byte_idx as usize
+                        ..(starting_byte_idx + num_bytes_to_fill) as usize],
+                );
+
+                FrameFill {
+                    entries: [FillEntry {
+                        range: Range {
+                            start: 0,
+                            end: num_bytes_to_fill,
+                        },
+                        content: FillEntryContent::Data(FillContent::BytesContent(BytesContent {
+                            bytes: frame_bytes,
+                        })),
+                    }]
+                    .to_vec(),
+                }
+            } else {
+                FrameFill {
+                    entries: [].to_vec(),
+                }
+            };
+
             frame_ids.push(capdl_util_make_frame_obj(
                 &mut spec_container,
-                Fill {
-                    entries: [].to_vec(),
-                },
+                frame_fill,
                 &format!("mr_{}_{:09}", mr.name, frame_sequence),
                 paddr,
                 frame_size_bits as u8,

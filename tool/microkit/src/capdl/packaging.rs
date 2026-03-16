@@ -5,7 +5,7 @@
 //
 
 use crate::{
-    capdl::{initialiser::CapDLInitialiser, CapDLSpecContainer},
+    capdl::{initialiser::CapDLInitialiser, spec::FillContent, CapDLSpecContainer},
     elf::ElfFile,
     sel4::{Config, PageSize},
 };
@@ -23,10 +23,19 @@ pub fn pack_spec_into_initial_task(
     let (mut output_spec, embedded_frame_data_list) = spec_container.spec.embed_fill(
         PageSize::Small.fixed_size_bits(sel4_config) as u8,
         |_| embed_frames,
-        |d, buf| {
-            buf.copy_from_slice(
-                &system_elfs[d.elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
-            );
+        |d, buf: &mut [u8]| {
+            match d {
+                FillContent::ElfContent(elf_content) => {
+                    buf.copy_from_slice(
+                        &system_elfs[elf_content.elf_id].segments[elf_content.elf_seg_idx].data()
+                            [elf_content.elf_seg_data_range.clone()],
+                    );
+                }
+                FillContent::BytesContent(bytes_content) => {
+                    buf.copy_from_slice(&bytes_content.bytes);
+                }
+            }
+
             compress_frames
         },
     );

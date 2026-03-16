@@ -21,6 +21,17 @@ pub struct ElfContent {
     pub elf_seg_data_range: Range<usize>,
 }
 
+#[derive(Clone, Serialize)]
+pub struct BytesContent {
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Serialize)]
+pub enum FillContent {
+    ElfContent(ElfContent),
+    BytesContent(BytesContent),
+}
+
 /// CNode and SchedContext are quirky as they have variable size.
 pub fn capdl_obj_physical_size_bits(obj: &Object<FrameFill>, sel4_config: &Config) -> u64 {
     match obj {
