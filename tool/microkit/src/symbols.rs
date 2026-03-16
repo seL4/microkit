@@ -156,6 +156,14 @@ pub fn patch_symbols(
                         }
                         sdf::SysSetVarKind::Id { id } => *id,
                         sdf::SysSetVarKind::X86IoPortAddr { address } => *address,
+                        sdf::SysSetVarKind::PrefillSize { mr } => mr_name_to_desc
+                            .get(mr)
+                            .unwrap()
+                            .prefill_bytes
+                            .as_ref()
+                            .unwrap()
+                            .len()
+                            as u64,
                     };
                     symbols_to_write.push((&setvar.symbol, data));
                 }

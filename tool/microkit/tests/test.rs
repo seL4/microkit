@@ -59,11 +59,16 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
 };
 
 fn check_success(kernel_config: &sel4::Config, test_name: &str) {
-    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let mut prefill_path = env_path.clone();
+    prefill_path.push("tests/prefills");
+
+    let mut path = env_path.clone();
     path.push("tests/sdf/");
     path.push(test_name);
     let sdf = std::fs::read_to_string(path).unwrap();
-    let parse = sdf::parse(test_name, &sdf, kernel_config);
+    let parse = sdf::parse(test_name, &sdf, kernel_config, &[prefill_path].to_vec());
 
     if let Err(ref e) = parse {
         eprintln!("Expected no error, instead got:\n{e}")
@@ -73,11 +78,17 @@ fn check_success(kernel_config: &sel4::Config, test_name: &str) {
 }
 
 fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str) {
-    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests/sdf/");
-    path.push(test_name);
-    let sdf = std::fs::read_to_string(path).unwrap();
-    let parse_err = sdf::parse(test_name, &sdf, kernel_config).unwrap_err();
+    let env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let mut prefill_path = env_path.clone();
+    prefill_path.push("tests/prefills");
+
+    let mut sdf_path = env_path.clone();
+    sdf_path.push("tests/sdf/");
+    sdf_path.push(test_name);
+    let sdf = std::fs::read_to_string(sdf_path).unwrap();
+    let parse_err =
+        sdf::parse(test_name, &sdf, kernel_config, &[prefill_path].to_vec()).unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
         eprintln!("Expected error:\n{expected_err}\nGot error:\n{parse_err}\n");
@@ -130,11 +141,10 @@ mod memory_region {
 
     #[test]
     fn test_missing_size() {
-        check_missing(
+        check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "mr_missing_size.system",
-            "size",
-            "memory_region",
+            "Error: size must be specified if memory region is not prefilled on element 'memory_region'",
         )
     }
 
@@ -162,6 +172,48 @@ mod memory_region {
         check_error(&DEFAULT_AARCH64_KERNEL_CONFIG,
             "mr_overlapping_phys_addr.system",
             "Error: memory region 'mr2' physical address range [0x9001000..0x9002000) overlaps with another memory region 'mr1' [0x9000000..0x9002000) @ ",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_empty_file() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_empty_file.system",
+            "Error: prefill file 'empty.bin' is empty on element 'memory_region'",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_does_not_exists() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_does_not_exists.system",
+            "Error: unable to find prefill file: 'abcxyz.bin' on element 'memory_region'",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_no_size_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_no_size_valid.system",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_page_sized_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_page_sized_valid.system",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_sized_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_sized_valid.system",
         )
     }
 }

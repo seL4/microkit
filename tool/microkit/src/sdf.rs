@@ -19,10 +19,11 @@
 use crate::sel4::{
     Arch, ArmRiscvIrqTrigger, Config, PageSize, X86IoapicIrqPolarity, X86IoapicIrqTrigger,
 };
-use crate::util::{ranges_overlap, str_to_bool};
+use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
@@ -125,6 +126,7 @@ pub struct SysMemoryRegion {
     /// due to the user's SDF or created by the tool for setting up the
     /// stack, ELF, etc.
     pub kind: SysMemoryRegionKind,
+    pub prefill_bytes: Option<Vec<u8>>,
 }
 
 impl SysMemoryRegion {
@@ -212,6 +214,7 @@ pub enum SysSetVarKind {
     Paddr { region: String },
     Id { id: u64 },
     X86IoPortAddr { address: u64 },
+    PrefillSize { mr: String },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -347,6 +350,7 @@ impl SysMap {
         if allow_setvar {
             attrs.push("setvar_vaddr");
             attrs.push("setvar_size");
+            attrs.push("setvar_prefill_size");
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
@@ -647,6 +651,14 @@ impl ProtectionDomain {
                         let setvar = SysSetVar {
                             symbol: setvar_size.to_string(),
                             kind: SysSetVarKind::Size { mr: map.mr.clone() },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
+
+                    if let Some(setvar_prefill_size) = child.attribute("setvar_prefill_size") {
+                        let setvar = SysSetVar {
+                            symbol: setvar_prefill_size.to_string(),
+                            kind: SysSetVarKind::PrefillSize { mr: map.mr.clone() },
                         };
                         checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                     }
@@ -1210,17 +1222,75 @@ impl VirtualMachine {
 }
 
 impl SysMemoryRegion {
+    fn determine_size(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        prefill_bytes_maybe: &Option<Vec<u8>>,
+        page_size: u64,
+    ) -> Result<u64, String> {
+        match checked_lookup(xml_sdf, node, "size") {
+            Ok(size_str) => {
+                // Size explicitly specified
+                let size_parsed = sdf_parse_number(size_str, node)?;
+
+                if !size_parsed.is_multiple_of(page_size) {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "size is not a multiple of the page size".to_string(),
+                    ));
+                }
+
+                match &prefill_bytes_maybe {
+                    Some(bytes) => {
+                        if bytes.len() > size_parsed as usize {
+                            return Err(value_error(
+                                xml_sdf,
+                                node,
+                                format!(
+                                    "size of prefill file exceeds memory region size: {:x} > {:x}",
+                                    bytes.len(),
+                                    size_parsed
+                                ),
+                            ));
+                        }
+
+                        Ok(size_parsed)
+                    }
+                    None => Ok(size_parsed),
+                }
+            }
+
+            Err(_) => {
+                // No size explicitly specified
+                match &prefill_bytes_maybe {
+                    Some(bytes) => Ok(round_up(bytes.len() as u64, page_size)),
+
+                    None => Err(value_error(
+                        xml_sdf,
+                        node,
+                        "size must be specified if memory region is not prefilled".to_string(),
+                    )),
+                }
+            }
+        }
+    }
+
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
+        search_paths: &Vec<PathBuf>,
     ) -> Result<SysMemoryRegion, String> {
-        check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
+        check_attributes(
+            xml_sdf,
+            node,
+            &["name", "size", "page_size", "phys_addr", "prefill_path"],
+        )?;
 
         let name = checked_lookup(xml_sdf, node, "name")?;
-        let size = sdf_parse_number(checked_lookup(xml_sdf, node, "size")?, node)?;
-        let mut page_size_specified_by_user = false;
 
+        let mut page_size_specified_by_user = false;
         let page_size = if let Some(xml_page_size) = node.attribute("page_size") {
             page_size_specified_by_user = true;
             sdf_parse_number(xml_page_size, node)?
@@ -1237,13 +1307,42 @@ impl SysMemoryRegion {
             ));
         }
 
-        if !size.is_multiple_of(page_size) {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                "size is not a multiple of the page size".to_string(),
-            ));
-        }
+        let prefill_bytes_maybe = node
+            .attribute("prefill_path")
+            .map(|path_str| {
+                get_full_path(&PathBuf::from(path_str), search_paths)
+                    .ok_or_else(|| {
+                        value_error(
+                            xml_sdf,
+                            node,
+                            format!("unable to find prefill file: '{path_str}'"),
+                        )
+                    })
+                    .and_then(|prefill_path| {
+                        fs::read(&prefill_path)
+                            .map_err(|_| {
+                                value_error(
+                                    xml_sdf,
+                                    node,
+                                    format!("failed to read file '{path_str}' at prefill_path"),
+                                )
+                            })
+                            .and_then(|bytes| {
+                                if bytes.is_empty() {
+                                    Err(value_error(
+                                        xml_sdf,
+                                        node,
+                                        format!("prefill file '{path_str}' is empty"),
+                                    ))
+                                } else {
+                                    Ok(bytes)
+                                }
+                            })
+                    })
+            })
+            .transpose()?;
+
+        let size = Self::determine_size(xml_sdf, node, &prefill_bytes_maybe, page_size)?;
 
         let phys_addr = if let Some(xml_phys_addr) = node.attribute("phys_addr") {
             SysMemoryRegionPaddr::Specified(sdf_parse_number(xml_phys_addr, node)?)
@@ -1273,6 +1372,7 @@ impl SysMemoryRegion {
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
             kind: SysMemoryRegionKind::User,
+            prefill_bytes: prefill_bytes_maybe,
         })
     }
 }
@@ -1611,7 +1711,12 @@ fn pd_flatten(
     Ok(all_pds)
 }
 
-pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescription, String> {
+pub fn parse(
+    filename: &str,
+    xml: &str,
+    config: &Config,
+    search_paths: &Vec<PathBuf>,
+) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
         Err(err) => return Err(format!("Could not parse '{filename}': {err}")),
@@ -1651,7 +1756,12 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
             }
             "channel" => channel_nodes.push(child),
-            "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
+            "memory_region" => mrs.push(SysMemoryRegion::from_xml(
+                config,
+                &xml_sdf,
+                &child,
+                search_paths,
+            )?),
             "virtual_machine" => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
