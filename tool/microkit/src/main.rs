@@ -487,6 +487,12 @@ fn main() -> Result<(), String> {
         _ => false,
     };
 
+    // Add check to make sure IOMMU is enabled and the platform is x86 in kernel_config_json.
+    let iommu = match arch {
+        Arch::X86_64 => json_str_as_bool(&kernel_config_json, "IOMMU")?,
+        _ => false,
+    };
+
     let arm_pa_size_bits = match arch {
         Arch::Aarch64 => {
             if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
@@ -525,6 +531,7 @@ fn main() -> Result<(), String> {
             "MAX_NUM_BOOTINFO_UNTYPED_CAPS",
         )?,
         hypervisor,
+        iommu,
         benchmark: args.config == "benchmark",
         num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
             json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?

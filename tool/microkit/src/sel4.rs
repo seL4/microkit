@@ -290,6 +290,7 @@ pub struct Config {
     pub fan_out_limit: u64,
     pub max_num_bootinfo_untypeds: u64,
     pub hypervisor: bool,
+    pub iommu: bool,
     pub benchmark: bool,
     pub num_cores: u8,
     pub fpu: bool,
