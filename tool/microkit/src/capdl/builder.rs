@@ -707,7 +707,7 @@ pub fn build_capdl_spec(
         }
 
         // Step 3-4 Create and Map IO Page Table Structure
-        {
+        if kernel_config.iommu {
             let mut pci_to_iospace: HashMap<(u8, u8, u8), ObjectId> = HashMap::new();
             for iomap in &pd.iomaps {
                 let iospace_id =
@@ -741,6 +741,8 @@ pub fn build_capdl_spec(
                     frames,
                 );
             }
+        } else if pd.iomaps.len() != 0 {
+            return Err(format!("ERROR: System description file contains iomap elements despite IOMMU is not supported!"));
         }
 
         // Step 3-5 Create Scheduling Context

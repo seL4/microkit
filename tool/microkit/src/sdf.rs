@@ -173,6 +173,7 @@ pub struct IOMemMap {
     pub pci_dev: u8,
     pub dev_func: u8,
     pub ioaddr: u64,
+    pub text_pos: Option<roxmltree::TextPos>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -524,6 +525,7 @@ impl IOMemMap {
             pci_dev: u8::try_from(pci_parts[1]).unwrap(),
             dev_func: u8::try_from(pci_parts[2]).unwrap(),
             ioaddr,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
 }
@@ -1691,6 +1693,69 @@ pub struct SystemDescription {
     pub channels: Vec<Channel>,
 }
 
+fn io_check_maps(
+    xml_sdf: &XmlSystemDescription,
+    mrs: &[SysMemoryRegion],
+    e: &dyn ExecutionContext,
+    io_maps: &[IOMemMap],
+) -> Result<(), String> {
+    let mut checked_maps = Vec::with_capacity(io_maps.len());
+    for io_map in io_maps {
+        let maybe_mr = mrs.iter().find(|mr| mr.name == io_map.name);
+        let pos = io_map.text_pos.unwrap();
+        match maybe_mr {
+            Some(mr) => {
+                // Page size check
+                if mr.page_size_bytes() != PageSize::Small as u64 {
+                    return Err(format!(
+                        "Error: invalid page size specified on 'iomap' @ {}, only 4 KB page size is supported for x86 IOMMU",
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+                // Alignment check
+                if !io_map.ioaddr.is_multiple_of(mr.page_size_bytes()) {
+                    return Err(format!(
+                        "Error: invalid ioaddr alignment on 'iomap' @ {}",
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+
+                // Overlap check
+                let map_start = io_map.ioaddr;
+                let map_end = map_start + mr.size;
+                for (name, start, end) in &checked_maps {
+                    if !(map_start >= *end || map_end <= *start) {
+                        return Err(
+                            format!(
+                                "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
+                                io_map.name,
+                                map_start,
+                                map_end,
+                                name,
+                                start,
+                                end,
+                                e.kind(),
+                                e.name(),
+                                loc_string(xml_sdf, pos)
+                            )
+                        );
+                    }
+                }
+                checked_maps.push((&io_map.name, map_start, map_end));
+            }
+            None => {
+                return Err(format!(
+                    "Error: invalid memory region name '{}' on 'map' @ {}",
+                    io_map.name,
+                    loc_string(xml_sdf, pos)
+                ))
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn check_maps(
     xml_sdf: &XmlSystemDescription,
     mrs: &[SysMemoryRegion],
@@ -2182,6 +2247,9 @@ pub fn parse(
     // Ensure that all maps are correct
     for pd in &pds {
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
+        if pd.iomaps.len() != 0 {
+            io_check_maps(&xml_sdf, &mrs, pd, &pd.iomaps)?
+        }
         if let Some(vm) = &pd.virtual_machine {
             check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
         }
