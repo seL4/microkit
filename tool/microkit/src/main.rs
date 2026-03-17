@@ -513,6 +513,7 @@ fn main() -> Result<(), String> {
         Arch::X86_64 => 1 << 12,
     };
 
+    let num_domains = json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")?;
     let num_domain_schedules = json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?;
 
     let kernel_config = Config {
@@ -546,6 +547,7 @@ fn main() -> Result<(), String> {
         invocations_labels,
         device_regions,
         normal_regions,
+        num_domains,
         num_domain_schedules,
     };
 
