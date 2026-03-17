@@ -171,36 +171,18 @@ pub unsafe fn bytes_to_struct<T>(bytes: &[u8]) -> &T {
     &body[0]
 }
 
-/// Serialise an array of u64 to a Vector of bytes.
-pub fn monitor_serialise_u64_vec(vec: &[u64]) -> Vec<u8> {
-    let mut bytes = vec![0; (1 + vec.len()) * 8];
-    for (i, value) in vec.iter().enumerate() {
-        let start = i * 8;
-        let end = start + 8;
-        bytes[start..end].copy_from_slice(&value.to_le_bytes());
+/// Copy at most `out_str.len() - 1` bytes from `in_str` to `out_str`. Null terminates `out_str`
+pub fn copy_and_clip_string(in_str: &[u8], out_str: &mut [u8]) {
+    if out_str.is_empty() {
+        return;
     }
 
-    bytes
-}
-
-/// For serialising an array of PD or VM names
-pub fn monitor_serialise_names(names: &[String], max_len: usize, max_name_len: usize) -> Vec<u8> {
-    let mut names_bytes = vec![0; (max_len + 1) * max_name_len];
-    for (i, name) in names.iter().enumerate() {
-        let name_bytes = name.as_bytes();
-        let start = i * max_name_len;
-        // Here instead of giving an error we simply take the minimum of the name
-        // and how large of a name we can encode. The name length is one less than
-        // the maximum since we still have to add the null terminator.
-        let name_length = std::cmp::min(name_bytes.len(), max_name_len - 1);
-        let end = start + name_length;
-        names_bytes[start..end].copy_from_slice(&name_bytes[..name_length]);
-        // These bytes will be interpreted as a C string, so we must include
-        // a null-terminator.
-        names_bytes[end] = 0;
-    }
-
-    names_bytes
+    // Here instead of giving an error we simply take the minimum of the name
+    // and how large of a name we can encode. The name length is one less than
+    // the maximum since we still have to add the null terminator.
+    let n = in_str.len().min(out_str.len() - 1);
+    out_str[..n].copy_from_slice(&in_str[..n]);
+    out_str[n] = 0;
 }
 
 #[cfg(test)]

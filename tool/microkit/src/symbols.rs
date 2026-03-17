@@ -10,9 +10,22 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    util::{monitor_serialise_names, monitor_serialise_u64_vec},
-    MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
+    util::{copy_and_clip_string, struct_to_bytes},
+    PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
 };
+
+/// Correspond to `struct pd_metadata` in monitor/src/main.c
+#[repr(C)]
+struct PdMetadata {
+    pub name: [u8; PD_MAX_NAME_LENGTH],
+    pub stack_bottom: u64,
+}
+
+/// Correspond to `struct vm_metadata` in monitor/src/main.c
+#[repr(C)]
+struct VmMetadata {
+    pub name: [u8; VM_MAX_NAME_LENGTH],
+}
 
 /// Patch all the required symbols in the Monitor and children PDs according to
 /// the Microkit's requirements
@@ -26,25 +39,36 @@ pub fn patch_symbols(
     // *********************************
     let monitor_elf = pd_elf_files.last_mut().unwrap();
 
-    let pd_names: Vec<String> = system
+    let mut pd_metadata_bytes = Vec::new();
+    system
         .protection_domains
         .iter()
-        .map(|pd| pd.name.clone())
-        .collect();
+        .map(|pd| {
+            let mut metadata = PdMetadata {
+                name: [0u8; PD_MAX_NAME_LENGTH],
+                stack_bottom: kernel_config.pd_stack_bottom(pd.stack_size),
+            };
+
+            copy_and_clip_string(pd.name.as_bytes(), &mut metadata.name);
+
+            metadata
+        })
+        .for_each(|metadata| {
+            pd_metadata_bytes.extend_from_slice(unsafe { struct_to_bytes(&metadata) })
+        });
+
     monitor_elf
         .write_symbol(
-            "pd_names_len",
+            "pd_metadata_len",
             &system.protection_domains.len().to_le_bytes(),
         )
         .unwrap();
     monitor_elf
-        .write_symbol(
-            "pd_names",
-            &monitor_serialise_names(&pd_names, MAX_PDS, PD_MAX_NAME_LENGTH),
-        )
+        .write_symbol("pd_metadata", &pd_metadata_bytes)
         .unwrap();
 
-    let vm_names: Vec<String> = system
+    let mut vm_metadata_bytes = Vec::new();
+    system
         .protection_domains
         .iter()
         .filter(|pd| pd.virtual_machine.is_some())
@@ -53,33 +77,29 @@ pub fn patch_symbols(
             let num_vcpus = vm.vcpus.len();
             std::iter::repeat_n(vm.name.clone(), num_vcpus)
         })
-        .collect();
+        .map(|vm_name| {
+            let mut metadata = VmMetadata {
+                name: [0u8; VM_MAX_NAME_LENGTH],
+            };
 
-    let vm_names_len = match kernel_config.arch {
-        Arch::Aarch64 | Arch::Riscv64 => vm_names.len(),
+            copy_and_clip_string(vm_name.as_bytes(), &mut metadata.name);
+
+            metadata
+        })
+        .for_each(|metadata| {
+            vm_metadata_bytes.extend_from_slice(unsafe { struct_to_bytes(&metadata) })
+        });
+
+    let vm_metadata_len = match kernel_config.arch {
+        Arch::Aarch64 | Arch::Riscv64 => vm_metadata_bytes.len() / size_of::<VmMetadata>(),
         // VM on x86 doesn't have a separate TCB.
         Arch::X86_64 => 0,
     };
     monitor_elf
-        .write_symbol("vm_names_len", &vm_names_len.to_le_bytes())
+        .write_symbol("vm_metadata_len", &vm_metadata_len.to_le_bytes())
         .unwrap();
     monitor_elf
-        .write_symbol(
-            "vm_names",
-            &monitor_serialise_names(&vm_names, MAX_VMS, VM_MAX_NAME_LENGTH),
-        )
-        .unwrap();
-
-    let mut pd_stack_bottoms: Vec<u64> = Vec::new();
-    for pd in system.protection_domains.iter() {
-        let cur_stack_vaddr = kernel_config.pd_stack_bottom(pd.stack_size);
-        pd_stack_bottoms.push(cur_stack_vaddr);
-    }
-    monitor_elf
-        .write_symbol(
-            "pd_stack_bottom_addrs",
-            &monitor_serialise_u64_vec(&pd_stack_bottoms),
-        )
+        .write_symbol("vm_metadata", &vm_metadata_bytes)
         .unwrap();
 
     // *********************************

@@ -32,13 +32,22 @@
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 
-char pd_names[MAX_PDS][MAX_NAME_LEN];
-seL4_Word pd_names_len;
-char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
-seL4_Word vm_names_len;
+/* Correspond to `struct PdMetadata` in tool/microkit/src/symbols.rs */
+struct pd_metadata {
+    char name[MAX_NAME_LEN];
+    /* For reporting potential stack overflows, keep track of the stack regions for each PD. */
+    seL4_Word stack_bottom;
+} __attribute__((packed));
 
-/* For reporting potential stack overflows, keep track of the stack regions for each PD. */
-seL4_Word pd_stack_bottom_addrs[MAX_PDS];
+/* Correspond to `struct VmMetadata` in tool/microkit/src/symbols.rs */
+struct vm_metadata {
+    char name[MAX_NAME_LEN];
+} __attribute__((packed));
+
+struct pd_metadata pd_metadata[MAX_PDS];
+seL4_Word pd_metadata_len;
+struct vm_metadata vm_metadata[MAX_VMS];
+seL4_Word vm_metadata_len;
 
 /* Sanity check that the architecture specific macro have been set. */
 #if defined(ARCH_aarch64)
@@ -742,7 +751,7 @@ static void monitor(void)
                     puts("MON|ERROR: could not bind scheduling context to notification object\n");
                 } else {
                     puts("MON|INFO: PD '");
-                    puts(pd_names[pd_id]);
+                    puts(pd_metadata[pd_id].name);
                     puts("' is now passive!\n");
                 }
             }
@@ -758,9 +767,9 @@ static void monitor(void)
         puthex64(tcb_cap);
         puts("\n");
 
-        if (pd_id < MAX_PDS && pd_names[pd_id][0] != 0) {
+        if (pd_id < MAX_PDS && pd_metadata[pd_id].name[0] != 0) {
             puts("MON|ERROR: faulting PD: ");
-            puts(pd_names[pd_id]);
+            puts(pd_metadata[pd_id].name);
             puts("\n");
         } else {
             fail("MON|ERROR: unknown/invalid badge\n");
@@ -850,7 +859,7 @@ static void monitor(void)
 #endif
 
             seL4_Word fault_addr = seL4_GetMR(seL4_VMFault_Addr);
-            seL4_Word stack_addr = pd_stack_bottom_addrs[pd_id];
+            seL4_Word stack_addr = pd_metadata[pd_id].stack_bottom;
             if (fault_addr < stack_addr && fault_addr >= stack_addr - 0x1000) {
                 puts("MON|ERROR: potential stack overflow, fault address within one page outside of stack region\n");
             }
@@ -894,11 +903,11 @@ void main(void)
      * Assign PD/VM names to each TCB with seL4, this helps debugging when an error
      * message is printed by seL4 or if we dump the scheduler state.
      */
-    for (unsigned idx = 0; idx < pd_names_len; idx++) {
-        seL4_DebugNameThread(BASE_PD_TCB_CAP + idx, pd_names[idx]);
+    for (unsigned idx = 0; idx < pd_metadata_len; idx++) {
+        seL4_DebugNameThread(BASE_PD_TCB_CAP + idx, pd_metadata[idx].name);
     }
-    for (unsigned idx = 0; idx < vm_names_len; idx++) {
-        seL4_DebugNameThread(BASE_VM_TCB_CAP + idx, vm_names[idx]);
+    for (unsigned idx = 0; idx < vm_metadata_len; idx++) {
+        seL4_DebugNameThread(BASE_VM_TCB_CAP + idx, vm_metadata[idx].name);
     }
 #endif
 
