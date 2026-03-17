@@ -1126,6 +1126,12 @@ impl DomainSchedule {
         config: &Config,
         node: &roxmltree::Node,
     ) -> Result<DomainSchedule, String> {
+        if config.num_domains <= 1 {
+            return Err(format!(
+                "Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain",
+            ));
+        }
+
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
 
         check_attributes(xml_sdf, node, &[])?;

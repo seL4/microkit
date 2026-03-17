@@ -1157,8 +1157,12 @@ The `domain` element has the following attributes:
 
 The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
 
+The `domain_idx_shift` element has the following attribute:
+* `shift`: This is the start index of where we will construct our schedule. So if we shift by 5, we will begin constructing
+the domain schedule from index 5 onwards.
+
 The `domain_start` element has the following attribute:
-* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again.
+* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again. This index is an offset into the user defined schedule, and not an absolute index.
 
 The `domain_schedule` element is only valid if the using one of the domain configs (`release_domains`, `debug_domains`).
 
@@ -1844,6 +1848,8 @@ which PD caused an exception and details on the PD's state at the time of the fa
 
 Other than printing fault details, the monitor does not do anything to handle
 the fault, it will simply go back to sleep waiting for any other faults.
+
+When domains are enabled, we will build one monitor for each domain.
 
 ## libmicrokit {#libmicrokit_internals}
 
