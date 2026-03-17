@@ -128,18 +128,5 @@ void main(void)
 {
     run_init_funcs();
     init();
-
-    /*
-     * If we are passive, now our initialisation is complete we can
-     * signal the monitor to unbind our scheduling context and bind
-     * it to our notification object.
-     * We delay this signal so we are ready waiting on a recv() syscall
-     */
-    if (microkit_passive) {
-        microkit_have_signal = seL4_True;
-        microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
-        microkit_signal_cap = MONITOR_EP;
-    }
-
     handler_loop();
 }

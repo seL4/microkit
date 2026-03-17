@@ -37,6 +37,7 @@ struct pd_metadata {
     char name[MAX_NAME_LEN];
     /* For reporting potential stack overflows, keep track of the stack regions for each PD. */
     seL4_Word stack_bottom;
+    seL4_Word passive;
 } __attribute__((packed));
 
 /* Correspond to `struct VmMetadata` in tool/microkit/src/symbols.rs */
@@ -740,25 +741,6 @@ static void monitor(void)
         seL4_Word pd_id = badge - 1;
         seL4_Word tcb_cap = BASE_PD_TCB_CAP + pd_id;
 
-        if (label == seL4_Fault_NullFault && pd_id < MAX_PDS) {
-            /* This is a request from our PD to become passive */
-            err = seL4_SchedContext_UnbindObject(BASE_SCHED_CONTEXT_CAP + pd_id, tcb_cap);
-            if (err != seL4_NoError) {
-                puts("MON|ERROR: could not unbind scheduling context from thread control block\n");
-            } else {
-                err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + pd_id, BASE_NOTIFICATION_CAP + pd_id);
-                if (err != seL4_NoError) {
-                    puts("MON|ERROR: could not bind scheduling context to notification object\n");
-                } else {
-                    puts("MON|INFO: PD '");
-                    puts(pd_metadata[pd_id].name);
-                    puts("' is now passive!\n");
-                }
-            }
-
-            continue;
-        }
-
         puts("MON|ERROR: received message ");
         puthex32(label);
         puts("  badge: ");
@@ -898,6 +880,8 @@ static void monitor(void)
 
 void main(void)
 {
+    puts("MON|INFO: Microkit Monitor started!\n");
+
 #if CONFIG_DEBUG_BUILD
     /*
      * Assign PD/VM names to each TCB with seL4, this helps debugging when an error
@@ -911,7 +895,28 @@ void main(void)
     }
 #endif
 
-    puts("MON|INFO: Microkit Monitor started!\n");
+    /* If there are passive PDs in the system, lazily rebind it's Scheduling Context to it's Notification.
+     * To workaround https://github.com/seL4/seL4/issues/1617 by applying https://github.com/seL4/seL4/pull/523
+     */
+    for (unsigned idx = 0; idx < pd_metadata_len; idx++) {
+        if (pd_metadata[idx].passive) {
+            seL4_Error err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + idx, BASE_NOTIFICATION_CAP + idx);
+            if (err != seL4_NoError) {
+                puts("MON|ERROR: could not bind scheduling context to notification object\n");
+                continue;
+            }
+
+            err = seL4_TCB_Resume(BASE_PD_TCB_CAP + idx);
+            if (err != seL4_NoError) {
+                puts("MON|ERROR: could not bind resume passive PD TCB\n");
+                continue;
+            }
+
+            puts("MON|INFO: PD '");
+            puts(pd_metadata[idx].name);
+            puts("' is now passive!\n");
+        }
+    }
 
     monitor();
 }

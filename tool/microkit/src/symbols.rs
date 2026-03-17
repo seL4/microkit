@@ -19,6 +19,7 @@ use crate::{
 struct PdMetadata {
     pub name: [u8; PD_MAX_NAME_LENGTH],
     pub stack_bottom: u64,
+    pub passive: u64,
 }
 
 /// Correspond to `struct vm_metadata` in monitor/src/main.c
@@ -47,6 +48,7 @@ pub fn patch_symbols(
             let mut metadata = PdMetadata {
                 name: [0u8; PD_MAX_NAME_LENGTH],
                 stack_bottom: kernel_config.pd_stack_bottom(pd.stack_size),
+                passive: if pd.passive { 1 } else { 0 },
             };
 
             copy_and_clip_string(pd.name.as_bytes(), &mut metadata.name);
