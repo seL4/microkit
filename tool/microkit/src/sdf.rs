@@ -290,6 +290,7 @@ pub struct DomainSchedule {
     pub domain_ids: HashMap<String, u8>,
     pub schedule: Vec<DomainTimeslice>,
     pub domain_start_idx: Option<u64>,
+    pub domain_idx_shift: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1133,6 +1134,7 @@ impl DomainSchedule {
         let mut domain_ids = HashMap::new();
         let mut schedule = Vec::new();
         let mut domain_start_idx: Option<u64> = None;
+        let mut domain_idx_shift: Option<u64> = None;
         for child in node.children() {
             if !child.is_element() {
                 continue;
@@ -1190,6 +1192,24 @@ impl DomainSchedule {
                         ))
                     }
                     domain_start_idx = Some(start_index.unwrap());
+
+                }
+                "domain_idx_shift" => {
+                    if domain_idx_shift.is_some() {
+                        return Err(format!(
+                            "Error: Duplicate setting of domain index shift, already set to '{}'",
+                            domain_idx_shift.unwrap()
+                        ))
+                    }
+                    check_attributes(xml_sdf, &child, &["shift"])?;
+                    let index_shift = checked_lookup(xml_sdf, &child, "shift")?.parse::<u64>();
+                    if index_shift.is_err() {
+                        return Err(format!(
+                            "Error: invalid domain index shift",
+                        ))
+                    }
+                    domain_idx_shift = Some(index_shift.unwrap());
+
                 }
                 _ => {
                     return Err(format!(
@@ -1206,6 +1226,7 @@ impl DomainSchedule {
             domain_ids,
             schedule,
             domain_start_idx,
+            domain_idx_shift,
         })
     }
 }
@@ -2164,13 +2185,39 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     // Ensure that the domain start index (if supplied) points to a valid index
     if domain_schedule.is_some() {
         let dom_sched = domain_schedule.as_ref().unwrap();
+
+        // Make sure we account for the shift when checking if the length of the
+        // schedule is valid and if the start index is valid.
+        let mut dom_shift = 0;
+        if dom_sched.domain_idx_shift.is_some() {
+            dom_shift = dom_sched.domain_idx_shift.unwrap();
+        }
+
         if dom_sched.domain_start_idx.is_some() &&
-            dom_sched.domain_start_idx.unwrap() >= dom_sched.schedule.len() as u64
+            dom_sched.domain_start_idx.unwrap() >=  dom_sched.schedule.len() as u64 {
+            return Err(format!(
+                "Error: Domain index of '{}' exceeds domain schedule length '{}'. NOTE: Domain start index starts at 0.",
+                dom_sched.domain_start_idx.unwrap(),
+                dom_sched.schedule.len(),
+            ))
+        }
+
+        if dom_sched.domain_start_idx.is_some() &&
+            dom_sched.domain_start_idx.unwrap() + dom_shift >= config.num_domain_schedules
         {
             return Err(format!(
-                "Error: Setting domain start index to '{}' when schedule is of length '{}'. Note that the domain start is 0 indexed.",
+                "Error: Setting domain start index to '{}' when max schedule length is '{}'.",
                 dom_sched.domain_start_idx.unwrap(),
                 dom_sched.schedule.len()
+            ))
+        }
+
+        let schedule_len: u64 = dom_sched.schedule.len() as u64;
+        if schedule_len + dom_shift > config.num_domain_schedules {
+            return Err(format!(
+                "Error: Schedule length '{}' exceeds max schedule length '{}'.",
+                schedule_len,
+                config.num_domain_schedules,
             ))
         }
     }
