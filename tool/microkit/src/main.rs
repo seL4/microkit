@@ -7,8 +7,6 @@
 // we want our asserts, even if the compiler figures out they hold true already during compile-time
 #![allow(clippy::assertions_on_constants)]
 
-use microkit_tool::argparse;
-use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
 use microkit_tool::capdl::allocation::{
     simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel,
 };
@@ -29,10 +27,15 @@ use microkit_tool::util::{
     round_up,
 };
 use microkit_tool::sdkparse::{SdkInfo};
+use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
+use microkit_tool::argparse;
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
+
 use std::collections::HashMap;
+use std::fmt;
 use std::fs::{self, metadata};
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
 const MAX_BUILD_ITERATION: usize = 3;
 
@@ -76,22 +79,296 @@ impl ImageOutputType {
                 Arch::Riscv64 => Some(Self::Uimage),
                 Arch::X86_64 | Arch::Aarch64 => None,
             },
-            RequestedImageType::Unspecified => {
-                Some(Self::default_from_arch_and_board(arch, board_name))
+            RequestedImageType::Unspecified =>
+                Some(Self::default_from_arch_and_board(arch, board_name)),
+        }
+    }
+}
+
+enum MainError {
+    MissingPath { description: &'static str, path: PathBuf },
+    ReadFile { description: &'static str, path: PathBuf, source: io::Error },
+    SerdeJsonError {
+        description: &'static str,
+        path: PathBuf,
+        source: serde_json::Error,
+    },
+    SerdeJsonTypeError {
+        description: &'static str,
+        field: &'static str,
+        expected_type: &'static str,
+    },
+    UnsupportedKernelArch { value: String },
+    UnsupportedImageType { requested: RequestedImageType, arch: Arch },
+    MissingArmPaSizeBits,
+    Aarch64HypervisorRequired,
+    UnsupportedWordSize { word_size: u64 },
+}
+
+impl fmt::Display for MainError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingPath { description, path } => {
+                write!(f, "{description} '{}' does not exist", path.display())
+            }
+            Self::ReadFile { description, path, source } => {
+                write!(f, "could not read {description} '{}': {source}", path.display())
+            }
+            Self::SerdeJsonError { description, path, source } => {
+                write!(f, "could not parse {description} '{}': {source}", path.display())
+            }
+            Self::SerdeJsonTypeError { description, field, expected_type } => {
+                write!(
+                    f,
+                    "{description} field '{}' has wrong type, expected {}",
+                    field,
+                    expected_type
+                )
+            }
+            Self::UnsupportedKernelArch { value } => {
+                write!(f, "unsupported kernel config architecture '{value}'")
+            }
+            Self::UnsupportedImageType { requested, arch } => {
+                write!(
+                    f,
+                    "building the output image as '{}' is unsupported for target architecture '{}'",
+                    requested, arch
+                )
+            }
+            Self::MissingArmPaSizeBits => {
+                write!(f, "expected ARM platform to have 40 or 44 physical address bits")
+            }
+            Self::Aarch64HypervisorRequired => {
+                write!(f, "Microkit requires hypervisor mode on AArch64")
+            }
+            Self::UnsupportedWordSize { word_size } => {
+                write!(f, "Microkit requires 64-bit word size, found {}", word_size)
             }
         }
     }
 }
 
-fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), String> {
+fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), MainError> {
     if !path.exists() {
-        eprintln!(
-            "microkit: error: {description} '{}' does not exist",
-            path.display()
-        );
-        std::process::exit(1);
+        Err(MainError::MissingPath {
+            description,
+            path: path.to_path_buf(),
+        })
+    } else {
+      Ok(())
     }
-    Ok(())
+}
+
+struct SerdeJsonDoc {
+    description: &'static str,
+    value: serde_json::Value,
+}
+
+impl SerdeJsonDoc {
+    fn field<'a>(&'a self, name: &'static str) -> Result<&'a serde_json::Value, MainError> {
+        match self.value.get(name) {
+            Some(value) => Ok(value),
+            None => Err(MainError::SerdeJsonTypeError {
+                description: self.description,
+                field: name,
+                expected_type: "any (but none found)",
+            }),
+        }
+    }
+
+    fn string<'a>(&'a self, name: &'static str) -> Result<&'a str, MainError> {
+        let value = self.field(name)?;
+        match value.as_str() {
+            Some(value) => Ok(value),
+            None => Err(MainError::SerdeJsonTypeError {
+                description: self.description,
+                field: name,
+                expected_type: "string",
+            }),
+        }
+    }
+
+    fn bool(&self, name: &'static str) -> Result<bool, MainError> {
+        let value = self.field(name)?;
+        match value.as_bool() {
+            Some(value) => Ok(value),
+            None => Err(MainError::SerdeJsonTypeError {
+                description: self.description,
+                field: name,
+                expected_type: "boolean",
+            }),
+        }
+    }
+
+    fn u64(&self, name: &'static str) -> Result<u64, MainError> {
+        let value = self.field(name)?;
+        match value.as_u64() {
+            Some(value) => Ok(value),
+            None => Err(MainError::SerdeJsonTypeError {
+                description: self.description,
+                field: name,
+                expected_type: "u64",
+            }),
+        }
+    }
+
+    fn u8(&self, name: &'static str) -> Result<u8, MainError> {
+        let value = match self.u64(name) {
+            Ok(value) => value,
+            Err(err) => return Err(err),
+        };
+
+        match u8::try_from(value) {
+            Ok(value) => Ok(value),
+            Err(_) => Err(MainError::SerdeJsonTypeError {
+                description: self.description,
+                field: name,
+                expected_type: "u8",
+            }),
+        }
+    }
+}
+
+fn read_json(description: &'static str, path: &Path) -> Result<SerdeJsonDoc, MainError> {
+    let text = match fs::read_to_string(path) {
+        Ok(the_text) => Ok(the_text),
+        Err(source) => Err(MainError::ReadFile {
+            description,
+            path: path.to_path_buf(),
+            source,
+        }),
+    }?;
+    match serde_json::from_str(&text) {
+        Ok(value) => Ok(SerdeJsonDoc { description, value }),
+        Err(source) => Err(
+            MainError::SerdeJsonError { description, path: path.to_path_buf(), source }
+        ),
+    }
+}
+
+fn build_kernel_config(
+    args: &Args,
+    config_dir: &Path,
+    kernel_config_path: &Path,
+    invocations_all_path: &Path,
+) -> Result<Config, MainError> {
+    let kernel_config_json =
+        read_json("kernel configuration file", kernel_config_path)?;
+    let invocations_labels =
+        read_json("invocations JSON file", invocations_all_path)?;
+
+    let arch = match kernel_config_json.string("SEL4_ARCH")? {
+        "aarch64" => Arch::Aarch64,
+        "riscv64" => Arch::Riscv64,
+        "x86_64" => Arch::X86_64,
+        value => {
+            return Err(MainError::UnsupportedKernelArch {
+                value: value.to_owned(),
+            });
+        },
+    };
+
+    let (device_regions, normal_regions) = match arch {
+        Arch::X86_64 => (None, None),
+        _ => {
+            let platform_gen_path = config_dir.join("platform_gen.json");
+            bail_if_not_exists("kernel platform configuration file", &platform_gen_path)?;
+
+            let platform_text =
+                fs::read_to_string(&platform_gen_path).map_err(|source| MainError::ReadFile {
+                    description: "kernel platform configuration file",
+                    path: platform_gen_path.clone(),
+                    source,
+                })?;
+
+            let platform: PlatformConfig =
+                serde_json::from_str(&platform_text).map_err(|source| MainError::SerdeJsonError {
+                    description: "kernel platform configuration file",
+                    path: platform_gen_path.clone(),
+                    source,
+                })?;
+
+            (Some(platform.devices), Some(platform.memory))
+        }
+    };
+
+    let hypervisor = match arch {
+        Arch::Aarch64 => kernel_config_json.bool("ARM_HYPERVISOR_SUPPORT")?,
+        Arch::X86_64 => kernel_config_json.bool("VTX")?,
+        Arch::Riscv64 => false,
+    };
+
+    let arm_pa_size_bits = match arch {
+        Arch::Aarch64 => {
+            if kernel_config_json.bool("ARM_PA_SIZE_BITS_40")? {
+                Some(40)
+            } else if kernel_config_json.bool("ARM_PA_SIZE_BITS_44")? {
+                Some(44)
+            } else {
+                return Err(MainError::MissingArmPaSizeBits);
+            }
+        }
+        Arch::X86_64 | Arch::Riscv64 => None,
+    };
+
+    let object_sizes = {
+        let object_sizes_path = config_dir.join("platform_gen.json");
+        bail_if_not_exists("object sizes file", &object_sizes_path)?;
+
+        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
+    };
+
+    let arm_smc = match arch {
+        Arch::Aarch64 => Some(kernel_config_json.bool("ALLOW_SMC_CALLS")?),
+        _ => None,
+    };
+
+    let kernel_frame_size = match arch {
+        Arch::Aarch64 => 1 << 12,
+        Arch::Riscv64 => 1 << 21,
+        Arch::X86_64 => 1 << 12,
+    };
+
+    let kernel_config = Config {
+        arch,
+        word_size: kernel_config_json.u64("WORD_SIZE")?,
+        minimum_page_size: 4096,
+        paddr_user_device_top: kernel_config_json.u64("PADDR_USER_DEVICE_TOP")?,
+        kernel_frame_size,
+        init_cnode_bits: kernel_config_json.u64("ROOT_CNODE_SIZE_BITS")?,
+        cap_address_bits: 64,
+        fan_out_limit: kernel_config_json.u64("RETYPE_FAN_OUT_LIMIT")?,
+        max_num_bootinfo_untypeds: kernel_config_json.u64("MAX_NUM_BOOTINFO_UNTYPED_CAPS")?,
+        hypervisor,
+        benchmark: args.config == "benchmark" || args.config == "smp-benchmark",
+        num_cores: if kernel_config_json.bool("ENABLE_SMP_SUPPORT")? {
+            kernel_config_json.u8("MAX_NUM_NODES")?
+        } else {
+            1
+        },
+        fpu: kernel_config_json.bool("HAVE_FPU")?,
+        arm_pa_size_bits,
+        arm_smc,
+        riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
+        invocations_labels: invocations_labels.value,
+        object_sizes,
+        device_regions,
+        normal_regions,
+    };
+
+    if let Arch::Aarch64 = kernel_config.arch {
+        if !kernel_config.hypervisor {
+            return Err(MainError::Aarch64HypervisorRequired);
+        }
+    }
+
+    if kernel_config.word_size != 64 {
+        return Err(MainError::UnsupportedWordSize {
+            word_size: kernel_config.word_size,
+        });
+    }
+
+    Ok(kernel_config)
 }
 
 fn main() -> Result<(), String> {
@@ -113,11 +390,11 @@ fn main() -> Result<(), String> {
         }
         Err(err) => {
             match err {
-                ArgsError::UnrecognizedArgument { arg: _ }
-                | ArgsError::MissingRequiredArguments { args: _ } => {
+                ArgsError::UnrecognizedArgument { arg: _ } |
+                ArgsError::MissingRequiredArguments { args: _ } => {
                     argparse::print_usage();
                 }
-                _ => {}
+                _ => { }
             };
             eprintln!("microkit: error: {err}");
             std::process::exit(1);
@@ -132,7 +409,7 @@ fn main() -> Result<(), String> {
     let elf_path = current_config.config_dir.join("elf");
     let loader_elf_path = elf_path.join("loader.elf");
     let kernel_elf_path = match args.override_kernel {
-        Some(ref path) => path,
+        Some(path) => Path::new(path),
         None => &elf_path.join("sel4.elf"),
     };
     let monitor_elf_path = elf_path.join("monitor.elf");
@@ -141,163 +418,52 @@ fn main() -> Result<(), String> {
         current_config.config_dir.join("include/kernel/gen_config.json");
     let invocations_all_path =
         current_config.config_dir.join("invocations_all.json");
-    bail_if_not_exists("board ELF directory", &elf_path)?;
-    bail_if_not_exists("kernel ELF", &kernel_elf_path)?;
-    bail_if_not_exists("monitor ELF", &monitor_elf_path)?;
-    bail_if_not_exists("CapDL initialiser ELF", &capdl_init_elf_path)?;
-    bail_if_not_exists("kernel configuration file", &kernel_config_path)?;
-    bail_if_not_exists("invocations JSON file", &invocations_all_path)?;
+    // bail_if_not_exists("board ELF directory", &elf_path)?;
+    // bail_if_not_exists("kernel ELF", &kernel_elf_path)?;
+    // bail_if_not_exists("monitor ELF", &monitor_elf_path)?;
+    // bail_if_not_exists("CapDL initialiser ELF", &capdl_init_elf_path)?;
+    // bail_if_not_exists("kernel configuration file", &kernel_config_path)?;
+    // bail_if_not_exists("invocations JSON file", &invocations_all_path)?;
 
-    let system_path = &args.sdf_path;
-    bail_if_not_exists("system description file", &system_path)?;
-
-    let xml: String = fs::read_to_string(system_path).unwrap();
-
-    let kernel_config_json: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
-
-    let invocations_labels: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
-
-    let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
-        "aarch64" => Arch::Aarch64,
-        "riscv64" => Arch::Riscv64,
-        "x86_64" => Arch::X86_64,
-        _ => panic!("Unsupported kernel config architecture"),
+    let kernel_config = match build_kernel_config(
+        &args,
+        current_config.config_dir.as_path(),
+        &kernel_config_path,
+        &invocations_all_path,
+    ) {
+        Ok(kernel_config) => kernel_config,
+        Err(err) => {
+            eprintln!("microkit: error: {err}");
+            std::process::exit(1);
+        }
     };
 
-    let image_output_type = match ImageOutputType::resolve(
+    let image_output_type = match ImageOutputType::based_on_requested(
         &args.requested_image_type,
-        &arch,
+        &kernel_config.arch,
         args.board.as_str(),
     ) {
-        Some(image) => image,
+        Some(image_output_type) => image_output_type,
         None => {
-            eprintln!(
-                    "microkit: error: building the output image as '{0}' is unsupported for target architecture '{arch}'",
-                    args.requested_image_type
-                );
+            let err = MainError::UnsupportedImageType {
+                requested: args.requested_image_type.clone(),
+                arch: kernel_config.arch,
+            };
+            eprintln!("microkit: error: {err}");
             std::process::exit(1);
         }
     };
 
-    let (device_regions, normal_regions) = match arch {
-        Arch::X86_64 => (None, None),
-        _ => {
-            let platform_gen_path =
-                current_config.config_dir.join("platform_gen.json");
-            bail_if_not_exists("kernel platform configuration file", &platform_gen_path)?;
-            let kernel_platform_config: PlatformConfig =
-                serde_json::from_str(&fs::read_to_string(platform_gen_path).unwrap())
-                    .unwrap();
-
-            (
-                Some(kernel_platform_config.devices),
-                Some(kernel_platform_config.memory),
-            )
-        }
-    };
-
-    let object_sizes = {
-        let object_sizes_path = sdk_dir
-            .join("board")
-            .join(args.board)
-            .join(&args.config)
-            .join("object_sizes.json");
-
-        if !object_sizes_path.exists() {
-            eprintln!(
-                "Error: object sizes file '{}' does not exist",
-                object_sizes_path.display()
-            );
+    if kernel_config.arch != Arch::X86_64 {
+        if let Err(err) = bail_if_not_exists("loader ELF", &loader_elf_path) {
+            eprintln!("microkit: error: {err}");
             std::process::exit(1);
         }
-
-        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
-    };
-
-    let hypervisor = match arch {
-        Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
-        Arch::X86_64 => json_str_as_bool(&kernel_config_json, "VTX")?,
-        // Hypervisor mode is not available on RISC-V
-        _ => false,
-    };
-
-    let arm_pa_size_bits = match arch {
-        Arch::Aarch64 => {
-            if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
-                Some(40)
-            } else if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_44")? {
-                Some(44)
-            } else {
-                panic!("Expected ARM platform to have 40 or 44 physical address bits")
-            }
-        }
-        Arch::X86_64 | Arch::Riscv64 => None,
-    };
-
-    let arm_smc = match arch {
-        Arch::Aarch64 => Some(json_str_as_bool(&kernel_config_json, "ALLOW_SMC_CALLS")?),
-        _ => None,
-    };
-
-    let kernel_frame_size = match arch {
-        Arch::Aarch64 => 1 << 12,
-        Arch::Riscv64 => 1 << 21,
-        Arch::X86_64 => 1 << 12,
-    };
-
-    let kernel_config = Config {
-        arch,
-        word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
-        minimum_page_size: 4096,
-        paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
-        kernel_frame_size,
-        init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
-        cap_address_bits: 64,
-        fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
-        max_num_bootinfo_untypeds: json_str_as_u64(
-            &kernel_config_json,
-            "MAX_NUM_BOOTINFO_UNTYPED_CAPS",
-        )?,
-        hypervisor,
-        benchmark: args.config == "benchmark",
-        num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
-            json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?
-                .try_into()
-                .expect("number of cores fits in u8")
-        } else {
-            1
-        },
-        fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
-        arm_pa_size_bits,
-        arm_smc,
-        riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
-        invocations_labels,
-        device_regions,
-        normal_regions,
-        object_sizes,
-    };
-
-    if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
-        eprintln!(
-            "Error: loader ELF '{}' does not exist",
-            loader_elf_path.display()
-        );
-        std::process::exit(1);
     }
 
-    if let Arch::Aarch64 = kernel_config.arch {
-        assert!(
-            kernel_config.hypervisor,
-            "Microkit tool expects a kernel with hypervisor mode enabled on AArch64."
-        );
-    }
-
-    assert!(
-        kernel_config.word_size == 64,
-        "Microkit tool has various assumptions about the word size being 64-bits."
-    );
+    let system_path = &args.sdf_path;
+    // bail_if_not_exists("system description file", &system_path)?;
+    let xml: String = fs::read_to_string(system_path).unwrap();
 
     let mut system = match parse(
         system_path.as_path(),
