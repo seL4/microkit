@@ -18,23 +18,22 @@ use microkit_tool::loader::Loader;
 use microkit_tool::report::write_report;
 use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr};
 use microkit_tool::sel4::{
-    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, PlatformConfig,
+    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config,
     RiscvVirtualMemory,
 };
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{
-    get_full_path, human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down,
-    round_up,
+    human_size_strict, round_down, round_up,
 };
 use microkit_tool::sdkparse::{SdkInfo};
 use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
 use microkit_tool::argparse;
+use microkit_tool::jsonparse;
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::{self, metadata};
-use std::io;
 use std::path::{Path, PathBuf};
 
 const MAX_BUILD_ITERATION: usize = 3;
@@ -87,17 +86,7 @@ impl ImageOutputType {
 
 enum MainError {
     MissingPath { description: &'static str, path: PathBuf },
-    ReadFile { description: &'static str, path: PathBuf, source: io::Error },
-    SerdeJsonError {
-        description: &'static str,
-        path: PathBuf,
-        source: serde_json::Error,
-    },
-    SerdeJsonTypeError {
-        description: &'static str,
-        field: &'static str,
-        expected_type: &'static str,
-    },
+    JsonError { source: jsonparse::JsonError },
     UnsupportedKernelArch { value: String },
     UnsupportedImageType { requested: RequestedImageType, arch: Arch },
     MissingArmPaSizeBits,
@@ -111,19 +100,8 @@ impl fmt::Display for MainError {
             Self::MissingPath { description, path } => {
                 write!(f, "{description} '{}' does not exist", path.display())
             }
-            Self::ReadFile { description, path, source } => {
-                write!(f, "could not read {description} '{}': {source}", path.display())
-            }
-            Self::SerdeJsonError { description, path, source } => {
-                write!(f, "could not parse {description} '{}': {source}", path.display())
-            }
-            Self::SerdeJsonTypeError { description, field, expected_type } => {
-                write!(
-                    f,
-                    "{description} field '{}' has wrong type, expected {}",
-                    field,
-                    expected_type
-                )
+            Self::JsonError { source } => {
+                write!(f, "{source}")
             }
             Self::UnsupportedKernelArch { value } => {
                 write!(f, "unsupported kernel config architecture '{value}'")
@@ -148,6 +126,12 @@ impl fmt::Display for MainError {
     }
 }
 
+impl From<jsonparse::JsonError> for MainError {
+    fn from(source: jsonparse::JsonError) -> Self {
+        MainError::JsonError { source }
+    }
+}
+
 fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), MainError> {
     if !path.exists() {
         Err(MainError::MissingPath {
@@ -159,93 +143,6 @@ fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), Main
     }
 }
 
-struct SerdeJsonDoc {
-    description: &'static str,
-    value: serde_json::Value,
-}
-
-impl SerdeJsonDoc {
-    fn field<'a>(&'a self, name: &'static str) -> Result<&'a serde_json::Value, MainError> {
-        match self.value.get(name) {
-            Some(value) => Ok(value),
-            None => Err(MainError::SerdeJsonTypeError {
-                description: self.description,
-                field: name,
-                expected_type: "any (but none found)",
-            }),
-        }
-    }
-
-    fn string<'a>(&'a self, name: &'static str) -> Result<&'a str, MainError> {
-        let value = self.field(name)?;
-        match value.as_str() {
-            Some(value) => Ok(value),
-            None => Err(MainError::SerdeJsonTypeError {
-                description: self.description,
-                field: name,
-                expected_type: "string",
-            }),
-        }
-    }
-
-    fn bool(&self, name: &'static str) -> Result<bool, MainError> {
-        let value = self.field(name)?;
-        match value.as_bool() {
-            Some(value) => Ok(value),
-            None => Err(MainError::SerdeJsonTypeError {
-                description: self.description,
-                field: name,
-                expected_type: "boolean",
-            }),
-        }
-    }
-
-    fn u64(&self, name: &'static str) -> Result<u64, MainError> {
-        let value = self.field(name)?;
-        match value.as_u64() {
-            Some(value) => Ok(value),
-            None => Err(MainError::SerdeJsonTypeError {
-                description: self.description,
-                field: name,
-                expected_type: "u64",
-            }),
-        }
-    }
-
-    fn u8(&self, name: &'static str) -> Result<u8, MainError> {
-        let value = match self.u64(name) {
-            Ok(value) => value,
-            Err(err) => return Err(err),
-        };
-
-        match u8::try_from(value) {
-            Ok(value) => Ok(value),
-            Err(_) => Err(MainError::SerdeJsonTypeError {
-                description: self.description,
-                field: name,
-                expected_type: "u8",
-            }),
-        }
-    }
-}
-
-fn read_json(description: &'static str, path: &Path) -> Result<SerdeJsonDoc, MainError> {
-    let text = match fs::read_to_string(path) {
-        Ok(the_text) => Ok(the_text),
-        Err(source) => Err(MainError::ReadFile {
-            description,
-            path: path.to_path_buf(),
-            source,
-        }),
-    }?;
-    match serde_json::from_str(&text) {
-        Ok(value) => Ok(SerdeJsonDoc { description, value }),
-        Err(source) => Err(
-            MainError::SerdeJsonError { description, path: path.to_path_buf(), source }
-        ),
-    }
-}
-
 fn build_kernel_config(
     args: &Args,
     config_dir: &Path,
@@ -253,9 +150,9 @@ fn build_kernel_config(
     invocations_all_path: &Path,
 ) -> Result<Config, MainError> {
     let kernel_config_json =
-        read_json("kernel configuration file", kernel_config_path)?;
+        jsonparse::read("kernel configuration file", kernel_config_path)?;
     let invocations_labels =
-        read_json("invocations JSON file", invocations_all_path)?;
+        jsonparse::read("invocations JSON file", invocations_all_path)?;
 
     let arch = match kernel_config_json.string("SEL4_ARCH")? {
         "aarch64" => Arch::Aarch64,
@@ -274,19 +171,10 @@ fn build_kernel_config(
             let platform_gen_path = config_dir.join("platform_gen.json");
             bail_if_not_exists("kernel platform configuration file", &platform_gen_path)?;
 
-            let platform_text =
-                fs::read_to_string(&platform_gen_path).map_err(|source| MainError::ReadFile {
-                    description: "kernel platform configuration file",
-                    path: platform_gen_path.clone(),
-                    source,
-                })?;
-
-            let platform: PlatformConfig =
-                serde_json::from_str(&platform_text).map_err(|source| MainError::SerdeJsonError {
-                    description: "kernel platform configuration file",
-                    path: platform_gen_path.clone(),
-                    source,
-                })?;
+            let platform = jsonparse::read_platform_config(
+                "kernel platform configuration file",
+                &platform_gen_path,
+            )?;
 
             (Some(platform.devices), Some(platform.memory))
         }

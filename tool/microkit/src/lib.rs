@@ -15,6 +15,7 @@ pub mod argparse;
 pub mod capdl;
 pub mod crc32;
 pub mod elf;
+pub mod jsonparse;
 pub mod loader;
 pub mod report;
 pub mod sdf;

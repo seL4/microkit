@@ -125,35 +125,6 @@ pub fn comma_sep_usize(n: usize) -> String {
     comma_sep_u64(n as u64)
 }
 
-pub fn json_str<'a>(json: &'a serde_json::Value, field: &'static str) -> Result<&'a str, String> {
-    match json.get(field) {
-        Some(value) => Ok(value
-            .as_str()
-            .unwrap_or_else(|| panic!("JSON field '{field}' is not a string"))),
-        None => Err(format!("JSON field '{field}' does not exist")),
-    }
-}
-
-pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<u64, String> {
-    match json.get(field) {
-        Some(value) => Ok(value
-            .as_str()
-            .unwrap_or_else(|| panic!("JSON field '{field}' is not a string"))
-            .parse::<u64>()
-            .unwrap_or_else(|_| panic!("JSON field '{field}' could not be converted to u64"))),
-        None => Err(format!("JSON field '{field}' does not exist")),
-    }
-}
-
-pub fn json_str_as_bool(json: &serde_json::Value, field: &'static str) -> Result<bool, String> {
-    match json.get(field) {
-        Some(value) => Ok(value
-            .as_bool()
-            .unwrap_or_else(|| panic!("JSON field '{field}' could not be converted to bool"))),
-        None => Err(format!("JSON field '{field}' does not exist")),
-    }
-}
-
 /// Convert a struct into raw bytes in order to be written to
 /// disk or some other format.
 #[allow(clippy::missing_safety_doc)]
