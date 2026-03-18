@@ -249,6 +249,10 @@ BEGIN_FUNC(switch_to_el1)
 
     /* set ELR so that it's possible to perform ERET */
     msr     elr_el2, x30
+
+    /* ELR_EL2, SP_EL1, and SPSR_EL2 are all special-purpose registers and do
+     * not require explicit synchronisation (DDI0487 L.b, section C5.2).
+     */
     eret
 END_FUNC(switch_to_el1)
 
@@ -261,6 +265,7 @@ BEGIN_FUNC(switch_to_el2)
      * NS => run as non-secure
      */
     mov    x9, #(SCR_RW_BIT | SCR_SMD_BIT | SCR_RES_BITS | SCR_NS_BIT)
+    /* ERET performs the 'Context Synchronisation Event' */
     msr    scr_el3, x9
 
     /* Set SPSR for EL3
@@ -274,6 +279,10 @@ BEGIN_FUNC(switch_to_el2)
 
     /* set ELR so RET returns to caller */
     msr     elr_el3, x30
+
+    /* ELR_EL3, SP_EL2, and SPSR_EL3 are all special-purpose registers and do
+     * not require explicit synchronisation (DDI0487 L.b, section C5.2).
+     */
     eret
 END_FUNC(switch_to_el2)
 
