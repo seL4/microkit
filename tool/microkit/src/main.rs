@@ -23,7 +23,7 @@ use microkit_tool::sel4::{
 };
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{
-    human_size_strict, round_down, round_up,
+    get_full_path, human_size_strict, round_down, round_up,
 };
 use microkit_tool::sdkparse::{SdkInfo};
 use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};

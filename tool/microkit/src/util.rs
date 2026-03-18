@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use serde_json;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
