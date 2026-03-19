@@ -1,16 +1,23 @@
+use std::ops::Range;
+
 use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
 
 use crate::{
     capdl::{
-        memory::{get_pt_level_coverage, get_pt_level_index, get_pt_level_to_insert},
         util::capdl_util_make_cte,
         CapDLNamedObject, CapDLSpecContainer,
     },
-    sel4::{Config, PageSize},
+    sel4::Config,
 };
 
-const VTD_PML4_LEVEL: u8 = 0;
-const VTD_ENTRY_LEVEL: u8 = 4;
+// VTD Page table level is defaulted to the three-level structure even if the hardware supports four level.
+// Sel4 will only attempt to use the four-level structure if the hardware does not supports three level.
+// https://github.com/seL4/seL4/blob/c406015c389decc4559fd44cb69604ddd24a0ddb/src/plat/pc99/machine/intel-vtd.c#L498
+const VTD_PDPT_LEVEL: u8 = 0;
+const VTD_PAGE_TABLE_LEVEL: u8 = 3;
+const VTD_BITS_PER_LEVEL: u8 = 9;
+const VTD_ENTRY_BITS: u8 = 12;
+pub(crate) const VTD_THREE_LEVEL_BITS: u8 = VTD_BITS_PER_LEVEL * VTD_PAGE_TABLE_LEVEL + VTD_ENTRY_BITS;
 
 pub fn create_iospace(
     spec_container: &mut CapDLSpecContainer,
@@ -24,13 +31,13 @@ pub fn create_iospace(
     let id = spec_container.add_root_object(CapDLNamedObject {
         name: format!(
             "{}_{}",
-            get_iopt_level_name(sel4_config, VTD_PML4_LEVEL as usize),
+            get_iopt_level_name(sel4_config, VTD_PDPT_LEVEL),
             pd_name,
         )
         .into(),
         object: Object::IOPageTable(object::IOPageTable {
             is_root: true,
-            level: Some(VTD_PML4_LEVEL),
+            level: Some(VTD_PDPT_LEVEL),
             slots: [].to_vec(),
         }),
     });
@@ -55,13 +62,31 @@ pub fn create_iospace(
     id
 }
 
-fn get_iopt_level_name(sel4_config: &Config, level: usize) -> &str {
+pub fn map_io_page(
+    spec_container: &mut CapDLSpecContainer,
+    sel4_config: &Config,
+    pd_name: &str,
+    iospace_obj_id: ObjectId,
+    frame_cap: Cap,
+    ioaddr: u64,
+) -> Result<(), String> {
+    map_recursive(
+        spec_container,
+        sel4_config,
+        pd_name,
+        iospace_obj_id,
+        VTD_PDPT_LEVEL,
+        frame_cap,
+        ioaddr,
+    )
+}
+
+fn get_iopt_level_name(sel4_config: &Config, level: u8) -> &str {
     match sel4_config.arch {
         crate::sel4::Arch::X86_64 => match level {
-            0 => "VTD_pml4",
-            1 => "VTD_pdpt",
-            2 => "VTD_pd",
-            3 => "VTD_pt",
+            0 => "VTD_pdpt",
+            1 => "VTD_pd",
+            2 => "VTD_pt",
             _ => unreachable!(),
         },
         _ => unreachable!("get_iopt_level_name(): Internal bug: Only x86 support iommu!"),
@@ -76,9 +101,9 @@ fn map_intermediary_level_helper(
     pd_name: &str,
     next_level_name_prefix: &str,
     cur_level_obj_id: ObjectId,
-    cur_level: usize,
+    cur_level: u8,
     cur_level_slot: usize,
-    vaddr: u64,
+    ioaddr: u64,
 ) -> Result<ObjectId, String> {
     let page_table_level_obj_wrapper = spec_container.get_root_object(cur_level_obj_id).unwrap();
     if let Object::IOPageTable(page_table_object) = &page_table_level_obj_wrapper.object {
@@ -102,7 +127,7 @@ fn map_intermediary_level_helper(
     }
 
     // get_pt_level_coverage works the same for io memory as well
-    let next_level_coverage = get_pt_level_coverage(sel4_config, cur_level + 1, vaddr);
+    let next_level_coverage = get_io_pt_level_coverage(sel4_config, cur_level + 1, ioaddr);
     let next_level_inner_obj = object::IOPageTable {
         is_root: false, // IOSpace is always created seperately
         level: Some(cur_level as u8 + 1),
@@ -138,7 +163,7 @@ fn map_intermediary_level_helper(
 fn insert_cap_into_io_page_table_level(
     spec_container: &mut CapDLSpecContainer,
     cur_level_obj_id: ObjectId,
-    cur_level: usize,
+    cur_level: u8,
     cur_level_slot: usize,
     cap: Cap,
 ) -> Result<(), String> {
@@ -175,22 +200,17 @@ fn map_recursive(
     sel4_config: &Config,
     pd_name: &str,
     pt_obj_id: ObjectId,
-    cur_level: usize,
+    cur_level: u8,
     frame_cap: Cap,
     ioaddr: u64,
 ) -> Result<(), String> {
-    assert!(
-        VTD_ENTRY_LEVEL as usize == sel4_config.num_page_table_levels(),
-        "internal bug: The maximum page table level does not match!"
-    );
-
-    if cur_level >= sel4_config.num_page_table_levels() {
+    if cur_level >= VTD_PAGE_TABLE_LEVEL {
         unreachable!("internal bug: we should have never recursed further!");
     }
 
-    let this_level_index = get_pt_level_index(sel4_config, cur_level, ioaddr);
+    let this_level_index = get_io_pt_level_index(sel4_config, cur_level, ioaddr);
 
-    if cur_level == get_pt_level_to_insert(sel4_config, PageSize::Small as u64) {
+    if cur_level == VTD_PAGE_TABLE_LEVEL - 1 {
         // Base case: we got to the target level to insert the frame cap.
         insert_cap_into_io_page_table_level(
             spec_container,
@@ -226,21 +246,29 @@ fn map_recursive(
     }
 }
 
-pub fn map_io_page(
-    spec_container: &mut CapDLSpecContainer,
-    sel4_config: &Config,
-    pd_name: &str,
-    iospace_obj_id: ObjectId,
-    frame_cap: Cap,
-    ioaddr: u64,
-) -> Result<(), String> {
-    map_recursive(
-        spec_container,
-        sel4_config,
-        pd_name,
-        iospace_obj_id,
-        VTD_PML4_LEVEL as usize,
-        frame_cap,
-        ioaddr,
-    )
+fn get_io_pt_level_index(sel4_config: &Config, level: u8, ioaddr: u64) -> usize {
+    match sel4_config.arch {
+        crate::sel4::Arch::X86_64 => {
+            assert!(level < VTD_PAGE_TABLE_LEVEL);
+            
+            let shift = VTD_BITS_PER_LEVEL * (VTD_PAGE_TABLE_LEVEL - level) - VTD_BITS_PER_LEVEL + VTD_ENTRY_BITS;
+
+            ((ioaddr >> shift) & ((1u64 << VTD_BITS_PER_LEVEL) - 1)) as usize
+        },
+        crate::sel4::Arch::Aarch64 => unreachable!("Internal bug: Aarch64 is not supported for IOMMU"),
+        crate::sel4::Arch::Riscv64 => unreachable!("Internal bug: Riscv64 is not supported for IOMMU"),
+    }
+}
+
+fn get_io_pt_level_coverage(sel4_config: &Config, level: u8, ioaddr: u64) -> Range<u64> {
+    match sel4_config.arch {
+        crate::sel4::Arch::X86_64 => {
+            let bits_from_higher_lvls: u64 = (VTD_PAGE_TABLE_LEVEL as u64 - (level as u64)) * VTD_BITS_PER_LEVEL as u64;
+            let coverage_bits = VTD_BITS_PER_LEVEL as u64 + bits_from_higher_lvls;
+            let low = (ioaddr >> coverage_bits) << coverage_bits;
+            let high = ioaddr | ((1 << coverage_bits) - 1);
+            low..high
+        },
+        _ => unreachable!("get_io_pt_level_coverage(): Internal bug: IOMMU is only supported for x86!"),
+    }
 }
