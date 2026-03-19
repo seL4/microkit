@@ -722,7 +722,7 @@ impl ProtectionDomain {
                                 "setvar_id",
                                 "ioapic",
                                 "pin",
-                                "trigger",
+                                "level",
                                 "polarity",
                                 "vector",
                             ],
@@ -751,7 +751,7 @@ impl ProtectionDomain {
                             ));
                         }
 
-                        let trigger = if let Some(trigger_str) = child.attribute("trigger") {
+                        let trigger = if let Some(trigger_str) = child.attribute("level") {
                             match trigger_str {
                                 "level" => X86IoapicIrqTrigger::Level,
                                 "edge" => X86IoapicIrqTrigger::Edge,
@@ -759,7 +759,7 @@ impl ProtectionDomain {
                                     return Err(value_error(
                                         xml_sdf,
                                         &child,
-                                        "trigger must be either 'level' or 'edge'".to_string(),
+                                        "level must be either 'level' or 'edge'".to_string(),
                                     ))
                                 }
                             }

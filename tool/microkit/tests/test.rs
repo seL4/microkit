@@ -396,11 +396,11 @@ mod protection_domain {
     }
 
     #[test]
-    fn test_irq_ioapic_invalid_trigger() {
+    fn test_irq_ioapic_invalid_level() {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
-            "irq_ioapic_invalid_trigger.system",
-            "Error: trigger must be either 'level' or 'edge' on element 'irq'",
+            "irq_ioapic_invalid_level.system",
+            "Error: level must be either 'level' or 'edge' on element 'irq'",
         )
     }
 
