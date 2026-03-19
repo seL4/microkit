@@ -418,7 +418,16 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_ioapic_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_ioapic_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_ioapic_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
     }
 
@@ -427,7 +436,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_bus_less_than_0.system",
-            "Error: PCI bus must be >= 0 on element 'irq'",
+            "Error: PCI bus must be within [0..255] on element 'irq'",
         )
     }
 
@@ -436,7 +445,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_dev_less_than_0.system",
-            "Error: PCI device must be >= 0 on element 'irq'",
+            "Error: PCI device must be within [0..31] on element 'irq'",
         )
     }
 
@@ -445,7 +454,34 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_func_less_than_0.system",
-            "Error: PCI function must be >= 0 on element 'irq'",
+            "Error: PCI function must be within [0..7] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_bus_greater_than_255() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_bus_greater_than_255.system",
+            "Error: PCI bus must be within [0..255] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_dev_greater_than_31() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_dev_greater_than_31.system",
+            "Error: PCI device must be within [0..31] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_func_greater_than_7() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_func_greater_than_7.system",
+            "Error: PCI function must be within [0..7] on element 'irq'",
         )
     }
 
@@ -463,8 +499,31 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
+    }
+
+    #[test]
+    fn test_irq_msi_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_msi_pci_invalid() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_invalid.system",
+            "Error: failed to parse PCI address '0:0:0' on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_msi_pci_valid() {
+        check_success(&DEFAULT_X86_64_KERNEL_CONFIG, "irq_msi_pci_valid.system")
     }
 
     #[test]

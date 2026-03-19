@@ -1031,7 +1031,7 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `pin`: IOAPIC pin that generates the interrupt.
-* `vector`: CPU vector to deliver the interrupt to.
+* `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
 * `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
 * `polarity`: (optional) Whether the line polarity is high ("high") or low ("low"). Defaults to "high".
@@ -1040,9 +1040,9 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 The `irq` element has the following attributes when registering x86-64 MSI interrupts:
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
-* `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
+* `pcidev`: The PCI device address of the device that will generate the interrupt in hexadecimal, in BUS:DEV.FUNC notation (e.g. 01:1f.2).
 * `handle`: Value of the handle programmed into the data portion of the MSI.
-* `vector`: CPU vector to deliver the interrupt to.
+* `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `ioport` element has the following attributes:
