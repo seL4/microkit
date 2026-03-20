@@ -57,7 +57,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
         let phys_size_bit =
             capdl_obj_physical_size_bits(&named_object.object, kernel_config) as usize;
         if phys_size_bit > 0 {
-            let window_maybe = object_windows_by_size.get_mut(phys_size_bit).unwrap();
+            let window_maybe = &mut object_windows_by_size[phys_size_bit];
             match window_maybe {
                 Some(window) => window.end += 1,
                 None => {
@@ -134,11 +134,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
             // past the lowest frame's paddr.
             let target = if next_obj_id_with_paddr < num_objs_with_paddr {
                 ut.end().min(u64::from(
-                    spec_container
-                        .spec
-                        .objects
-                        .get(next_obj_id_with_paddr)
-                        .unwrap()
+                    spec_container.spec.objects[next_obj_id_with_paddr]
                         .object
                         .paddr()
                         .unwrap(),
@@ -160,7 +156,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
                     // If at the current size we cannot allocate any more object, drop to objects of smaller
                     // size that still need to be allocated.
                     for size_bits in (0..=max_size_bits).rev() {
-                        let obj_id_range_maybe = object_windows_by_size.get_mut(size_bits).unwrap();
+                        let obj_id_range_maybe = &mut object_windows_by_size[size_bits];
                         if obj_id_range_maybe.is_some() {
                             // Got objects at this size bits, check if we still have any to allocate
                             if obj_id_range_maybe.as_ref().unwrap().start
@@ -242,7 +238,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
     // Ensure that we've created every objects
     let mut oom = false;
     for size_bit in 0..kernel_config.word_size {
-        let obj_id_range_maybe = object_windows_by_size.get(size_bit as usize).unwrap();
+        let obj_id_range_maybe = &object_windows_by_size[size_bit as usize];
         if obj_id_range_maybe.is_some() {
             let obj_id_range = obj_id_range_maybe.as_ref().unwrap();
             if obj_id_range.start != obj_id_range.end {
