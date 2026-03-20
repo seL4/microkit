@@ -276,7 +276,7 @@ pub struct ProtectionDomain {
     text_pos: Option<roxmltree::TextPos>,
     /// Index into the domain schedule vector if the system is using domain scheduling
     /// Defaults to domain 0 if not set.
-    pub domain_id: u8,
+    pub domain_id: Option<u8>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -603,14 +603,14 @@ impl ProtectionDomain {
             ));
         }
 
-        let mut domain_id: u8 = 0;
+        let mut domain_id: Option<u8> = None;
         match (domain_schedule, checked_lookup(xml_sdf, node, "domain")) {
             (Some(domain_schedule), Ok(domain_name)) => {
                 let domain_id_get = domain_schedule.domain_ids.get(domain_name);
                 if domain_id_get.is_none() {
                     return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule", name, domain_name));
                 }
-                domain_id = *domain_id_get.unwrap();
+                domain_id = Some(*domain_id_get.unwrap());
             }
             (Some(_), _) => {
                 return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))

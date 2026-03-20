@@ -325,7 +325,7 @@ impl CapDLSpecContainer {
             prio: 0,
             max_prio: 0,
             resume: false,
-            domain: 0,
+            domain: None,
             ip: entry_point.into(),
             sp: 0.into(),
             gprs: Vec::new(),
@@ -497,7 +497,7 @@ pub fn build_capdl_spec(
             monitor_tcb.extra.max_prio = MONITOR_PRIORITY;
             monitor_tcb.extra.resume = true;
 
-            monitor_tcb.extra.domain = monitor_idx as u8;
+            monitor_tcb.extra.domain = Some(monitor_idx as u8);
 
             monitor_tcb.slots.push(capdl_util_make_cte(
                 TcbBoundSlot::CSpace as u32,
@@ -569,11 +569,12 @@ pub fn build_capdl_spec(
 
     for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
         let elf_obj = &elfs[pd_global_idx];
-        let mon_pd_idx = mon_pd_idx_by_dom[pd.domain_id as usize];
+        let pd_domain_id = pd.domain_id.unwrap_or(0);
+        let mon_pd_idx = mon_pd_idx_by_dom[pd_domain_id as usize];
 
         // Get this PD's monitor info
-        let mon_cnode_obj_id = *mon_cnode_id_by_dom.get(pd.domain_id as usize).unwrap();
-        let mon_fault_ep_obj_id = *mon_fault_ep_id_by_dom.get(pd.domain_id as usize).unwrap();
+        let mon_cnode_obj_id = *mon_cnode_id_by_dom.get(pd_domain_id as usize).unwrap();
+        let mon_fault_ep_obj_id = *mon_fault_ep_id_by_dom.get(pd_domain_id as usize).unwrap();
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
@@ -1036,7 +1037,7 @@ pub fn build_capdl_spec(
             );
         }
 
-        mon_pd_idx_by_dom[pd.domain_id as usize] = mon_pd_idx + 1;
+        mon_pd_idx_by_dom[pd_domain_id as usize] = mon_pd_idx + 1;
     }
 
     // *********************************

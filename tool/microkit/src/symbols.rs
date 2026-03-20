@@ -32,7 +32,7 @@ pub fn patch_symbols(
         let filtered_pds: Vec<&ProtectionDomain> = system
             .protection_domains
             .iter()
-            .filter(|pd| pd.domain_id == mon_idx as u8)
+            .filter(|pd| pd.domain_id.unwrap_or(0) == mon_idx as u8)
             .collect();
 
         let pd_names: Vec<String> = filtered_pds
