@@ -1118,8 +1118,6 @@ pub fn build_capdl_spec(
             });
         }
 
-        println!("This is the domain schedule: {:?}", domain_schedule);
-
         spec_container.spec.domain_schedule = Some(domain_schedule);
         spec_container.spec.domain_set_start = system.domain_schedule
                                                 .as_ref()
