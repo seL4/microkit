@@ -189,7 +189,7 @@ Runnable PDs of the same priority are scheduled in a round-robin manner.
 
 #### Domain scheduling (experimental)
 
-If a Microkit system is built with a domain supported (`release_domain, debug_domain`) config, the PD can be assigned to a scheduling **domain** in the system description. If a PD is assigned to a domain, then the PD will only be allowed to execute when that domain is active. By default, PDs are assigned to domain 0. Which domain is active at any given point in time is determined by the [domain schedule](#domain).
+If a Microkit system is built with a domain supported (`release_domain, debug_domain`) config, the PD can be assigned to a scheduling **domain** in the system description. If a PD is assigned to a domain, then the PD will only be allowed to execute when that domain is active. Which domain is active at any given point in time is determined by the [domain schedule](#domain).
 
 ## Virtual Machines {#vm}
 
@@ -1158,11 +1158,11 @@ The `domain` element has the following attributes:
 The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
 
 The `domain_idx_shift` element has the following attribute:
-* `shift`: This is the start index of where we will construct our schedule. So if we shift by 5, we will begin constructing
-the domain schedule from index 5 onwards.
+* `shift`: This is the start index of where we will construct our schedule. So if we shift by 5, we will begin constructing the domain schedule from index 5 onwards. If not specified, no shift will be applied, and we will start constructing the schedule from index 0.
+
 
 The `domain_start` element has the following attribute:
-* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again. This index is an offset into the user defined schedule, and not an absolute index.
+* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again. This index is an offset into the user defined schedule, and not an absolute index. If no domain start index is set, then the Microkit tool will set this to 0 by default.
 
 The `domain_schedule` element is only valid if the using one of the domain configs (`release_domains`, `debug_domains`).
 
