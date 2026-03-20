@@ -131,7 +131,7 @@ impl CapDLSpecContainer {
                 objects: Vec::new(),
                 irqs: Vec::new(),
                 domain_schedule: None,
-                domain_start_idx: None,
+                domain_set_start: None,
                 domain_idx_shift: None,
                 asid_slots: Vec::new(),
                 root_objects: Range {
@@ -1121,7 +1121,7 @@ pub fn build_capdl_spec(
         println!("This is the domain schedule: {:?}", domain_schedule);
 
         spec_container.spec.domain_schedule = Some(domain_schedule);
-        spec_container.spec.domain_start_idx = system.domain_schedule
+        spec_container.spec.domain_set_start = system.domain_schedule
                                                 .as_ref()
                                                 .unwrap()
                                                 .domain_start_idx.map(|idx| Word(idx));
