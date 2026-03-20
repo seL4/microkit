@@ -1006,7 +1006,7 @@ impl ProtectionDomain {
                         return Err(value_error(
                             xml_sdf,
                             node,
-                            "seL4 has not been built as a hypervisor, virtual machiens are disabled".to_string()
+                            "seL4 has not been built as a hypervisor, virtual machines are disabled".to_string()
                         ));
                     }
                     if virtual_machine.is_some() {

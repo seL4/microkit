@@ -871,7 +871,7 @@ fn main() -> Result<(), String> {
                 }
 
                 // Patch the list of untypeds we used to simulate object allocation into the initialiser.
-                // At runtime the intialiser will validate what we simulated against what the kernel gives it. If they deviate
+                // At runtime the initialiser will validate what we simulated against what the kernel gives it. If they deviate
                 // we will have problems! For example, if we simulated with more memory than what's actually available, the initialiser
                 // can crash.
                 capdl_initialiser.add_expected_untypeds(&kernel_boot_info.untyped_objects);
