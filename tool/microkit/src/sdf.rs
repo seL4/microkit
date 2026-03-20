@@ -22,6 +22,7 @@ use crate::sel4::{
 use crate::util::{ranges_overlap, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::HashSet;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
@@ -273,6 +274,20 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
+    /// Index into the domain schedule vector if the system is using domain scheduling
+    pub domain_id: Option<u8>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+pub struct DomainTimeslice {
+    pub id: u8,
+    pub length: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DomainSchedule {
+    pub domain_ids: HashMap<String, u8>,
+    pub schedule: Vec<DomainTimeslice>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -444,6 +459,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
+        domain_schedule: &Option<DomainSchedule>,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name",
@@ -455,6 +471,7 @@ impl ProtectionDomain {
             // The SMC field is only available in certain configurations
             // but we do the error-checking further down.
             "smc",
+            "domain",
             "cpu",
         ];
         if is_child {
@@ -581,6 +598,27 @@ impl ProtectionDomain {
                     config.page_sizes()[0]
                 ),
             ));
+        }
+
+        let mut domain_id = None;
+        match (domain_schedule, checked_lookup(xml_sdf, node, "domain")) {
+            (Some(domain_schedule), Ok(domain_name)) => {
+                domain_id = domain_schedule.domain_ids.get(domain_name);
+                if domain_id.is_none() {
+                    return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule", name, domain_name));
+                }
+            }
+            (Some(_), _) => {
+                return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
+            }
+            (_, Ok(domain)) => {
+                if config.num_domain_schedules > 1 {
+                    return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
+                } else {
+                    return Err("Assigning PDs to domains is only supported if SDK is built with --experimental-domain-support".to_string());
+                }
+            }
+            (_, _) => {}
         }
 
         let mut maps = Vec::new();
@@ -987,7 +1025,7 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
-                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true)?;
+                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true, domain_schedule)?;
 
                     if let Some(setvar_id) = &child_pd.setvar_id {
                         let setvar = SysSetVar {
@@ -1073,6 +1111,76 @@ impl ProtectionDomain {
             parent: None,
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            domain_id: domain_id.copied(),
+        })
+    }
+}
+
+impl DomainSchedule {
+    fn from_xml(
+        xml_sdf: &XmlSystemDescription,
+        config: &Config,
+        node: &roxmltree::Node,
+    ) -> Result<DomainSchedule, String> {
+        let pos = xml_sdf.doc.text_pos_at(node.range().start);
+
+        check_attributes(xml_sdf, node, &[])?;
+
+        let mut next_domain_id = 0;
+        let mut domain_ids = HashMap::new();
+        let mut schedule = Vec::new();
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+
+            let child_name = child.tag_name().name();
+            if child_name != "domain" {
+                return Err(format!(
+                    "Error: invalid XML element '{}': {}",
+                    child_name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+
+            if schedule.len() == config.num_domain_schedules as usize {
+                return Err(format!(
+                    "Error: length of domain schedule exceeds maximum of {}: {}",
+                    config.num_domain_schedules as usize,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+
+            check_attributes(xml_sdf, &child, &["name", "length"])?;
+            let name = checked_lookup(xml_sdf, &child, "name")?;
+            let length = checked_lookup(xml_sdf, &child, "length")?.parse::<u64>();
+            if length.is_err() {
+                return Err(format!(
+                    "Error: invalid domain timeslice length '{}': {}",
+                    name,
+                    loc_string(xml_sdf, pos)
+                ));
+            }
+
+            let id = match domain_ids.get(name) {
+                Some(&id) => id,
+                None => {
+                    let id = next_domain_id;
+                    next_domain_id += 1;
+                    domain_ids.insert(name.to_string(), id);
+                    id
+                }
+            };
+
+            schedule.push(DomainTimeslice {
+                id,
+                length: length.unwrap(),
+            });
+        }
+
+        Ok(DomainSchedule {
+            domain_ids,
+            schedule,
         })
     }
 }
@@ -1391,6 +1499,7 @@ pub struct SystemDescription {
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub channels: Vec<Channel>,
+    pub domain_schedule: Option<DomainSchedule>,
 }
 
 fn check_maps(
@@ -1616,6 +1725,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         doc: &doc,
     };
 
+    let mut domain_schedule = None;
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
@@ -1642,7 +1752,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         let child_name = child.tag_name().name();
         match child_name {
             "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
+                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, &domain_schedule)?)
             }
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
@@ -1652,6 +1762,21 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     "Error: virtual machine must be a child of a protection domain: {}",
                     loc_string(&xml_sdf, pos)
                 ));
+            },
+            "domain_schedule" => {
+                if config.num_domain_schedules > 1 {
+                    println!("NUM DOMAINS IS GREATER THAN 1: {}", config.num_domain_schedules);
+                    if let Some(domain_schedule_node) = system
+                        .children()
+                        .filter(|&child| child.is_element())
+                        .find(|&child| child.tag_name().name() == "domain_schedule")
+                    {
+                        println!("Doing the domain schedule!\n");
+                        domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &config, &domain_schedule_node)?);
+                    }
+                } else {
+                    println!("NUM DOMAINS SCHEDULE IS 1 OR NONE");
+                }
             }
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -2015,6 +2140,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         protection_domains: pds,
         memory_regions: mrs,
         channels,
+        domain_schedule,
     })
 }
 

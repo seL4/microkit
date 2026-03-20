@@ -538,6 +538,7 @@ fn main() -> Result<(), String> {
         invocations_labels,
         device_regions,
         normal_regions,
+        num_domain_schedules: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
     };
 
     if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {

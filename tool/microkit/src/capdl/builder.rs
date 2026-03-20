@@ -12,7 +12,7 @@ use std::{
 
 use sel4_capdl_initializer_types::{
     object, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec,
-    Word,
+    Word, DomainSchedEntry,
 };
 
 use crate::{
@@ -130,6 +130,7 @@ impl CapDLSpecContainer {
             spec: Spec {
                 objects: Vec::new(),
                 irqs: Vec::new(),
+                domain_schedule: None,
                 asid_slots: Vec::new(),
                 root_objects: Range {
                     start: 0.into(),
@@ -322,6 +323,7 @@ impl CapDLSpecContainer {
             prio: 0,
             max_prio: 0,
             resume: false,
+            domain: 0,
             ip: entry_point.into(),
             sp: 0.into(),
             gprs: Vec::new(),
@@ -484,6 +486,9 @@ pub fn build_capdl_spec(
         monitor_tcb.extra.prio = MONITOR_PRIORITY;
         monitor_tcb.extra.max_prio = MONITOR_PRIORITY;
         monitor_tcb.extra.resume = true;
+
+        // @kwinter: What domain should the monitor be in?
+        monitor_tcb.extra.domain = 0;
 
         monitor_tcb.slots.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
@@ -904,6 +909,7 @@ pub fn build_capdl_spec(
                     ));
 
                     // Finally create TCB, unlike PDs, VMs are suspended by default until resume'd by their parent.
+                    // @kwinter: Is it fair to assign the VM the same domain as the parent?
                     let vm_vcpu_tcb_inner_obj = object::Tcb {
                         slots: caps_to_bind_to_vm_tcbs,
                         extra: Box::new(object::TcbExtraInfo {
@@ -912,6 +918,7 @@ pub fn build_capdl_spec(
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
                             resume: false,
+                            domain: pd.domain_id.expect("No domain ID specified for vm"),
                             // VMs do not have program images associated with them so these are always zero.
                             ip: Word(0),
                             sp: Word(0),
@@ -980,6 +987,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.prio = pd.priority;
             pd_tcb.extra.max_prio = pd.priority;
             pd_tcb.extra.resume = true;
+            pd_tcb.extra.domain = pd.domain_id.expect("No domain ID specified for PD");
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);
             // Stylistic purposes only
@@ -1079,7 +1087,24 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Sort the root objects
+    // Step 5. Pass domain schedule
+    // *********************************
+
+    if system.domain_schedule.is_some() {
+        let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
+
+        for sched_entry in system.domain_schedule.as_ref().unwrap().schedule.iter() {
+            domain_schedule.push(DomainSchedEntry{
+                id: sched_entry.id,
+                time: sched_entry.length,
+            })
+        }
+
+        spec_container.spec.domain_schedule = Some(domain_schedule);
+    }
+
+    // *********************************
+    // Step 6. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.

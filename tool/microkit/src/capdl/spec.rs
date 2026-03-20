@@ -74,6 +74,7 @@ pub fn capdl_obj_human_name(obj: &Object<FrameFill>, sel4_config: &Config) -> &'
         Object::ArmSmc => "ARM SMC",
         Object::Untyped(_) => "Untyped",
         Object::Irq(_) => "IRQ",
+        Object::DomainSet => "Domain Set",
     }
 }
 
