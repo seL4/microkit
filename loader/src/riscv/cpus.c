@@ -20,7 +20,7 @@
  * seL4 on but an additional S-mode only monitor core, this is the case on certain
  * CPUs such as the SiFive U74. The problematic part is that the monitor core has
  * a hart ID of zero and hart IDs are not guaranteed to be contiguous.
- * This is why we must explitly list all the hart IDs that we want to boot on.
+ * This is why we must explicitly list all the hart IDs that we want to boot on.
  * To figure this out for your platform, the best way is to look at the Device Tree,
  * each CPU will have a 'reg' field where the value is the hart ID.
  */

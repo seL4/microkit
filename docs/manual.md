@@ -61,7 +61,7 @@ Rather than a single `main` entry point, a program has four distinct entry point
 On ARM and RISC-V, the individual programs are combined to produce a single bootable *system image*.
 The format of the image is suitable for loading by the target board's bootloader.
 
-On x86-64, there are two ELF images invovled. One for the seL4 kernel, and one for the initialiser that
+On x86-64, there are two ELF images involved. One for the seL4 kernel, and one for the initialiser that
 setups up the Microkit system. These are loaded by a Multiboot 2 compliant bootloader.
 
 The Microkit tool, which is provided as part of the SDK, is used to generate the system image(s).
@@ -1412,7 +1412,7 @@ Microkit will produce a raw binary file by default, so when using U-Boot run the
 
 Support is available for the Radxa Rock3b platform which is based on the Rockchip rk3568 SoC.
 
-Since the platform relies on some closed-source binary blobs for first stage bootloader and then ARM's TrustZone A, we need to compile the U-Boot including these images. Detailed instructions on how to do that are avalilable [here](https://docs.sel4.systems/Hardware/rock3b.html).
+Since the platform relies on some closed-source binary blobs for first stage bootloader and then ARM's TrustZone A, we need to compile the U-Boot including these images. Detailed instructions on how to do that are available [here](https://docs.sel4.systems/Hardware/rock3b.html).
 
 Once the proper U-Boot image is in place, you can simply load the `loader.img` on the board and run it like that (this is assuming you have the TFTP server set up):
 
