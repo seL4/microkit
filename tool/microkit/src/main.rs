@@ -82,6 +82,27 @@ impl ImageOutputType {
     }
 }
 
+enum KernelBootType {
+    // The boot type used for x86_64 systems:
+    // setvar region_paddr not supported on this architecture nor can we emulate the
+    // kernel boot process to statically check for issues due to unknown memory map, so nothing to do.
+    // Write out the capDL initialiser as an ELF boot module and we are done.
+    X86_64,
+
+    // The boot type used for ARM and RISC-V:
+    // Determine how much physical memory is available to the kernel after it boots but before dropping
+    // to userspace by partially emulating the kernel boot process. This is useful for two purposes:
+    // 1. To implement setvar region_paddr for memory regions that doesn't specify a phys address, where
+    //    we must automatically select a suitable address inside the Microkit tool.
+    // 2. Post-spec generation sanity checks at a later point to ensure that we have sufficient memory
+    //    to allocate all kernel objects.
+    Static {
+        kernel_elf: ElfFile,
+        available_memory: DisjointMemoryRegion,
+        kernel_boot_region: MemoryRegion,
+    }
+}
+
 enum MainError {
     MissingPath {
         description: &'static str,
@@ -386,36 +407,28 @@ fn main() -> Result<(), String> {
         std::process::exit(1);
     });
 
-    // Only relevant for ARM and RISC-V.
-    // Determine how much physical memory is available to the kernel after it boots but before dropping
-    // to userspace by partially emulating the kernel boot process. This is useful for two purposes:
-    // 1. To implement setvar region_paddr for memory regions that doesn't specify a phys address, where
-    //    we must automatically select a suitable address inside the Microkit tool.
-    // 2. Post-spec generation sanity checks at a later point to ensure that there are sufficient memory
-    //    to allocate all kernel objects.
-    let (kernel_elf_maybe, available_memory_maybe, kernel_boot_region_maybe) =
-        match kernel_config.arch {
-            Arch::X86_64 => (None, None, None),
-            Arch::Aarch64 | Arch::Riscv64 => {
-                let kernel_elf = ElfFile::from_path(kernel_elf_path).unwrap_or_else(|e| {
-                    eprintln!(
-                        "ERROR: failed to parse kernel ELF ({}): {}",
-                        kernel_elf_path.display(),
-                        e
-                    );
-                    std::process::exit(1);
-                });
+    let kernel_boot_type: KernelBootType = match kernel_config.arch {
+        Arch::X86_64 => { KernelBootType::X86_64 }
+        Arch::Aarch64 | Arch::Riscv64 => {
+            let kernel_elf = ElfFile::from_path(kernel_elf_path).unwrap_or_else(|e| {
+                eprintln!(
+                    "ERROR: failed to parse kernel ELF ({}): {}",
+                    kernel_elf_path.display(),
+                    e
+                );
+                std::process::exit(1);
+            }); // TODO: improve error handling here
 
-                // Now determine how much memory we have after the kernel boots.
-                let (available_memory, kernel_boot_region) =
-                    emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
-                (
-                    Some(kernel_elf),
-                    Some(available_memory),
-                    Some(kernel_boot_region),
-                )
+            // Now determine how much memory we have after the kernel boots.
+            let (available_memory, kernel_boot_region) =
+                emulate_kernel_boot_partial(&kernel_config, &kernel_elf);
+            KernelBootType::Static {
+                kernel_elf,
+                available_memory,
+                kernel_boot_region,
             }
-        };
+        }
+    };
 
     let monitor_elf = ElfFile::from_path(&monitor_elf_path).unwrap_or_else(|e| {
         eprintln!(
@@ -496,17 +509,17 @@ fn main() -> Result<(), String> {
             &mut capdl_initialiser,
         );
 
-        match kernel_config.arch {
-            Arch::X86_64 => {
+        match kernel_boot_type {
+            KernelBootType::X86_64 => {
                 // setvar region_paddr not supported on this architecture nor can we emulate the
                 // kernel boot process to statically check for issues due to unknown memory map, so nothing to do.
                 // Write out the capDL initialiser as an ELF boot module and we are done.
             }
-            Arch::Aarch64 | Arch::Riscv64 => {
+            KernelBootType::Static { ref kernel_elf, ref available_memory, kernel_boot_region } => {
                 // Now that we have the CapDL initialiser ELF with embedded spec,
                 // we can determine exactly how much memory will be available statically when the kernel
                 // drops to userspace on ARM and RISC-V. This allow us to sanity check that:
-                // 1. There are enough memory to allocate all the objects required in the spec.
+                // 1. We have enough memory to allocate all the objects required in the spec.
                 // 2. All frames with a physical attached reside in legal memory (device or normal).
                 // 3. Objects can be allocated from the free untyped list. For example, we detect
                 //    situations where you might have a few frames with size bit 12 to allocate but
@@ -520,8 +533,7 @@ fn main() -> Result<(), String> {
 
                 // Reuse data from the partial kernel boot emulation previously done.
                 // .clone() as we need to mutate this for every iteration.
-                let mut available_memory = available_memory_maybe.clone().unwrap();
-                let kernel_boot_region = kernel_boot_region_maybe.unwrap();
+                let mut available_memory = available_memory.clone();
 
                 // The kernel relies on the initial task region being allocated above the kernel
                 // boot/ELF region, so we have the end of the kernel boot region as the lower
@@ -561,7 +573,7 @@ fn main() -> Result<(), String> {
                 // the boot info information (containing untyped objects) which is needed for the next steps
                 let kernel_boot_info = emulate_kernel_boot(
                     &kernel_config,
-                    kernel_elf_maybe.as_ref().unwrap(),
+                    kernel_elf,
                     initial_task_phys_region,
                     user_image_virt_region,
                 );
@@ -717,8 +729,8 @@ fn main() -> Result<(), String> {
 
             let image_out_path = args.output_path.as_path();
 
-            match kernel_config.arch {
-                Arch::X86_64 => match capdl_initialiser.elf.reserialise(image_out_path) {
+            match kernel_boot_type {
+                KernelBootType::X86_64 => match capdl_initialiser.elf.reserialise(image_out_path) {
                     Ok(size) => {
                         // Copy the kernel to the build directory as well so users doesn't have to dig through the SDK.
                         if let Err(copy_err) = fs::copy(
@@ -751,11 +763,11 @@ fn main() -> Result<(), String> {
                         std::process::exit(1);
                     }
                 },
-                Arch::Aarch64 | Arch::Riscv64 => {
+                KernelBootType::Static { ref kernel_elf, .. } => {
                     let loader = Loader::new(
                         &kernel_config,
                         Path::new(&loader_elf_path),
-                        kernel_elf_maybe.as_ref().unwrap(),
+                        kernel_elf,
                         &capdl_initialiser.elf,
                         capdl_initialiser.phys_base.unwrap(),
                         &initialiser_vaddr_range,
