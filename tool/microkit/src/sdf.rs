@@ -1228,6 +1228,11 @@ impl DomainSchedule {
             }
         }
 
+        // We are defaulting the set start to 0 if none has been specified.
+        if domain_start_idx.is_none() {
+            domain_start_idx = Some(0);
+        }
+
         Ok(DomainSchedule {
             domain_ids,
             schedule,
