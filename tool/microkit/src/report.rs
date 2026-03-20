@@ -214,24 +214,18 @@ pub fn write_report(
                     format!("\t\t\t-> Object: '{}'\n", to_object.name.as_ref().unwrap()).as_bytes(),
                 )
                 .unwrap();
-            let rights_maybe = capdl_cap_rights(&cte.cap);
-            if rights_maybe.is_some() {
+
+            if let Some(rights) = capdl_cap_rights(&cte.cap) {
                 report_file
                     .write_all(
-                        format!(
-                            "\t\t\t-> Rights: {}\n",
-                            capdl_rights_to_human_repr(&rights_maybe.unwrap())
-                        )
-                        .as_bytes(),
+                        format!("\t\t\t-> Rights: {}\n", capdl_rights_to_human_repr(&rights))
+                            .as_bytes(),
                     )
                     .unwrap();
             }
-            let badge_maybe = capdl_cap_badge(&cte.cap);
-            if badge_maybe.is_some() {
+            if let Some(badge) = capdl_cap_badge(&cte.cap) {
                 report_file
-                    .write_all(
-                        format!("\t\t\t-> Badge: 0x{:x}\n", badge_maybe.unwrap().0).as_bytes(),
-                    )
+                    .write_all(format!("\t\t\t-> Badge: 0x{:x}\n", badge.0).as_bytes())
                     .unwrap();
             }
         }

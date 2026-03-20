@@ -303,36 +303,28 @@ impl ElfFile {
         // Read all the section headers
         let mut shents = Vec::with_capacity(hdr.shnum as usize);
         let mut symtab_shent: Option<&ElfSectionHeader64> = None;
-        let mut shstrtab_shent: Option<&ElfSectionHeader64> = None;
         for i in 0..hdr.shnum {
             let shent_start = hdr.shoff + (i as u64 * hdr.shentsize as u64);
             let shent_end = shent_start + hdr.shentsize as u64;
             let shent_bytes = &bytes[shent_start as usize..shent_end as usize];
 
             let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
-            match shent.type_ {
-                2 => symtab_shent = Some(shent),
-                3 => shstrtab_shent = Some(shent),
-                _ => {}
+            if shent.type_ == 2 {
+                symtab_shent = Some(shent)
             }
             shents.push(shent);
         }
 
-        if shstrtab_shent.is_none() {
-            return Err("unable to find string table section".to_string());
-        }
-
-        assert!(symtab_shent.is_some());
-        if symtab_shent.is_none() {
+        let Some(symtab_shent) = symtab_shent else {
             return Err("unable to find symbol table section".to_string());
-        }
+        };
 
         // Reading the symbol table
-        let symtab_start = symtab_shent.unwrap().offset as usize;
-        let symtab_end = symtab_start + symtab_shent.unwrap().size as usize;
+        let symtab_start = symtab_shent.offset as usize;
+        let symtab_end = symtab_start + symtab_shent.size as usize;
         let symtab = &bytes[symtab_start..symtab_end];
 
-        let symtab_str_shent = shents[symtab_shent.unwrap().link as usize];
+        let symtab_str_shent = shents[symtab_shent.link as usize];
         let symtab_str_start = symtab_str_shent.offset as usize;
         let symtab_str_end = symtab_str_start + symtab_str_shent.size as usize;
         let symtab_str = &bytes[symtab_str_start..symtab_str_end];

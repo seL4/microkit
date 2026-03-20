@@ -156,14 +156,10 @@ pub fn simulate_capdl_object_alloc_algorithm(
                     // If at the current size we cannot allocate any more object, drop to objects of smaller
                     // size that still need to be allocated.
                     for size_bits in (0..=max_size_bits).rev() {
-                        let obj_id_range_maybe = &mut object_windows_by_size[size_bits];
-                        if obj_id_range_maybe.is_some() {
+                        if let Some(ref mut obj_id_range) = &mut object_windows_by_size[size_bits] {
                             // Got objects at this size bits, check if we still have any to allocate
-                            if obj_id_range_maybe.as_ref().unwrap().start
-                                < obj_id_range_maybe.as_ref().unwrap().end
-                            {
-                                let obj_id: ObjectId =
-                                    obj_id_range_maybe.as_ref().unwrap().start.into();
+                            if obj_id_range.start < obj_id_range.end {
+                                let obj_id: ObjectId = obj_id_range.start.into();
 
                                 {
                                     // Should not have touched this object before
@@ -187,7 +183,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
                                         &named_obj.object,
                                         kernel_config,
                                     ) as usize;
-                                obj_id_range_maybe.as_mut().unwrap().start += 1;
+                                obj_id_range.start += 1;
                                 created = true;
                                 break;
                             }
@@ -238,9 +234,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
     // Ensure that we've created every objects
     let mut oom = false;
     for size_bit in 0..kernel_config.word_size {
-        let obj_id_range_maybe = &object_windows_by_size[size_bit as usize];
-        if obj_id_range_maybe.is_some() {
-            let obj_id_range = obj_id_range_maybe.as_ref().unwrap();
+        if let Some(obj_id_range) = &object_windows_by_size[size_bit as usize] {
             if obj_id_range.start != obj_id_range.end {
                 oom = true;
                 let shortfall = (obj_id_range.end - obj_id_range.start) as u64;
