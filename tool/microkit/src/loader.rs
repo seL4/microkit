@@ -194,8 +194,6 @@ impl<'a> Loader<'a> {
             }
         }
 
-        assert!(kernel_first_paddr.is_some());
-
         // We support an initial task ELF with multiple segments. This is implemented by amalgamating all the segments
         // into 1 segment, so if your segments are sparse, a lot of memory will be wasted.
         let initial_task_segments = initial_task_elf.loadable_segments();
@@ -213,20 +211,25 @@ impl<'a> Loader<'a> {
             }
         }
 
-        // Determine the pagetable variables
-        assert!(kernel_first_vaddr.is_some());
-        assert!(kernel_first_vaddr.is_some());
+        let Some(kernel_first_vaddr) = kernel_first_vaddr else {
+            panic!("INTERNAL: could not determine kernel_first_vaddr");
+        };
+
+        let Some(kernel_first_paddr) = kernel_first_paddr else {
+            panic!("INTERNAL: could not determine kernel_first_paddr");
+        };
+
         let pagetable_vars = match config.arch {
             Arch::Aarch64 => Loader::aarch64_setup_pagetables(
                 &loader_elf,
-                kernel_first_vaddr.unwrap(),
-                kernel_first_paddr.unwrap(),
+                kernel_first_vaddr,
+                kernel_first_paddr,
             ),
             Arch::Riscv64 => Loader::riscv64_setup_pagetables(
                 config,
                 &loader_elf,
-                kernel_first_vaddr.unwrap(),
-                kernel_first_paddr.unwrap(),
+                kernel_first_vaddr,
+                kernel_first_paddr,
             ),
             Arch::X86_64 => unreachable!("x86_64 does not support creating a loader image"),
         };

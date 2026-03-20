@@ -661,19 +661,15 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if pd.parent.is_none() {
-            // badge = pd_global_idx + 1 because seL4 considers badge = 0 as no badge.
-            let badge: u64 = pd_global_idx as u64 + 1;
-            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, badge)
-        } else {
-            assert!(pd_global_idx > pd.parent.unwrap());
+        let pd_fault_ep_cap = if let Some(pd_parent) = pd.parent {
+            assert!(pd_global_idx > pd_parent);
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_ep_obj_id = &pd_id_to_ep_id[&pd.parent.unwrap()];
+            let parent_ep_obj_id = &pd_id_to_ep_id[&pd_parent];
             let fault_ep_cap =
                 capdl_util_make_endpoint_cap(*parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = &pd_id_to_cspace_id[&pd.parent.unwrap()];
+            let parent_cspace_obj_id = &pd_id_to_cspace_id[&pd_parent];
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 *parent_cspace_obj_id,
@@ -682,6 +678,10 @@ pub fn build_capdl_spec(
             );
 
             fault_ep_cap
+        } else {
+            // badge = pd_global_idx + 1 because seL4 considers badge = 0 as no badge.
+            let badge: u64 = pd_global_idx as u64 + 1;
+            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, badge)
         };
         caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
             PD_FAULT_EP_CAP_IDX as u32,

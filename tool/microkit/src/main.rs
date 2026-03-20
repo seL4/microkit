@@ -708,9 +708,10 @@ fn main() -> Result<(), String> {
                 // The kernel relies on the initial task region being allocated above the kernel
                 // boot/ELF region, so we have the end of the kernel boot region as the lower
                 // bound for allocating the reserved region.
-                let initial_task_phys_base_maybe =
+                let initial_task_phys_base =
                     available_memory.allocate_from(initial_task_size, kernel_boot_region.end);
-                if initial_task_phys_base_maybe.is_none() {
+
+                let Some(initial_task_phys_base) = initial_task_phys_base else {
                     // Unlikely to happen on Microkit-supported platforms with multi gigabytes memory.
                     // But printing a helpful error in case we do run into this problem.
                     eprintln!(
@@ -726,9 +727,8 @@ fn main() -> Result<(), String> {
                         );
                     }
                     std::process::exit(1);
-                }
+                };
 
-                let initial_task_phys_base = initial_task_phys_base_maybe.unwrap();
                 capdl_initialiser.set_phys_base(initial_task_phys_base);
                 let initial_task_phys_region = MemoryRegion::new(
                     initial_task_phys_base,

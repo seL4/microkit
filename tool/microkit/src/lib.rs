@@ -198,14 +198,14 @@ pub struct DisjointMemoryRegion {
 }
 
 impl DisjointMemoryRegion {
+    /// Ensure that regions are sorted and non-overlapping
     fn check(&self) {
-        // Ensure that regions are sorted and non-overlapping
-        let mut last_end: Option<u64> = None;
+        // The value 0 is the least element in the set of all u64, so >= is
+        // always true.
+        let mut last_end: u64 = 0;
         for region in &self.regions {
-            if last_end.is_some() {
-                assert!(region.base >= last_end.unwrap());
-            }
-            last_end = Some(region.end)
+            assert!(region.base >= last_end);
+            last_end = region.end;
         }
     }
 
@@ -241,20 +241,14 @@ impl DisjointMemoryRegion {
     }
 
     pub fn remove_region(&mut self, base: u64, end: u64) {
-        let mut maybe_idx = None;
-        for (i, r) in self.regions.iter().enumerate() {
-            if base >= r.base && end <= r.end {
-                maybe_idx = Some(i);
-                break;
-            }
-        }
-        if maybe_idx.is_none() {
+        let Some((idx, &region)) = self
+            .regions
+            .iter()
+            .enumerate()
+            .find(|(_, region)| (base >= region.base && end <= region.end))
+        else {
             panic!("Internal error: attempting to remove region [0x{base:x}-0x{end:x}) that is not currently covered");
-        }
-
-        let idx = maybe_idx.unwrap();
-
-        let region = self.regions[idx];
+        };
 
         if region.base == base && region.end == end {
             // Covers exactly, so just remove
