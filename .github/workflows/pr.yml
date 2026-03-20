@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Clippy
         # Make sure CI fails on all warnings, including Clippy lints
-        run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-clippy --all-targets --all-features -- -D warnings"
+        run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-clippy --all-targets --all-features -- -D warnings -Wclippy::get_unwrap"
 
   rustfmt_check:
     runs-on: [self-hosted, macos, ARM64]

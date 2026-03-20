@@ -397,7 +397,7 @@ pub fn build_capdl_spec(
     let mon_elf_id = elfs.len() - 1;
     assert!(elfs.len() == system.protection_domains.len() + 1);
     let monitor_tcb_obj_id = {
-        let monitor_elf = elfs.get(mon_elf_id).unwrap();
+        let monitor_elf = &elfs[mon_elf_id];
         spec_container
             .add_elf_to_spec(
                 kernel_config,
@@ -581,7 +581,7 @@ pub fn build_capdl_spec(
 
         // Step 3-2: Map in all Memory Regions
         for map in pd.maps.iter() {
-            let frames = mr_name_to_frames.get(&map.mr).unwrap();
+            let frames = &mr_name_to_frames[&map.mr];
             // MRs have frames of equal size so just use the first frame's page size.
             let page_size_bytes =
                 1 << capdl_util_get_frame_size_bits(&spec_container, *frames.first().unwrap());
@@ -668,12 +668,12 @@ pub fn build_capdl_spec(
         } else {
             assert!(pd_global_idx > pd.parent.unwrap());
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_ep_obj_id = pd_id_to_ep_id.get(&pd.parent.unwrap()).unwrap();
+            let parent_ep_obj_id = &pd_id_to_ep_id[&pd.parent.unwrap()];
             let fault_ep_cap =
                 capdl_util_make_endpoint_cap(*parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = pd_id_to_cspace_id.get(&pd.parent.unwrap()).unwrap();
+            let parent_cspace_obj_id = &pd_id_to_cspace_id[&pd.parent.unwrap()];
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 *parent_cspace_obj_id,
@@ -783,7 +783,7 @@ pub fn build_capdl_spec(
             };
             let vm_vspace_cap = capdl_util_make_page_table_cap(vm_vspace_obj_id);
             for map in virtual_machine.maps.iter() {
-                let frames = mr_name_to_frames.get(&map.mr).unwrap();
+                let frames = &mr_name_to_frames[&map.mr];
                 let page_size_bytes =
                     1 << capdl_util_get_frame_size_bits(&spec_container, *frames.first().unwrap());
                 map_memory_region(
@@ -1019,10 +1019,10 @@ pub fn build_capdl_spec(
     // Step 4. Create channels
     // *********************************
     for channel in system.channels.iter() {
-        let pd_a_cspace_id = *pd_id_to_cspace_id.get(&channel.end_a.pd).unwrap();
-        let pd_b_cspace_id = *pd_id_to_cspace_id.get(&channel.end_b.pd).unwrap();
-        let pd_a_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_a.pd).unwrap();
-        let pd_b_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_b.pd).unwrap();
+        let pd_a_cspace_id = pd_id_to_cspace_id[&channel.end_a.pd];
+        let pd_b_cspace_id = pd_id_to_cspace_id[&channel.end_b.pd];
+        let pd_a_ntfn_id = pd_id_to_ntfn_id[&channel.end_a.pd];
+        let pd_b_ntfn_id = pd_id_to_ntfn_id[&channel.end_b.pd];
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
@@ -1052,7 +1052,7 @@ pub fn build_capdl_spec(
         if channel.end_a.pp {
             let pd_a_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_a.id;
             let pd_a_ep_badge = PPC_BADGE | channel.end_b.id;
-            let pd_b_ep_id = *pd_id_to_ep_id.get(&channel.end_b.pd).unwrap();
+            let pd_b_ep_id = pd_id_to_ep_id[&channel.end_b.pd];
             let pd_a_ep_cap =
                 capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
             capdl_util_insert_cap_into_cspace(
@@ -1066,7 +1066,7 @@ pub fn build_capdl_spec(
         if channel.end_b.pp {
             let pd_b_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_b.id;
             let pd_b_ep_badge = PPC_BADGE | channel.end_a.id;
-            let pd_a_ep_id = *pd_id_to_ep_id.get(&channel.end_a.pd).unwrap();
+            let pd_a_ep_id = pd_id_to_ep_id[&channel.end_a.pd];
             let pd_b_ep_cap =
                 capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
             capdl_util_insert_cap_into_cspace(
@@ -1139,7 +1139,7 @@ pub fn build_capdl_spec(
     let mut obj_old_id_to_new_id: HashMap<ObjectId, ObjectId> = HashMap::new();
     for (new_id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_old_id_to_new_id.insert(
-            *obj_name_to_old_id.get(obj.name.as_ref().unwrap()).unwrap(),
+            obj_name_to_old_id[obj.name.as_ref().unwrap()],
             new_id.into(),
         );
     }
@@ -1150,7 +1150,7 @@ pub fn build_capdl_spec(
             Some(caps) => {
                 for cte in caps {
                     let old_id = cte.cap.obj();
-                    let new_id = obj_old_id_to_new_id.get(&old_id).unwrap();
+                    let new_id = &obj_old_id_to_new_id[&old_id];
                     cte.cap.set_obj(*new_id);
                 }
             }
@@ -1158,7 +1158,7 @@ pub fn build_capdl_spec(
         }
     }
     for irq in spec_container.spec.irqs.iter_mut() {
-        irq.handler = *obj_old_id_to_new_id.get(&irq.handler).unwrap();
+        irq.handler = obj_old_id_to_new_id[&irq.handler];
     }
 
     // Only for aesthetic purposes:

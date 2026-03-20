@@ -149,13 +149,11 @@ pub fn patch_symbols(
                         ));
                     }
                     let data = match &setvar.kind {
-                        sdf::SysSetVarKind::Size { mr } => mr_name_to_desc.get(mr).unwrap().size,
+                        sdf::SysSetVarKind::Size { mr } => mr_name_to_desc[mr].size,
                         sdf::SysSetVarKind::Vaddr { address } => *address,
-                        sdf::SysSetVarKind::Paddr { region } => mr_name_to_desc
-                            .get(region)
-                            .unwrap()
-                            .paddr()
-                            .unwrap_or_default(),
+                        sdf::SysSetVarKind::Paddr { region } => {
+                            mr_name_to_desc[region].paddr().unwrap_or_default()
+                        }
                         sdf::SysSetVarKind::Id { id } => *id,
                         sdf::SysSetVarKind::X86IoPortAddr { address } => *address,
                     };
@@ -172,7 +170,7 @@ pub fn patch_symbols(
                 }
             }
         }
-        let elf_obj = pd_elf_files.get_mut(pd_global_idx).unwrap();
+        let elf_obj = &mut pd_elf_files[pd_global_idx];
         for (sym_name, value) in symbols_to_write.iter() {
             elf_obj
                 .write_symbol(sym_name, &value.to_le_bytes())
