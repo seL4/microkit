@@ -24,6 +24,27 @@ pub struct AvailableConfig {
     pub config_dir: PathBuf,
 }
 
+impl AvailableConfig {
+    pub fn base_elf_path(&self) -> PathBuf {
+        self.config_dir.clone().join("elf")
+    }
+    pub fn monitor_elf_path(&self) -> PathBuf {
+        self.base_elf_path().join("monitor.elf")
+    }
+    pub fn loader_elf_path(&self) -> PathBuf {
+        self.base_elf_path().join("loader.elf")
+    }
+    pub fn sel4_elf_path(&self) -> PathBuf {
+        self.base_elf_path().join("sel4.elf")
+    }
+    pub fn kernel_config_path(&self) -> PathBuf {
+        self.config_dir.clone().join("include/kernel/gen_config.json")
+    }
+    pub fn invocations_all_path(&self) -> PathBuf {
+        self.config_dir.clone().join("invocations_all.json")
+    }
+}
+
 pub struct Sdk {
     pub exe_path: PathBuf,
     pub cwd: PathBuf,
