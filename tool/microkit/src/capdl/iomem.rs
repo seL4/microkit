@@ -13,11 +13,11 @@ use crate::{
 // VTD Page table level is defaulted to the three-level structure even if the hardware supports four level.
 // Sel4 will only attempt to use the four-level structure if the hardware does not supports three level.
 // https://github.com/seL4/seL4/blob/c406015c389decc4559fd44cb69604ddd24a0ddb/src/plat/pc99/machine/intel-vtd.c#L498
-const VTD_PDPT_LEVEL: u8 = 0;
-const VTD_PAGE_TABLE_LEVEL: u8 = 3;
+const VTD_PML4_LEVEL: u8 = 0;
+const VTD_PAGE_TABLE_LEVEL: u8 = 4;
 const VTD_BITS_PER_LEVEL: u8 = 9;
 const VTD_ENTRY_BITS: u8 = 12;
-pub(crate) const VTD_THREE_LEVEL_BITS: u8 = VTD_BITS_PER_LEVEL * VTD_PAGE_TABLE_LEVEL + VTD_ENTRY_BITS;
+// pub(crate) const VTD_WHOLE_BITS: u8 = VTD_BITS_PER_LEVEL * VTD_PAGE_TABLE_LEVEL + VTD_ENTRY_BITS;
 
 pub fn create_iospace(
     spec_container: &mut CapDLSpecContainer,
@@ -31,13 +31,13 @@ pub fn create_iospace(
     let id = spec_container.add_root_object(CapDLNamedObject {
         name: format!(
             "{}_{}",
-            get_iopt_level_name(sel4_config, VTD_PDPT_LEVEL),
+            get_iopt_level_name(sel4_config, VTD_PML4_LEVEL),
             pd_name,
         )
         .into(),
         object: Object::IOPageTable(object::IOPageTable {
             is_root: true,
-            level: Some(VTD_PDPT_LEVEL),
+            level: Some(VTD_PML4_LEVEL),
             slots: [].to_vec(),
         }),
     });
@@ -75,7 +75,7 @@ pub fn map_io_page(
         sel4_config,
         pd_name,
         iospace_obj_id,
-        VTD_PDPT_LEVEL,
+        VTD_PML4_LEVEL,
         frame_cap,
         ioaddr,
     )
@@ -84,9 +84,10 @@ pub fn map_io_page(
 fn get_iopt_level_name(sel4_config: &Config, level: u8) -> &str {
     match sel4_config.arch {
         crate::sel4::Arch::X86_64 => match level {
-            0 => "VTD_pdpt",
-            1 => "VTD_pd",
-            2 => "VTD_pt",
+            0 => "VTD_pml4",
+            1 => "VTD_pdpt",
+            2 => "VTD_pd",
+            3 => "VTD_pt",
             _ => unreachable!(),
         },
         _ => unreachable!("get_iopt_level_name(): Internal bug: Only x86 support iommu!"),
