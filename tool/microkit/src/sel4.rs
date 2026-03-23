@@ -435,7 +435,7 @@ impl ObjectType {
         match self {
             ObjectType::Tcb => match config.arch {
                 Arch::Aarch64 => {
-                    if config.hypervisor && config.benchmark && config.num_cores > 0 {
+                    if config.hypervisor && config.benchmark && config.num_cores > 1 {
                         Some(12)
                     } else {
                         Some(11)
