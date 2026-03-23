@@ -629,18 +629,32 @@ fn main() -> Result<(), String> {
     // Get the elf files for each pd:
     for pd in &system.protection_domains {
         match get_full_path(&pd.program_image, &search_paths) {
-            Some(path) => match ElfFile::from_path(&path) {
-                Ok(elf) => system_elfs.push(elf),
-                Err(e) => {
-                    eprintln!(
-                        "ERROR: failed to parse ELF '{}' for PD '{}': {}",
-                        path.display(),
-                        pd.name,
-                        e
-                    );
-                    std::process::exit(1);
-                }
-            },
+            Some(path) => {
+                let path_for_symbols = pd
+                    .program_image_for_symbols
+                    .as_ref()
+                    .map(|path_suffix| {
+                        get_full_path(path_suffix, &search_paths).ok_or_else(|| {
+                            format!(
+                                "unable to find program image for symbols: '{}'",
+                                path_suffix.display()
+                            )
+                        })
+                    })
+                    .transpose()?;
+                match ElfFile::from_split_paths(&path, path_for_symbols.as_deref()) {
+                    Ok(elf) => system_elfs.push(elf),
+                    Err(e) => {
+                        eprintln!(
+                            "ERROR: failed to parse ELF '{}' for PD '{}': {}",
+                            path.display(),
+                            pd.name,
+                            e
+                        );
+                        std::process::exit(1);
+                    }
+                };
+            }
             None => {
                 return Err(format!(
                     "unable to find program image: '{}'",
