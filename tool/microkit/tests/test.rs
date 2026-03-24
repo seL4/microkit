@@ -27,11 +27,11 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
-    x86_xsave_size: None,
     // Not necessary for SDF parsing
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    object_sizes: None,
 };
 
 const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
@@ -51,11 +51,11 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: None,
     arm_smc: None,
     riscv_pt_levels: None,
-    x86_xsave_size: None,
     // Not necessary for SDF parsing
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    object_sizes: None,
 };
 
 fn check_success(kernel_config: &sel4::Config, test_name: &str) {
