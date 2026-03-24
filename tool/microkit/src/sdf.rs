@@ -619,7 +619,7 @@ impl ProtectionDomain {
                 if config.num_domain_schedules > 1 {
                     return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
                 } else {
-                    return Err("Assigning PDs to domains is only supported if SDK is built with --experimental-domain-support".to_string());
+                    return Err("Assigning PDs to domains is only supported built with a config that supports domains".to_string());
                 }
             }
             (_, _) => {}
@@ -1829,8 +1829,6 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     {
                         domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &config, &domain_schedule_node)?);
                     }
-                } else {
-                    println!("NUM DOMAINS SCHEDULE IS 1 OR NONE");
                 }
             }
             _ => {
@@ -1889,13 +1887,6 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: duplicate protection domain name '{}'.",
                 pd.name
             ));
-        }
-        // @kwinter: Is it ok to change this check to if the name has monitor
-        // as the start of the string at all?
-        if pd.name == MONITOR_PD_NAME {
-            return Err(
-                "Error: the PD name 'monitor' is reserved for the Microkit Monitor.".to_string(),
-            );
         }
     }
 
