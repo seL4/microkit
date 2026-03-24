@@ -245,7 +245,7 @@ impl DisjointMemoryRegion {
             .regions
             .iter()
             .enumerate()
-            .find(|(_, region)| (base >= region.base && end <= region.end))
+            .find(|(_, region)| base >= region.base && end <= region.end)
         else {
             panic!("Internal error: attempting to remove region [0x{base:x}-0x{end:x}) that is not currently covered");
         };
