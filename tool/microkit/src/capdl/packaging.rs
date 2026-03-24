@@ -5,10 +5,10 @@
 //
 
 use crate::{
+    capdl::spec::ElfIndex,
     capdl::{initialiser::CapDLInitialiser, CapDLSpecContainer},
     elf::ElfFile,
     sel4::{Config, PageSize},
-    capdl::spec::{ElfIndex},
 };
 
 pub fn pack_spec_into_initial_task(
@@ -29,16 +29,18 @@ pub fn pack_spec_into_initial_task(
             match d.elf_id {
                 ElfIndex::SystemElf(elf_id) => {
                     buf.copy_from_slice(
-                        &system_elfs[elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
+                        &system_elfs[elf_id].segments[d.elf_seg_idx].data()
+                            [d.elf_seg_data_range.clone()],
                     );
                 }
                 ElfIndex::MonitorElf(elf_id) => {
                     buf.copy_from_slice(
-                        &monitor_elfs[elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
+                        &monitor_elfs[elf_id].segments[d.elf_seg_idx].data()
+                            [d.elf_seg_data_range.clone()],
                     );
                 }
             }
-            
+
             compress_frames
         },
     );
@@ -52,7 +54,9 @@ pub fn pack_spec_into_initial_task(
         match build_config {
             "smp-debug" | "debug" | "debug_domains" => {}
             // We don't copy over the object names as there is no debug printing in these configuration to save memory.
-            "release" | "release_domains" | "benchmark" | "smp-release" | "smp-benchmark" => named_obj.name = None,
+            "release" | "release_domains" | "benchmark" | "smp-release" | "smp-benchmark" => {
+                named_obj.name = None
+            }
             _ => panic!("unknown configuration {build_config}"),
         };
     }

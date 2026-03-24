@@ -8,7 +8,7 @@ use std::{cmp::min, collections::HashMap};
 
 use crate::{
     elf::ElfFile,
-    sdf::{self, SysMemoryRegion, SystemDescription, ProtectionDomain},
+    sdf::{self, ProtectionDomain, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
     util::{monitor_serialise_names, monitor_serialise_u64_vec},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
@@ -35,15 +35,9 @@ pub fn patch_symbols(
             .filter(|pd| pd.domain_id.unwrap_or(0) == mon_idx as u8)
             .collect();
 
-        let pd_names: Vec<String> = filtered_pds
-            .iter()
-            .map(|pd| pd.name.clone())
-            .collect();
+        let pd_names: Vec<String> = filtered_pds.iter().map(|pd| pd.name.clone()).collect();
         monitor_elf
-            .write_symbol(
-                "pd_names_len",
-                &filtered_pds.len().to_le_bytes(),
-            )
+            .write_symbol("pd_names_len", &filtered_pds.len().to_le_bytes())
             .unwrap();
         monitor_elf
             .write_symbol(
@@ -90,10 +84,7 @@ pub fn patch_symbols(
             .unwrap();
 
         monitor_elf
-            .write_symbol(
-                "monitor_name",
-                format!("monitor_{}", mon_idx).as_bytes()
-            )
+            .write_symbol("monitor_name", format!("monitor_{mon_idx}").as_bytes())
             .unwrap();
     }
 
