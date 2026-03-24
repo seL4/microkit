@@ -502,8 +502,11 @@ fn main() -> Result<(), String> {
         _ => None,
     };
 
+    // TODO - x86 builds do not have to statically define PC99_TSC_FREQUENCY, so we are
+    // defaulting to using timer ticks. Need to have a better solution for this problem
     let timer_freq = match arch {
         Arch::Aarch64 => Some(json_str_as_u64(&kernel_config_json, "TIMER_FREQUENCY")? as u64),
+        Arch::Riscv64 => Some(json_str_as_u64(&kernel_config_json, "TIMER_FREQUENCY")? as u64),
         _ => None,
     };
 

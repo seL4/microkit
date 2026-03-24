@@ -1153,7 +1153,7 @@ The `domain_schedule` element, by default, has a list of up to 256 `domain` chil
 The `domain` element has the following attributes:
 
 * `name`: Name of the domain.
-* `length`: Length of time the domain will run each time it is active, in milliseconds.
+* `length`: Length of time the domain will run each time it is active, in milliseconds on Aarch64 and Riscv64. On x86 this length is currently defined in ticks as we don't have a static definition of the timer frequency.
 
 The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
 

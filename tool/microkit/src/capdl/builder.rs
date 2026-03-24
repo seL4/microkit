@@ -107,6 +107,8 @@ pub const SLOT_SIZE: u64 = 1 << SLOT_BITS;
 pub type FrameFill = Fill<ElfContent>;
 pub type CapDLNamedObject = NamedObject<FrameFill>;
 
+const MS_IN_S: u64 = 1000;
+
 pub struct ExpectedAllocation {
     pub ut_idx: usize,
     pub paddr: u64,
@@ -404,6 +406,16 @@ pub fn build_capdl_spec(
 
     for (monitor_idx, monitor_elf) in monitor_elfs.iter().enumerate() {
         let monitor_name = format!("{MONITOR_PD_NAME}_{monitor_idx}");
+        // Make sure that no other PD has the same name as this monitor
+        for pd in system.protection_domains.iter() {
+            if pd.name == monitor_name {
+                return Err(format!(
+                    "Error: User defined PD name clashes with monitor name '{}'",
+                    monitor_name,
+                ));
+            }
+        }
+
         let monitor_name_str = monitor_name.as_str();
         let monitor_tcb_obj_id = {
             spec_container
@@ -1109,9 +1121,16 @@ pub fn build_capdl_spec(
 
     if system.domain_schedule.is_some() {
         let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
-        // We need to convert from the milliseconds that the user defines in the
-        // sdf to the kernel scheduler ticks.
-        let ticks_in_ms = kernel_config.timer_freq.unwrap() / 1000;
+        // We want to convert from the milliseconds that the user defines in the
+        // sdf to the kernel scheduler ticks. If we are on x86, we won't necessarily
+        // have a static definition of the timer frequency. We will express the
+        // domain timeslices in ticks.
+        let ticks_in_ms = if kernel_config.timer_freq.is_some() {
+            kernel_config.timer_freq.unwrap() / MS_IN_S
+        } else {
+            1
+        };
+
         for sched_entry in system.domain_schedule.as_ref().unwrap().schedule.iter() {
             domain_schedule.push(DomainSchedEntry{
                 id: sched_entry.id,
