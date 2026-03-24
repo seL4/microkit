@@ -585,8 +585,8 @@ pub fn build_capdl_spec(
         let mon_pd_idx = mon_pd_idx_by_dom[pd_domain_id as usize];
 
         // Get this PD's monitor info
-        let mon_cnode_obj_id = *mon_cnode_id_by_dom.get(pd_domain_id as usize).unwrap();
-        let mon_fault_ep_obj_id = *mon_fault_ep_id_by_dom.get(pd_domain_id as usize).unwrap();
+        let mon_cnode_obj_id = mon_cnode_id_by_dom[pd_domain_id as usize];
+        let mon_fault_ep_obj_id = mon_fault_ep_id_by_dom[pd_domain_id as usize];
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
