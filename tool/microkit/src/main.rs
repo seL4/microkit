@@ -513,6 +513,8 @@ fn main() -> Result<(), String> {
         Arch::X86_64 => 1 << 12,
     };
 
+    let num_domain_schedules = json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?;
+
     let kernel_config = Config {
         arch,
         word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
@@ -544,7 +546,7 @@ fn main() -> Result<(), String> {
         invocations_labels,
         device_regions,
         normal_regions,
-        num_domain_schedules: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
+        num_domain_schedules,
     };
 
     if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
@@ -657,8 +659,17 @@ fn main() -> Result<(), String> {
         }
     }
 
-    // The monitor is just a special PD
-    system_elfs.push(monitor_elf);
+    // Create a copy of the monitor elf for every domain in the system
+    let mut num_domains = 1;
+    if system.domain_schedule.is_some() {
+        num_domains = system.domain_schedule.clone().unwrap().domain_ids.len();
+    }
+
+    let mut monitor_elfs = Vec::with_capacity(num_domains);
+
+    for _ in 0..num_domains {
+        monitor_elfs.push(monitor_elf.clone());
+    }
 
     let mut capdl_initialiser = CapDLInitialiser::new(capdl_initialiser_elf);
 
@@ -671,17 +682,18 @@ fn main() -> Result<(), String> {
         spec_need_refinement = false;
 
         // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
-        if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &system) {
+        if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system) {
             eprintln!("ERROR: {err}");
             std::process::exit(1);
         }
 
-        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
+        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,
             args.config,
             &spec_container,
             &system_elfs,
+            &monitor_elfs,
             &mut capdl_initialiser,
         );
 

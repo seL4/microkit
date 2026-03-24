@@ -8,6 +8,7 @@ use crate::{
     capdl::{initialiser::CapDLInitialiser, CapDLSpecContainer},
     elf::ElfFile,
     sel4::{Config, PageSize},
+    capdl::spec::{ElfIndex},
 };
 
 pub fn pack_spec_into_initial_task(
@@ -15,6 +16,7 @@ pub fn pack_spec_into_initial_task(
     build_config: &str,
     spec_container: &CapDLSpecContainer,
     system_elfs: &[ElfFile],
+    monitor_elfs: &[ElfFile],
     capdl_initialiser: &mut CapDLInitialiser,
 ) {
     let compress_frames = true;
@@ -24,9 +26,19 @@ pub fn pack_spec_into_initial_task(
         PageSize::Small.fixed_size_bits(sel4_config) as u8,
         |_| embed_frames,
         |d, buf| {
-            buf.copy_from_slice(
-                &system_elfs[d.elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
-            );
+            match d.elf_id {
+                ElfIndex::SystemElf(elf_id) => {
+                    buf.copy_from_slice(
+                        &system_elfs[elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
+                    );
+                }
+                ElfIndex::MonitorElf(elf_id) => {
+                    buf.copy_from_slice(
+                        &monitor_elfs[elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
+                    );
+                }
+            }
+            
             compress_frames
         },
     );

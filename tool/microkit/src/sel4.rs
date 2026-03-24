@@ -9,12 +9,6 @@ use serde::Deserialize;
 
 use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
 
-/// Default number of domain schedule entries. Note that this *does*
-/// not mean the maximum number of *domains*. If you change this constant,
-/// you will also need to change the config declared in build_sdk.py to reflect
-/// this as the max size is needed at kernel compile time.
-pub const DOMAIN_SCHEDULE_MAX_LENGTH: usize = 256;
-
 pub struct KernelPartialBootInfo {
     device_memory: DisjointMemoryRegion,
     normal_memory: DisjointMemoryRegion,
@@ -297,7 +291,7 @@ pub struct Config {
     /// The two remaining fields are only valid on ARM and RISC-V
     pub device_regions: Option<Vec<PlatformConfigRegion>>,
     pub normal_regions: Option<Vec<PlatformConfigRegion>>,
-    /// Flag to enable experimental domain scheduler support
+    /// Number of domain schedules the kernel is configure for
     pub num_domain_schedules: u64,
 }
 
