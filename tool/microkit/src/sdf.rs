@@ -2190,35 +2190,26 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         // Make sure we account for the shift when checking if the length of the
         // schedule is valid and if the start index is valid.
-        let mut dom_shift = 0;
-        if dom_sched.domain_idx_shift.is_some() {
-            dom_shift = dom_sched.domain_idx_shift.unwrap();
-        }
+        let dom_shift = dom_sched.domain_idx_shift.unwrap_or(0);
+        let dom_start_idx = dom_sched.domain_start_idx.unwrap_or(0);
+        let schedule_len = dom_sched.schedule.len() as u64;
 
-        if dom_sched.domain_start_idx.is_some() &&
-            dom_sched.domain_start_idx.unwrap() >=  dom_sched.schedule.len() as u64 {
+        // Checking start index against the length of the user defined schedule
+        if dom_start_idx >= schedule_len {
             return Err(format!(
-                "Error: Domain index of '{}' exceeds domain schedule length '{}'. NOTE: Domain start index starts at 0.",
+                "Error: Domain index of '{}' is out of bounds for domain schedule length '{}'. Note that the schedule is 0 indexed.",
                 dom_sched.domain_start_idx.unwrap(),
-                dom_sched.schedule.len(),
+                schedule_len
             ))
         }
 
-        if dom_sched.domain_start_idx.is_some() &&
-            dom_sched.domain_start_idx.unwrap() + dom_shift >= config.num_domain_schedules
-        {
+        // Make sure our schedule length, including the shift, is in bounds of
+        // the kernel configured max number of schedules.
+        if schedule_len + dom_shift >= config.num_domain_schedules {
             return Err(format!(
-                "Error: Setting domain start index to '{}' when max schedule length is '{}'.",
-                dom_sched.domain_start_idx.unwrap(),
-                dom_sched.schedule.len()
-            ))
-        }
-
-        let schedule_len: u64 = dom_sched.schedule.len() as u64;
-        if schedule_len + dom_shift > config.num_domain_schedules {
-            return Err(format!(
-                "Error: Schedule length '{}' exceeds max schedule length '{}'.",
+                "Error: Schedule length '{}' with shift of '{}' exceeds max schedule length '{}'.",
                 schedule_len,
+                dom_shift,
                 config.num_domain_schedules,
             ))
         }
