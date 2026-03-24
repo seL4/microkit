@@ -261,6 +261,24 @@ pub struct PlatformConfig {
     pub memory: Vec<PlatformConfigRegion>,
 }
 
+/// Deserialised from a generated 'object_sizes.json' file in the SDK
+/// Maps a kernel object to the size of the object, specified in bits.
+#[derive(Deserialize)]
+pub struct ObjectSizes {
+    pub tcb: u64,
+    pub endpoint: u64,
+    pub notification: u64,
+    pub reply: u64,
+    pub vspace: u64,
+    pub page_table: u64,
+    pub huge_page: u64,
+    pub large_page: u64,
+    pub small_page: u64,
+    pub asid_pool: u64,
+    // Optional as vCPU is not supported on RISC-V.
+    pub vcpu: Option<u64>,
+}
+
 pub struct Config {
     pub arch: Arch,
     pub word_size: u64,
@@ -283,9 +301,9 @@ pub struct Config {
     pub arm_smc: Option<bool>,
     /// RISC-V specific, what kind of virtual memory system (e.g Sv39)
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
-    /// x86 specific, user context size
-    pub x86_xsave_size: Option<usize>,
     pub invocations_labels: serde_json::Value,
+    /// Kernel object sizes, used for kernel boot emulation and untyped allocation.
+    pub object_sizes: Option<ObjectSizes>,
     /// The two remaining fields are only valid on ARM and RISC-V
     pub device_regions: Option<Vec<PlatformConfigRegion>>,
     pub normal_regions: Option<Vec<PlatformConfigRegion>>,
@@ -432,54 +450,23 @@ impl ObjectType {
     /// Gets the number of bits to represent the size of a object. The
     /// size depends on architecture as well as kernel configuration.
     pub fn fixed_size_bits(self, config: &Config) -> Option<u64> {
+        assert!(config.object_sizes.is_some());
+        let object_sizes = &config.object_sizes.as_ref().unwrap();
         match self {
-            ObjectType::Tcb => match config.arch {
-                Arch::Aarch64 => {
-                    if config.hypervisor && config.benchmark && config.num_cores > 1 {
-                        Some(12)
-                    } else {
-                        Some(11)
-                    }
-                }
-                Arch::Riscv64 => match config.fpu {
-                    true => Some(11),
-                    false => Some(10),
-                },
-                Arch::X86_64 => {
-                    // matches seL4/libsel4/sel4_arch_include/x86_64/sel4/sel4_arch/constants.h
-                    if config.x86_xsave_size.unwrap() >= 832 {
-                        Some(12)
-                    } else {
-                        Some(11)
-                    }
-                }
-            },
-            ObjectType::Endpoint => Some(4),
-            ObjectType::Notification => Some(6),
-            ObjectType::Reply => Some(5),
-            ObjectType::VSpace => match config.arch {
-                Arch::Aarch64 => match config.hypervisor {
-                    true => match config.arm_pa_size_bits.unwrap() {
-                        40 => Some(13),
-                        44 => Some(12),
-                        _ => {
-                            panic!("Unexpected ARM PA size bits when determining VSpace size bits")
-                        }
-                    },
-                    false => Some(12),
-                },
-                _ => Some(12),
-            },
-            ObjectType::PageTable => Some(12),
-            ObjectType::HugePage => Some(30),
-            ObjectType::LargePage => Some(21),
-            ObjectType::SmallPage => Some(12),
+            ObjectType::Tcb => Some(object_sizes.tcb),
+            ObjectType::Endpoint => Some(object_sizes.endpoint),
+            ObjectType::Notification => Some(object_sizes.notification),
+            ObjectType::Reply => Some(object_sizes.reply),
+            ObjectType::VSpace => Some(object_sizes.vspace),
+            ObjectType::PageTable => Some(object_sizes.page_table),
+            ObjectType::HugePage => Some(object_sizes.huge_page),
+            ObjectType::LargePage => Some(object_sizes.large_page),
+            ObjectType::SmallPage => Some(object_sizes.small_page),
             ObjectType::Vcpu => match config.arch {
-                Arch::Aarch64 => Some(12),
-                Arch::X86_64 => Some(14),
+                Arch::Aarch64 | Arch::X86_64 => Some(object_sizes.vcpu.unwrap()),
                 _ => panic!("Unexpected architecture asking for vCPU size bits"),
             },
-            ObjectType::AsidPool => Some(12),
+            ObjectType::AsidPool => Some(object_sizes.asid_pool),
             _ => None,
         }
     }

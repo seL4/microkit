@@ -23,6 +23,7 @@ from tarfile import open as tar_open, TarInfo
 import platform as host_platform
 from enum import IntEnum
 import json
+import subprocess
 
 from typing import Any, Dict, Union, List, Tuple, Optional
 
@@ -568,6 +569,7 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
 def build_sel4(
     sel4_dir: Path,
+    tool_dir: Path,
     sdk_dir: Path,
     build_dir: Path,
     board: BoardInfo,
@@ -689,7 +691,34 @@ def build_sel4(
         shutil.copy(platform_gen, dest)
         dest.chmod(0o744)
 
-    object_sizes_header = 
+    # Use the preprocessor to convert the seL4 object size constants to readable JSON
+    # for the tool.
+    object_sizes_header = tool_dir / "object_sizes.h"
+    dest = sdk_dir / "board" / board.name / config.name / "object_sizes.json"
+    preprocessor = "clang" if (llvm) else f"{target_triple}-cpp"
+    preprocess_cmd = [
+        preprocessor,
+        "-E",
+        "-P",
+        f"-I{include_dir}",
+        object_sizes_header,
+    ]
+    r = subprocess.run(preprocess_cmd, capture_output=True)
+    if r.returncode != 0:
+        raise Exception(f"Failed creating object_sizes.json: cmd={preprocess_cmd}")
+
+    preprocessor_out = r.stdout.decode("utf-8")
+    object_sizes = []
+    for l in preprocessor_out.split("\n"):
+        # Preprocessor emits commented lines etc that we want to ignore
+        if ": " in l:
+            assert len(l.split(": ")) == 2
+            obj_name, size = l.split(": ")
+            object_sizes.append((obj_name, int(size)))
+
+    with open(dest, "w") as out_file:
+        json.dump(dict(object_sizes), out_file)
+        dest.chmod(0o744)
 
 
 def build_elf_component(
@@ -907,6 +936,7 @@ def main() -> None:
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
 
+    tool_dir = Path("tool/microkit")
     sdk_dir = Path("release") / f"{NAME}-sdk-{version}"
     tar_file = Path("release") / f"{NAME}-sdk-{version}.tar.gz"
     source_tar_file = Path("release") / f"{NAME}-source-{version}.tar.gz"
@@ -960,7 +990,7 @@ def main() -> None:
         for (board, configs) in build_goals:
             for config in configs:
                 if not args.skip_sel4:
-                    build_sel4(sel4_dir, sdk_dir, build_dir, board, config, args.llvm)
+                    build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config, args.llvm)
                 loader_printing = 1 if config.name == "debug" else 0
                 loader_defines = []
                 if not board.arch.is_x86():

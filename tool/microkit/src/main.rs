@@ -472,6 +472,24 @@ fn main() -> Result<(), String> {
         }
     };
 
+    let object_sizes = {
+        let object_sizes_path = sdk_dir
+            .join("board")
+            .join(args.board)
+            .join(args.config)
+            .join("object_sizes.json");
+
+        if !object_sizes_path.exists() {
+            eprintln!(
+                "Error: object sizes file '{}' does not exist",
+                object_sizes_path.display()
+            );
+            std::process::exit(1);
+        }
+
+        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
+    };
+
     let hypervisor = match arch {
         Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
         Arch::X86_64 => json_str_as_bool(&kernel_config_json, "VTX")?,
@@ -494,11 +512,6 @@ fn main() -> Result<(), String> {
 
     let arm_smc = match arch {
         Arch::Aarch64 => Some(json_str_as_bool(&kernel_config_json, "ALLOW_SMC_CALLS")?),
-        _ => None,
-    };
-
-    let x86_xsave_size = match arch {
-        Arch::X86_64 => Some(json_str_as_u64(&kernel_config_json, "XSAVE_SIZE")? as usize),
         _ => None,
     };
 
@@ -534,10 +547,10 @@ fn main() -> Result<(), String> {
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
-        x86_xsave_size,
         invocations_labels,
         device_regions,
         normal_regions,
+        object_sizes,
     };
 
     if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
