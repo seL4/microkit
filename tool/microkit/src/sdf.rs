@@ -21,8 +21,8 @@ use crate::sel4::{
 };
 use crate::util::{ranges_overlap, str_to_bool};
 use crate::MAX_PDS;
-use std::collections::HashSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
@@ -608,16 +608,16 @@ impl ProtectionDomain {
             (Some(domain_schedule), Ok(domain_name)) => {
                 let domain_id_get = domain_schedule.domain_ids.get(domain_name);
                 if domain_id_get.is_none() {
-                    return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule", name, domain_name));
+                    return Err(format!("Protection domain {name} specifies a domain {domain_name} that is not in the domain schedule"));
                 }
                 domain_id = Some(*domain_id_get.unwrap());
             }
             (Some(_), _) => {
-                return Err(format!("System specifies a domain schedule but protection domain {} does not specify a domain", name))
+                return Err(format!("System specifies a domain schedule but protection domain {name} does not specify a domain"))
             }
             (_, Ok(domain)) => {
                 if config.num_domain_schedules > 1 {
-                    return Err(format!("Protection domain {} specifies a domain {} but system does not specify a domain schedule", name, domain));
+                    return Err(format!("Protection domain {name} specifies a domain {domain} but system does not specify a domain schedule"));
                 } else {
                     return Err("Assigning PDs to domains is only supported built with a config that supports domains".to_string());
                 }
@@ -1029,7 +1029,8 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
-                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true, domain_schedule)?;
+                    let child_pd =
+                        ProtectionDomain::from_xml(config, xml_sdf, &child, true, domain_schedule)?;
 
                     if let Some(setvar_id) = &child_pd.setvar_id {
                         let setvar = SysSetVar {
@@ -1127,9 +1128,7 @@ impl DomainSchedule {
         node: &roxmltree::Node,
     ) -> Result<DomainSchedule, String> {
         if config.num_domains <= 1 {
-            return Err(format!(
-                "Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain",
-            ));
+            return Err("Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain".to_string());
         }
 
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
@@ -1188,34 +1187,28 @@ impl DomainSchedule {
                         return Err(format!(
                             "Error: Duplicate setting of domain start index, already set to '{}'",
                             domain_start_idx.unwrap()
-                        ))
+                        ));
                     }
                     check_attributes(xml_sdf, &child, &["index"])?;
                     let start_index = checked_lookup(xml_sdf, &child, "index")?.parse::<u64>();
                     if start_index.is_err() {
-                        return Err(format!(
-                            "Error: invalid domain start index",
-                        ))
+                        return Err("Error: invalid domain start index".to_string());
                     }
                     domain_start_idx = Some(start_index.unwrap());
-
                 }
                 "domain_idx_shift" => {
                     if domain_idx_shift.is_some() {
                         return Err(format!(
                             "Error: Duplicate setting of domain index shift, already set to '{}'",
                             domain_idx_shift.unwrap()
-                        ))
+                        ));
                     }
                     check_attributes(xml_sdf, &child, &["shift"])?;
                     let index_shift = checked_lookup(xml_sdf, &child, "shift")?.parse::<u64>();
                     if index_shift.is_err() {
-                        return Err(format!(
-                            "Error: invalid domain index shift",
-                        ))
+                        return Err("Error: invalid domain index shift".to_string());
                     }
                     domain_idx_shift = Some(index_shift.unwrap());
-
                 }
                 _ => {
                     return Err(format!(
@@ -1224,7 +1217,6 @@ impl DomainSchedule {
                         loc_string(xml_sdf, pos)
                     ));
                 }
-
             }
         }
 
@@ -1808,9 +1800,13 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, &domain_schedule)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                config,
+                &xml_sdf,
+                &child,
+                false,
+                &domain_schedule,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
             "virtual_machine" => {
@@ -1819,7 +1815,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     "Error: virtual machine must be a child of a protection domain: {}",
                     loc_string(&xml_sdf, pos)
                 ));
-            },
+            }
             "domain_schedule" => {
                 if config.num_domain_schedules > 1 {
                     if let Some(domain_schedule_node) = system
@@ -1827,7 +1823,11 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                         .filter(|&child| child.is_element())
                         .find(|&child| child.tag_name().name() == "domain_schedule")
                     {
-                        domain_schedule = Some(DomainSchedule::from_xml(&xml_sdf, &config, &domain_schedule_node)?);
+                        domain_schedule = Some(DomainSchedule::from_xml(
+                            &xml_sdf,
+                            config,
+                            &domain_schedule_node,
+                        )?);
                     }
                 }
             }
@@ -2200,7 +2200,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: Domain index of '{}' is out of bounds for domain schedule length '{}'. Note that the schedule is 0 indexed.",
                 dom_sched.domain_start_idx.unwrap(),
                 schedule_len
-            ))
+            ));
         }
 
         // Make sure our schedule length, including the shift, is in bounds of
@@ -2208,10 +2208,8 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         if schedule_len + dom_shift >= config.num_domain_schedules {
             return Err(format!(
                 "Error: Schedule length '{}' with shift of '{}' exceeds max schedule length '{}'.",
-                schedule_len,
-                dom_shift,
-                config.num_domain_schedules,
-            ))
+                schedule_len, dom_shift, config.num_domain_schedules,
+            ));
         }
     }
 

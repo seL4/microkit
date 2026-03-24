@@ -687,12 +687,15 @@ fn main() -> Result<(), String> {
         spec_need_refinement = false;
 
         // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
-        if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system) {
+        if let Err(err) =
+            patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)
+        {
             eprintln!("ERROR: {err}");
             std::process::exit(1);
         }
 
-        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)?;
+        let mut spec_container =
+            build_capdl_spec(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,
             args.config,

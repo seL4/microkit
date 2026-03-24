@@ -11,8 +11,8 @@ use std::{
 };
 
 use sel4_capdl_initializer_types::{
-    object, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec,
-    Word, DomainSchedEntry,
+    object, CapTableEntry, DomainSchedEntry, Fill, FillEntry, FillEntryContent, NamedObject,
+    Object, ObjectId, Spec, Word,
 };
 
 use crate::{
@@ -410,8 +410,7 @@ pub fn build_capdl_spec(
         for pd in system.protection_domains.iter() {
             if pd.name == monitor_name {
                 return Err(format!(
-                    "Error: User defined PD name clashes with monitor name '{}'",
-                    monitor_name,
+                    "Error: User defined PD name clashes with monitor name '{monitor_name}'",
                 ));
             }
         }
@@ -432,7 +431,8 @@ pub fn build_capdl_spec(
         // Create monitor fault endpoint object + cap
         let mon_fault_ep_obj_id =
             capdl_util_make_endpoint_obj(&mut spec_container, monitor_name_str, true);
-        let mon_fault_ep_cap = capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, 0);
+        let mon_fault_ep_cap =
+            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, 0);
 
         mon_fault_ep_id_by_dom.push(mon_fault_ep_obj_id);
 
@@ -593,7 +593,13 @@ pub fn build_capdl_spec(
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
         let pd_tcb_obj_id = spec_container
-            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, ElfIndex::SystemElf(pd_global_idx), elf_obj)
+            .add_elf_to_spec(
+                kernel_config,
+                &pd.name,
+                pd.cpu,
+                ElfIndex::SystemElf(pd_global_idx),
+                elf_obj,
+            )
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
@@ -1132,21 +1138,25 @@ pub fn build_capdl_spec(
         };
 
         for sched_entry in system.domain_schedule.as_ref().unwrap().schedule.iter() {
-            domain_schedule.push(DomainSchedEntry{
+            domain_schedule.push(DomainSchedEntry {
                 id: sched_entry.id,
                 time: sched_entry.length * ticks_in_ms,
             });
         }
 
         spec_container.spec.domain_schedule = Some(domain_schedule);
-        spec_container.spec.domain_set_start = system.domain_schedule
-                                                .as_ref()
-                                                .unwrap()
-                                                .domain_start_idx.map(|idx| Word(idx));
-        spec_container.spec.domain_idx_shift = system.domain_schedule
-                                        .as_ref()
-                                        .unwrap()
-                                        .domain_idx_shift.map(|shift| Word(shift));
+        spec_container.spec.domain_set_start = system
+            .domain_schedule
+            .as_ref()
+            .unwrap()
+            .domain_start_idx
+            .map(Word);
+        spec_container.spec.domain_idx_shift = system
+            .domain_schedule
+            .as_ref()
+            .unwrap()
+            .domain_idx_shift
+            .map(Word);
     }
 
     // *********************************
