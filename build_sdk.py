@@ -164,6 +164,17 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="stm32mp2",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a35",
+        loader_link_address=0x88000000,
+        smp_cores=2,
+        kernel_options={
+            "KernelPlatform": "stm32mp2",
+            "KernelARMPlatform": "stm32mp257f-ev1",
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="tqma8xqp1gb",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
