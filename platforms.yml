@@ -20,6 +20,12 @@ platforms:
   - name: rock3b
     cmake_plat: rk3568
     since: dev
+  - name: x86_64_generic
+    cmake_plat: pc99
+    since: 2.1.0
+  - name: x86_64_generic_vtx
+    cmake_plat: pc99
+    since: 2.1.0
   - name: serengeti
     cmake_plat: cheshire
     since: 2.1.0
