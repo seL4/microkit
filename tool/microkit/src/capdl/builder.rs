@@ -107,7 +107,7 @@ pub const SLOT_SIZE: u64 = 1 << SLOT_BITS;
 pub type FrameFill = Fill<ElfContent>;
 pub type CapDLNamedObject = NamedObject<FrameFill>;
 
-const MS_IN_S: u64 = 1000;
+const US_IN_S: u64 = 1000000;
 
 pub struct ExpectedAllocation {
     pub ut_idx: usize,
@@ -1127,12 +1127,12 @@ pub fn build_capdl_spec(
 
     if system.domain_schedule.is_some() {
         let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
-        // We want to convert from the milliseconds that the user defines in the
+        // We want to convert from the microseconds that the user defines in the
         // sdf to the kernel scheduler ticks. If we are on x86, we won't necessarily
         // have a static definition of the timer frequency. We will express the
         // domain timeslices in ticks.
         let ticks_in_ms = if kernel_config.timer_freq.is_some() {
-            kernel_config.timer_freq.unwrap() / MS_IN_S
+            kernel_config.timer_freq.unwrap() / US_IN_S
         } else {
             1
         };
