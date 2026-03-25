@@ -9,7 +9,7 @@ Building the Microkit SDK is supported on Linux (x86_64/AArch64) and macOS (Appl
 
 This section attempts to list the packages or external development tools which are required during development.
 
-* Rust and Cargo
+* Rust and Cargo; minimum version 1.94.0
 * git
 * make
 * python3.12
