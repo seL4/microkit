@@ -99,7 +99,7 @@
             rustTool
             pandoc
             (texlive.combine {
-              inherit (texlive) scheme-medium titlesec enumitem sfmath roboto fontaxes isodate substr tcolorbox environ pdfcol;
+              inherit (texlive) scheme-small fancyvrb parskip titlesec enumitem sfmath roboto fontaxes isodate substr tcolorbox environ pdfcol;
             })
             cmake
             ninja
