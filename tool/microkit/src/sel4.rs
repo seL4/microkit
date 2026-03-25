@@ -326,14 +326,6 @@ impl Config {
         }
     }
 
-    pub fn iommu_top(&self) -> u64 {
-        match self.arch {
-            Arch::Aarch64 => unreachable!("Internal bug: Aarch64 doesn't support IOMMU"),
-            Arch::Riscv64 => unreachable!("Internal bug: Risv64 doesn't support IOMMU"),
-            Arch::X86_64 => 1 << (12 + 9 + 9 + 9),
-        }
-    }
-
     pub fn virtual_base(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {

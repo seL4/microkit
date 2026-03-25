@@ -12,10 +12,12 @@ members = [
 ]
 
 [workspace.dependencies.sel4-capdl-initializer]
-path = "/home/cheng/system/rust-sel4/crates/sel4-capdl-initializer"
+git = "https://github.com/au-ts/rust-sel4"
+branch = "cheng/iommu_support"
 
 [workspace.dependencies.sel4-capdl-initializer-types]
-path = "/home/cheng/system/rust-sel4/crates/sel4-capdl-initializer/types"
+git = "https://github.com/au-ts/rust-sel4"
+branch = "cheng/iommu_support"
 
 [profile.release.package.microkit-tool]
 strip = true

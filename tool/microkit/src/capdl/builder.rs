@@ -392,9 +392,12 @@ fn map_io_memory_region(
     frames: &[ObjectId],
 ) {
     let mut cur_vaddr = map.ioaddr;
+    let read = map.perms & SysMapPerms::Read as u8 != 0;
+    let write = map.perms & SysMapPerms::Write as u8 != 0;
+
     for frame_obj_id in frames.iter() {
-        // Make a cap for this frame. The perms should not matter in IOMMU
-        let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, true, true, false, false);
+        // Make a cap for this frame.
+        let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, false, false);
         // Map it into this PD IOSpace.
         map_io_page(
             spec_container,
@@ -707,7 +710,7 @@ pub fn build_capdl_spec(
             for iomap in &pd.iomaps {
                 let iospace_id =
                     match pci_to_iospace.get(&(iomap.pci_bus, iomap.pci_dev, iomap.dev_func)) {
-                        Some(iospace_id) => iospace_id.clone(),
+                        Some(iospace_id) => *iospace_id,
                         None => {
                             let iospace_id = create_iospace(
                                 &mut spec_container,
@@ -736,8 +739,8 @@ pub fn build_capdl_spec(
                     frames,
                 );
             }
-        } else if pd.iomaps.len() != 0 {
-            return Err(format!("ERROR: System description file contains iomap elements despite IOMMU is not supported!"));
+        } else if !pd.iomaps.is_empty() {
+            return Err("ERROR: System description file contains iomap elements despite IOMMU is not supported!".to_string());
         }
 
         // Step 3-5 Create Scheduling Context

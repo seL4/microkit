@@ -631,7 +631,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "iommu_out_of_bound.system",
-            "Error: ioaddr (0x8000000000) must be less than 0x8000000000 on element 'iomap':",
+            "Error: iomap for 'region' has address 0x8000001000 which exceeds the upper limits of 549755813887 in protection domain 'test' @ iommu_out_of_bound.system:13:9",
         )
     }
 }
