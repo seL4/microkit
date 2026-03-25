@@ -16,7 +16,7 @@ on:
     branches: [ "main" ]
 
 env:
-  SEL4_VERSION: efd9426e1771b6cdbcc7e58d3fd58d3df77c337e
+  SEL4_VERSION: 27a52ddd4cf592b1996ba50074c85e21d832398a
 
 # To reduce the load we cancel any older runs of this workflow for the current
 # PR. For deployment to the main branch, the workflow will run on each push,
@@ -43,10 +43,10 @@ jobs:
             path: seL4
       - name: Install SDK dependencies
         run: |
-          rustup install 1.90.0
-          rustup default 1.90.0
+          rustup install 1.94.0
+          rustup default 1.94.0
           rustup target add x86_64-unknown-linux-musl
-          rustup component add rust-src --toolchain 1.90.0-x86_64-unknown-linux-gnu
+          rustup component add rust-src --toolchain 1.94.0-x86_64-unknown-linux-gnu
           sudo apt update
           sudo apt install software-properties-common
           sudo add-apt-repository ppa:deadsnakes/ppa

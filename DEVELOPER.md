@@ -120,7 +120,7 @@ It should be noted that while Microkit uses mainline seL4, it is fairly tied to 
 specific version used.
 
 For this version of Microkit please use the following commit:
-`efd9426e1771b6cdbcc7e58d3fd58d3df77c337e`.
+`27a52ddd4cf592b1996ba50074c85e21d832398a`.
 
 ## Building the SDK
 
