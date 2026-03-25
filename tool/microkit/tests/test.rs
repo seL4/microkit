@@ -691,6 +691,29 @@ mod virtual_machine {
             "Error: invalid memory region name 'mr1' on 'map' @",
         )
     }
+
+    #[test]
+    fn test_x86_ppc_invalid_1() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "vm_x86_ppc_invalid_1.system",
+            "Error: It is not possible to PPC to PD 'VMM' with a bound vCPU from PD 'some_service' on x86_64",
+        )
+    }
+
+    #[test]
+    fn test_x86_ppc_invalid_2() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "vm_x86_ppc_invalid_2.system",
+            "Error: It is not possible to PPC to PD 'VMM' with a bound vCPU from PD 'some_service' on x86_64",
+        )
+    }
+
+    #[test]
+    fn test_x86_ppc_valid() {
+        check_success(&DEFAULT_X86_64_KERNEL_CONFIG, "vm_x86_ppc_valid.system")
+    }
 }
 
 #[cfg(test)]

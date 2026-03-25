@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW (ABN 57 195 873 179)
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="hpet_regs" size="0x1000" phys_addr="0xfed00000" />
+    <memory_region name="guest_ram" size="0x10_000_000" page_size="0x200_000" />
+
+    <protection_domain name="VMM" priority="0" stack_size="0x2000">
+        <program_image path="vmm_x86_64.elf" />
+        <map mr="guest_ram" vaddr="0x80000000" perms="rw" setvar_vaddr="guest_ram_vaddr" setvar_size="guest_ram_size" />
+
+        <virtual_machine name="linux">
+            <vcpu id="0" />
+            <map mr="guest_ram" vaddr="0x0" perms="rwx" cached="true" />
+        </virtual_machine>
+    </protection_domain>
+
+    <protection_domain name="timer_driver" priority="254" passive="true">
+        <program_image path="timer_driver.elf" />
+        <map mr="hpet_regs" vaddr="0x50000000" perms="rw" cached="false" />
+        <irq pin="2" vector="107" id="0" ioapic="0" trigger="edge" />
+    </protection_domain>
+
+    <channel>
+        <end pd="timer_driver" id="1" />
+        <end pd="VMM" id="11" notify="false" pp="true" />
+    </channel>
+</system>
