@@ -3,10 +3,7 @@ use std::ops::Range;
 use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
 
 use crate::{
-    capdl::{
-        util::capdl_util_make_cte,
-        CapDLNamedObject, CapDLSpecContainer,
-    },
+    capdl::{util::capdl_util_make_cte, CapDLNamedObject, CapDLSpecContainer},
     sel4::Config,
 };
 
@@ -15,9 +12,11 @@ use crate::{
 // https://github.com/seL4/seL4/blob/c406015c389decc4559fd44cb69604ddd24a0ddb/src/plat/pc99/machine/intel-vtd.c#L498
 const VTD_PML4_LEVEL: u8 = 0;
 const VTD_PAGE_TABLE_LEVEL: u8 = 4;
+const VTD_SEL4_DEFAULT_PT_LEVEL: u8 = 3;
 const VTD_BITS_PER_LEVEL: u8 = 9;
 const VTD_ENTRY_BITS: u8 = 12;
-// pub(crate) const VTD_WHOLE_BITS: u8 = VTD_BITS_PER_LEVEL * VTD_PAGE_TABLE_LEVEL + VTD_ENTRY_BITS;
+pub(crate) const VTD_MAX_ADDR: u64 =
+    (1 << (VTD_BITS_PER_LEVEL * VTD_SEL4_DEFAULT_PT_LEVEL + VTD_ENTRY_BITS)) - 1;
 
 pub fn create_iospace(
     spec_container: &mut CapDLSpecContainer,
@@ -50,7 +49,8 @@ pub fn create_iospace(
             pci_bus,
             pci_device,
             dev_func,
-            domain_id: u16::try_from(pd_id).expect(&format!("The pd id {} is too large!", pd_id))
+            domain_id: u16::try_from(pd_id)
+                .unwrap_or_else(|_| panic!("The pd id {} is too large!", pd_id))
                 + PD_TO_DOMAIN_ID_OFFSET,
             slots: vec![capdl_util_make_cte(
                 0,
@@ -94,7 +94,6 @@ fn get_iopt_level_name(sel4_config: &Config, level: u8) -> &str {
     }
 }
 
-// Just this one time pinky promise
 #[allow(clippy::too_many_arguments)]
 fn map_intermediary_level_helper(
     spec_container: &mut CapDLSpecContainer,
@@ -131,7 +130,7 @@ fn map_intermediary_level_helper(
     let next_level_coverage = get_io_pt_level_coverage(sel4_config, cur_level + 1, ioaddr);
     let next_level_inner_obj = object::IOPageTable {
         is_root: false, // IOSpace is always created seperately
-        level: Some(cur_level as u8 + 1),
+        level: Some(cur_level + 1),
         slots: [].to_vec(),
     };
     // We create name with this PT level coverage so that every object names are unique
@@ -251,25 +250,33 @@ fn get_io_pt_level_index(sel4_config: &Config, level: u8, ioaddr: u64) -> usize 
     match sel4_config.arch {
         crate::sel4::Arch::X86_64 => {
             assert!(level < VTD_PAGE_TABLE_LEVEL);
-            
-            let shift = VTD_BITS_PER_LEVEL * (VTD_PAGE_TABLE_LEVEL - level) - VTD_BITS_PER_LEVEL + VTD_ENTRY_BITS;
+
+            let shift = VTD_BITS_PER_LEVEL * (VTD_PAGE_TABLE_LEVEL - level) - VTD_BITS_PER_LEVEL
+                + VTD_ENTRY_BITS;
 
             ((ioaddr >> shift) & ((1u64 << VTD_BITS_PER_LEVEL) - 1)) as usize
-        },
-        crate::sel4::Arch::Aarch64 => unreachable!("Internal bug: Aarch64 is not supported for IOMMU"),
-        crate::sel4::Arch::Riscv64 => unreachable!("Internal bug: Riscv64 is not supported for IOMMU"),
+        }
+        crate::sel4::Arch::Aarch64 => {
+            unreachable!("Internal bug: Aarch64 is not supported for IOMMU")
+        }
+        crate::sel4::Arch::Riscv64 => {
+            unreachable!("Internal bug: Riscv64 is not supported for IOMMU")
+        }
     }
 }
 
 fn get_io_pt_level_coverage(sel4_config: &Config, level: u8, ioaddr: u64) -> Range<u64> {
     match sel4_config.arch {
         crate::sel4::Arch::X86_64 => {
-            let bits_from_higher_lvls: u64 = (VTD_PAGE_TABLE_LEVEL as u64 - (level as u64)) * VTD_BITS_PER_LEVEL as u64;
+            let bits_from_higher_lvls: u64 =
+                (VTD_PAGE_TABLE_LEVEL as u64 - (level as u64)) * VTD_BITS_PER_LEVEL as u64;
             let coverage_bits = VTD_BITS_PER_LEVEL as u64 + bits_from_higher_lvls;
             let low = (ioaddr >> coverage_bits) << coverage_bits;
             let high = ioaddr | ((1 << coverage_bits) - 1);
             low..high
-        },
-        _ => unreachable!("get_io_pt_level_coverage(): Internal bug: IOMMU is only supported for x86!"),
+        }
+        _ => unreachable!(
+            "get_io_pt_level_coverage(): Internal bug: IOMMU is only supported for x86!"
+        ),
     }
 }

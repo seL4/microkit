@@ -7,7 +7,7 @@
 pub mod allocation;
 pub mod builder;
 pub mod initialiser;
-mod iomem;
+pub mod iomem;
 mod irq;
 mod memory;
 pub mod packaging;

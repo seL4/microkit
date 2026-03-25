@@ -68,7 +68,7 @@ DEFAULT_KERNEL_OPTIONS_X86_64 = {
     "KernelPlatform": "pc99",
     "KernelX86MicroArch": "generic",
     # See https://github.com/seL4/microkit/issues/418 for details.
-    "KernelIOMMU": False,
+    "KernelIOMMU": True,
 } | DEFAULT_KERNEL_OPTIONS
 
 

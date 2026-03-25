@@ -173,6 +173,7 @@ pub struct IOMemMap {
     pub pci_dev: u8,
     pub dev_func: u8,
     pub ioaddr: u64,
+    pub perms: u8,
     pub text_pos: Option<roxmltree::TextPos>,
 }
 
@@ -235,6 +236,7 @@ pub enum SysSetVarKind {
     Id { id: u64 },
     X86IoPortAddr { address: u64 },
     PrefillSize { mr: String },
+    IoAddr { address: u64 },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -445,32 +447,56 @@ impl IOMemMap {
         config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
+        allow_setvar: bool,
     ) -> Result<IOMemMap, String> {
         const PCI_DEV_MAX: u8 = 0x1F;
         const DEV_FUNC_MAX: u8 = 0b111;
         if config.arch != Arch::X86_64 {
             return Err(value_error(
                 xml_sdf,
-                &node,
+                node,
                 "IOMMU isn't supported on ARM and RISC-V".to_string(),
             ));
         }
 
-        check_attributes(xml_sdf, &node, &["mr", "pcidev", "addr"])?;
+        let mut attrs = vec!["mr", "pcidev", "addr"];
+        if allow_setvar {
+            attrs.push("setvar_vaddr");
+            attrs.push("setvar_size");
+        }
+
+        check_attributes(xml_sdf, node, &attrs)?;
 
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
         let pcidev_str = checked_lookup(xml_sdf, node, "pcidev")?.to_string();
         let ioaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "addr")?, node)?;
 
-        let max_ioaddr = config.iommu_top();
-
-        if ioaddr >= max_ioaddr {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                format!("ioaddr (0x{ioaddr:x}) must be less than 0x{max_ioaddr:x}"),
-            ));
-        }
+        let perms = if let Some(xml_perms) = node.attribute("perms") {
+            match SysMapPerms::from_str(xml_perms) {
+                Ok(parsed_perms) => {
+                    if parsed_perms != SysMapPerms::Read as u8 | SysMapPerms::Write as u8
+                        || parsed_perms != SysMapPerms::Read as u8
+                    {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "perms for io mapped memory can only be 'r' or 'rw'".to_string(),
+                        ));
+                    }
+                    parsed_perms
+                }
+                Err(()) => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "perms for io mapped memory can only be 'r' or 'rw'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            // Default to read-write
+            SysMapPerms::Read as u8 | SysMapPerms::Write as u8
+        };
 
         let pci_parts: Vec<i64> = pcidev_str
             .split([':', '.'])
@@ -494,7 +520,7 @@ impl IOMemMap {
         if pci_parts[0] != pci_bus as i64 {
             return Err(value_error(
                 xml_sdf,
-                &node,
+                node,
                 "Invalid value for PCI bus".to_string(),
             ));
         }
@@ -504,7 +530,7 @@ impl IOMemMap {
         if pci_parts[1] != pci_dev as i64 || pci_dev > PCI_DEV_MAX {
             return Err(value_error(
                 xml_sdf,
-                &node,
+                node,
                 "Invalid value for PCI Device".to_string(),
             ));
         }
@@ -514,7 +540,7 @@ impl IOMemMap {
         if pci_parts[2] != dev_func as i64 || dev_func > DEV_FUNC_MAX {
             return Err(value_error(
                 xml_sdf,
-                &node,
+                node,
                 "Invalid value for PCI Device Function".to_string(),
             ));
         }
@@ -525,6 +551,7 @@ impl IOMemMap {
             pci_dev: u8::try_from(pci_parts[1]).unwrap(),
             dev_func: u8::try_from(pci_parts[2]).unwrap(),
             ioaddr,
+            perms,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
@@ -1177,7 +1204,27 @@ impl ProtectionDomain {
                     }
                 }
                 "iomap" => {
-                    let iomap = IOMemMap::from_xml(config, xml_sdf, &child)?;
+                    let iomap = IOMemMap::from_xml(config, xml_sdf, &child, true)?;
+
+                    if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
+                        let setvar = SysSetVar {
+                            symbol: setvar_vaddr.to_string(),
+                            kind: SysSetVarKind::IoAddr {
+                                address: iomap.ioaddr,
+                            },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
+
+                    if let Some(setvar_size) = child.attribute("setvar_size") {
+                        let setvar = SysSetVar {
+                            symbol: setvar_size.to_string(),
+                            kind: SysSetVarKind::Size {
+                                mr: iomap.name.clone(),
+                            },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
 
                     iomaps.push(iomap);
                 }
@@ -1720,14 +1767,27 @@ fn io_check_maps(
                     ));
                 }
 
-                // Overlap check
+                // Addr and Overlap check
                 let map_start = io_map.ioaddr;
                 let map_end = map_start + mr.size;
+                if map_end > crate::capdl::iomem::VTD_MAX_ADDR {
+                    return Err(
+                        format!(
+                            "Error: iomap for '{}' has address 0x{:x} which exceeds the upper limits of {} in {} '{}' @ {}",
+                            io_map.name,
+                            map_end,
+                            crate::capdl::iomem::VTD_MAX_ADDR,
+                            e.kind(),
+                            e.name(),
+                            loc_string(xml_sdf, pos)
+                        )
+                    );
+                }
                 for (name, start, end) in &checked_maps {
                     if !(map_start >= *end || map_end <= *start) {
                         return Err(
                             format!(
-                                "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
+                                "Error: map for '{}' has io address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
                                 io_map.name,
                                 map_start,
                                 map_end,
@@ -2247,7 +2307,7 @@ pub fn parse(
     // Ensure that all maps are correct
     for pd in &pds {
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
-        if pd.iomaps.len() != 0 {
+        if !pd.iomaps.is_empty() {
             io_check_maps(&xml_sdf, &mrs, pd, &pd.iomaps)?
         }
         if let Some(vm) = &pd.virtual_machine {
@@ -2286,8 +2346,10 @@ pub fn parse(
 
     // Check that all MRs are used
     let mut all_maps = vec![];
+    let mut all_iomaps = vec![];
     for pd in &pds {
         all_maps.extend(&pd.maps);
+        all_iomaps.extend(&pd.iomaps);
         if let Some(vm) = &pd.virtual_machine {
             all_maps.extend(&vm.maps);
         }
@@ -2300,7 +2362,12 @@ pub fn parse(
                 break;
             }
         }
-
+        for iomap in &all_iomaps {
+            if iomap.name == mr.name {
+                found = true;
+                break;
+            }
+        }
         if !found {
             println!("WARNING: unused memory region '{}'", mr.name);
         }
@@ -2317,6 +2384,13 @@ pub fn parse(
         let mr_largest_page_size = mr.optimal_page_size(config);
         if mr.page_size_bytes() == mr_largest_page_size {
             continue;
+        }
+
+        // Check if this MR is mapped as io memory
+        for iomap in &all_iomaps {
+            if iomap.name == mr.name {
+                continue;
+            }
         }
 
         // Get all the addresses that this MR will be mapped into
