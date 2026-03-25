@@ -493,6 +493,7 @@ def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
         config = copy.deepcopy(config)
         config.name = f"domain-{config.name}"
         config.kernel_options |= {
+            "KernelTimerFrequency": True,
             "KernelNumDomains": 32,
             "KernelNumDomainSchedules": 64,
         }
