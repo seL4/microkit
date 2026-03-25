@@ -700,19 +700,16 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if pd.parent.is_none() {
-            let badge: u64 = mon_pd_idx as u64 + 1;
-            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, badge)
-        } else {
+        let pd_fault_ep_cap = if let Some(parent) = pd.parent {
             // @kwinter: Should we enforce domain boundaries here?
-            assert!(pd_global_idx > pd.parent.unwrap());
+            assert!(pd_global_idx > parent);
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_ep_obj_id = &pd_id_to_ep_id[&pd.parent.unwrap()];
+            let parent_ep_obj_id = &pd_id_to_ep_id[&parent];
             let fault_ep_cap =
                 capdl_util_make_endpoint_cap(*parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = &pd_id_to_cspace_id[&pd.parent.unwrap()];
+            let parent_cspace_obj_id = &pd_id_to_cspace_id[&parent];
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 *parent_cspace_obj_id,
@@ -721,7 +718,11 @@ pub fn build_capdl_spec(
             );
 
             fault_ep_cap
+        } else {
+            let badge: u64 = mon_pd_idx as u64 + 1;
+            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, badge)
         };
+
         caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
             PD_FAULT_EP_CAP_IDX as u32,
             pd_fault_ep_cap.clone(),
@@ -1125,19 +1126,19 @@ pub fn build_capdl_spec(
     // Step 5. Parse domain schedule
     // *********************************
 
-    if system.domain_schedule.is_some() {
+    if let Some(sys_domain_schedule) = &system.domain_schedule {
         let mut domain_schedule: Vec<DomainSchedEntry> = Vec::new();
         // We want to convert from the microseconds that the user defines in the
         // sdf to the kernel scheduler ticks. If we are on x86, we won't necessarily
         // have a static definition of the timer frequency. We will express the
         // domain timeslices in ticks.
-        let ticks_in_ms = if kernel_config.timer_freq.is_some() {
-            kernel_config.timer_freq.unwrap() / US_IN_S
+        let ticks_in_ms = if let Some(timer_freq) = kernel_config.timer_freq {
+            timer_freq / US_IN_S
         } else {
             1
         };
 
-        for sched_entry in system.domain_schedule.as_ref().unwrap().schedule.iter() {
+        for sched_entry in sys_domain_schedule.schedule.iter() {
             domain_schedule.push(DomainSchedEntry {
                 id: sched_entry.id,
                 time: sched_entry.length * ticks_in_ms,
@@ -1145,18 +1146,8 @@ pub fn build_capdl_spec(
         }
 
         spec_container.spec.domain_schedule = Some(domain_schedule);
-        spec_container.spec.domain_set_start = system
-            .domain_schedule
-            .as_ref()
-            .unwrap()
-            .domain_start_idx
-            .map(Word);
-        spec_container.spec.domain_idx_shift = system
-            .domain_schedule
-            .as_ref()
-            .unwrap()
-            .domain_idx_shift
-            .map(Word);
+        spec_container.spec.domain_set_start = sys_domain_schedule.domain_start_idx.map(Word);
+        spec_container.spec.domain_idx_shift = sys_domain_schedule.domain_idx_shift.map(Word);
     }
 
     // *********************************

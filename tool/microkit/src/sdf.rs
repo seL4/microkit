@@ -1183,10 +1183,10 @@ impl DomainSchedule {
                     });
                 }
                 "domain_start" => {
-                    if domain_start_idx.is_some() {
+                    if let Some(domain_start_idx) = domain_start_idx {
                         return Err(format!(
                             "Error: Duplicate setting of domain start index, already set to '{}'",
-                            domain_start_idx.unwrap()
+                            domain_start_idx
                         ));
                     }
                     check_attributes(xml_sdf, &child, &["index"])?;
@@ -1197,10 +1197,10 @@ impl DomainSchedule {
                     domain_start_idx = Some(start_index.unwrap());
                 }
                 "domain_idx_shift" => {
-                    if domain_idx_shift.is_some() {
+                    if let Some(domain_idx_shift) = domain_idx_shift {
                         return Err(format!(
                             "Error: Duplicate setting of domain index shift, already set to '{}'",
-                            domain_idx_shift.unwrap()
+                            domain_idx_shift
                         ));
                     }
                     check_attributes(xml_sdf, &child, &["shift"])?;
@@ -2185,9 +2185,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     }
 
     // Ensure that the domain start index (if supplied) points to a valid index
-    if domain_schedule.is_some() {
-        let dom_sched = domain_schedule.as_ref().unwrap();
-
+    if let Some(dom_sched) = &domain_schedule {
         // Make sure we account for the shift when checking if the length of the
         // schedule is valid and if the start index is valid.
         let dom_shift = dom_sched.domain_idx_shift.unwrap_or(0);
