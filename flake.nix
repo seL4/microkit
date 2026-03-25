@@ -62,9 +62,16 @@
           aarch64-linux = [];
         }.${system} or (throw "Unsupported system: ${system}");
 
+        # For the initialiser
+        crossTargets = [
+          "aarch64-unknown-none"
+          "riscv64gc-unknown-none-elf"
+          "x86_64-unknown-none"
+        ];
+
         rustTool = pkgs.rust-bin.stable.${microkitToolVersion}.default.override {
           extensions = [ "rust-src" ];
-          targets = [ pkgs.pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets;
+          targets = [ pkgs.pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets ++ crossTargets;
         };
       in
       {

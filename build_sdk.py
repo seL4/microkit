@@ -88,11 +88,11 @@ class KernelArch(IntEnum):
 
     def rust_toolchain(self) -> str:
         if self == KernelArch.AARCH64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"aarch64-unknown-none"
         elif self == KernelArch.RISCV64:
-            return f"{self.to_str()}imac-sel4-minimal"
+            return f"riscv64gc-unknown-none-elf"
         elif self == KernelArch.X86_64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"x86_64-unknown-none"
         else:
             raise Exception(f"Unsupported toolchain target triple '{self}'")
 
@@ -804,9 +804,7 @@ def build_initialiser(
 ) -> None:
     sel4_src_dir = build_dir / board.name / config.name / "sel4" / "install"
 
-    cargo_cross_options = "-Z build-std=core,alloc,compiler_builtins -Z build-std-features=compiler-builtins-mem"
     cargo_target = board.arch.rust_toolchain()
-    rust_target_path = Path("initialiser/support/targets").absolute()
 
     dest = (
         root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
@@ -819,11 +817,10 @@ def build_initialiser(
     component_build_dir = build_dir / board.name / config.name / component_name
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
-    capdl_init_elf = rust_target_dir / cargo_target / "release" / "initialiser.elf"
     r = system(f"""
         RUSTC_BOOTSTRAP=1 \
-        RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
-            cargo build {cargo_cross_options} \
+        SEL4_PREFIX={sel4_src_dir.absolute()} \
+            cargo build \
                 --target {cargo_target} \
                 --locked \
                 --target-dir {rust_target_dir} \
@@ -836,6 +833,7 @@ def build_initialiser(
         )
 
     dest.unlink(missing_ok=True)
+    capdl_init_elf = rust_target_dir / cargo_target / "release" / "initialiser"
     shutil.copy(capdl_init_elf, dest)
     # Make output read-only
     dest.chmod(0o744)
