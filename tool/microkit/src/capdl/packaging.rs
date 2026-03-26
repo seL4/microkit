@@ -52,9 +52,9 @@ pub fn pack_spec_into_initial_task(
 
     for named_obj in output_spec.objects.iter_mut() {
         match build_config {
-            "smp-debug" | "debug" | "debug_domains" => {}
+            "smp-debug" | "debug" | "domain-debug" => {}
             // We don't copy over the object names as there is no debug printing in these configuration to save memory.
-            "release" | "release_domains" | "benchmark" | "smp-release" | "smp-benchmark" => {
+            "release" | "benchmark" | "smp-release" | "smp-benchmark" | "domain-release" | "domain-benchmark" => {
                 named_obj.name = None
             }
             _ => panic!("unknown configuration {build_config}"),
