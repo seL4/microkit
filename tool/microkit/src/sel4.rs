@@ -560,15 +560,15 @@ impl X86IoapicIrqTrigger {
 #[repr(u64)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum X86IoapicIrqPolarity {
-    LowTriggered = 0,
-    HighTriggered = 1,
+    HighTriggered = 0,
+    LowTriggered = 1,
 }
 
 impl From<u64> for X86IoapicIrqPolarity {
     fn from(item: u64) -> X86IoapicIrqPolarity {
         match item {
-            0 => X86IoapicIrqPolarity::LowTriggered,
-            1 => X86IoapicIrqPolarity::HighTriggered,
+            0 => X86IoapicIrqPolarity::HighTriggered,
+            1 => X86IoapicIrqPolarity::LowTriggered,
             _ => panic!("Unknown x86 IOAPIC IRQ polarity {item:x}"),
         }
     }
