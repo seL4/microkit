@@ -465,29 +465,6 @@ SUPPORTED_CONFIGS = (
             }
         },
     ),
-    # TODO: This is experimental for now, do this in a better way
-    ConfigInfo(
-        name="release_domains",
-        debug=False,
-        kernel_options={
-            "KernelNumDomains": 256,
-            "KernelNumDomainSchedules": 256,
-        },
-        kernel_options_arch={},
-    ),
-    ConfigInfo(
-        name="debug_domains",
-        debug=True,
-        kernel_options={
-            "KernelDebugBuild": True,
-            "KernelPrinting": True,
-            "KernelVerificationBuild": False,
-            "KernelNumDomains": 256,
-            "KernelNumDomainSchedules": 256,
-        },
-        kernel_options_arch={},
-    ),
-
 )
 
 
@@ -511,6 +488,15 @@ def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
                 "KernelMaxNumNodes": str(board.smp_cores),
             }
             elaborated_configs.append(config)
+
+    for config in SUPPORTED_CONFIGS:
+        config = copy.deepcopy(config)
+        config.name = f"domain-{config.name}"
+        config.kernel_options |= {
+            "KernelNumDomains": 32,
+            "KernelNumDomainSchedules": 64,
+        }
+        elaborated_configs.append(config)
 
     return elaborated_configs
 
