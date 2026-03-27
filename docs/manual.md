@@ -1011,7 +1011,11 @@ Additionally, it supports the following child elements:
 * `virtual_machine`: (zero or one) Describes a child virtual machine.
 * `ioport`: (zero or more) Describes an I/O port, x86-64 only.
 
-The `program_image` element has a single `path` attribute describing the path to an ELF file.
+The `program_image` element has the following attributes:
+
+* `path`: path to an ELF file.
+* `path_for_symbols`: (optional) path to an ELF that will be used just for searching up and patching symbols rather than
+                      the ELF specified in `path`.
 
 The `map` element has the following attributes:
 
