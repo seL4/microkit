@@ -8,6 +8,7 @@
 #include "../arch.h"
 #include "../loader.h"
 #include "../uart.h"
+#include "../cpus.h"
 #include "el.h"
 #include "smc.h"
 
@@ -105,8 +106,7 @@ void arch_init(void)
         fail();
     }
 
-    // TODO: handle non-PSCI platforms better, see https://github.com/seL4/microkit/issues/401.
-#if !defined(CONFIG_PLAT_BCM2711) && !defined(BOARD_kria_k26)
+#if !defined(ARM_PSCI_UNAVAILABLE)
     uint32_t ret = arm_smc32_call(PSCI_FUNCTION_VERSION, /* unused */ 0, 0, 0);
     /* the return value has no error codes, but if we get it wrong this is what we will get */
     if (ret == PSCI_RETURN_NOT_SUPPORTED) {
