@@ -56,7 +56,7 @@ $(crate): $(crate).intermediate
 
 .INTERMDIATE: $(crate).intermediate
 $(crate).intermediate:
-	RUSTFLAGS=-Zunstable-options \
+	RUSTC_BOOTSTRAP=1 \
 	SEL4_INCLUDE_DIRS=$(abspath $(SEL4_INCLUDE_DIRS)) \
 		cargo build \
 			-Z build-std=core,alloc,compiler_builtins \

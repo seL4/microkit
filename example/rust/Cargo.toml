@@ -15,4 +15,4 @@ name = "hello"
 path = "hello.rs"
 
 [dependencies]
-sel4-microkit = { git = "https://github.com/seL4/rust-sel4", rev = "3059c2d236bf56b066936dd48d8966255e172c3b" }
+sel4-microkit = { git = "https://github.com/seL4/rust-sel4", rev = "cf43f5d0a97854e9916cc999fdd97ff3b5fbea7b" }
