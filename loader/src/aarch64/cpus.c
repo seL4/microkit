@@ -189,7 +189,7 @@ int plat_start_cpu(int logical_cpu)
     while (__atomic_load_n(&arm_spin_table_secondary_cpu_data, __ATOMIC_ACQUIRE) != 0);
     arm_spin_table_cpu_start(logical_cpu, (uint64_t)sp);
     return 0;
-#else
+#elif !defined(ARM_PSCI_UNAVAILABLE)
     uint64_t ret = arm_smc64_call(
                        PSCI_FUNCTION_CPU_ON,
                        /* target_cpu */ psci_target_cpus[logical_cpu],
@@ -204,5 +204,8 @@ int plat_start_cpu(int logical_cpu)
     }
 
     return ret;
+#else
+    LDR_PRINT("ERROR", 0, "unknown CPU start method for this platform");
+    return -1;
 #endif
 }
