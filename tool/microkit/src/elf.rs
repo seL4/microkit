@@ -244,7 +244,6 @@ impl ElfFile {
     }
 }
 
-#[derive(Clone)]
 struct ElfFileReader {
     bytes: Vec<u8>,
     word_size: usize,
