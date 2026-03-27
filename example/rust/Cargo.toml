@@ -16,3 +16,7 @@ path = "hello.rs"
 
 [dependencies]
 sel4-microkit = { git = "https://github.com/seL4/rust-sel4", rev = "cf43f5d0a97854e9916cc999fdd97ff3b5fbea7b" }
+
+[workspace]
+# Since this example lives in Microkit source code, the empty tells cargo this
+# is not part of the Microkit workspace
