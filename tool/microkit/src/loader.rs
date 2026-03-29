@@ -487,20 +487,64 @@ impl<'a> Loader<'a> {
         let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = elf
             .find_symbol("boot_lvl0_upper")
             .expect("Could not find 'boot_lvl0_upper' symbol");
+        let (boot_lvl2_lower_addr, boot_lvl2_lower_size) = elf
+            .find_symbol("boot_lvl2_lower")
+            .expect("Could not find 'boot_lvl2_lower' symbol");
+        let (start_addr, _) = elf
+            .find_symbol("_loader_start")
+            .expect("Could not find 'loader_start' symbol");
+        let (end_addr, _) = elf
+            .find_symbol("_loader_end")
+            .expect("Could not find 'loader_end' symbol");
+
+        if Aarch64::lvl1_index(start_addr) != Aarch64::lvl1_index(end_addr) {
+            panic!("We only map 1GiB, but elfloader paddr range covers multiple GiB");
+        }
 
         let mut boot_lvl0_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         boot_lvl0_lower[..8].copy_from_slice(&(boot_lvl1_lower_addr | 3).to_le_bytes());
 
         let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        for i in 0..512 {
+
+        // map optional UART MMIO in l1 1GB page, only available if CONFIG_PRINTING
+        if let Ok((uart_addr, _)) = elf.find_symbol("uart_addr") {
+            let data = elf
+                .get_data(uart_addr, 8)
+                .expect("uart_addr not initialized");
+            let uart_base = u64::from_le_bytes(data[0..8].try_into().unwrap());
+
+            let lvl1_idx = Aarch64::lvl1_index(uart_base);
             #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 = ((i as u64) << AARCH64_1GB_BLOCK_BITS) |
+            let pt_entry: u64 = ((lvl1_idx as u64) << AARCH64_1GB_BLOCK_BITS) |
                 (1 << 10) | // access flag
                 (0 << 2) | // strongly ordered memory
-                (1); // 1G block
+                (1 << 0); // 1G block
+            let start = 8 * lvl1_idx;
+            let end = 8 * (lvl1_idx + 1);
+            boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+        }
+
+        let mut boot_lvl2_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+
+        // 1GB lvl1 Table entry
+        let pt_entry = (boot_lvl2_lower_addr | 3).to_le_bytes();
+        let lvl1_idx = Aarch64::lvl1_index(start_addr);
+        let start = 8 * lvl1_idx;
+        let end = 8 * (lvl1_idx + 1);
+        boot_lvl1_lower[start..end].copy_from_slice(&pt_entry);
+
+        // map the loader 1:1 access into 2MB lvl2 Block entries for a 4KB granule
+        let lvl2_idx = Aarch64::lvl2_index(start_addr);
+        for i in lvl2_idx..=Aarch64::lvl2_index(end_addr) {
+            let entry_idx = (i - Aarch64::lvl2_index(start_addr)) << AARCH64_2MB_BLOCK_BITS;
+            let pt_entry: u64 = (entry_idx as u64 + start_addr) |
+                (1 << 10) | // Access flag
+                (3 << 8) | // Sharable
+                (0 << 2) |
+                (1 << 0); // 2M block
             let start = 8 * i;
             let end = 8 * (i + 1);
-            boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+            boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
         let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
@@ -538,6 +582,7 @@ impl<'a> Loader<'a> {
             (boot_lvl0_upper_addr, boot_lvl0_upper_size, boot_lvl0_upper),
             (boot_lvl1_upper_addr, boot_lvl1_upper_size, boot_lvl1_upper),
             (boot_lvl2_upper_addr, boot_lvl2_upper_size, boot_lvl2_upper),
+            (boot_lvl2_lower_addr, boot_lvl2_lower_size, boot_lvl2_lower),
         ]
     }
 }

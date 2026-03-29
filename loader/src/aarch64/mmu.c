@@ -23,6 +23,7 @@ uint64_t boot_lvl2_upper[1 << 9] ALIGN(1 << 12);
 /* Paging structures for identity mapping */
 uint64_t boot_lvl0_lower[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl1_lower[1 << 9] ALIGN(1 << 12);
+uint64_t boot_lvl2_lower[1 << 9] ALIGN(1 << 12);
 
 int arch_mmu_enable(int logical_cpu)
 {

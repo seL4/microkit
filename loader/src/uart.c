@@ -205,6 +205,10 @@ void putc(uint8_t ch)
 #error Board not defined
 #endif
 
+#ifdef UART_BASE
+uint32_t *uart_addr = (uint32_t *)UART_BASE;
+#endif
+
 void puts(const char *s)
 {
     while (*s) {
