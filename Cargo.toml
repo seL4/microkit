@@ -13,11 +13,11 @@ members = [
 
 [workspace.dependencies.sel4-capdl-initializer]
 git = "https://github.com/seL4/rust-sel4"
-rev = "cf43f5d0a97854e9916cc999fdd97ff3b5fbea7b"
+rev = "b9ab5cdaa29262e634143e371817546bd844ca41"
 
 [workspace.dependencies.sel4-capdl-initializer-types]
 git = "https://github.com/seL4/rust-sel4"
-rev = "cf43f5d0a97854e9916cc999fdd97ff3b5fbea7b"
+rev = "b9ab5cdaa29262e634143e371817546bd844ca41"
 
 [profile.release.package.microkit-tool]
 strip = true
