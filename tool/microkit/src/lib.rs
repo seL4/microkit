@@ -11,6 +11,7 @@ use crate::{
     util::struct_to_bytes,
 };
 
+pub mod build;
 pub mod capdl;
 pub mod crc32;
 pub mod elf;

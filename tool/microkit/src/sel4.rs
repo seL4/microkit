@@ -3,11 +3,15 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-use std::{cmp::max, fmt::Display};
+use std::{cmp::max, fmt::Display, fs, path::Path};
 
 use serde::Deserialize;
 
-use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
+use crate::{
+    elf::ElfFile,
+    util::{self, json_str, json_str_as_bool, json_str_as_u64},
+    DisjointMemoryRegion, MemoryRegion, UntypedObject,
+};
 
 pub struct KernelPartialBootInfo {
     device_memory: DisjointMemoryRegion,
@@ -249,6 +253,27 @@ pub fn emulate_kernel_boot(
     }
 }
 
+pub fn get_available_boards(sdk_dir: &Path) -> Result<Vec<String>, String> {
+    let boards_path = sdk_dir.join("board");
+    if !boards_path.exists() || !boards_path.is_dir() {
+        return Err(format!(
+            "Error: SDK directory '{}' does not have a 'board' sub-directory.",
+            sdk_dir.display()
+        ));
+    }
+
+    let mut available_boards = Vec::new();
+    for p in fs::read_dir(&boards_path).unwrap() {
+        let path_buf = p.unwrap().path();
+        let path = path_buf.as_path();
+        if path.is_dir() {
+            available_boards.push(path.file_name().unwrap().to_str().unwrap().to_string());
+        }
+    }
+    available_boards.sort();
+    Ok(available_boards)
+}
+
 #[derive(Deserialize)]
 pub struct PlatformConfigRegion {
     pub start: u64,
@@ -310,6 +335,248 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn from_board_profile(
+        board: &String,
+        config: &String,
+        sdk_dir: &Path,
+    ) -> Result<Config, String> {
+        let boards_path = sdk_dir.join("board");
+        if !boards_path.exists() || !boards_path.is_dir() {
+            return Err(format!(
+                "Error: SDK directory '{}' does not have a 'board' sub-directory.",
+                sdk_dir.display()
+            ));
+        }
+
+        let mut available_boards = get_available_boards(sdk_dir).unwrap();
+        let board_path = boards_path.join(board);
+        if !board_path.exists() {
+            return Err(format!(
+                "Error: board path '{}' does not exist.",
+                board_path.display()
+            ));
+            std::process::exit(1);
+        }
+
+        let mut available_configs = Vec::new();
+        for p in fs::read_dir(board_path).unwrap() {
+            let path_buf = p.unwrap().path();
+            let path = path_buf.as_path();
+
+            if path.file_name().unwrap() == "example" {
+                continue;
+            }
+
+            if path.is_dir() {
+                available_configs.push(path.file_name().unwrap().to_str().unwrap().to_string());
+            }
+        }
+
+        if !available_configs.contains(&config.clone()) {
+            eprintln!(
+                "microkit: error: argument --config: invalid choice: '{}' (choose from: {})",
+                config,
+                available_configs.join(", ")
+            );
+        }
+
+        let elf_path = sdk_dir.join("board").join(board).join(config).join("elf");
+        let loader_elf_path = elf_path.join("loader.elf");
+        let kernel_elf_path = elf_path.join("sel4.elf");
+        let monitor_elf_path = elf_path.join("monitor.elf");
+        let capdl_init_elf_path = elf_path.join("initialiser.elf");
+
+        let kernel_config_path = sdk_dir
+            .join("board")
+            .join(board)
+            .join(config)
+            .join("include/kernel/gen_config.json");
+
+        let invocations_all_path = sdk_dir
+            .join("board")
+            .join(board)
+            .join(config)
+            .join("invocations_all.json");
+
+        if !elf_path.exists() {
+            return Err(format!(
+                "Error: board ELF directory '{}' does not exist",
+                elf_path.display()
+            ));
+        }
+        if !kernel_elf_path.exists() {
+            return Err(format!(
+                "Error: kernel ELF '{}' does not exist",
+                kernel_elf_path.display()
+            ));
+        }
+        if !monitor_elf_path.exists() {
+            return Err(format!(
+                "Error: monitor ELF '{}' does not exist",
+                monitor_elf_path.display()
+            ));
+        }
+        if !capdl_init_elf_path.exists() {
+            return Err(format!(
+                "Error: CapDL initialiser ELF '{}' does not exist",
+                capdl_init_elf_path.display()
+            ));
+        }
+        if !kernel_config_path.exists() {
+            return Err(format!(
+                "Error: kernel configuration file '{}' does not exist",
+                kernel_config_path.display()
+            ));
+        }
+        if !invocations_all_path.exists() {
+            return Err(format!(
+                "Error: invocations JSON file '{}' does not exist",
+                invocations_all_path.display()
+            ));
+        }
+
+        let kernel_config_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
+        let invocations_labels: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
+
+        let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
+            "aarch64" => Arch::Aarch64,
+            "riscv64" => Arch::Riscv64,
+            "x86_64" => Arch::X86_64,
+            _ => panic!("Unsupported kernel config architecture"),
+        };
+
+        let (device_regions, normal_regions) = match arch {
+            Arch::X86_64 => (None, None),
+            _ => {
+                let kernel_platform_config_path = sdk_dir
+                    .join("board")
+                    .join(board)
+                    .join(config)
+                    .join("platform_gen.json");
+
+                if !kernel_platform_config_path.exists() {
+                    return Err(format!(
+                        "Error: kernel platform configuration file '{}' does not exist",
+                        kernel_platform_config_path.display()
+                    ));
+                }
+
+                let kernel_platform_config: PlatformConfig =
+                    serde_json::from_str(&fs::read_to_string(kernel_platform_config_path).unwrap())
+                        .unwrap();
+
+                (
+                    Some(kernel_platform_config.devices),
+                    Some(kernel_platform_config.memory),
+                )
+            }
+        };
+
+        let object_sizes = {
+            let object_sizes_path = sdk_dir
+                .join("board")
+                .join(board)
+                .join(config)
+                .join("object_sizes.json");
+
+            if !object_sizes_path.exists() {
+                return Err(format!(
+                    "Error: object sizes file '{}' does not exist",
+                    object_sizes_path.display()
+                ));
+            }
+
+            serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
+        };
+
+        let hypervisor = match arch {
+            Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+            Arch::X86_64 => json_str_as_bool(&kernel_config_json, "VTX")?,
+            // Hypervisor mode is not available on RISC-V
+            _ => false,
+        };
+
+        let arm_pa_size_bits = match arch {
+            Arch::Aarch64 => {
+                if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
+                    Some(40)
+                } else if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_44")? {
+                    Some(44)
+                } else {
+                    panic!("Expected ARM platform to have 40 or 44 physical address bits")
+                }
+            }
+            Arch::X86_64 | Arch::Riscv64 => None,
+        };
+
+        let arm_smc = match arch {
+            Arch::Aarch64 => Some(json_str_as_bool(&kernel_config_json, "ALLOW_SMC_CALLS")?),
+            _ => None,
+        };
+
+        let kernel_frame_size = match arch {
+            Arch::Aarch64 => 1 << 12,
+            Arch::Riscv64 => 1 << 21,
+            Arch::X86_64 => 1 << 12,
+        };
+
+        let kernel_config = Config {
+            arch,
+            word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
+            minimum_page_size: 4096,
+            paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
+            kernel_frame_size,
+            init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
+            cap_address_bits: 64,
+            fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
+            max_num_bootinfo_untypeds: json_str_as_u64(
+                &kernel_config_json,
+                "MAX_NUM_BOOTINFO_UNTYPED_CAPS",
+            )?,
+            hypervisor,
+            benchmark: config == "benchmark",
+            num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
+                json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?
+                    .try_into()
+                    .expect("number of cores fits in u8")
+            } else {
+                1
+            },
+            fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+            arm_pa_size_bits,
+            arm_smc,
+            riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
+            invocations_labels,
+            device_regions,
+            normal_regions,
+            object_sizes,
+        };
+
+        if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
+            return Err(format!(
+                "Error: loader ELF '{}' does not exist",
+                loader_elf_path.display()
+            ));
+        }
+
+        if let Arch::Aarch64 = kernel_config.arch {
+            assert!(
+                kernel_config.hypervisor,
+                "Microkit tool expects a kernel with hypervisor mode enabled on AArch64."
+            );
+        }
+
+        assert!(
+            kernel_config.word_size == 64,
+            "Microkit tool has various assumptions about the word size being 64-bits."
+        );
+
+        Ok(kernel_config)
+    }
+
     pub fn user_top(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {

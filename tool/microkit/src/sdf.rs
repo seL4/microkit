@@ -340,7 +340,23 @@ impl SysMapPerms {
 }
 
 impl SysMap {
-    pub fn new(mr: String, vaddr: u64, perms: u8, cached: bool) -> Result<SysMap, String> {
+    pub fn new(
+        mr: String,
+        vaddr: u64,
+        perms: u8,
+        cached: bool,
+        max_vaddr: u64,
+    ) -> Result<SysMap, String> {
+        if vaddr >= max_vaddr {
+            return Err(format!(
+                "vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"
+            ));
+        }
+
+        if perms == SysMapPerms::Write as u8 {
+            return Err("perms must not be 'w', write-only mappings are not allowed".to_string());
+        }
+
         Ok(SysMap {
             mr,
             vaddr,
@@ -454,6 +470,7 @@ impl ProtectionDomain {
     }
 
     pub fn new(
+        config: &Config,
         id: Option<u64>,
         name: String,
         priority: u8,
@@ -473,6 +490,53 @@ impl ProtectionDomain {
         has_children: bool,
         setvar_id: Option<String>,
     ) -> Result<ProtectionDomain, String> {
+        if budget > period {
+            return Err(format!(
+                "budget ({budget}) must be less than, or equal to, period ({period})"
+            ));
+        }
+
+        if smc {
+            match config.arm_smc {
+                Some(smc_allowed) => {
+                    if !smc_allowed {
+                        return Err("Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string());
+                    }
+                }
+                None => {
+                    return Err(
+                        "ARM SMC forwarding support is not available for this architecture"
+                            .to_string(),
+                    )
+                }
+            }
+        }
+
+        if cpu.0 >= config.num_cores {
+            return Err(format!(
+                "cpu core must be less than {}, got {}",
+                config.num_cores, cpu.0
+            ));
+        }
+
+        #[allow(clippy::manual_range_contains)]
+        if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
+            return Err(                format!(
+                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
+                ),
+            );
+        }
+
+        if !stack_size.is_multiple_of(config.page_sizes()[0]) {
+            return Err(format!(
+                "stack size must be aligned to the smallest page size, {} bytes",
+                config.page_sizes()[0]
+            ));
+        }
+
+        if priority > PD_MAX_PRIORITY {
+            return Err(format!("priority must be between 0 and {PD_MAX_PRIORITY}"));
+        }
         Ok(ProtectionDomain {
             id,
             name,
@@ -486,6 +550,7 @@ impl ProtectionDomain {
             smc,
             cpu,
             program_image,
+            program_image_for_symbols: None,
             maps,
             irqs,
             ioports,
@@ -1355,6 +1420,7 @@ impl SysMemoryRegion {
         phys_addr: SysMemoryRegionPaddr,
         kind: SysMemoryRegionKind,
     ) -> Result<SysMemoryRegion, String> {
+        let page_count = size / (page_size as u64);
         Ok(SysMemoryRegion {
             name,
             size,
