@@ -33,6 +33,33 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    num_domains: 32,
+    num_domain_schedules: 64,
+};
+
+const DEFAULT_AARCH64_SMP_KERNEL_CONFIG: sel4::Config = sel4::Config {
+    arch: sel4::Arch::Aarch64,
+    word_size: 64,
+    minimum_page_size: 4096,
+    paddr_user_device_top: 1 << 40,
+    kernel_frame_size: 1 << 12,
+    init_cnode_bits: 12,
+    cap_address_bits: 64,
+    max_num_bootinfo_untypeds: 230,
+    fan_out_limit: 256,
+    hypervisor: true,
+    benchmark: false,
+    num_cores: 4,
+    fpu: true,
+    timer_freq: None,
+    arm_pa_size_bits: Some(40),
+    arm_smc: None,
+    riscv_pt_levels: None,
+    x86_xsave_size: None,
+    // Not necessary for SDF parsing
+    invocations_labels: json!(null),
+    device_regions: None,
+    normal_regions: None,
     num_domains: 1,
     num_domain_schedules: 1,
 };
@@ -60,8 +87,8 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
-    num_domains: 1,
-    num_domain_schedules: 1,
+    num_domains: 32,
+    num_domain_schedules: 64,
 };
 
 fn check_success(kernel_config: &sel4::Config, test_name: &str) {
@@ -749,6 +776,111 @@ mod channel {
             "Error: PPCs must be to protection domains of strictly higher priorities; channel with PPC exists from pd test1 (priority: 2) to pd test2 (priority: 1)",
         )
     }
+}
+
+#[cfg(test)]
+mod domains {
+    use super::*;
+
+    #[test]
+    fn test_domain_smp() {
+        check_error(
+            &DEFAULT_AARCH64_SMP_KERNEL_CONFIG,
+            "domain_smp.system",
+            "Assigning PDs to domains is only supported when built with a config that supports domains",
+        )
+    }
+
+    #[test]
+    fn test_domain_too_many_domains() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_exceed_max_domains.system",
+            "Error: number of domains exceeds maximum of 32",
+        )
+    }
+
+    #[test]
+    fn test_domain_assign_pd_to_invalid_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_assign_pd_to_invalid_domain.system",
+            "Protection domain test1 specifies a domain domain_2 that is not in the domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_timeslice() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_timeslice.system",
+            "Error: invalid domain timeslice for domain: domain_1",
+        )
+    }
+
+    #[test]
+    fn test_domain_no_schedule() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_schedule.system",
+            "Protection domain test1 specifies a domain domain_1 but system does not specify a domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_start_index.system",
+            "Error: invalid domain start index",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_start_index.system",
+            "Error: Domain index of '2' is out of bounds for domain schedule length '1'. Note that the schedule is 0 indexed.",
+        )
+    }
+    
+    #[test]
+    fn test_domain_invalid_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_shift.system",
+            "Error: invalid domain index shift",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_shift.system",
+            "Error: Schedule length '1' with shift of '1000' exceeds max schedule length '64'.",
+        )
+    }
+
+    #[test]
+    fn test_domain_duplicate_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_duplicate_start_index.system",
+            "Error: Duplicate setting of domain start index, already set to '1'",
+        )
+    }
+
+    #[test]
+    fn test_domain_duplicate_index_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_duplicate_index_shift.system",
+            "Error: Duplicate setting of domain index shift, already set to '1'",
+        )
+    }
+
 }
 
 #[cfg(test)]

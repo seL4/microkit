@@ -619,7 +619,7 @@ impl ProtectionDomain {
                 if config.num_domain_schedules > 1 {
                     return Err(format!("Protection domain {name} specifies a domain {domain} but system does not specify a domain schedule"));
                 } else {
-                    return Err("Assigning PDs to domains is only supported built with a config that supports domains".to_string());
+                    return Err("Assigning PDs to domains is only supported when built with a config that supports domains".to_string());
                 }
             }
             (_, _) => {}
@@ -1148,11 +1148,16 @@ impl DomainSchedule {
             let child_name = child.tag_name().name();
             match child_name {
                 "domain" => {
-                    if schedule.len() == config.num_domain_schedules as usize {
+                    if schedule.len() >= config.num_domain_schedules as usize {
                         return Err(format!(
-                            "Error: length of domain schedule exceeds maximum of {}: {}",
+                            "Error: length of domain schedule exceeds maximum of {}",
                             config.num_domain_schedules as usize,
-                            loc_string(xml_sdf, pos)
+                        ));
+                    }
+                    if domain_ids.len() >= config.num_domains as usize {
+                        return Err(format!(
+                            "Error: number of domains exceeds maximum of {}",
+                            config.num_domains as usize,
                         ));
                     }
 
@@ -1161,9 +1166,8 @@ impl DomainSchedule {
                     let length = checked_lookup(xml_sdf, &child, "length")?.parse::<u64>();
                     if length.is_err() {
                         return Err(format!(
-                            "Error: invalid domain timeslice length '{}': {}",
+                            "Error: invalid domain timeslice for domain: {}",
                             name,
-                            loc_string(xml_sdf, pos)
                         ));
                     }
 

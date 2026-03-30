@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <domain_schedule>
+        <domain name="domain_1" length="1000000" />
+        <domain name="domain_2" length="1000000" />
+        <domain name="domain_3" length="1000000" />
+        <domain name="domain_4" length="1000000" />
+        <domain name="domain_5" length="1000000" />
+        <domain name="domain_6" length="1000000" />
+        <domain name="domain_7" length="1000000" />
+        <domain name="domain_8" length="1000000" />
+        <domain name="domain_9" length="1000000" />
+        <domain name="domain_10" length="1000000" />
+        <domain name="domain_12" length="1000000" />
+        <domain name="domain_13" length="1000000" />
+        <domain name="domain_14" length="1000000" />
+        <domain name="domain_15" length="1000000" />
+        <domain name="domain_16" length="1000000" />
+        <domain name="domain_17" length="1000000" />
+        <domain name="domain_18" length="1000000" />
+        <domain name="domain_19" length="1000000" />
+        <domain name="domain_20" length="1000000" />
+        <domain name="domain_22" length="1000000" />
+        <domain name="domain_23" length="1000000" />
+        <domain name="domain_24" length="1000000" />
+        <domain name="domain_25" length="1000000" />
+        <domain name="domain_26" length="1000000" />
+        <domain name="domain_27" length="1000000" />
+        <domain name="domain_28" length="1000000" />
+        <domain name="domain_29" length="1000000" />
+        <domain name="domain_30" length="1000000" />
+        <domain name="domain_32" length="1000000" />
+        <domain name="domain_33" length="1000000" />
+        <domain name="domain_34" length="1000000" />
+        <domain name="domain_35" length="1000000" />
+        <domain name="domain_36" length="1000000" />
+        <domain name="domain_37" length="1000000" />
+        <domain name="domain_38" length="1000000" />
+        <domain name="domain_39" length="1000000" />
+    </domain_schedule>
+
+    <protection_domain name="test1" domain="domain_1">
+        <program_image path="test" />
+    </protection_domain>
+</system>
