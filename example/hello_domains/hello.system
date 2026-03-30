@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <domain_schedule>
+        <domain name="domain_1" length="1000000" />
+        <domain name="domain_2" length="1000000" />
+        <domain name="domain_3" length="2000000" />
+    </domain_schedule>
+
+    <protection_domain name="hello" domain="domain_1">
+        <program_image path="hello.elf" />
+    </protection_domain>
+
+    <protection_domain name="hello_2" domain="domain_2">
+        <program_image path="hello.elf" />
+    </protection_domain>
+
+    <protection_domain name="hello_3" domain="domain_3">
+        <program_image path="hello.elf" />
+    </protection_domain>
+</system>

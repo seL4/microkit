@@ -24,6 +24,7 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     benchmark: false,
     num_cores: 1,
     fpu: true,
+    timer_freq: None,
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
@@ -32,6 +33,8 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    num_domains: 1,
+    num_domain_schedules: 1,
 };
 
 const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
@@ -48,6 +51,7 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     benchmark: false,
     num_cores: 1,
     fpu: true,
+    timer_freq: None,
     arm_pa_size_bits: None,
     arm_smc: None,
     riscv_pt_levels: None,
@@ -56,6 +60,8 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    num_domains: 1,
+    num_domain_schedules: 1,
 };
 
 fn check_success(kernel_config: &sel4::Config, test_name: &str) {

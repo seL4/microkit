@@ -275,6 +275,9 @@ pub struct Config {
     pub benchmark: bool,
     pub num_cores: u8,
     pub fpu: bool,
+    /// Not used on x86 configs as timer freq is not required to be statically
+    /// defined
+    pub timer_freq: Option<u64>,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,
     /// ARM-specific, where or not SMC forwarding is allowed
@@ -289,6 +292,9 @@ pub struct Config {
     /// The two remaining fields are only valid on ARM and RISC-V
     pub device_regions: Option<Vec<PlatformConfigRegion>>,
     pub normal_regions: Option<Vec<PlatformConfigRegion>>,
+    /// Number of domain and domain schedules the kernel is configure for
+    pub num_domains: u64,
+    pub num_domain_schedules: u64,
 }
 
 impl Config {

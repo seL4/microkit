@@ -5,6 +5,7 @@
 //
 
 use crate::{
+    capdl::spec::ElfIndex,
     capdl::{initialiser::CapDLInitialiser, CapDLSpecContainer},
     elf::ElfFile,
     sel4::{Config, PageSize},
@@ -15,6 +16,7 @@ pub fn pack_spec_into_initial_task(
     build_config: &str,
     spec_container: &CapDLSpecContainer,
     system_elfs: &[ElfFile],
+    monitor_elfs: &[ElfFile],
     capdl_initialiser: &mut CapDLInitialiser,
 ) {
     let compress_frames = true;
@@ -24,9 +26,21 @@ pub fn pack_spec_into_initial_task(
         PageSize::Small.fixed_size_bits(sel4_config) as u8,
         |_| embed_frames,
         |d, buf| {
-            buf.copy_from_slice(
-                &system_elfs[d.elf_id].segments[d.elf_seg_idx].data()[d.elf_seg_data_range.clone()],
-            );
+            match d.elf_id {
+                ElfIndex::SystemElf(elf_id) => {
+                    buf.copy_from_slice(
+                        &system_elfs[elf_id].segments[d.elf_seg_idx].data()
+                            [d.elf_seg_data_range.clone()],
+                    );
+                }
+                ElfIndex::MonitorElf(elf_id) => {
+                    buf.copy_from_slice(
+                        &monitor_elfs[elf_id].segments[d.elf_seg_idx].data()
+                            [d.elf_seg_data_range.clone()],
+                    );
+                }
+            }
+
             compress_frames
         },
     );
@@ -38,9 +52,10 @@ pub fn pack_spec_into_initial_task(
 
     for named_obj in output_spec.objects.iter_mut() {
         match build_config {
-            "smp-debug" | "debug" => {}
+            "smp-debug" | "debug" | "domain-debug" => {}
             // We don't copy over the object names as there is no debug printing in these configuration to save memory.
-            "release" | "benchmark" | "smp-release" | "smp-benchmark" => named_obj.name = None,
+            "release" | "benchmark" | "smp-release" | "smp-benchmark" | "domain-release"
+            | "domain-benchmark" => named_obj.name = None,
             _ => panic!("unknown configuration {build_config}"),
         };
     }

@@ -109,6 +109,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [interrupt](#irq)
 * [fault](#fault)
 * [ioport](#ioport)
+* [domain scheduling](#domain)
 
 ## System {#system}
 
@@ -185,6 +186,12 @@ The **priority** determines which of the runnable PDs to schedule. A PD is runna
 Runnable PDs of the same priority are scheduled in a round-robin manner.
 
 **Passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
+
+#### Domain scheduling
+
+If a Microkit system is built with a domain supported (`release_domain, debug_domain`) config, the PD can be assigned to a scheduling **domain** in the system description. If a PD is assigned to a domain, then the PD will only be allowed to execute when that domain is active. Which domain is active at any given point in time is determined by the [domain schedule](#domain).
+
+The user can describe up to 32 distinct domains by default, and 64 different domain schedule entries. These defaults can be changed in `build_sdk.py` in `elaborate_all_board_configs`. There are two kernel config options: `KernelNumDomains` and `KernelNumDomainSchedules`.
 
 ## Virtual Machines {#vm}
 
@@ -345,6 +352,10 @@ delivered to another PD, the fault being handled depends on when the parent PD i
 ## I/O Ports {#ioport}
 
 I/O ports are x86 mechanisms to access certain physical devices (e.g. PC serial ports or PCI) using the `in` and `out` CPU instructions. The system description specifies if a protection domain have access to certain port address ranges. These accesses will be executed by seL4 and the result returned to protection domains.
+
+# Domain Scheduling {#domain}
+
+Microkit can be built with experimental support for a method of temporally isolating different groups of PDs called domain scheduling. On a Microkit system, only one domain is active at a time, and the kernel alternates between domains according to a round-robin schedule. A domain schedule consists of an ordered list of domains, each with an associated length of time to run. The kernel will then activate a domain for the specified length of time; after that time has passed, it will deactivate that domain and activate the next domain for its length of time, and so on, proceeding through the list until it wraps back to the first domain. PDs are assigned to domains, such that when a certain domain is active, only PDs belonging to that domain will be scheduled to run.
 
 # SDK {#sdk}
 
@@ -984,6 +995,7 @@ Within the `system` root element the following child elements are supported:
 * `protection_domain`
 * `memory_region`
 * `channel`
+* `domain_schedule` (If using one of the domain configs)
 
 ## `protection_domain`
 
@@ -1000,6 +1012,7 @@ It supports the following attributes:
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
+* `domain`: (optional, experimental) Specifies the name of the scheduling domain the PD belongs to.
 
 Additionally, it supports the following child elements:
 
@@ -1138,6 +1151,26 @@ The `end` element has the following attributes:
 
 The `id` is passed to the PD in the `notified` and `protected` entry points.
 The `id` should be passed to the `microkit_notify` and `microkit_ppcall` functions.
+
+## `domain_schedule`
+
+The `domain_schedule` element, by default, has a list of up to 64 `domain` child elements, and can describe 32 different domains. (bounded by the kernel config). This can be configured by changing the number of schedule entries defined in `elaborate_all_board_configs` in `build_sdk.py`. Each child specifies a particular timeslice in the domain schedule and the order of the child elements specifies the order in which the timeslices will be scheduled. A domain may be named more than once in the schedule, in which case the domain will have multiple timeslices in the schedule.
+
+The `domain` element has the following attributes:
+
+* `name`: Name of the domain.
+* `length`: Length of time the domain will run each time it is active, in microseconds on Aarch64 and Riscv64. On x86 this length is currently defined in ticks as we don't have a static definition of the timer frequency.
+
+The `name` attribute of each `domain` element can be referenced in the `domain` attribute of a `protection_domain` element.
+
+The `domain_idx_shift` element has the following attribute:
+* `shift`: This is the start index of where we will construct our schedule. So if we shift by 5, we will begin constructing the domain schedule from index 5 onwards. If not specified, no shift will be applied, and we will start constructing the schedule from index 0.
+
+
+The `domain_start` element has the following attribute:
+* `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again. This index is an offset into the user defined schedule, and not an absolute index. If no domain start index is set, then the Microkit tool will set this to 0 by default.
+
+The `domain_schedule` element is only valid if the using one of the domain configs (`domain-release`, `domain-debug`, `domain-benchmark`).
 
 # Board Support Packages {#bsps}
 
@@ -1821,6 +1854,8 @@ which PD caused an exception and details on the PD's state at the time of the fa
 
 Other than printing fault details, the monitor does not do anything to handle
 the fault, it will simply go back to sleep waiting for any other faults.
+
+When domains are enabled, we will build one monitor for each domain.
 
 ## libmicrokit {#libmicrokit_internals}
 

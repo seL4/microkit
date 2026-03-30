@@ -32,6 +32,7 @@
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
 
+char monitor_name[MAX_NAME_LEN];
 char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;
 char vm_names[MAX_VMS][MAX_NAME_LEN] __attribute__((unused));
@@ -897,7 +898,9 @@ void main(void)
     }
 #endif
 
-    puts("MON|INFO: Microkit Monitor started!\n");
+    puts("MON|INFO: Microkit Monitor started: '");
+    puts(monitor_name);
+    puts("'\n");
 
     monitor();
 }

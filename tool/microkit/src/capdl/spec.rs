@@ -15,8 +15,14 @@ use crate::{
 };
 
 #[derive(Clone, Serialize)]
+pub enum ElfIndex {
+    MonitorElf(usize),
+    SystemElf(usize),
+}
+
+#[derive(Clone, Serialize)]
 pub struct ElfContent {
-    pub elf_id: usize,
+    pub elf_id: ElfIndex,
     pub elf_seg_idx: usize,
     pub elf_seg_data_range: Range<usize>,
 }
@@ -74,6 +80,7 @@ pub fn capdl_obj_human_name(obj: &Object<FrameFill>, sel4_config: &Config) -> &'
         Object::ArmSmc => "ARM SMC",
         Object::Untyped(_) => "Untyped",
         Object::Irq(_) => "IRQ",
+        Object::DomainSet => "Domain Set",
     }
 }
 
