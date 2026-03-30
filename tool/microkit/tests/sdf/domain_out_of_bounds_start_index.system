@@ -5,9 +5,8 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <domain_schedule>
+    <domain_schedule start_index="2">
         <domain name="domain_1" length="1000000" />
-        <domain_start index="2" />
     </domain_schedule>
 
     <protection_domain name="test1" domain="domain_1">

@@ -1133,13 +1133,30 @@ impl DomainSchedule {
 
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
 
-        check_attributes(xml_sdf, node, &[])?;
+        check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
+
+        let index_shift = if let Some(xml_index_shift) = node.attribute("index_shift") {
+            match sdf_parse_number(xml_index_shift, node) {
+                Ok(val) => Some(val),
+                Err(_) => return Err("Error: invalid domain index shift".to_string())
+            }
+        } else {
+            None
+        };
+
+        let start_index = if let Some(xml_start_index) = node.attribute("start_index") {
+            match sdf_parse_number(xml_start_index, node) {
+                Ok(val) => val,
+                Err(_) => return Err("Error: invalid domain start index".to_string())
+            }
+        } else {
+            0
+        };
+
 
         let mut next_domain_id = 0;
         let mut domain_ids = HashMap::new();
         let mut schedule = Vec::new();
-        let mut domain_start_idx: Option<u64> = None;
-        let mut domain_idx_shift: Option<u64> = None;
         for child in node.children() {
             if !child.is_element() {
                 continue;
@@ -1186,34 +1203,6 @@ impl DomainSchedule {
                         length: length.unwrap(),
                     });
                 }
-                "domain_start" => {
-                    if let Some(domain_start_idx) = domain_start_idx {
-                        return Err(format!(
-                            "Error: Duplicate setting of domain start index, already set to '{}'",
-                            domain_start_idx
-                        ));
-                    }
-                    check_attributes(xml_sdf, &child, &["index"])?;
-                    let start_index = checked_lookup(xml_sdf, &child, "index")?.parse::<u64>();
-                    if start_index.is_err() {
-                        return Err("Error: invalid domain start index".to_string());
-                    }
-                    domain_start_idx = Some(start_index.unwrap());
-                }
-                "domain_idx_shift" => {
-                    if let Some(domain_idx_shift) = domain_idx_shift {
-                        return Err(format!(
-                            "Error: Duplicate setting of domain index shift, already set to '{}'",
-                            domain_idx_shift
-                        ));
-                    }
-                    check_attributes(xml_sdf, &child, &["shift"])?;
-                    let index_shift = checked_lookup(xml_sdf, &child, "shift")?.parse::<u64>();
-                    if index_shift.is_err() {
-                        return Err("Error: invalid domain index shift".to_string());
-                    }
-                    domain_idx_shift = Some(index_shift.unwrap());
-                }
                 _ => {
                     return Err(format!(
                         "Error: invalid XML element '{}': {}",
@@ -1224,16 +1213,11 @@ impl DomainSchedule {
             }
         }
 
-        // We are defaulting the set start to 0 if none has been specified.
-        if domain_start_idx.is_none() {
-            domain_start_idx = Some(0);
-        }
-
         Ok(DomainSchedule {
             domain_ids,
             schedule,
-            domain_start_idx,
-            domain_idx_shift,
+            domain_start_idx: Some(start_index),
+            domain_idx_shift: index_shift,
         })
     }
 }

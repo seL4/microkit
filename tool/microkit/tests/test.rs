@@ -863,24 +863,6 @@ mod domains {
         )
     }
 
-    #[test]
-    fn test_domain_duplicate_start_index() {
-        check_error(
-            &DEFAULT_AARCH64_KERNEL_CONFIG,
-            "domain_duplicate_start_index.system",
-            "Error: Duplicate setting of domain start index, already set to '1'",
-        )
-    }
-
-    #[test]
-    fn test_domain_duplicate_index_shift() {
-        check_error(
-            &DEFAULT_AARCH64_KERNEL_CONFIG,
-            "domain_duplicate_index_shift.system",
-            "Error: Duplicate setting of domain index shift, already set to '1'",
-        )
-    }
-
 }
 
 #[cfg(test)]
