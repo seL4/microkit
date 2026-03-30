@@ -355,7 +355,7 @@ I/O ports are x86 mechanisms to access certain physical devices (e.g. PC serial 
 
 # Domain Scheduling {#domain}
 
-Microkit can be built with experimental support for a method of temporally isolating different groups of PDs called domain scheduling. On a Microkit system, only one domain is active at a time, and the kernel alternates between domains according to a round-robin schedule. A domain schedule consists of an ordered list of domains, each with an associated length of time to run. The kernel will then activate a domain for the specified length of time; after that time has passed, it will deactivate that domain and activate the next domain for its length of time, and so on, proceeding through the list until it wraps back to the first domain. PDs are assigned to domains, such that when a certain domain is active, only PDs belonging to that domain will be scheduled to run.
+Microkit also supports a method of temporally isolating different groups of PDs called domain scheduling. On a Microkit system, only one domain is active at a time, and the kernel alternates between domains according to a round-robin schedule. A domain schedule consists of an ordered list of domains, each with an associated length of time to run. The kernel will then activate a domain for the specified length of time; after that time has passed, it will deactivate that domain and activate the next domain for its length of time, and so on, proceeding through the list until it wraps back to the first domain. PDs are assigned to domains, such that when a certain domain is active, only PDs belonging to that domain will be scheduled to run.
 
 # SDK {#sdk}
 
@@ -1012,7 +1012,7 @@ It supports the following attributes:
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
-* `domain`: (optional, experimental) Specifies the name of the scheduling domain the PD belongs to.
+* `domain`: (optional) Specifies the name of the scheduling domain the PD belongs to.
 
 Additionally, it supports the following child elements:
 
@@ -1166,7 +1166,7 @@ The `domain_idx_shift` element has the following attribute:
 The `domain_start` element has the following attribute:
 * `index`: This is the start index of the domain schedule. When the kernel reaches the end of the domain schedule, it will wrap around to this index again. This index is an offset into the user defined schedule, and not an absolute index. If no domain start index is set, then the Microkit tool will set this to 0 by default.
 
-The `domain_schedule` element is only valid if the using one of the domain configs (`domain-release`, `domain-debug`, `domain-benchmark`).
+The `domain_schedule` element is only valid of using non-smp configs.
 
 # Board Support Packages {#bsps}
 
