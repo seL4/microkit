@@ -81,7 +81,7 @@ fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
 }
 
 pub fn build(
-    kernel_config: Config,
+    kernel_config: &Config,
     board: &String,
     config: &String,
     system: &mut SystemDescription,

@@ -238,7 +238,7 @@ fn main() -> Result<(), String> {
     };
 
     let _ = build(
-        kernel_config,
+        &kernel_config,
         &args.board.to_string(),
         &args.config.to_string(),
         &mut system,
