@@ -2105,6 +2105,17 @@ pub fn parse(
             if let SysSetVarKind::Paddr { region } = &setvar.kind {
                 mr_names_with_setvar_paddr.insert(region);
             };
+            if let SysSetVarKind::PrefillSize { mr } = &setvar.kind {
+                for matching_mr in &mrs {
+                    if matching_mr.name == *mr && matching_mr.prefill_bytes.is_none() {
+                        return Err(format!(
+                            "Error: 'setvar_prefill_size' used for MR without a `prefill_path` @ '{}' {}",
+                            matching_mr.name,
+                            loc_string(&xml_sdf, matching_mr.text_pos.unwrap()),
+                        ));
+                    }
+                }
+            }
         }
     }
     for mr in mrs.iter_mut() {
