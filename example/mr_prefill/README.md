@@ -4,7 +4,7 @@
 -->
 # Example - Memory Region Prefill
 
-This is an example demostrating prefilling a memory region from a data file at compile time.
+This is an example demonstrating prefilling a memory region from a data file at compile time.
 
 All Microkit platforms are supported.
 
