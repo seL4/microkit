@@ -194,6 +194,15 @@ mod memory_region {
     }
 
     #[test]
+    fn test_mr_prefill_size_without_prefill() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_size_without_prefill.system",
+            "Error: 'setvar_prefill_size' used for MR without a `prefill_path` @"
+        )
+    }
+
+    #[test]
     fn test_mr_prefill_no_size_valid() {
         check_success(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
