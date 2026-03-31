@@ -74,7 +74,7 @@ jobs:
           tar xf aarch64-toolchain.tar.gz
           echo "$(pwd)/arm-gnu-toolchain-12.2.rel1-x86_64-aarch64-none-elf/bin" >> $GITHUB_PATH
       - name: Set version
-        run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
+        run: echo "SDK_VERSION=$(./ci/sdk_version.sh)" >> $GITHUB_ENV
       - name: Build SDK (x86-64)
         run: ./pyenv/bin/python build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }}-linux-x86-64 --tool-target-triple="x86_64-unknown-linux-musl"
   # The macOS run is slightly different to Linux since it also produces the
@@ -98,7 +98,7 @@ jobs:
       - name: Get Nix dependencies
         run: nix develop -c bash -c 'echo Hello World'
       - name: Set version
-        run: echo "SDK_VERSION=$(./ci/dev_version.sh)" >> $GITHUB_ENV
+        run: echo "SDK_VERSION=$(./ci/sdk_version.sh)" >> $GITHUB_ENV
       - name: Build SDK
         run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --release-packaging"
       - name: Upload SDK (macos-aarch64)
