@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <sel4/constants.h>
+#include <sel4/arch/constants.h>
 #include <sel4/sel4_arch/constants.h>
 
 /*
