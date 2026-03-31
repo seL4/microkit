@@ -1109,10 +1109,12 @@ The `memory_region` element describes a memory region.
 It supports the following attributes:
 
 * `name`: A unique name for the memory region
-* `size`: Size of the memory region in bytes (must be a multiple of the page size)
+* `size`: Size of the memory region in bytes (must be a multiple of the page size). This can
+          be omitted if the memory region is has `prefill_path`, the size will be determined by
+          the length of the file given.
 * `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the largest page size for the target architecture that the memory region is aligned to.
 * `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
-* `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at boot.
+* `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at initialisation.
 
 The `memory_region` element does not support any child elements.
 
