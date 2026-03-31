@@ -10,4 +10,9 @@ LATEST_TAG=`git describe --tags --abbrev=0`
 NUM_COMMITS=`git rev-list --count $LATEST_TAG..HEAD`
 HEAD=`git rev-parse --short HEAD`
 
-echo "$VERSION.$NUM_COMMITS+$HEAD"
+if [[ $NUM_COMMITS -eq 0 ]];
+then
+    echo "$VERSION"
+else
+    echo "$VERSION.$NUM_COMMITS+$HEAD"
+fi
