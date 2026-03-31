@@ -1,5 +1,40 @@
 # Revision History for Microkit
 
+## Release 2.2.0
+
+This release contains various bug fixes, minor features, and new board support.
+
+There are no breaking changes.
+
+### Feature changes
+
+* Update to seL4 15.0.0.
+* Support passing a separate ELF file used for symbol patching for PD program images.
+  See the manual section on the `program_image` element for details.
+* Support memory regions that are prefilled with data upon initialisation.
+* Update flake to Nix 25.11.
+
+### Bug fixes
+
+* Fix version of uImage header emitted.
+* Fix regressions from 2.1.0 that caused Raspberry Pi 4B to fail to boot.
+* Fix false-positive error message when using setvar with memory regions that do not
+  have an explicit physical address.
+* Fix ELF image output to include empty string table, certain tools such as objcopy
+  were complaining that the ELF was invalid.
+* Fix some memory ranges overlapping false-positivies in the tool.
+* Formatting fixes to libmicrokit's provided `__assert_fail`. It is now a weakly
+  declared function so users can overwrite it with their own implementation.
+* Fix internal bug that can cause initialisation to fail on ARM with the benchmarking configuration.
+* Fix passive PD initialisation sometimes failing. There is still a possible race
+  condition on SMP configurations, but single-core is fixed.
+  See https://github.com/seL4/microkit/issues/91 for details.
+
+### Board support
+
+* Radxa ROCK 3B
+* AMD Kria K26 SOM (based on the ZCU102)
+
 ## Release 2.1.0
 
 This release contains various bug fixes, quality-of-life changes, features, and new board support.
