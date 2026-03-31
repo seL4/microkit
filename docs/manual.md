@@ -1415,9 +1415,9 @@ Microkit will produce a raw binary file by default, so when using U-Boot run the
 
     => go 0x30000000
 
-## Radxa Rock3b {#rock3b}
+## Radxa ROCK 3B {#rock3b}
 
-Support is available for the Radxa Rock3b platform which is based on the Rockchip rk3568 SoC.
+Support is available for the Radxa ROCK 3B platform which is based on the Rockchip RK3568 SoC.
 
 Since the platform relies on some closed-source binary blobs for first stage bootloader and then ARM's TrustZone A, we need to compile the U-Boot including these images. Detailed instructions on how to do that are available [here](https://docs.sel4.systems/Hardware/rock3b.html).
 
