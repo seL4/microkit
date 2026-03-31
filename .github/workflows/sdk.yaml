@@ -14,6 +14,9 @@ on:
   pull_request:
   push:
     branches: [ "main" ]
+    tags:
+      # Run on version tags
+      - '*.*.*'
 
 env:
   SEL4_VERSION: 27a52ddd4cf592b1996ba50074c85e21d832398a
