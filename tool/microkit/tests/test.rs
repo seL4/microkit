@@ -787,7 +787,7 @@ mod domains {
         check_error(
             &DEFAULT_AARCH64_SMP_KERNEL_CONFIG,
             "domain_smp.system",
-            "Assigning PDs to domains is only supported when built with a config that supports domains",
+            "Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain",
         )
     }
 
@@ -823,7 +823,16 @@ mod domains {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "domain_no_schedule.system",
-            "Protection domain test1 specifies a domain domain_1 but system does not specify a domain schedule",
+            "Protection domain test1 specifies a domain 'domain_1', but user has not declared a domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_pd_no_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_pd_domain.system",
+            "Protection domain test1 doesn't specify a domain, but user has declared a domain schedule",
         )
     }
 

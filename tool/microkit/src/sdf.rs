@@ -275,7 +275,7 @@ pub struct ProtectionDomain {
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
     /// Index into the domain schedule vector if the system is using domain scheduling
-    /// Defaults to domain 0 if not set.
+    pub domain_name: Option<String>,
     pub domain_id: Option<u8>,
 }
 
@@ -603,28 +603,12 @@ impl ProtectionDomain {
             ));
         }
 
-        let mut domain_id: Option<u8> = None;
-        match (domain_schedule, checked_lookup(xml_sdf, node, "domain")) {
-            (Some(domain_schedule), Ok(domain_name)) => {
-                let domain_id_get = domain_schedule.domain_ids.get(domain_name);
-                if domain_id_get.is_none() {
-                    return Err(format!("Protection domain {name} specifies a domain {domain_name} that is not in the domain schedule"));
-                }
-                domain_id = Some(*domain_id_get.unwrap());
-            }
-            (Some(_), _) => {
-                return Err(format!("System specifies a domain schedule but protection domain {name} does not specify a domain"))
-            }
-            (_, Ok(domain)) => {
-                if config.num_domain_schedules > 1 {
-                    return Err(format!("Protection domain {name} specifies a domain {domain} but system does not specify a domain schedule"));
-                } else {
-                    return Err("Assigning PDs to domains is only supported when built with a config that supports domains".to_string());
-                }
-            }
-            (_, _) => {}
-        }
-
+        let domain_name = if let Some(xml_domain_name) = node.attribute("domain") {
+            Some(xml_domain_name.to_string())
+        } else {
+            None
+        };
+        let  domain_id: Option<u8> = None;
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
         let mut ioports = Vec::new();
@@ -1116,6 +1100,7 @@ impl ProtectionDomain {
             parent: None,
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            domain_name,
             domain_id,
         })
     }
@@ -1127,10 +1112,6 @@ impl DomainSchedule {
         config: &Config,
         node: &roxmltree::Node,
     ) -> Result<DomainSchedule, String> {
-        if config.num_domains <= 1 {
-            return Err("Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain".to_string());
-        }
-
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
 
         check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
@@ -1805,18 +1786,19 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 ));
             }
             "domain_schedule" => {
-                if config.num_domain_schedules > 1 {
-                    if let Some(domain_schedule_node) = system
-                        .children()
-                        .filter(|&child| child.is_element())
-                        .find(|&child| child.tag_name().name() == "domain_schedule")
-                    {
-                        domain_schedule = Some(DomainSchedule::from_xml(
-                            &xml_sdf,
-                            config,
-                            &domain_schedule_node,
-                        )?);
-                    }
+                if config.num_domains <= 1 {
+                    return Err("Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain".to_string());
+                }
+                if let Some(domain_schedule_node) = system
+                    .children()
+                    .filter(|&child| child.is_element())
+                    .find(|&child| child.tag_name().name() == "domain_schedule")
+                {
+                    domain_schedule = Some(DomainSchedule::from_xml(
+                        &xml_sdf,
+                        config,
+                        &domain_schedule_node,
+                    )?);
                 }
             }
             _ => {
@@ -2196,6 +2178,42 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: Schedule length '{}' with shift of '{}' exceeds max schedule length '{}'.",
                 schedule_len, dom_shift, config.num_domain_schedules,
             ));
+        }
+
+        // Resolve the domain names to id's
+        for pd in pds.iter_mut() {
+            if let Some(domain_name) = &pd.domain_name {
+                let domain_id_get = dom_sched.domain_ids.get(domain_name);
+                if domain_id_get.is_none() {
+                    return Err(format!("Protection domain {} specifies a domain {} that is not in the domain schedule",
+                        pd.name,
+                        domain_name
+                    ));
+                }
+                pd.domain_id = Some(*domain_id_get.unwrap());
+            } else {
+                return Err(format!("Protection domain {} doesn't specify a domain, but user has declared a domain schedule",
+                    pd.name,
+                ));
+            }
+        }
+    } else {
+        // If no domain schedule is defined, check that no PD has specified a domain.
+        for pd in pds.iter() {
+            if let Some(domain_name) = &pd.domain_name {
+                if config.num_domains > 1 {
+                    return Err(format!("Protection domain {} specifies a domain '{}', but user has not declared a domain schedule",
+                        pd.name,
+                        domain_name
+                    ));
+                } else {
+                    return Err(format!("Protection domain {} specifies a domain '{}', but Microkit config does not support domains.",
+                        pd.name,
+                        domain_name
+                    ));
+                }
+                
+            }
         }
     }
 
