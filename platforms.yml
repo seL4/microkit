@@ -16,10 +16,10 @@
 platforms:
   - name: kria_k26
     cmake_plat: zcu102
-    since: dev
+    since: 2.2.0
   - name: rock3b
     cmake_plat: rk3568
-    since: dev
+    since: 2.2.0
   - name: x86_64_generic
     cmake_plat: pc99
     since: 2.1.0
