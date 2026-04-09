@@ -200,7 +200,7 @@ impl<'a> Loader<'a> {
 
         // Compute an available physical memory segment large enough to house the initial task (CapDL initialiser with spec)
         // that is after the kernel window.
-        let inittask_p_v_offset = initial_task_vaddr_range.start - initial_task_phy_base;
+        let inittask_p_v_offset = inittask_first_vaddr.wrapping_sub(inittask_first_paddr);
         let inittask_v_entry = initial_task_elf.entry;
 
         for segment in initial_task_segments.iter() {
