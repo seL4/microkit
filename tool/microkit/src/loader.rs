@@ -262,7 +262,7 @@ impl<'a> Loader<'a> {
         let pv_offset = initial_task_phy_base.wrapping_sub(initial_task_vaddr_range.start);
 
         let ui_p_reg_start = initial_task_phy_base;
-        let ui_p_reg_end = initial_task_vaddr_range.end - inittask_p_v_offset;
+        let ui_p_reg_end = initial_task_vaddr_range.end.wrapping_sub(inittask_p_v_offset);
         assert!(ui_p_reg_end > ui_p_reg_start);
 
         // This clone isn't too bad as it is just a Vec<(u64, &[u8])>
