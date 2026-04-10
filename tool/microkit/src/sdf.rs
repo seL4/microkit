@@ -342,6 +342,31 @@ impl SysMapPerms {
 }
 
 impl SysMap {
+    pub fn new(
+        mr: String,
+        vaddr: u64,
+        perms: u8,
+        cached: bool,
+        max_vaddr: u64,
+    ) -> Result<SysMap, String> {
+        if vaddr >= max_vaddr {
+            return Err(format!(
+                "vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"
+            ));
+        }
+
+        if perms == SysMapPerms::Write as u8 {
+            return Err("perms must not be 'w', write-only mappings are not allowed".to_string());
+        }
+
+        Ok(SysMap {
+            mr,
+            vaddr,
+            perms,
+            cached,
+            text_pos: None,
+        })
+    }
     fn from_xml(
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
@@ -444,6 +469,101 @@ impl ProtectionDomain {
         }
 
         ioports
+    }
+
+    pub fn new(
+        config: &Config,
+        id: Option<u64>,
+        name: String,
+        priority: u8,
+        budget: u64,
+        period: u64,
+        passive: bool,
+        stack_size: u64,
+        smc: bool,
+        cpu: CpuCore,
+        program_image: PathBuf,
+        maps: Vec<SysMap>,
+        irqs: Vec<SysIrq>,
+        ioports: Vec<IOPort>,
+        setvars: Vec<SysSetVar>,
+        virtual_machine: Option<VirtualMachine>,
+        child_pds: Vec<ProtectionDomain>,
+        has_children: bool,
+        setvar_id: Option<String>,
+    ) -> Result<ProtectionDomain, String> {
+        if budget > period {
+            return Err(format!(
+                "budget ({budget}) must be less than, or equal to, period ({period})"
+            ));
+        }
+
+        if smc {
+            match config.arm_smc {
+                Some(smc_allowed) => {
+                    if !smc_allowed {
+                        return Err("Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string());
+                    }
+                }
+                None => {
+                    return Err(
+                        "ARM SMC forwarding support is not available for this architecture"
+                            .to_string(),
+                    )
+                }
+            }
+        }
+
+        if cpu.0 >= config.num_cores {
+            return Err(format!(
+                "cpu core must be less than {}, got {}",
+                config.num_cores, cpu.0
+            ));
+        }
+
+        #[allow(clippy::manual_range_contains)]
+        if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
+            return Err(                format!(
+                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
+                ),
+            );
+        }
+
+        if !stack_size.is_multiple_of(config.page_sizes()[0]) {
+            return Err(format!(
+                "stack size must be aligned to the smallest page size, {} bytes",
+                config.page_sizes()[0]
+            ));
+        }
+
+        if priority > PD_MAX_PRIORITY {
+            return Err(format!("priority must be between 0 and {PD_MAX_PRIORITY}"));
+        }
+        Ok(ProtectionDomain {
+            id,
+            name,
+            // This downcast is safe as we have checked that this is less than
+            // the maximum PD priority, which fits in a u8.
+            priority,
+            budget,
+            period,
+            passive,
+            stack_size,
+            smc,
+            cpu,
+            program_image,
+            program_image_for_symbols: None,
+            maps,
+            irqs,
+            ioports,
+            setvars,
+            child_pds,
+            virtual_machine,
+            has_children,
+            parent: None,
+            setvar_id,
+            text_pos: None,
+        })
     }
 
     fn from_xml(
@@ -1116,6 +1236,23 @@ impl ProtectionDomain {
 }
 
 impl VirtualMachine {
+    pub fn new(
+        vcpus: Vec<VirtualCpu>,
+        name: String,
+        maps: Vec<SysMap>,
+        priority: u8,
+        budget: u64,
+        period: u64,
+    ) -> Result<VirtualMachine, String> {
+        Ok(VirtualMachine {
+            vcpus,
+            name,
+            maps,
+            priority,
+            budget,
+            period,
+        })
+    }
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
@@ -1295,6 +1432,27 @@ impl SysMemoryRegion {
             }
         }
     }
+    pub fn new(
+        name: String,
+        size: u64,
+        page_size: PageSize,
+        page_size_specified_by_user: bool,
+        phys_addr: SysMemoryRegionPaddr,
+        kind: SysMemoryRegionKind,
+    ) -> Result<SysMemoryRegion, String> {
+        let page_count = size / (page_size as u64);
+        Ok(SysMemoryRegion {
+            name,
+            size,
+            page_size,
+            page_size_specified_by_user,
+            page_count,
+            phys_addr,
+            text_pos: None,
+            kind,
+            prefill_bytes: None,
+        })
+    }
 
     fn from_xml(
         config: &Config,
@@ -1398,6 +1556,22 @@ impl SysMemoryRegion {
 }
 
 impl ChannelEnd {
+    pub fn new(
+        pd_idx: usize,
+        id: u64,
+        notify: bool,
+        pp: bool,
+        setvar_id: Option<String>,
+    ) -> Result<ChannelEnd, String> {
+        Ok(ChannelEnd {
+            pd: pd_idx,
+            id: id,
+            notify,
+            pp,
+            setvar_id,
+        })
+    }
+
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
         node: &'a roxmltree::Node,
@@ -1469,6 +1643,12 @@ impl ChannelEnd {
 }
 
 impl Channel {
+    pub fn new(end_a: ChannelEnd, end_b: ChannelEnd) -> Result<Channel, String> {
+        Ok(Channel {
+            end_a: end_a,
+            end_b: end_b,
+        })
+    }
     /// It should be noted that this function assumes that `pds` is populated
     /// with all the Protection Domains that could potentially be connected with
     /// the channel.
