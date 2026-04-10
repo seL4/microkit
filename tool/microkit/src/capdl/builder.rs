@@ -138,6 +138,9 @@ impl CapDLSpecContainer {
                 untyped_covers: Vec::new(),
                 cached_orig_cap_slots: None,
                 log_level: None,
+                domain_idx_shift: None,
+                domain_schedule: None,
+                domain_set_start: None,
             },
             expected_allocations: HashMap::new(),
         }
@@ -322,10 +325,12 @@ impl CapDLSpecContainer {
             prio: 0,
             max_prio: 0,
             resume: false,
+            fpu_disabled: false,
             ip: entry_point.into(),
             sp: 0.into(),
             gprs: Vec::new(),
             master_fault_ep: None,
+            domain: None,
         };
 
         let tcb_inner_obj = object::Tcb {
@@ -468,7 +473,7 @@ pub fn build_capdl_spec(
     )
     .unwrap();
 
-    // At this point, all of the required objects for the monitor have been created and it caps inserted into
+    // At this point, all of the required objects for the monitor have been created and its caps inserted into
     // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
     // In addition, `add_elf_to_spec()` doesn't fill most the details in the TCB.
     // Now fill them in: stack ptr, priority, ipc buf vaddr, etc.
@@ -939,12 +944,15 @@ pub fn build_capdl_spec(
                             affinity: Word(vcpu.cpu.0.into()),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
+                            // Given the use cases of VMs, for now we always give them FPU access.
+                            fpu_disabled: false,
                             resume: false,
                             // VMs do not have program images associated with them so these are always zero.
                             ip: Word(0),
                             sp: Word(0),
                             gprs: [].to_vec(),
                             master_fault_ep: None, // Not used on MCS kernel.
+                            domain: None,
                         }),
                     };
                     let vm_vcpu_tcb_obj_id = spec_container.add_root_object(NamedObject {
@@ -1007,6 +1015,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.master_fault_ep = None; // Not used on MCS kernel.
             pd_tcb.extra.prio = pd.priority;
             pd_tcb.extra.max_prio = pd.priority;
+            pd_tcb.extra.fpu_disabled = !pd.fpu;
             pd_tcb.extra.resume = true;
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);
