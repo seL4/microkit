@@ -6,7 +6,7 @@
 use crate::elf::{ElfFile, ElfSegmentData};
 use crate::sel4::{Arch, Config};
 use crate::uimage::uimage_serialise;
-use crate::util::{mask, mb, round_up, struct_to_bytes};
+use crate::util::{mb, round_up, struct_to_bytes};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::ops::Range;
@@ -14,67 +14,65 @@ use std::path::Path;
 
 const PAGE_TABLE_SIZE: usize = 4096;
 
-const AARCH64_1GB_BLOCK_BITS: u64 = 30;
-const AARCH64_2MB_BLOCK_BITS: u64 = 21;
+mod aarch64 {
+    use crate::util::mask;
 
-const AARCH64_LVL0_BITS: u64 = 9;
-const AARCH64_LVL1_BITS: u64 = 9;
-const AARCH64_LVL2_BITS: u64 = 9;
+    pub(crate) const BLOCK_BITS_1GB: u64 = 30;
+    pub(crate) const BLOCK_BITS_2MB: u64 = 21;
+    pub(crate) const LVL0_BITS: u64 = 9;
+    pub(crate) const LVL1_BITS: u64 = 9;
+    pub(crate) const LVL2_BITS: u64 = 9;
 
-struct Aarch64;
-impl Aarch64 {
     pub fn lvl0_index(addr: u64) -> usize {
-        let idx = (addr >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS + AARCH64_LVL1_BITS))
-            & mask(AARCH64_LVL0_BITS);
+        let idx = (addr >> (BLOCK_BITS_2MB + LVL2_BITS + LVL1_BITS)) & mask(LVL0_BITS);
         idx as usize
     }
 
     pub fn lvl1_index(addr: u64) -> usize {
-        let idx = (addr >> (AARCH64_2MB_BLOCK_BITS + AARCH64_LVL2_BITS)) & mask(AARCH64_LVL1_BITS);
+        let idx = (addr >> (BLOCK_BITS_2MB + LVL2_BITS)) & mask(LVL1_BITS);
         idx as usize
     }
 
     pub fn lvl2_index(addr: u64) -> usize {
-        let idx = (addr >> (AARCH64_2MB_BLOCK_BITS)) & mask(AARCH64_LVL2_BITS);
+        let idx = (addr >> (BLOCK_BITS_2MB)) & mask(LVL2_BITS);
         idx as usize
     }
 }
 
-struct Riscv64;
-impl Riscv64 {
-    const BLOCK_BITS_2MB: u64 = 21;
+mod riscv64 {
+    pub(crate) const BLOCK_BITS_2MB: u64 = 21;
 
-    const PAGE_TABLE_INDEX_BITS: u64 = 9;
-    const PAGE_SHIFT: u64 = 12;
+    pub(crate) const PAGE_TABLE_INDEX_BITS: u64 = 9;
+    pub(crate) const PAGE_SHIFT: u64 = 12;
     /// This sets the page table entry bits: D,A,X,W,R.
-    const PTE_TYPE_BITS: u64 = 0b11001110;
+    pub(crate) const PTE_TYPE_BITS: u64 = 0b11001110;
     // TODO: where does this come from?
-    const PTE_TYPE_TABLE: u64 = 0;
-    const PTE_TYPE_VALID: u64 = 1;
+    pub(crate) const PTE_TYPE_TABLE: u64 = 0;
+    pub(crate) const PTE_TYPE_VALID: u64 = 1;
 
-    const PTE_PPN0_SHIFT: u64 = 10;
+    pub(crate) const PTE_PPN0_SHIFT: u64 = 10;
 
     /// Due to RISC-V having various virtual memory setups, we have this generic function to
     /// figure out the page-table index given the total number of page table levels for the
     /// platform and which level we are currently looking at.
     pub fn pt_index(pt_levels: usize, addr: u64, level: usize) -> usize {
-        let pt_index_bits = Self::PAGE_TABLE_INDEX_BITS * (pt_levels - level) as u64;
-        let idx = (addr >> (pt_index_bits + Self::PAGE_SHIFT)) % 512;
+        let pt_index_bits = PAGE_TABLE_INDEX_BITS * (pt_levels - level) as u64;
+        let idx = (addr >> (pt_index_bits + PAGE_SHIFT)) % 512;
 
         idx as usize
     }
 
     /// Generate physical page number given an address
     pub fn pte_ppn(addr: u64) -> u64 {
-        (addr >> Self::PAGE_SHIFT) << Self::PTE_PPN0_SHIFT
+        (addr >> PAGE_SHIFT) << PTE_PPN0_SHIFT
     }
 
     pub fn pte_next(addr: u64) -> u64 {
-        Self::pte_ppn(addr) | Self::PTE_TYPE_TABLE | Self::PTE_TYPE_VALID
+        pte_ppn(addr) | PTE_TYPE_TABLE | PTE_TYPE_VALID
     }
 
     pub fn pte_leaf(addr: u64) -> u64 {
-        Self::pte_ppn(addr) | Self::PTE_TYPE_BITS | Self::PTE_TYPE_VALID
+        pte_ppn(addr) | PTE_TYPE_BITS | PTE_TYPE_VALID
     }
 }
 
@@ -416,8 +414,8 @@ impl<'a> Loader<'a> {
 
         let mut boot_lvl1_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
-            let text_index_lvl1 = Riscv64::pt_index(num_pt_levels, text_addr, 1);
-            let pt_entry = Riscv64::pte_next(boot_lvl2_pt_elf_addr);
+            let text_index_lvl1 = riscv64::pt_index(num_pt_levels, text_addr, 1);
+            let pt_entry = riscv64::pte_next(boot_lvl2_pt_elf_addr);
             let start = 8 * text_index_lvl1;
             let end = start + 8;
             boot_lvl1_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
@@ -425,33 +423,33 @@ impl<'a> Loader<'a> {
 
         let mut boot_lvl2_pt_elf: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
-            let text_index_lvl2 = Riscv64::pt_index(num_pt_levels, text_addr, 2);
+            let text_index_lvl2 = riscv64::pt_index(num_pt_levels, text_addr, 2);
             for (page, i) in (text_index_lvl2..512).enumerate() {
                 let start = 8 * i;
                 let end = start + 8;
-                let addr = text_addr + ((page as u64) << Riscv64::BLOCK_BITS_2MB);
-                let pt_entry = Riscv64::pte_leaf(addr);
+                let addr = text_addr + ((page as u64) << riscv64::BLOCK_BITS_2MB);
+                let pt_entry = riscv64::pte_leaf(addr);
                 boot_lvl2_pt_elf[start..end].copy_from_slice(&pt_entry.to_le_bytes());
             }
         }
 
         {
-            let index = Riscv64::pt_index(num_pt_levels, first_vaddr, 1);
+            let index = riscv64::pt_index(num_pt_levels, first_vaddr, 1);
             let start = 8 * index;
             let end = start + 8;
             boot_lvl1_pt[start..end]
-                .copy_from_slice(&Riscv64::pte_next(boot_lvl2_pt_addr).to_le_bytes());
+                .copy_from_slice(&riscv64::pte_next(boot_lvl2_pt_addr).to_le_bytes());
         }
 
         let mut boot_lvl2_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
         {
-            let index = Riscv64::pt_index(num_pt_levels, first_vaddr, 2);
+            let index = riscv64::pt_index(num_pt_levels, first_vaddr, 2);
             for (page, i) in (index..512).enumerate() {
                 let start = 8 * i;
                 let end = start + 8;
-                let addr = first_paddr + ((page as u64) << Riscv64::BLOCK_BITS_2MB);
-                let pt_entry = Riscv64::pte_leaf(addr);
+                let addr = first_paddr + ((page as u64) << riscv64::BLOCK_BITS_2MB);
+                let pt_entry = riscv64::pte_leaf(addr);
                 boot_lvl2_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
             }
         }
@@ -497,7 +495,7 @@ impl<'a> Loader<'a> {
             .find_symbol("_loader_end")
             .expect("Could not find 'loader_end' symbol");
 
-        if Aarch64::lvl1_index(start_addr) != Aarch64::lvl1_index(end_addr) {
+        if aarch64::lvl1_index(start_addr) != aarch64::lvl1_index(end_addr) {
             panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
         }
 
@@ -513,9 +511,9 @@ impl<'a> Loader<'a> {
                 .expect("uart_addr not initialized");
             let uart_base = u64::from_le_bytes(data[0..8].try_into().unwrap());
 
-            let lvl1_idx = Aarch64::lvl1_index(uart_base);
+            let lvl1_idx = aarch64::lvl1_index(uart_base);
             #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 = ((lvl1_idx as u64) << AARCH64_1GB_BLOCK_BITS) |
+            let pt_entry: u64 = ((lvl1_idx as u64) << aarch64::BLOCK_BITS_1GB) |
                 (1 << 10) | // access flag
                 (0 << 2) | // strongly ordered memory
                 (1 << 0); // 1G block
@@ -528,15 +526,15 @@ impl<'a> Loader<'a> {
 
         // 1GB lvl1 Table entry
         let pt_entry = (boot_lvl2_lower_addr | 3).to_le_bytes();
-        let lvl1_idx = Aarch64::lvl1_index(start_addr);
+        let lvl1_idx = aarch64::lvl1_index(start_addr);
         let start = 8 * lvl1_idx;
         let end = 8 * (lvl1_idx + 1);
         boot_lvl1_lower[start..end].copy_from_slice(&pt_entry);
 
         // map the loader 1:1 access into 2MB lvl2 Block entries for a 4KB granule
-        let lvl2_idx = Aarch64::lvl2_index(start_addr);
-        for i in lvl2_idx..=Aarch64::lvl2_index(end_addr) {
-            let entry_idx = (i - Aarch64::lvl2_index(start_addr)) << AARCH64_2MB_BLOCK_BITS;
+        let lvl2_idx = aarch64::lvl2_index(start_addr);
+        for i in lvl2_idx..=aarch64::lvl2_index(end_addr) {
+            let entry_idx = (i - aarch64::lvl2_index(start_addr)) << aarch64::BLOCK_BITS_2MB;
             let pt_entry: u64 = (entry_idx as u64 + start_addr) |
                 (1 << 10) | // Access flag
                 (3 << 8) | // Sharable
@@ -550,12 +548,12 @@ impl<'a> Loader<'a> {
         // TODO: this is a complete hack specific to BCM2711/Raspberry Pi 4B and
         // will be removed with patches that re-do this loader mapping code.
         if elf.find_symbol("cpus_release_addr").is_ok() {
-            let lvl2_idx = Aarch64::lvl2_index(0);
+            let lvl2_idx = aarch64::lvl2_index(0);
             // Make sure we don't override the loader mappings done above.
-            assert!(Aarch64::lvl2_index(start_addr) != lvl2_idx);
-            assert!(Aarch64::lvl1_index(start_addr) == Aarch64::lvl1_index(0));
+            assert!(aarch64::lvl2_index(start_addr) != lvl2_idx);
+            assert!(aarch64::lvl1_index(start_addr) == aarch64::lvl1_index(0));
             #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 = ((lvl2_idx as u64) << AARCH64_2MB_BLOCK_BITS) |
+            let pt_entry: u64 = ((lvl2_idx as u64) << aarch64::BLOCK_BITS_2MB) |
                 (1 << 10) | // access flag
                 (0 << 2) | // strongly ordered memory
                 (1 << 0); // 2M block
@@ -567,22 +565,22 @@ impl<'a> Loader<'a> {
         let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl1_upper_addr | 3).to_le_bytes();
-            let idx = Aarch64::lvl0_index(first_vaddr);
+            let idx = aarch64::lvl0_index(first_vaddr);
             boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
         }
 
         let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl2_upper_addr | 3).to_le_bytes();
-            let idx = Aarch64::lvl1_index(first_vaddr);
+            let idx = aarch64::lvl1_index(first_vaddr);
             boot_lvl1_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
         }
 
         let mut boot_lvl2_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
-        let lvl2_idx = Aarch64::lvl2_index(first_vaddr);
+        let lvl2_idx = aarch64::lvl2_index(first_vaddr);
         for i in lvl2_idx..512 {
-            let entry_idx = (i - Aarch64::lvl2_index(first_vaddr)) << AARCH64_2MB_BLOCK_BITS;
+            let entry_idx = (i - aarch64::lvl2_index(first_vaddr)) << aarch64::BLOCK_BITS_2MB;
             let pt_entry: u64 = (entry_idx as u64 + first_paddr) |
                 (1 << 10) | // Access flag
                 (3 << 8) | // Make sure the shareability is the same as the kernel's
