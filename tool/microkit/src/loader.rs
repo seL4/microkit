@@ -12,6 +12,13 @@ use std::io::{BufWriter, Write};
 use std::ops::Range;
 use std::path::Path;
 
+macro_rules! grab_symbol {
+    ($elf: expr, $symbol_name: literal) => {
+        $elf.find_symbol($symbol_name)
+            .expect(concat!("Could not find '", $symbol_name, "' symbol"))
+    };
+}
+
 const PAGE_TABLE_SIZE: usize = 4096;
 
 pub mod aarch64 {
@@ -580,18 +587,10 @@ impl<'a> Loader<'a> {
         first_vaddr: u64,
         first_paddr: u64,
     ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
-        let (text_addr, _) = elf
-            .find_symbol("_text")
-            .expect("Could not find 'text' symbol");
-        let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = elf
-            .find_symbol("boot_lvl1_pt")
-            .expect("Could not find 'boot_lvl1_pt' symbol");
-        let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = elf
-            .find_symbol("boot_lvl2_pt")
-            .expect("Could not find 'boot_lvl2_pt' symbol");
-        let (boot_lvl2_pt_elf_addr, boot_lvl2_pt_elf_size) = elf
-            .find_symbol("boot_lvl2_pt_elf")
-            .expect("Could not find 'boot_lvl2_pt_elf' symbol");
+        let (text_addr, _) = grab_symbol!(elf, "_text");
+        let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = grab_symbol!(elf, "boot_lvl1_pt");
+        let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
+        let (boot_lvl2_pt_elf_addr, boot_lvl2_pt_elf_size) = grab_symbol!(elf, "boot_lvl2_pt_elf");
 
         let num_pt_levels = config.riscv_pt_levels.unwrap().levels();
 
@@ -653,32 +652,17 @@ impl<'a> Loader<'a> {
         first_vaddr: u64,
         first_paddr: u64,
     ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
-        let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = elf
-            .find_symbol("boot_lvl1_lower")
-            .expect("Could not find 'boot_lvl1_lower' symbol");
-        let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = elf
-            .find_symbol("boot_lvl1_upper")
-            .expect("Could not find 'boot_lvl1_upper' symbol");
-        let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = elf
-            .find_symbol("boot_lvl2_upper")
-            .expect("Could not find 'boot_lvl2_upper' symbol");
-        let (boot_lvl0_lower_addr, boot_lvl0_lower_size) = elf
-            .find_symbol("boot_lvl0_lower")
-            .expect("Could not find 'boot_lvl0_lower' symbol");
-        let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = elf
-            .find_symbol("boot_lvl0_upper")
-            .expect("Could not find 'boot_lvl0_upper' symbol");
-        let (boot_lvl2_lower_addr, boot_lvl2_lower_size) = elf
-            .find_symbol("boot_lvl2_lower")
-            .expect("Could not find 'boot_lvl2_lower' symbol");
-        let (start_addr, _) = elf
-            .find_symbol("_loader_start")
-            .expect("Could not find 'loader_start' symbol");
-        let (end_addr, _) = elf
-            .find_symbol("_loader_end")
-            .expect("Could not find 'loader_end' symbol");
+        let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = grab_symbol!(elf, "boot_lvl1_lower");
+        let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = grab_symbol!(elf, "boot_lvl1_upper");
+        let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = grab_symbol!(elf, "boot_lvl2_upper");
+        let (boot_lvl0_lower_addr, boot_lvl0_lower_size) = grab_symbol!(elf, "boot_lvl0_lower");
+        let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = grab_symbol!(elf, "boot_lvl0_upper");
+        let (boot_lvl2_lower_addr, boot_lvl2_lower_size) = grab_symbol!(elf, "boot_lvl2_lower");
 
-        if aarch64::lvl1_index(start_addr) != aarch64::lvl1_index(end_addr) {
+        let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
+        let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
+
+        if aarch64::lvl1_index(loader_start_addr) != aarch64::lvl1_index(loader_end_addr) {
             panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
         }
 
@@ -691,10 +675,11 @@ impl<'a> Loader<'a> {
         let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
         // map optional UART MMIO in l1 1GB page, only available if CONFIG_PRINTING
-        if let Ok((uart_addr, _)) = elf.find_symbol("uart_addr") {
+        if let Ok((uart_addr, uart_addr_size)) = elf.find_symbol("uart_addr") {
             let data = elf
-                .get_data(uart_addr, 8)
+                .get_data(uart_addr, uart_addr_size)
                 .expect("uart_addr not initialized");
+
             let uart_base = u64::from_le_bytes(data[0..8].try_into().unwrap());
 
             let lvl1_idx = aarch64::lvl1_index(uart_base);
@@ -710,19 +695,19 @@ impl<'a> Loader<'a> {
 
         // 1GB lvl1 Table entry
         let pt_entry = aarch64::table_descriptor(boot_lvl2_lower_addr);
-        let lvl1_idx = aarch64::lvl1_index(start_addr);
+        let lvl1_idx = aarch64::lvl1_index(loader_start_addr);
         let start = 8 * lvl1_idx;
         let end = 8 * (lvl1_idx + 1);
         boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
 
         // map the loader 1:1 access into 2MB lvl2 Block entries for a 4KB granule
-        let lvl2_idx = aarch64::lvl2_index(start_addr);
-        for i in lvl2_idx..=aarch64::lvl2_index(end_addr) {
+        let lvl2_idx = aarch64::lvl2_index(loader_start_addr);
+        for i in lvl2_idx..=aarch64::lvl2_index(loader_end_addr) {
             let entry_idx: u64 =
-                ((i - aarch64::lvl2_index(start_addr)) << aarch64::BLOCK_BITS_2MB) as u64;
+                ((i - aarch64::lvl2_index(loader_start_addr)) << aarch64::BLOCK_BITS_2MB) as u64;
 
             let pt_entry =
-                aarch64::block_descriptor(2, start_addr + entry_idx, aarch64::MT_DEVICE_nGnRnE);
+                aarch64::block_descriptor(2, loader_start_addr + entry_idx, aarch64::MT_DEVICE_nGnRnE);
 
             let start = 8 * i;
             let end = 8 * (i + 1);
@@ -734,8 +719,8 @@ impl<'a> Loader<'a> {
         if elf.find_symbol("cpus_release_addr").is_ok() {
             let lvl2_idx = aarch64::lvl2_index(0);
             // Make sure we don't override the loader mappings done above.
-            assert!(aarch64::lvl2_index(start_addr) != lvl2_idx);
-            assert!(aarch64::lvl1_index(start_addr) == aarch64::lvl1_index(0));
+            assert!(aarch64::lvl2_index(loader_start_addr) != lvl2_idx);
+            assert!(aarch64::lvl1_index(loader_start_addr) == aarch64::lvl1_index(0));
 
             let pt_entry = aarch64::block_descriptor(2, lvl2_idx as u64, aarch64::MT_DEVICE_nGnRnE);
 
