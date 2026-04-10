@@ -14,14 +14,12 @@ use std::path::Path;
 
 const PAGE_TABLE_SIZE: usize = 4096;
 
-mod aarch64 {
+pub mod aarch64 {
     use crate::util::mask;
 
-    pub(crate) const BLOCK_BITS_1GB: u64 = 30;
-    pub(crate) const BLOCK_BITS_2MB: u64 = 21;
-    pub(crate) const LVL0_BITS: u64 = 9;
-    pub(crate) const LVL1_BITS: u64 = 9;
-    pub(crate) const LVL2_BITS: u64 = 9;
+    pub const LVL0_BITS: u64 = 9;
+    pub const LVL1_BITS: u64 = 9;
+    pub const LVL2_BITS: u64 = 9;
 
     pub fn lvl0_index(addr: u64) -> usize {
         let idx = (addr >> (BLOCK_BITS_2MB + LVL2_BITS + LVL1_BITS)) & mask(LVL0_BITS);
@@ -36,6 +34,191 @@ mod aarch64 {
     pub fn lvl2_index(addr: u64) -> usize {
         let idx = (addr >> (BLOCK_BITS_2MB)) & mask(LVL2_BITS);
         idx as usize
+    }
+
+    /// These match those in util64.S configured in the MAIR register
+
+    #[allow(non_upper_case_globals, reason = "matching ARM naming convention")]
+    pub const MT_DEVICE_nGnRnE: u64 = 0;
+    #[allow(non_upper_case_globals, reason = "matching ARM naming convention")]
+    pub const MT_DEVICE_nGnRE: u64 = 1 << 2;
+    pub const MT_DEVICE_GRE: u64 = 2 << 2;
+    pub const MT_NORMAL_NC: u64 = 3 << 2;
+    pub const MT_NORMAL: u64 = 4 << 2;
+
+    pub mod descriptor_type {
+        //! The translation table descriptor formats, as per §D8.3 "Translation
+        //! table descriptor formats" of ARM DDI 0487 L.b. Specifically,
+        //! as per "Table D8-48 Determination of descriptor type"
+
+        /// Descriptor type: Table. Condition is lookup level != 3.
+        pub const TABLE: u64 = 0b11;
+        /// Descriptor type: Page. Condition is lookup level == 3.
+        pub const PAGE: u64 = 0b11;
+        /// Descriptor type: Block. Condition is lookup level != 3.
+        pub const BLOCK: u64 = 0b01;
+        /// Descriptor type: Invalid. Strictly speaking bit[1] does not matter.
+        pub const INVALID: u64 = 0b00;
+    }
+
+    // TODO: are we stage 2 or stage 1?
+    // TODO: what is the difference between stage 2 / stage 1??
+    pub mod shareability_attributes {
+        //! Per §D8.6.2 "Stage 1 Shareability attributes", these contain the
+        //! shareability attributes of the descriptor OA for normal-cacheable
+        //! memory.
+
+        /// Non-shareable
+        pub const NON_SHAREABLE: u64 = 0b00;
+        /// Outer-shareable
+        pub const OUTER_SHAREABLE: u64 = 0b10;
+        /// Inner-shareable
+        pub const INNER_SHAREABLE: u64 = 0b11;
+    }
+
+    // TODO: for PT
+
+    /// Per "Figure D8-14 VMSAv8-64 Block descriptor formats" of ARM DDI0487L.b,
+    /// subfigure "4KB, 16KB, and 64KB granules, 48-bit OA", the Output address
+    /// is bits [47:n], and:
+    ///
+    /// > For the 4KB granule size, the level 1 descriptor n is 30,
+    /// > and the level 2 descriptor n is 21.
+    pub const BLOCK_BITS_1GB: u64 = 30;
+
+    /// Per "Figure D8-14 VMSAv8-64 Block descriptor formats" of ARM DDI0487L.b,
+    /// subfigure "4KB, 16KB, and 64KB granules, 48-bit OA", the Output address
+    /// is bits [47:n], and:
+    ///
+    /// > For the 4KB granule size, the level 1 descriptor n is 30,
+    /// > and the level 2 descriptor n is 21.
+    pub const BLOCK_BITS_2MB: u64 = 21;
+
+    /// Per "Table D8-52 Stage 1 VMSAv8-64 Block and Page descriptor fields" and
+    /// "Figure D8-14 VMSAv8-64 Block descriptor formats" of ARM DDI0487L.b;
+    /// specifically subfigure "4KB, 16KB, and 64KB granules, 48-bit OA"
+    pub fn block_descriptor(level: usize, addr: u64, attr_index: u64) -> u64 {
+        // Per Table D8-48, Condition for descriptor_type::BLOCK is level != 3.
+        assert!(level != 3);
+
+        let upper_attributes: u64 = 0;
+
+        let shareability = if attr_index == MT_NORMAL {
+            // Match what the seL4 kernel uses for its page tables
+            shareability_attributes::INNER_SHAREABLE
+        } else {
+            // Per $R_{PYFVQ}$:
+            // > If a region is mapped as Device memory or Normal Non-cacheable
+            // > memory after all enabled translation stages, then the region
+            // > has an effective Shareability attribute of Outer Shareable.
+            // We override the value we place in here to OUTER_SHAREABLE to match
+            // how the hardware behaves.
+            shareability_attributes::OUTER_SHAREABLE
+        };
+
+        // bit[11] is the not global (nG) field, we leave as 0 (global)
+        // bit[10] is the access flag; depending on FEAT_HAFDBS, when software
+        //         manages the AF memory accesses to the page/block when AF=0
+        //         raise an Access Fault; when hardware manages the AF it will
+        //         become 1.
+        // bit[9:8] is SH[1:0] containing stage 1 shareability attributes
+        // bit[7:6] contains AP[2:1] (FIXME: why is this 0b00????)
+        // bit[5] is RES0
+        // bit[4:2] contains AttrIndex
+        let lower_attributes: u64 = (1 << 10) | (0b00 << 6) | (shareability << 8) | attr_index;
+
+        // bits[47:n]
+        let output_address: u64 = addr
+            & !mask(match level {
+                1 => BLOCK_BITS_1GB,
+                2 => BLOCK_BITS_2MB,
+                _ => panic!("unsupported level {level} for block descriptor"),
+            });
+
+        // address must not have bits above 47 set.
+        assert!(addr & mask(48) == addr);
+
+        // bits[63:50] describing the "Upper attributes" are left at 0.
+        // bits[49:48] are RES0
+        // bits[47:n] contain the Output address
+        // bits[n-1:12] are RES0
+        // bits[11:2] contain the "Lower attributes"
+        // bits[1:0] contains the descriptor type
+        upper_attributes | output_address | lower_attributes | descriptor_type::BLOCK
+    }
+
+    /// Per "Table D8-52 Stage 1 VMSAv8-64 Block and Page descriptor fields" and
+    /// "Figure D8-15 VMSAv8-64 Page descriptor formats" of ARM DDI0487L.b;
+    /// specifically subfigure "4KB granule 48-bit OA"
+    pub fn page_descriptor(addr: u64, attr_index: u64) -> u64 {
+        // The main difference between a page descriptor and block descriptor
+        // is in the size of the output address (OA) and in the descriptor type.
+
+        let upper_attributes: u64 = 0;
+
+        let shareability = if attr_index == MT_NORMAL {
+            // Match what the seL4 kernel uses for its page tables
+            shareability_attributes::INNER_SHAREABLE
+        } else {
+            // Per $R_{PYFVQ}$:
+            // > If a region is mapped as Device memory or Normal Non-cacheable
+            // > memory after all enabled translation stages, then the region
+            // > has an effective Shareability attribute of Outer Shareable.
+            // We override the value we place in here to OUTER_SHAREABLE to match
+            // how the hardware behaves.
+            shareability_attributes::OUTER_SHAREABLE
+        };
+
+        // bit[11] is the not global (nG) field, we leave as 0 (global)
+        // bit[10] is the access flag; depending on FEAT_HAFDBS, when software
+        //         manages the AF memory accesses to the page/block when AF=0
+        //         raise an Access Fault; when hardware manages the AF it will
+        //         become 1.
+        // bit[9:8] is SH[1:0] containing stage 1 shareability attributes
+        // bit[7:6] contains AP[2:1] (FIXME: why is this 0b00????)
+        // bit[5] is RES0
+        // bit[4:2] contains AttrIndex
+        let lower_attributes: u64 = (1 << 10) | (0b00 << 6) | (shareability << 8) | attr_index;
+
+        // bits[47:12]
+        let output_address: u64 = addr & !mask(12);
+
+        // address must not have bits above 47 set.
+        assert!(addr & mask(48) == addr);
+
+        // bits[63:50] describing the "Upper attributes" are left at 0.
+        // bits[49:48] are RES0
+        // bits[47:12] contain the Output address
+        // bits[11:2] contain the "Lower attributes"
+        // bits[1:0] contains the descriptor type
+        upper_attributes | output_address | lower_attributes | descriptor_type::PAGE
+    }
+
+    /// Per "Table D8-50 Stage 1 VMSAv8-64 Table descriptor fields" and
+    /// "Figure D8-12 VMSAv8-64 Table descriptor formats" of ARM DDI0487L.b;
+    /// specifically subfigure "4KB, 16KB, and 64KB granules, 48-bit OA"
+    pub fn table_descriptor(addr: u64) -> u64 {
+        // Per Table D8-48, Condition for descriptor_type::TABLE is level != 3.
+
+        // We don't set any of these attributes, most are hardware-feature conditional
+        let attributes: u64 = 0;
+
+        // address must not have bits above 47 or below 12 set
+        assert!(addr & mask(12) == 0x0);
+        assert!(addr & mask(48) == addr);
+
+        let next_level_table_address = addr;
+
+        // bits[63:59] are "Attributes"
+        // bits[58:51] are ignored
+        // bits[50:48] are RES0
+        // bits[47:m] is the next-level table address
+        //  note: here m=12 for 4KB granule
+        // bits[m-1:12] are RES0
+        //  so this doesn't exist for 4KB granule
+        // bits[11:2] are ignored
+        // bits[1:0] contain the descriptor type
+        attributes | next_level_table_address | descriptor_type::TABLE
     }
 }
 
@@ -500,7 +683,10 @@ impl<'a> Loader<'a> {
         }
 
         let mut boot_lvl0_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        boot_lvl0_lower[..8].copy_from_slice(&(boot_lvl1_lower_addr | 3).to_le_bytes());
+        {
+            let pt_entry = aarch64::table_descriptor(boot_lvl1_lower_addr);
+            boot_lvl0_lower[..8].copy_from_slice(&pt_entry.to_le_bytes());
+        }
 
         let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
@@ -512,11 +698,9 @@ impl<'a> Loader<'a> {
             let uart_base = u64::from_le_bytes(data[0..8].try_into().unwrap());
 
             let lvl1_idx = aarch64::lvl1_index(uart_base);
-            #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 = ((lvl1_idx as u64) << aarch64::BLOCK_BITS_1GB) |
-                (1 << 10) | // access flag
-                (0 << 2) | // strongly ordered memory
-                (1 << 0); // 1G block
+
+            let pt_entry = aarch64::block_descriptor(1, uart_base, aarch64::MT_DEVICE_nGnRnE);
+
             let start = 8 * lvl1_idx;
             let end = 8 * (lvl1_idx + 1);
             boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
@@ -525,21 +709,21 @@ impl<'a> Loader<'a> {
         let mut boot_lvl2_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
         // 1GB lvl1 Table entry
-        let pt_entry = (boot_lvl2_lower_addr | 3).to_le_bytes();
+        let pt_entry = aarch64::table_descriptor(boot_lvl2_lower_addr);
         let lvl1_idx = aarch64::lvl1_index(start_addr);
         let start = 8 * lvl1_idx;
         let end = 8 * (lvl1_idx + 1);
-        boot_lvl1_lower[start..end].copy_from_slice(&pt_entry);
+        boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
 
         // map the loader 1:1 access into 2MB lvl2 Block entries for a 4KB granule
         let lvl2_idx = aarch64::lvl2_index(start_addr);
         for i in lvl2_idx..=aarch64::lvl2_index(end_addr) {
-            let entry_idx = (i - aarch64::lvl2_index(start_addr)) << aarch64::BLOCK_BITS_2MB;
-            let pt_entry: u64 = (entry_idx as u64 + start_addr) |
-                (1 << 10) | // Access flag
-                (3 << 8) | // Sharable
-                (0 << 2) |
-                (1 << 0); // 2M block
+            let entry_idx: u64 =
+                ((i - aarch64::lvl2_index(start_addr)) << aarch64::BLOCK_BITS_2MB) as u64;
+
+            let pt_entry =
+                aarch64::block_descriptor(2, start_addr + entry_idx, aarch64::MT_DEVICE_nGnRnE);
+
             let start = 8 * i;
             let end = 8 * (i + 1);
             boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
@@ -552,11 +736,9 @@ impl<'a> Loader<'a> {
             // Make sure we don't override the loader mappings done above.
             assert!(aarch64::lvl2_index(start_addr) != lvl2_idx);
             assert!(aarch64::lvl1_index(start_addr) == aarch64::lvl1_index(0));
-            #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
-            let pt_entry: u64 = ((lvl2_idx as u64) << aarch64::BLOCK_BITS_2MB) |
-                (1 << 10) | // access flag
-                (0 << 2) | // strongly ordered memory
-                (1 << 0); // 2M block
+
+            let pt_entry = aarch64::block_descriptor(2, lvl2_idx as u64, aarch64::MT_DEVICE_nGnRnE);
+
             let start = 8 * lvl2_idx;
             let end = 8 * (lvl2_idx + 1);
             boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
@@ -564,28 +746,28 @@ impl<'a> Loader<'a> {
 
         let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
-            let pt_entry = (boot_lvl1_upper_addr | 3).to_le_bytes();
+            let pt_entry = aarch64::table_descriptor(boot_lvl1_upper_addr);
             let idx = aarch64::lvl0_index(first_vaddr);
-            boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
+            boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
         let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
-            let pt_entry = (boot_lvl2_upper_addr | 3).to_le_bytes();
+            let pt_entry = aarch64::table_descriptor(boot_lvl2_upper_addr);
             let idx = aarch64::lvl1_index(first_vaddr);
-            boot_lvl1_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry);
+            boot_lvl1_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
         let mut boot_lvl2_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
 
         let lvl2_idx = aarch64::lvl2_index(first_vaddr);
         for i in lvl2_idx..512 {
-            let entry_idx = (i - aarch64::lvl2_index(first_vaddr)) << aarch64::BLOCK_BITS_2MB;
-            let pt_entry: u64 = (entry_idx as u64 + first_paddr) |
-                (1 << 10) | // Access flag
-                (3 << 8) | // Make sure the shareability is the same as the kernel's
-                (4 << 2) | // MT_NORMAL memory
-                (1 << 0); // 2MB block
+            let entry_idx: u64 =
+                ((i - aarch64::lvl2_index(first_vaddr)) << aarch64::BLOCK_BITS_2MB) as u64;
+
+            let pt_entry =
+                aarch64::block_descriptor(2, first_paddr + entry_idx, aarch64::MT_NORMAL);
+
             let start = 8 * i;
             let end = 8 * (i + 1);
             boot_lvl2_upper[start..end].copy_from_slice(&pt_entry.to_le_bytes());
