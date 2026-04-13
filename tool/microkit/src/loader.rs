@@ -647,6 +647,95 @@ impl<'a> Loader<'a> {
         ]
     }
 
+    /// AArch64 loader page tables have two variations:
+    ///  - Loader in EL2, then Stage 2 translations in use, so we have the
+    ///    singular TTBR0_EL2 register containing the Level 0 table;
+    ///    this allows virtual address in the range [0,2^48).
+    ///  - Loader in EL1, then Stage 1 translations are in use, so we have both
+    ///    the TTBR0_EL1 (covering vaddr in range [0,2^48)) and TTBR1_EL2 (
+    ///    (covering vaddr in the range [2^64-2^48,2^64)), and containing
+    ///    the "Level 0 Lower" page table, and "Level 0 Upper" page table
+    ///    physical addresses respectively.
+    ///
+    /// Thus, for EL2 loader, the singular Level 0 page table contains the table
+    /// descriptors for the "Level 1 Upper" and "Level 1 Lower" page tables.
+    /// For the EL1 loader, we instead have two Level 0 page tables, and
+    /// "Level 0 Lower" contains the "Level 1 Lower" descriptor, and "Level 0
+    /// Upper" contains the "Level 1 Upper" descriptor.
+    /// Otherwise, the page tables layout from Level 1 downwards are identical
+    /// (but not necessarily the layout within the page/table/block descriptors).
+    ///
+    ///          (256 TiB)
+    ///   512 +-- Level 0 --+ 2^48
+    ///       |             |
+    ///       |   (empty)   |
+    ///       |             |
+    ///   k+1 +-------------+                 (512 GiB)
+    ///       | Level 1 Upr | ---------->  +-- Level 1 --+
+    ///     k +-------------+              |             |
+    ///       |             |              |   (empty)   |
+    ///       |             |              |             |
+    ///       |             |         l+1  +-------------+                 (1 GiB)
+    ///       |             |              | Level 2 Upr | ----------> +-- Level 2 --+             +-------------+
+    ///       |             |           l  +-------------+             |             | ----------> | 2 MiB block |
+    ///       |             |              |             |         511 |-------------|             +-------------+
+    ///       |             |              |   (empty)   |             |             | ----------> | 2 MiB block |
+    ///       |             |              |             |         510 |-------------|             +-------------+
+    ///       |             |              +-------------+             |             | ----------> | 2 MiB block |
+    ///       |             |                                          |-------------|             +-------------+
+    ///       |   (empty)   |                          Kernel Regions       (...)         (...)         (...)
+    ///       |             |                                          |-------------|             +-------------+
+    ///       |             |                                          |             | ----------> | 2 MiB block |
+    ///       |             |                                        m |-------------|             +-------------+ p
+    ///       |             |                                          |             |
+    ///       |             |                                          |   (empty)   |
+    ///       |             |                                          |             |
+    ///       |             |                                        0 +-------------+
+    ///       |             |
+    ///       |             |
+    ///       |             |
+    ///     1 +-------------+                 (512 GiB)
+    ///       | Level 1 Lwr | ---------->  +-- Level 1 --+
+    ///     0 +-------------+              |             |
+    ///                                    |   (empty)   |
+    ///                                    |             |
+    ///                                u+1 +-------------+             +-------------+
+    ///                                    |  uart_base  | ----------> | 1 GiB block |
+    ///                                  u +-------------+             +-------------+
+    ///                                    |             |
+    ///                                    |   (empty)   |
+    ///                                    |             |
+    ///                               i+1  +-------------+                 (1 GiB)
+    ///                                    | Level 2 Lwr | ----------> +-- Level 2 --+
+    ///                                 i  +-------------+             |             |
+    ///                                    |             |             |   (empty)   |
+    ///                                    |   (empty)   |             |             |
+    ///                                    |             |           t +-------------+             +-------------+
+    ///                                    +-------------+             |             | ----------> | 2 MiB block |
+    ///                                                                |-------------|             +-------------+
+    ///                                                                |             | ----------> | 2 MiB block |
+    ///                                                                |-------------|             +-------------+
+    ///                                                Loader Regions       (...)         (...)         (...)
+    ///                                                                |-------------|             +-------------+
+    ///                                                                |             | ----------> | 2 MiB block |
+    ///                                                                |-------------|             +-------------+
+    ///                                                                |             | ----------> | 2 MiB block |
+    ///                                                              s +-------------+             +-------------+
+    ///                                                                |             |
+    ///                                                                |   (empty)   |
+    ///                                                                |             |
+    ///                                                                +-------------+
+    ///
+    /// Where:
+    ///      k = align_down(kernel_first_vaddr, 512GiB),
+    ///      l = align_down(kernel_first_vaddr, 1GiB),
+    ///      m = align_down(kernel_first_vaddr, 2MiB),
+    ///      p = align_down(kernel_first_paddr, 2MiB),
+    ///      u = align_down(uart_base, 1GiB),
+    ///      i = align_down(loader_start_addr, 1GiB),
+    ///      s = align_down(loader_start_addr, 2MiB),
+    ///      t = align_up(loader_end_addr, 2MiB),
+    ///
     fn aarch64_setup_pagetables(
         elf: &ElfFile,
         first_vaddr: u64,
