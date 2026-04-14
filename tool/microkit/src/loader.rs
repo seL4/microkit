@@ -200,7 +200,6 @@ impl<'a> Loader<'a> {
 
         // Compute an available physical memory segment large enough to house the initial task (CapDL initialiser with spec)
         // that is after the kernel window.
-        let inittask_p_v_offset = initial_task_vaddr_range.start - initial_task_phy_base;
         let inittask_v_entry = initial_task_elf.entry;
 
         for segment in initial_task_segments.iter() {
@@ -259,10 +258,13 @@ impl<'a> Loader<'a> {
 
         let kernel_entry = kernel_elf.entry;
 
+        // initial task virt + pv_offset == initial task physical, so
+        // pv_offset == initial task physical - initial task virt
         let pv_offset = initial_task_phy_base.wrapping_sub(initial_task_vaddr_range.start);
 
         let ui_p_reg_start = initial_task_phy_base;
-        let ui_p_reg_end = initial_task_vaddr_range.end - inittask_p_v_offset;
+        let ui_p_reg_end =
+            ui_p_reg_start + (initial_task_vaddr_range.end - initial_task_vaddr_range.start);
         assert!(ui_p_reg_end > ui_p_reg_start);
 
         // This clone isn't too bad as it is just a Vec<(u64, &[u8])>
