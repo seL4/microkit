@@ -1097,7 +1097,8 @@ Additionally, it supports the following child elements:
 The `vcpu` element has the following attributes:
 
 * `id`: The vCPU identifier. Must be at least 0 and less than 62.
-* `cpu`: (optional) set the physical CPU core that the vCPU will run on. Defaults to zero.
+* `cpu`: (optional) set the physical CPU core that the vCPU will run on. Defaults to the same CPU
+                    core of the PD that the virtual machine belongs to.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the vCPU identifier.
 
 The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
