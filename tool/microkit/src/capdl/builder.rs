@@ -936,12 +936,14 @@ pub fn build_capdl_spec(
                         capdl_util_make_vcpu_cap(vm_vcpu_obj_id),
                     ));
 
+                    // vCPU should default to CPU that the PD runs if not explicitly specified.
+                    let vcpu_affinity = vcpu.cpu.unwrap_or(pd.cpu);
                     // Finally create TCB, unlike PDs, VMs are suspended by default until resume'd by their parent.
                     let vm_vcpu_tcb_inner_obj = object::Tcb {
                         slots: caps_to_bind_to_vm_tcbs,
                         extra: Box::new(object::TcbExtraInfo {
                             ipc_buffer_addr: Word(0),
-                            affinity: Word(vcpu.cpu.0.into()),
+                            affinity: Word(vcpu_affinity.0.into()),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
                             // Given the use cases of VMs, for now we always give them FPU access.
