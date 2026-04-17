@@ -295,7 +295,7 @@ pub struct VirtualMachine {
 pub struct VirtualCpu {
     pub id: u64,
     pub setvar_id: Option<String>,
-    pub cpu: CpuCore,
+    pub cpu: Option<CpuCore>,
 }
 
 /// To avoid code duplication for handling protection domains
@@ -1186,22 +1186,26 @@ impl VirtualMachine {
 
                     let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
 
-                    let cpu = CpuCore(
-                        sdf_parse_number(child.attribute("cpu").unwrap_or("0"), node)?
+                    let cpu = if let Some(cpu) = child.attribute("cpu") {
+                        let cpu_value: u8 = sdf_parse_number(cpu, node)?
                             .try_into()
-                            .expect("cpu # fits in u8"),
-                    );
+                            .expect("cpu # fits in u8");
 
-                    if cpu.0 >= config.num_cores {
-                        return Err(value_error(
-                            xml_sdf,
-                            &child,
-                            format!(
-                                "cpu core must be less than {}, got {}",
-                                config.num_cores, cpu
-                            ),
-                        ));
-                    }
+                        if cpu_value >= config.num_cores {
+                            return Err(value_error(
+                                xml_sdf,
+                                &child,
+                                format!(
+                                    "cpu core must be less than {}, got {}",
+                                    config.num_cores, cpu_value
+                                ),
+                            ));
+                        }
+
+                        Some(CpuCore(cpu_value))
+                    } else {
+                        None
+                    };
 
                     vcpus.push(VirtualCpu { id, setvar_id, cpu });
                 }
