@@ -445,7 +445,14 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "HardwareDebugAPI": True,
+            },
+            KernelArch.X86_64: {
+                "HardwareDebugAPI": True,
+            }
+        },
     ),
     ConfigInfo(
         name="benchmark",
