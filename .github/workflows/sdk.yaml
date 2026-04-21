@@ -75,22 +75,22 @@ jobs:
       - name: Build SDK
         run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=seL4 --version ${{ env.SDK_VERSION }} --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --release-packaging"
       - name: Upload SDK (macos-aarch64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64.tar.gz
       - name: Upload SDK (macos-x86-64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
       - name: Upload SDK (linux-aarch64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
       - name: Upload SDK (linux-x86-64)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
           path: release/microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64.tar.gz
