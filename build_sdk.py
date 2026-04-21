@@ -18,7 +18,7 @@ from os import popen, system, environ
 import shutil
 from pathlib import Path
 from dataclasses import dataclass
-from sys import executable
+from sys import executable, stderr
 from tarfile import open as tar_open, TarInfo
 import platform as host_platform
 from enum import IntEnum
@@ -877,6 +877,20 @@ def build_initialiser(
     dest.chmod(0o744)
 
 
+def github_actions_board_matrix(
+    matrix_file: Path, build_goals: list[tuple[BoardInfo, list[ConfigInfo]]]
+) -> None:
+
+    board_matrix = [
+        {"board": board.name, "march": board.arch.to_str(), "config": config.name}
+        for (board, configs) in build_goals
+        for config in configs
+    ]
+
+    with open(matrix_file, "w") as f:
+        json.dump(board_matrix, f)
+
+
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
@@ -891,6 +905,7 @@ def main() -> None:
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
     parser.add_argument("--release-packaging", action="store_true", help="All SDKs for distribution will be produced")
+    parser.add_argument("--matrix", type=Path, help="Print out elaborated configs to a matrix for GitHub actions")
     # Read from the version file as unless someone has specified
     # a version, that is the source of truth
     with open("VERSION", "r") as f:
@@ -938,6 +953,10 @@ def main() -> None:
             elaborated_configs = [config for config in elaborated_configs if config.name in selected_config_names]
 
         build_goals.append((board, elaborated_configs))
+
+    if args.matrix is not None:
+        github_actions_board_matrix(args.matrix, build_goals)
+        return
 
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
