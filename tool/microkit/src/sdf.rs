@@ -1760,7 +1760,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     return Err(
                         "Error: only one PD can receive the remaining untypeds (Map the MR with 'receive_all_untypeds' set to true)".to_string()
                     );
-                } else {
+                } else if mr.receive_all_untypeds {
                     pd_has_remaining_untypeds = true;
                     pd_receive_all_untypeds_idx = idx;
                 }
