@@ -42,7 +42,7 @@ const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
 
 fn print_usage() {
-    println!("usage: microkit [-h] [-o OUTPUT] [--image-type {{binary,elf,uimage}}] [-r REPORT] --board BOARD --config CONFIG [--capdl-json CAPDL_SPEC] --search-path [SEARCH_PATH ...] system")
+    println!("usage: microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system")
 }
 
 fn print_help(available_boards: &[String]) {
@@ -54,6 +54,7 @@ fn print_help(available_boards: &[String]) {
     println!("  -o, --output OUTPUT");
     println!("  -r, --report REPORT");
     println!("  --image-type {{binary,elf}}");
+    println!("  --override-kernel KERNEL (for debugging purposes)");
     println!("  --board {}", available_boards.join("\n          "));
     println!("  --config CONFIG");
     println!("  --capdl-json CAPDL_SPEC (JSON format)");
@@ -107,6 +108,7 @@ struct Args<'a> {
     output: &'a str,
     search_paths: Vec<&'a String>,
     output_image_type: Option<&'a str>,
+    override_kernel: Option<&'a str>,
 }
 
 impl<'a> Args<'a> {
@@ -121,6 +123,7 @@ impl<'a> Args<'a> {
         let mut board = None;
         let mut config = None;
         let mut output_image_type = None;
+        let mut override_kernel = None;
 
         if args.len() <= 1 {
             print_usage();
@@ -198,6 +201,17 @@ impl<'a> Args<'a> {
                         std::process::exit(1);
                     }
                 }
+                "--override-kernel" => {
+                    if i < args.len() - 1 {
+                        override_kernel = Some(args[i + 1].as_str());
+                        i += 1;
+                    } else {
+                        eprintln!(
+                            "microkit: error: argument --override-kernel: expected one argument"
+                        );
+                        std::process::exit(1);
+                    }
+                }
                 _ => {
                     if in_search_path {
                         search_paths.push(&args[i]);
@@ -252,6 +266,7 @@ impl<'a> Args<'a> {
             output,
             search_paths,
             output_image_type,
+            override_kernel,
         }
     }
 }
@@ -339,7 +354,10 @@ fn main() -> Result<(), String> {
         .join(args.config)
         .join("elf");
     let loader_elf_path = elf_path.join("loader.elf");
-    let kernel_elf_path = elf_path.join("sel4.elf");
+    let kernel_elf_path = match args.override_kernel {
+        Some(path) => Path::new(path),
+        None => &elf_path.join("sel4.elf"),
+    };
     let monitor_elf_path = elf_path.join("monitor.elf");
     let capdl_init_elf_path = elf_path.join("initialiser.elf");
 
@@ -596,7 +614,7 @@ fn main() -> Result<(), String> {
         match kernel_config.arch {
             Arch::X86_64 => (None, None, None),
             Arch::Aarch64 | Arch::Riscv64 => {
-                let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap_or_else(|e| {
+                let kernel_elf = ElfFile::from_path(kernel_elf_path).unwrap_or_else(|e| {
                     eprintln!(
                         "ERROR: failed to parse kernel ELF ({}): {}",
                         kernel_elf_path.display(),
@@ -921,7 +939,7 @@ fn main() -> Result<(), String> {
                     Ok(size) => {
                         // Copy the kernel to the build directory as well so users doesn't have to dig through the SDK.
                         if let Err(copy_err) = fs::copy(
-                            &kernel_elf_path,
+                            kernel_elf_path,
                             image_out_path.parent().unwrap().join(KERNEL_COPY_FILENAME),
                         ) {
                             eprintln!("ERROR: couldn't copy the kernel to image's output directory: {copy_err}");

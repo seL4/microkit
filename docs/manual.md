@@ -456,9 +456,9 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT]
-              [--capdl-json CAPDL_SPEC] [--image-type {binary,elf,uimage}]
-              --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
+    microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system
+
+See `microkit --help` for a full list of options.
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
@@ -475,6 +475,11 @@ The report is a plain text file describing important information about the syste
 The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
+
+The `--override-kernel` option will override the kernel ELF used for the system rather than from the SDK.
+It is important to note that this is largely just for debugging purposes and the Microkit is
+highly tied to a specific version and configuration of the kernel. When using this option the kernel
+should be the same version and compiled with the same configuration options.
 
 ## Image format
 
