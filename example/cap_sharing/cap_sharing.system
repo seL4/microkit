@@ -5,6 +5,8 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
+    <cnode name="sharing_cnode" size_bits="8" />
+
     <protection_domain name="primary" priority="1">
         <program_image path="cap_sharing.elf" />
 
@@ -16,6 +18,8 @@
             <!-- You can also have it of yourself -->
             <cap_sc  slot="3" pd="primary" />
             <cap_tcb slot="4" pd="primary" />
+
+            <cap_cspace slot="5" cnode_name="sharing_cnode" />
         </cspace>
     </protection_domain>
 
