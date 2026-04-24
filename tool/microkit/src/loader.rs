@@ -498,7 +498,7 @@ impl<'a> Loader<'a> {
             .expect("Could not find 'loader_end' symbol");
 
         if Aarch64::lvl1_index(start_addr) != Aarch64::lvl1_index(end_addr) {
-            panic!("We only map 1GiB, but elfloader paddr range covers multiple GiB");
+            panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
         }
 
         let mut boot_lvl0_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
