@@ -547,6 +547,23 @@ impl<'a> Loader<'a> {
             boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
+        // TODO: this is a complete hack specific to BCM2711/Raspberry Pi 4B and
+        // will be removed with patches that re-do this loader mapping code.
+        if elf.find_symbol("cpus_release_addr").is_ok() {
+            let lvl2_idx = Aarch64::lvl2_index(0);
+            // Make sure we don't override the loader mappings done above.
+            assert!(Aarch64::lvl2_index(start_addr) != lvl2_idx);
+            assert!(Aarch64::lvl1_index(start_addr) == Aarch64::lvl1_index(0));
+            #[allow(clippy::identity_op)] // keep the (0 << 2) for clarity
+            let pt_entry: u64 = ((lvl2_idx as u64) << AARCH64_2MB_BLOCK_BITS) |
+                (1 << 10) | // access flag
+                (0 << 2) | // strongly ordered memory
+                (1 << 0); // 2M block
+            let start = 8 * lvl2_idx;
+            let end = 8 * (lvl2_idx + 1);
+            boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+        }
+
         let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = (boot_lvl1_upper_addr | 3).to_le_bytes();
