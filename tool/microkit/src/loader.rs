@@ -663,6 +663,12 @@ impl<'a> Loader<'a> {
         let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
         let (boot_lvl2_pt_elf_addr, boot_lvl2_pt_elf_size) = grab_symbol!(elf, "boot_lvl2_pt_elf");
 
+        // We map the loader using 2MB pages, so make sure the base is actually aligned.
+        assert!(text_addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
+        // We map the kernel using 2MB pages, so make sure the base is actually aligned.
+        assert!(first_paddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
+        assert!(first_vaddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
+
         let num_pt_levels = config.riscv_pt_levels.unwrap().levels();
 
         let mut boot_lvl1_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
@@ -823,6 +829,10 @@ impl<'a> Loader<'a> {
 
         let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
         let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
+
+        // We map the kernel using 2MB pages, so make sure the base is actually aligned.
+        assert!(first_paddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
+        assert!(first_vaddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
 
         // Stage 1 or 2 depends on hypervisor config. TODO: Vary.
         let hypervisor = true;
