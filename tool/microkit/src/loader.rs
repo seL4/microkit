@@ -302,6 +302,7 @@ pub mod aarch64 {
 
 mod riscv64 {
     pub(crate) const BLOCK_BITS_2MB: u64 = 21;
+    pub(crate) const PAGE_BITS_4K: u64 = 12;
 
     pub(crate) const PAGE_TABLE_INDEX_BITS: u64 = 9;
     pub(crate) const PAGE_SHIFT: u64 = 12;
@@ -662,13 +663,11 @@ impl<'a> Loader<'a> {
         let (text_addr, _) = grab_symbol!(elf, "_text");
         let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = grab_symbol!(elf, "boot_lvl1_pt");
         let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
+        let (boot_lvl3_pt_addr, boot_lvl3_pt_size) = grab_symbol!(elf, "boot_lvl3_pt");
         let (boot_lvl2_pt_loader_addr, boot_lvl2_pt_loader_size) = grab_symbol!(elf, "boot_lvl2_pt_loader");
 
         // We map the loader using 2MB pages, so make sure the base is actually aligned.
         assert!(text_addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
-        // We map the kernel using 2MB pages, so make sure the base is actually aligned.
-        assert!(first_paddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
-        assert!(first_vaddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
 
         let num_pt_levels = config.riscv_pt_levels.unwrap().levels();
 
@@ -701,14 +700,33 @@ impl<'a> Loader<'a> {
                 .copy_from_slice(&riscv64::pte_next(boot_lvl2_pt_addr).to_le_bytes());
         }
 
+        let mut boot_lvl3_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         let mut boot_lvl2_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-
         {
-            let index = riscv64::pt_index(num_pt_levels, first_vaddr, 2);
-            for (page, i) in (index..512).enumerate() {
+            let mut index_lvl2 = riscv64::pt_index(num_pt_levels, first_vaddr, 2);
+            if !first_vaddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB) {
+                let index_lvl3 = riscv64::pt_index(num_pt_levels, first_vaddr, 3);
+                for (page, i) in (index_lvl3..512).enumerate() {
+                    let start = 8 * i;
+                    let end = start + 8;
+                    let addr = first_paddr + ((page as u64) << riscv64::PAGE_BITS_4K);
+                    assert!(addr.is_multiple_of(1 << riscv64::PAGE_BITS_4K));
+                    let pt_entry = riscv64::pte_leaf(addr);
+                    boot_lvl3_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+                }
+                let start = 8 * index_lvl2;
+                let end = start + 8;
+                let lvl3_pt_entry = riscv64::pte_next(boot_lvl3_pt_addr);
+                assert!(boot_lvl3_pt_addr.is_multiple_of(1 << riscv64::PAGE_BITS_4K));
+                boot_lvl2_pt[start..end].copy_from_slice(&lvl3_pt_entry.to_le_bytes());
+                index_lvl2 += 1;
+            }
+            let first_paddr_aligned = round_up(first_paddr, 1 << riscv64::BLOCK_BITS_2MB);
+            for (page, i) in (index_lvl2..512).enumerate() {
                 let start = 8 * i;
                 let end = start + 8;
-                let addr = first_paddr + ((page as u64) << riscv64::BLOCK_BITS_2MB);
+                let addr = first_paddr_aligned + ((page as u64) << riscv64::BLOCK_BITS_2MB);
+                assert!(addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
                 let pt_entry = riscv64::pte_leaf(addr);
                 boot_lvl2_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
             }
@@ -717,6 +735,7 @@ impl<'a> Loader<'a> {
         vec![
             (boot_lvl1_pt_addr, boot_lvl1_pt_size, boot_lvl1_pt),
             (boot_lvl2_pt_addr, boot_lvl2_pt_size, boot_lvl2_pt),
+            (boot_lvl3_pt_addr, boot_lvl3_pt_size, boot_lvl3_pt),
             (
                 boot_lvl2_pt_loader_addr,
                 boot_lvl2_pt_loader_size,
