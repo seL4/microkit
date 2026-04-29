@@ -664,7 +664,8 @@ impl<'a> Loader<'a> {
         let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = grab_symbol!(elf, "boot_lvl1_pt");
         let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
         let (boot_lvl3_pt_addr, boot_lvl3_pt_size) = grab_symbol!(elf, "boot_lvl3_pt");
-        let (boot_lvl2_pt_loader_addr, boot_lvl2_pt_loader_size) = grab_symbol!(elf, "boot_lvl2_pt_loader");
+        let (boot_lvl2_pt_loader_addr, boot_lvl2_pt_loader_size) =
+            grab_symbol!(elf, "boot_lvl2_pt_loader");
 
         // We map the loader using 2MB pages, so make sure the base is actually aligned.
         assert!(text_addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
