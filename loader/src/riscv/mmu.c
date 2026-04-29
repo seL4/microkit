@@ -14,7 +14,7 @@
 uint64_t boot_lvl1_pt[1 << 9] ALIGN(1 << 12);
 uint64_t boot_lvl2_pt[1 << 9] ALIGN(1 << 12);
 /* Paging structures for identity mapping */
-uint64_t boot_lvl2_pt_elf[1 << 9] ALIGN(1 << 12);
+uint64_t boot_lvl2_pt_loader[1 << 9] ALIGN(1 << 12);
 
 
 /*

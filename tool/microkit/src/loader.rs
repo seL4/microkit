@@ -662,7 +662,7 @@ impl<'a> Loader<'a> {
         let (text_addr, _) = grab_symbol!(elf, "_text");
         let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = grab_symbol!(elf, "boot_lvl1_pt");
         let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
-        let (boot_lvl2_pt_elf_addr, boot_lvl2_pt_elf_size) = grab_symbol!(elf, "boot_lvl2_pt_elf");
+        let (boot_lvl2_pt_loader_addr, boot_lvl2_pt_loader_size) = grab_symbol!(elf, "boot_lvl2_pt_loader");
 
         // We map the loader using 2MB pages, so make sure the base is actually aligned.
         assert!(text_addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
@@ -675,13 +675,13 @@ impl<'a> Loader<'a> {
         let mut boot_lvl1_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let text_index_lvl1 = riscv64::pt_index(num_pt_levels, text_addr, 1);
-            let pt_entry = riscv64::pte_next(boot_lvl2_pt_elf_addr);
+            let pt_entry = riscv64::pte_next(boot_lvl2_pt_loader_addr);
             let start = 8 * text_index_lvl1;
             let end = start + 8;
             boot_lvl1_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
-        let mut boot_lvl2_pt_elf: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+        let mut boot_lvl2_pt_loader: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let text_index_lvl2 = riscv64::pt_index(num_pt_levels, text_addr, 2);
             for (page, i) in (text_index_lvl2..512).enumerate() {
@@ -689,7 +689,7 @@ impl<'a> Loader<'a> {
                 let end = start + 8;
                 let addr = text_addr + ((page as u64) << riscv64::BLOCK_BITS_2MB);
                 let pt_entry = riscv64::pte_leaf(addr);
-                boot_lvl2_pt_elf[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+                boot_lvl2_pt_loader[start..end].copy_from_slice(&pt_entry.to_le_bytes());
             }
         }
 
@@ -718,9 +718,9 @@ impl<'a> Loader<'a> {
             (boot_lvl1_pt_addr, boot_lvl1_pt_size, boot_lvl1_pt),
             (boot_lvl2_pt_addr, boot_lvl2_pt_size, boot_lvl2_pt),
             (
-                boot_lvl2_pt_elf_addr,
-                boot_lvl2_pt_elf_size,
-                boot_lvl2_pt_elf,
+                boot_lvl2_pt_loader_addr,
+                boot_lvl2_pt_loader_size,
+                boot_lvl2_pt_loader,
             ),
         ]
     }
