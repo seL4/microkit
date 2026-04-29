@@ -479,6 +479,7 @@ impl<'a> Loader<'a> {
 
         let pagetable_vars = match config.arch {
             Arch::Aarch64 => Loader::aarch64_setup_pagetables(
+                config,
                 &loader_elf,
                 kernel_first_vaddr,
                 kernel_first_paddr,
@@ -816,6 +817,7 @@ impl<'a> Loader<'a> {
     /// ```
     ///
     fn aarch64_setup_pagetables(
+        config: &Config,
         elf: &ElfFile,
         first_vaddr: u64,
         first_paddr: u64,
@@ -834,16 +836,15 @@ impl<'a> Loader<'a> {
         assert!(first_paddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
         assert!(first_vaddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
 
-        // Stage 1 or 2 depends on hypervisor config. TODO: Vary.
-        let hypervisor = true;
+        // Stage 1 or 2 depends on hypervisor config.
         #[rustfmt::skip]
-        let memattr_normal = if hypervisor {
+        let memattr_normal = if config.hypervisor {
             aarch64::MemAttr::Stage2 { mem_attr: aarch64::s2_mem_attr::NORMAL_INNER_WBC_OUTER_WBC }
         } else {
             aarch64::MemAttr::Stage1 { attr_index: aarch64::s1_mair_attr_index::MT_NORMAL }
         };
         #[rustfmt::skip]
-        let memattr_device = if hypervisor {
+        let memattr_device = if config.hypervisor {
             aarch64::MemAttr::Stage2 { mem_attr: aarch64::s2_mem_attr::DEVICE_nGnRnE }
         } else {
             aarch64::MemAttr::Stage1 { attr_index: aarch64::s1_mair_attr_index::MT_DEVICE_nGnRnE }
