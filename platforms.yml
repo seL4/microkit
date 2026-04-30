@@ -94,3 +94,6 @@ platforms:
   - name: zcu102
     cmake_plat: zcu102
     since: 1.3.0
+  - name: stm32mp2
+    cmake_plat: stm32mp257f-ev1
+    since: dev

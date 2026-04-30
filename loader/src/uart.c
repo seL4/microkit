@@ -188,6 +188,20 @@ void putc(uint8_t ch)
     while ((*UART_REG(ULSR) & ULSR_THRE) == 0);
     *UART_REG(UTHR) = ch;
 }
+#elif defined(CONFIG_PLAT_STM32MP2)
+
+#define UART_BASE     0x400e0000
+#define USART_ISR     0x1c
+#define USART_TDR     0x28
+#define USART_ISR_TXE 0x80
+
+void uart_init(void) {}
+
+void putc(uint8_t ch)
+{
+    while (!(*UART_REG(USART_ISR) & USART_ISR_TXE));
+    *UART_REG(USART_TDR) = ch;
+}
 #elif defined(CONFIG_ARCH_RISCV64)
 
 #include "riscv/sbi.h"
