@@ -852,10 +852,6 @@ impl<'a> Loader<'a> {
         let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
         let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
 
-        // We map the kernel using 2MB pages, so make sure the base is actually aligned.
-        assert!(first_paddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
-        assert!(first_vaddr.is_multiple_of(1 << aarch64::BLOCK_BITS_2MB));
-
         // Stage 1 or 2 depends on hypervisor config.
         #[rustfmt::skip]
         let memattr_normal = if config.hypervisor {
