@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "smc.h"
+#include "../arch.h"
 #include "../cpus.h"
 #include "../cutil.h"
 #include "../loader.h"
@@ -110,6 +111,14 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
 
     plat_save_hw_id(logical_cpu, mpidr_el1);
 
+    int r = arch_mmu_enable(logical_cpu);
+    if (r != 0) {
+        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
+        puthex32(r);
+        puts("\n");
+        goto fail;
+    }
+
     start_kernel(logical_cpu);
 
 fail:
@@ -174,6 +183,10 @@ int plat_start_cpu(int logical_cpu)
     sp[0] = logical_cpu;
     /* zero out what was here before */
     sp[1] = 0;
+
+    /* clean up the cache line containing sp before use by secondary core */
+    asm volatile("dc cvac, %0" :: "r"(sp) : "memory");
+    asm volatile("dsb sy" ::: "memory");
 
     /* Arguments as per 5.1.4 CPU_ON of the PSCI spec.
 
