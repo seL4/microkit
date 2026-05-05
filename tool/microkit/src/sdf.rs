@@ -2018,6 +2018,26 @@ pub fn parse(
             ));
         }
 
+        // Due to a kernel limitation in `src/arch/x86/c_traps.c`,
+        // only the VMM's bound ntfn is checked for pending ntfn.
+        // The endpoint object isn't passed to the kernel and checked for
+        // pending messages so PPC won't work while the VCPU is running.
+        // Technically PPC still works if the VCPU isn't resumed. But
+        // we shouldn't expose this footgun to users.
+        if config.arch == Arch::X86_64
+            && ((ch.end_a.pp && pd_b.virtual_machine.is_some())
+                || (ch.end_b.pp && pd_a.virtual_machine.is_some()))
+        {
+            return Err(format!(
+                "Error: It is not possible to PPC to PD '{}' with a bound vCPU from PD '{}' on x86_64 @ {}:{}:{}",
+                    if ch.end_a.pp {&pd_b.name} else {&pd_a.name},
+                    if ch.end_a.pp {&pd_a.name} else {&pd_b.name},
+                    filename,
+                    pd_a.text_pos.unwrap().row,
+                    pd_a.text_pos.unwrap().col
+            ));
+        }
+
         ch_ids[ch.end_a.pd].push(ch.end_a.id);
         ch_ids[ch.end_b.pd].push(ch.end_b.id);
     }
