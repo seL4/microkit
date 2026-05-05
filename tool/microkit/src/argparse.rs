@@ -7,7 +7,6 @@
 use std::fmt;
 use std::iter::Peekable;
 use std::path::PathBuf;
-use std::fmt;
 use crate::sdkparse::{SdkInfo};
 
 pub fn print_usage() {
@@ -173,7 +172,7 @@ impl Args {
                 }
                 "--board" => {
                     let board_param = consume_parameter(&mut args, "--board")?;
-                    if !sdkinfo.available_boards.contains(&board_param) {
+                    if !sdkinfo.available_boards_contains(&board_param) {
                         return Err(ArgsError::InvalidBoardParameter {
                             parameter: board_param,
                         });

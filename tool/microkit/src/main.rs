@@ -297,7 +297,7 @@ fn main() -> Result<(), String> {
     let elf_path = current_config.config_dir.join("elf");
     let loader_elf_path = elf_path.join("loader.elf");
     let kernel_elf_path = match args.override_kernel {
-        Some(path) => Path::new(path),
+        Some(ref path) => path,
         None => &elf_path.join("sel4.elf"),
     };
     let monitor_elf_path = elf_path.join("monitor.elf");
@@ -326,12 +326,12 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let image_output_type = match ImageOutputType::based_on_requested(
+    let image_output_type = match ImageOutputType::resolve(
         &args.requested_image_type,
         &kernel_config.arch,
         args.board.as_str(),
     ) {
-        Some(image_output_type) => image_output_type,
+        Some(image) => image,
         None => {
             let err = MainError::UnsupportedImageType {
                 requested: args.requested_image_type.clone(),
