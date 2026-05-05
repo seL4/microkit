@@ -706,34 +706,38 @@ pub fn build_capdl_spec(
 
         // Step 3-4 Create and Map IO Page Table Structure
         if kernel_config.iommu {
-            let mut pci_to_iospace: HashMap<(u8, u8, u8), ObjectId> = HashMap::new();
+            let mut pci_to_iospace: HashMap<u16, ObjectId> = HashMap::new();
             for iomap in &pd.iomaps {
-                let iospace_id =
-                    match pci_to_iospace.get(&(iomap.pci_bus, iomap.pci_dev, iomap.dev_func)) {
-                        Some(iospace_id) => *iospace_id,
-                        None => {
-                            let iospace_id = create_iospace(
-                                &mut spec_container,
-                                kernel_config,
-                                &pd.name,
-                                iomap.pci_bus,
-                                iomap.pci_dev,
-                                iomap.dev_func,
-                                pd_global_idx,
-                            );
+                const DEVICE_ID_SHIFT: u16 = 3;
+                const PCI_ID_SHIFT: u16 = DEVICE_ID_SHIFT + 5;
+                let pci_id = ((iomap.pci_bus as u16) << PCI_ID_SHIFT)
+                    + ((iomap.pci_dev as u16) << DEVICE_ID_SHIFT)
+                    + iomap.dev_func as u16;
+                let iospace_name = format!("{}_0x{:04x}", pd.name.clone(), pci_id);
+                let iospace_id = match pci_to_iospace.get(&pci_id) {
+                    Some(iospace_id) => *iospace_id,
+                    None => {
+                        let iospace_id = create_iospace(
+                            &mut spec_container,
+                            kernel_config,
+                            &iospace_name,
+                            iomap.pci_bus,
+                            iomap.pci_dev,
+                            iomap.dev_func,
+                            pd_global_idx,
+                        );
 
-                            pci_to_iospace
-                                .insert((iomap.pci_bus, iomap.pci_dev, iomap.dev_func), iospace_id);
-                            iospace_id
-                        }
-                    };
+                        pci_to_iospace.insert(pci_id, iospace_id);
+                        iospace_id
+                    }
+                };
 
                 let frames = mr_name_to_frames.get(&iomap.name).unwrap();
 
                 map_io_memory_region(
                     &mut spec_container,
                     kernel_config,
-                    &pd.name,
+                    &iospace_name,
                     iomap,
                     iospace_id,
                     frames,
