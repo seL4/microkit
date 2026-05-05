@@ -7,6 +7,8 @@
 // we want our asserts, even if the compiler figures out they hold true already during compile-time
 #![allow(clippy::assertions_on_constants)]
 
+use microkit_tool::argparse;
+use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
 use microkit_tool::capdl::allocation::{
     simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel,
 };
@@ -14,21 +16,16 @@ use microkit_tool::capdl::build_capdl_spec;
 use microkit_tool::capdl::initialiser::CapDLInitialiser;
 use microkit_tool::capdl::packaging::pack_spec_into_initial_task;
 use microkit_tool::elf::ElfFile;
+use microkit_tool::jsonparse;
 use microkit_tool::loader::Loader;
 use microkit_tool::report::write_report;
 use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr};
+use microkit_tool::sdk::Sdk;
 use microkit_tool::sel4::{
-    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config,
-    RiscvVirtualMemory,
+    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, RiscvVirtualMemory,
 };
 use microkit_tool::symbols::patch_symbols;
-use microkit_tool::util::{
-    get_full_path, human_size_strict, round_down, round_up,
-};
-use microkit_tool::sdkparse::{SdkInfo};
-use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
-use microkit_tool::argparse;
-use microkit_tool::jsonparse;
+use microkit_tool::util::{get_full_path, human_size_strict, round_down, round_up};
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 
 use std::collections::HashMap;
@@ -78,20 +75,33 @@ impl ImageOutputType {
                 Arch::Riscv64 => Some(Self::Uimage),
                 Arch::X86_64 | Arch::Aarch64 => None,
             },
-            RequestedImageType::Unspecified =>
-                Some(Self::default_from_arch_and_board(arch, board_name)),
+            RequestedImageType::Unspecified => {
+                Some(Self::default_from_arch_and_board(arch, board_name))
+            }
         }
     }
 }
 
 enum MainError {
-    MissingPath { description: &'static str, path: PathBuf },
-    JsonError { source: jsonparse::JsonError },
-    UnsupportedKernelArch { value: String },
-    UnsupportedImageType { requested: RequestedImageType, arch: Arch },
+    MissingPath {
+        description: &'static str,
+        path: PathBuf,
+    },
+    JsonError {
+        source: jsonparse::JsonError,
+    },
+    UnsupportedKernelArch {
+        value: String,
+    },
+    UnsupportedImageType {
+        requested: RequestedImageType,
+        arch: Arch,
+    },
     MissingArmPaSizeBits,
     Aarch64HypervisorRequired,
-    UnsupportedWordSize { word_size: u64 },
+    UnsupportedWordSize {
+        word_size: u64,
+    },
 }
 
 impl fmt::Display for MainError {
@@ -114,7 +124,10 @@ impl fmt::Display for MainError {
                 )
             }
             Self::MissingArmPaSizeBits => {
-                write!(f, "expected ARM platform to have 40 or 44 physical address bits")
+                write!(
+                    f,
+                    "expected ARM platform to have 40 or 44 physical address bits"
+                )
             }
             Self::Aarch64HypervisorRequired => {
                 write!(f, "Microkit requires hypervisor mode on AArch64")
@@ -139,7 +152,7 @@ fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), Main
             path: path.to_path_buf(),
         })
     } else {
-      Ok(())
+        Ok(())
     }
 }
 
@@ -149,10 +162,8 @@ fn build_kernel_config(
     kernel_config_path: &Path,
     invocations_all_path: &Path,
 ) -> Result<Config, MainError> {
-    let kernel_config_json =
-        jsonparse::read("kernel configuration file", kernel_config_path)?;
-    let invocations_labels =
-        jsonparse::read("invocations JSON file", invocations_all_path)?;
+    let kernel_config_json = jsonparse::read("kernel configuration file", kernel_config_path)?;
+    let invocations_labels = jsonparse::read("invocations JSON file", invocations_all_path)?;
 
     let arch = match kernel_config_json.string("SEL4_ARCH")? {
         "aarch64" => Arch::Aarch64,
@@ -162,7 +173,7 @@ fn build_kernel_config(
             return Err(MainError::UnsupportedKernelArch {
                 value: value.to_owned(),
             });
-        },
+        }
     };
 
     let (device_regions, normal_regions) = match arch {
@@ -260,8 +271,8 @@ fn build_kernel_config(
 }
 
 fn main() -> Result<(), String> {
-    let sdkinfo = match SdkInfo::discover() {
-        Ok(discovered_info) => { discovered_info }
+    let sdk = match Sdk::discover() {
+        Ok(discovered_info) => discovered_info,
         Err(err) => {
             argparse::print_usage();
             eprintln!("microkit: error: {err}");
@@ -270,19 +281,19 @@ fn main() -> Result<(), String> {
     };
 
     let env_args: Vec<_> = std::env::args().collect();
-    let args = match Args::parse(&env_args, &sdkinfo) {
-        Ok(parsed_arguments) => { parsed_arguments }
+    let args = match Args::parse(&env_args, &sdk) {
+        Ok(parsed_arguments) => parsed_arguments,
         Err(ArgsError::HelpWanted) => {
-            argparse::print_help(&sdkinfo);
+            argparse::print_help(&sdk);
             std::process::exit(0);
         }
         Err(err) => {
             match err {
-                ArgsError::UnrecognizedArgument { arg: _ } |
-                ArgsError::MissingRequiredArguments { args: _ } => {
+                ArgsError::UnrecognizedArgument { arg: _ }
+                | ArgsError::MissingRequiredArguments { args: _ } => {
                     argparse::print_usage();
                 }
-                _ => { }
+                _ => {}
             };
             eprintln!("microkit: error: {err}");
             std::process::exit(1);
@@ -291,7 +302,7 @@ fn main() -> Result<(), String> {
 
     // NB safe unwrap: argparse would already have bailed if the config did not
     // exist.
-    let current_config = sdkinfo.select(&args.board, &args.config).unwrap();
+    let current_config = sdk.select(&args.board, &args.config).unwrap();
 
     // the real work begins here
     let elf_path = current_config.config_dir.join("elf");
@@ -302,10 +313,10 @@ fn main() -> Result<(), String> {
     };
     let monitor_elf_path = elf_path.join("monitor.elf");
     let capdl_init_elf_path = elf_path.join("initialiser.elf");
-    let kernel_config_path =
-        current_config.config_dir.join("include/kernel/gen_config.json");
-    let invocations_all_path =
-        current_config.config_dir.join("invocations_all.json");
+    let kernel_config_path = current_config
+        .config_dir
+        .join("include/kernel/gen_config.json");
+    let invocations_all_path = current_config.config_dir.join("invocations_all.json");
     // bail_if_not_exists("board ELF directory", &elf_path)?;
     // bail_if_not_exists("kernel ELF", &kernel_elf_path)?;
     // bail_if_not_exists("monitor ELF", &monitor_elf_path)?;

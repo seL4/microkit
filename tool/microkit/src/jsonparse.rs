@@ -37,18 +37,37 @@ pub enum JsonError {
 impl fmt::Display for JsonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ReadError { description, path, source } => {
-                write!(f, "could not read {description} '{}': {source}", path.display())
+            Self::ReadError {
+                description,
+                path,
+                source,
+            } => {
+                write!(
+                    f,
+                    "could not read {description} '{}': {source}",
+                    path.display()
+                )
             }
-            Self::ParseError { description, path, source } => {
-                write!(f, "could not parse {description} '{}': {source}", path.display())
+            Self::ParseError {
+                description,
+                path,
+                source,
+            } => {
+                write!(
+                    f,
+                    "could not parse {description} '{}': {source}",
+                    path.display()
+                )
             }
-            Self::TypeError { description, field, expected_type } => {
+            Self::TypeError {
+                description,
+                field,
+                expected_type,
+            } => {
                 write!(
                     f,
                     "{description} field '{}' has wrong type, expected {}",
-                    field,
-                    expected_type
+                    field, expected_type
                 )
             }
         }
@@ -132,10 +151,7 @@ impl JsonDoc {
     }
 
     pub fn u8(&self, name: &'static str) -> Result<u8, JsonError> {
-        let value = match self.u64(name) {
-            Ok(value) => value,
-            Err(err) => return Err(err),
-        };
+        let value = self.u64(name)?;
 
         match u8::try_from(value) {
             Ok(value) => Ok(value),
@@ -159,9 +175,11 @@ pub fn read(description: &'static str, path: &Path) -> Result<JsonDoc, JsonError
     }?;
     match serde_json::from_str(&text) {
         Ok(value) => Ok(JsonDoc { description, value }),
-        Err(source) => Err(
-            JsonError::ParseError { description, path: path.to_path_buf(), source }
-        ),
+        Err(source) => Err(JsonError::ParseError {
+            description,
+            path: path.to_path_buf(),
+            source,
+        }),
     }
 }
 

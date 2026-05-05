@@ -24,7 +24,7 @@ pub struct AvailableConfig {
     pub config_dir: PathBuf,
 }
 
-pub struct SdkInfo {
+pub struct Sdk {
     pub exe_path: PathBuf,
     pub cwd: PathBuf,
     pub sdk_dir: PathBuf,
@@ -42,29 +42,43 @@ pub enum SdkInfoError {
     CannotFindSdkDirectory { path: PathBuf },
     CannotFindBoardsDirectory { path: PathBuf },
     CannotFindDirectory { path: PathBuf },
-    CannotReadDirectory {
-        path: PathBuf,
-        source: io::Error,
-    },
+    CannotReadDirectory { path: PathBuf, source: io::Error },
 }
 
 impl fmt::Display for SdkInfoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CannotDetermineExePath { source } => {
-                write!(f, "Could not determine the current executable path: {source}")
+                write!(
+                    f,
+                    "Could not determine the current executable path: {source}"
+                )
             }
             Self::CannotDetermineCwd { source } => {
-                write!(f, "Could not determine the current working directory: {source}")
+                write!(
+                    f,
+                    "Could not determine the current working directory: {source}"
+                )
             }
             Self::CannotReadSdkVar { source } => {
-                write!(f, "Could not read the MICROKIT_SDK environmental variable: {source}")
+                write!(
+                    f,
+                    "Could not read the MICROKIT_SDK environmental variable: {source}"
+                )
             }
             Self::CannotFindSdkDirectory { path } => {
-                write!(f, "The MICROKIT_SDK directory '{}' does not exist", path.display())
+                write!(
+                    f,
+                    "The MICROKIT_SDK directory '{}' does not exist",
+                    path.display()
+                )
             }
             Self::CannotFindBoardsDirectory { path } => {
-                write!(f, "The MICROKIT_SDK directory does not have a 'board' sub-directory at '{}'", path.display())
+                write!(
+                    f,
+                    "The MICROKIT_SDK directory does not have a 'board' sub-directory at '{}'",
+                    path.display()
+                )
             }
             Self::CannotInferSdkDir { exe_path } => {
                 write!(
@@ -97,7 +111,10 @@ fn read_dir(path: &Path) -> Result<fs::ReadDir, SdkInfoError> {
     }
 }
 
-fn read_dir_entry(path: &Path, entry: Result<fs::DirEntry, io::Error>) -> Result<fs::DirEntry, SdkInfoError> {
+fn read_dir_entry(
+    path: &Path,
+    entry: Result<fs::DirEntry, io::Error>,
+) -> Result<fs::DirEntry, SdkInfoError> {
     match entry {
         Ok(result) => Ok(result),
         Err(ioerr) => Err(SdkInfoError::CannotReadDirectory {
@@ -128,14 +145,13 @@ fn discover_sdk_dir(default_path: &Path) -> Result<PathBuf, SdkInfoError> {
         }
         Err(VarError::NotPresent) => {
             // there is no MICROKIT_SDK explicitly set, use the one that the binary is in
-            let grandpa =
-                Some(default_path)
+            let grandpa = Some(default_path)
                 .and_then(|p| p.parent())
                 .and_then(|p| p.parent());
             match grandpa {
                 Some(gp) => Ok(gp.to_path_buf()),
                 None => Err(SdkInfoError::CannotInferSdkDir {
-                    exe_path: default_path.to_path_buf()
+                    exe_path: default_path.to_path_buf(),
                 }),
             }
         }
@@ -170,9 +186,13 @@ fn discover_available_configs_for(board: &BoardInfo) -> Result<Vec<AvailableConf
         // bail when some irrelevant board has a permission error
         let entry = read_dir_entry(&board.dir, entry)?;
         let path = entry.path();
-        if !path.is_dir() { continue; }
+        if !path.is_dir() {
+            continue;
+        }
         let name = final_path_component(&path)?.to_owned();
-        if name == "example" { continue; }
+        if name == "example" {
+            continue;
+        }
         let config = AvailableConfig {
             board_name: board.name.clone(),
             board_dir: board.dir.clone(),
@@ -184,7 +204,7 @@ fn discover_available_configs_for(board: &BoardInfo) -> Result<Vec<AvailableConf
     Ok(discovered)
 }
 
-impl SdkInfo {
+impl Sdk {
     pub fn discover() -> Result<Self, SdkInfoError> {
         let exe_path =
             env::current_exe().map_err(|source| SdkInfoError::CannotDetermineExePath { source })?;
@@ -202,10 +222,8 @@ impl SdkInfo {
         let mut available_configs: Vec<AvailableConfig> = Vec::new();
 
         for board in &available_boards {
-            available_configs.append(
-                &mut discover_available_configs_for(board)?
-            );
-        };
+            available_configs.append(&mut discover_available_configs_for(board)?);
+        }
 
         Ok(Self {
             exe_path,
@@ -218,9 +236,9 @@ impl SdkInfo {
     }
 
     pub fn select(&self, board_name: &str, config_name: &str) -> Option<&AvailableConfig> {
-        self.available_configs.iter().find(|pair| {
-            pair.board_name == board_name && pair.config_name == config_name
-        })
+        self.available_configs
+            .iter()
+            .find(|pair| pair.board_name == board_name && pair.config_name == config_name)
     }
 
     pub fn available_boards_contains(&self, name: &str) -> bool {
@@ -228,12 +246,14 @@ impl SdkInfo {
     }
 
     pub fn available_board_names(&self) -> Vec<String> {
-        self.available_boards.iter().map(|b| b.name.clone()).collect()
+        self.available_boards
+            .iter()
+            .map(|b| b.name.clone())
+            .collect()
     }
-    
+
     pub fn available_config_names_for(&self, board_name: &str) -> Vec<String> {
-        self
-            .available_configs
+        self.available_configs
             .iter()
             .filter(|c| c.board_name == board_name)
             .map(|c| c.config_name.clone())
