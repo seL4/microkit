@@ -27,8 +27,6 @@ pub struct AvailableConfig {
 pub struct Sdk {
     pub exe_path: PathBuf,
     pub cwd: PathBuf,
-    pub sdk_dir: PathBuf,
-    pub boards_dir: PathBuf,
     pub available_boards: Vec<BoardInfo>,
     pub available_configs: Vec<AvailableConfig>,
 }
@@ -190,9 +188,6 @@ fn discover_available_configs_for(board: &BoardInfo) -> Result<Vec<AvailableConf
             continue;
         }
         let name = final_path_component(&path)?.to_owned();
-        if name == "example" {
-            continue;
-        }
         let config = AvailableConfig {
             board_name: board.name.clone(),
             board_dir: board.dir.clone(),
@@ -228,8 +223,6 @@ impl Sdk {
         Ok(Self {
             exe_path,
             cwd,
-            sdk_dir,
-            boards_dir,
             available_boards,
             available_configs,
         })
