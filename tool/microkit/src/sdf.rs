@@ -515,8 +515,9 @@ impl IOMemMap {
             ));
         }
 
-        let pci_bus: u8 = pci_parts[0] as u8;
+        let pci_bus = pci_parts[0] as u8;
 
+        // Determine whether provided pci parts are valid
         if pci_parts[0] != pci_bus as i64 {
             return Err(value_error(
                 xml_sdf,

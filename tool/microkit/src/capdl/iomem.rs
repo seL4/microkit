@@ -21,7 +21,7 @@ pub(crate) const VTD_MAX_ADDR: u64 =
 pub fn create_iospace(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
-    pd_name: &str,
+    iospace_name: &str,
     pci_bus: u8,
     pci_device: u8,
     dev_func: u8,
@@ -31,7 +31,7 @@ pub fn create_iospace(
         name: format!(
             "{}_{}",
             get_iopt_level_name(sel4_config, VTD_PML4_LEVEL),
-            pd_name,
+            iospace_name,
         )
         .into(),
         object: Object::IOPageTable(object::IOPageTable {
@@ -44,7 +44,7 @@ pub fn create_iospace(
     const PD_TO_DOMAIN_ID_OFFSET: u16 = 1;
 
     spec_container.add_root_object(CapDLNamedObject {
-        name: format!("IOSpace_{}", pd_name,).into(),
+        name: format!("IOSpace_{}", iospace_name,).into(),
         object: Object::IOSpace(object::IOSpace {
             pci_bus,
             pci_device,
@@ -65,7 +65,7 @@ pub fn create_iospace(
 pub fn map_io_page(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
-    pd_name: &str,
+    iospace_name: &str,
     iospace_obj_id: ObjectId,
     frame_cap: Cap,
     ioaddr: u64,
@@ -73,7 +73,7 @@ pub fn map_io_page(
     map_recursive(
         spec_container,
         sel4_config,
-        pd_name,
+        iospace_name,
         iospace_obj_id,
         VTD_PML4_LEVEL,
         frame_cap,
@@ -98,7 +98,7 @@ fn get_iopt_level_name(sel4_config: &Config, level: u8) -> &str {
 fn map_intermediary_level_helper(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
-    pd_name: &str,
+    iospace_name: &str,
     next_level_name_prefix: &str,
     cur_level_obj_id: ObjectId,
     cur_level: u8,
@@ -123,7 +123,7 @@ fn map_intermediary_level_helper(
         }
     } else {
         return Err(format!("map_intermediary_level_helper(): internal bug: received a non-Page Table object id {} with name '{}', for mapping at level {}, to pd {}.",
-            usize::from(cur_level_obj_id), spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap(), cur_level, pd_name));
+            usize::from(cur_level_obj_id), spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap(), cur_level, iospace_name));
     }
 
     // get_pt_level_coverage works the same for io memory as well
@@ -137,7 +137,7 @@ fn map_intermediary_level_helper(
     let next_level_object = CapDLNamedObject {
         name: format!(
             "{}_{}_ioaddr_0x{:x}",
-            next_level_name_prefix, pd_name, next_level_coverage.start
+            next_level_name_prefix, iospace_name, next_level_coverage.start
         )
         .into(),
         object: Object::IOPageTable(next_level_inner_obj),
