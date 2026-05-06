@@ -12,8 +12,8 @@
 #include "../cutil.h"
 #include "../uart.h"
 
-void el1_mmu_enable(void);
-void el2_mmu_enable(void);
+void el1_mmu_enable(void *a, void *b);
+void el2_mmu_enable(void *a);
 
 /* Paging structures for kernel mapping */
 uint64_t boot_lvl0_upper[1 << 9] ALIGN(1 << 12);
@@ -37,9 +37,9 @@ int arch_mmu_enable(int logical_cpu)
     LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
     el = current_el();
     if (el == EL1) {
-        el1_mmu_enable();
+        el1_mmu_enable(&boot_lvl0_lower, &boot_lvl0_upper);
     } else if (el == EL2) {
-        el2_mmu_enable();
+        el2_mmu_enable(&boot_lvl0_lower);
     } else {
         LDR_PRINT("ERROR", logical_cpu, "unknown EL for MMU enable\n");
     }
