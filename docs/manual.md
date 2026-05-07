@@ -606,6 +606,10 @@ The `notified` entry point is called by the system when a PD has received a noti
 
 Channel identifiers are specified in the system configuration.
 
+For x86 specifically:
+If you've previously resumed the bound VCPU with `microkit_vcpu_x86_deferred_resume()`.
+You must explicitly resume it again before retuning from `notified`.
+
 ## `microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)`
 
 The `protected` entry point is optional.
@@ -648,6 +652,14 @@ to handle it.
 To find the full list of possible faults that could occur and details regarding to replying to a particular
 kind of fault, please see the 'Faults' section of the
 [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
+For x86 VCPU fault specifically:
+Only the `child` argument will contain a valid value. The return value of is ignored.
+To resume a VCPU from a fault, `fault` must call `microkit_vcpu_x86_deferred_resume()` with
+the correct values in message registers before returning.
+
+To deduce the VM Exit reason, read the `SEL4_VMENTER_FAULT_REASON_MR` message register. For more details,
+please see the 'Virtualisation' section of the [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
 
 ## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
@@ -984,6 +996,15 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
+## `void microkit_vcpu_x86_deferred_resume(void)`
+
+Resume the bound vCPU when current execution returns to libmicrokit's event handler (see [Internals](#Internals)).
+It switches the PD's thread from regular execution mode into the guest execution mode whenever it is scheduled thereafter.
+
+The caller is responsible for setting the VCPU's instruction pointer, Primary Processor-Based VM-Execution Controls
+and VM-Entry Interruption-Information Field to the corresponding message registers. For more details,
+please see the 'Virtualisation' section of the [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -1154,6 +1175,7 @@ The `end` element has the following attributes:
 * `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
 * `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
         Protected procedure calls can only be to PDs of strictly higher priority.
+        On x86-64, PDs with virtual machines cannot receive protected procedure calls.
 * `notify`: (optional) Indicates that the protection domain for this end can send a notification to the other end; defaults to true.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier.
 
