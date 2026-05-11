@@ -470,7 +470,7 @@ impl ObjectType {
             },
             ObjectType::AsidPool => Some(object_sizes.asid_pool),
             ObjectType::IOPageTable => Some(12),
-            // It would be best to avoid such catch all case so people might forget to add the size of new object type here.
+            // It would be best to avoid such catch all case as people might forget to add the size of new object type here.
             _ => None,
         }
     }

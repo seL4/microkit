@@ -1,3 +1,9 @@
+//
+// Copyright 2026, UNSW
+//
+// SPDX-License-Identifier: BSD-2-Clause
+//
+
 use std::ops::Range;
 
 use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
@@ -7,9 +13,10 @@ use crate::{
     sel4::Config,
 };
 
-// VTD Page table level is defaulted to the three-level structure even if the hardware supports four level.
-// Sel4 will only attempt to use the four-level structure if the hardware does not supports three level.
-// https://github.com/seL4/seL4/blob/c406015c389decc4559fd44cb69604ddd24a0ddb/src/plat/pc99/machine/intel-vtd.c#L498
+// Logic of seL4 setting VT-d page table level: 
+// Determine whether three-level VT-d pt is supported by host. If supported, set PT level to three if supported.
+// If not, check whether 4, 5, 6, 2 level is supported one by one.
+// https://github.com/seL4/seL4/blob/15.0.0/src/plat/pc99/machine/intel-vtd.c#L498
 const VTD_PML4_LEVEL: u8 = 0;
 const VTD_PAGE_TABLE_LEVEL: u8 = 4;
 const VTD_SEL4_DEFAULT_PT_LEVEL: u8 = 3;
@@ -41,6 +48,7 @@ pub fn create_iospace(
         }),
     });
 
+    // Domain ID cannot be negative so add one to PD ID
     const PD_TO_DOMAIN_ID_OFFSET: u16 = 1;
 
     spec_container.add_root_object(CapDLNamedObject {
@@ -126,7 +134,7 @@ fn map_intermediary_level_helper(
             usize::from(cur_level_obj_id), spec_container.get_root_object(cur_level_obj_id).unwrap().name.as_ref().unwrap(), cur_level, iospace_name));
     }
 
-    // get_pt_level_coverage works the same for io memory as well
+    // get_pt_level_coverage works the same for io memory
     let next_level_coverage = get_io_pt_level_coverage(sel4_config, cur_level + 1, ioaddr);
     let next_level_inner_obj = object::IOPageTable {
         is_root: false, // IOSpace is always created seperately
@@ -136,7 +144,7 @@ fn map_intermediary_level_helper(
     // We create name with this PT level coverage so that every object names are unique
     let next_level_object = CapDLNamedObject {
         name: format!(
-            "{}_{}_ioaddr_0x{:x}",
+            "{}_{}_ioaddr_{:#x}",
             next_level_name_prefix, iospace_name, next_level_coverage.start
         )
         .into(),

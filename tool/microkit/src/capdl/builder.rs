@@ -402,6 +402,7 @@ fn map_io_memory_region(
 
     for frame_obj_id in frames.iter() {
         // Make a cap for this frame.
+        // The frame should not executable or cacheable.
         let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, false, false);
         // Map it into this PD IOSpace.
         map_io_page(

@@ -166,6 +166,7 @@ impl SysMemoryRegion {
     }
 }
 
+/// x86-64 specific
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct IOMemMap {
     pub name: String,
@@ -1774,7 +1775,7 @@ fn io_check_maps(
                 if map_end > crate::capdl::iomem::VTD_MAX_ADDR {
                     return Err(
                         format!(
-                            "Error: iomap for '{}' has address 0x{:x} which exceeds the upper limits of {} in {} '{}' @ {}",
+                            "Error: iomap for '{}' has address 0x{:x} which exceeds the upper limits of 0x{:x} in {} '{}' @ {}",
                             io_map.name,
                             map_end,
                             crate::capdl::iomem::VTD_MAX_ADDR,
