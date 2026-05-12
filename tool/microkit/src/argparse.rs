@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use crate::sdk::Sdk;
 use std::fmt;
 use std::iter::Peekable;
 use std::path::PathBuf;
@@ -12,7 +13,7 @@ pub fn print_usage() {
     println!("usage: microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system")
 }
 
-pub fn print_help(available_boards: &[String]) {
+pub fn print_help(sdk: &Sdk) {
     print_usage();
     println!("\npositional arguments:");
     println!("  system");
@@ -22,7 +23,10 @@ pub fn print_help(available_boards: &[String]) {
     println!("  -r, --report REPORT");
     println!("  --image-type {{binary,elf,uimage}}");
     println!("  --override-kernel KERNEL (for debugging purposes)");
-    println!("  --board {}", available_boards.join("\n          "));
+    println!(
+        "  --board {}",
+        sdk.available_board_names().join("\n          ")
+    );
     println!("  --config CONFIG");
     println!("  --capdl-json CAPDL_SPEC (JSON format)");
     println!("  --search-path [SEARCH_PATH ...]");
@@ -73,11 +77,25 @@ pub struct Args {
 
 #[derive(Debug)]
 pub enum ArgsError {
-    InvalidImageTypeParameter { parameter: String },
-    InvalidBoardParameter { parameter: String },
-    MissingParameter { parent_argument: &'static str },
-    MissingRequiredArguments { args: Vec<&'static str> },
-    UnrecognizedArgument { arg: String },
+    InvalidImageTypeParameter {
+        parameter: String,
+    },
+    InvalidBoardParameter {
+        parameter: String,
+    },
+    InvalidConfigParameter {
+        parameter: String,
+        choices: Vec<String>,
+    },
+    MissingParameter {
+        parent_argument: &'static str,
+    },
+    MissingRequiredArguments {
+        args: Vec<&'static str>,
+    },
+    UnrecognizedArgument {
+        arg: String,
+    },
     HelpWanted,
 }
 
@@ -89,6 +107,13 @@ impl fmt::Display for ArgsError {
             }
             Self::InvalidBoardParameter { parameter } => {
                 write!(f, "argument --board: unknown parameter '{parameter}'")
+            }
+            Self::InvalidConfigParameter { parameter, choices } => {
+                write!(
+                    f,
+                    "argument --config: invalid choice '{parameter}' (choose from: {})",
+                    choices.join(", ")
+                )
             }
             Self::MissingParameter { parent_argument } => {
                 write!(f, "argument {parent_argument}: expected one parameter")
@@ -136,7 +161,7 @@ where
 }
 
 impl Args {
-    pub fn parse(args: &[String], available_boards: &[String]) -> Result<Self, ArgsError> {
+    pub fn parse(args: &[String], sdk: &Sdk) -> Result<Self, ArgsError> {
         let mut args = args.iter().skip(1).cloned().peekable();
 
         let mut output_path = PathBuf::from("loader.img");
@@ -163,7 +188,7 @@ impl Args {
                 }
                 "--board" => {
                     let board_param = consume_parameter(&mut args, "--board")?;
-                    if !available_boards.contains(&board_param) {
+                    if !sdk.available_boards_contains(&board_param) {
                         return Err(ArgsError::InvalidBoardParameter {
                             parameter: board_param,
                         });
@@ -223,6 +248,13 @@ impl Args {
         let board = board.unwrap();
         let config = config.unwrap();
         let sdf_path = sdf_path.unwrap();
+
+        if sdk.select(&board, &config).is_none() {
+            return Err(ArgsError::InvalidConfigParameter {
+                parameter: config,
+                choices: sdk.available_config_names_for(&board),
+            });
+        }
 
         Ok(Self {
             sdf_path,
