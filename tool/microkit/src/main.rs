@@ -122,7 +122,7 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     };
-    args.search_paths.push(std::env::current_dir().unwrap());
+    args.search_paths.push(sdk.cwd.clone());
 
     // NB safe unwrap: argparse would already have bailed if the config did not
     // exist.
