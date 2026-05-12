@@ -29,6 +29,7 @@ use microkit_tool::util::{
     get_full_path, human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down,
     round_up,
 };
+use microkit_tool::viper;
 use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
 use std::collections::HashMap;
 use std::fs::{self, metadata};
@@ -693,6 +694,33 @@ fn main() -> Result<(), String> {
                 let serialised = serde_json::to_string_pretty(&spec_container.spec).unwrap();
                 fs::write(capdl_json, &serialised).unwrap();
             };
+
+            if let Some(viper_output_dir) = args.viper_output_dir {
+                // NB returns Ok if the directory already exists, that's fine
+                fs::create_dir_all(&viper_output_dir).unwrap_or_else(|source| {
+                    eprintln!(
+                        "ERROR: cannot write Viper output directory {}: {source}",
+                        &viper_output_dir.display()
+                    );
+                    std::process::exit(1);
+                });
+                for view in viper::get_combined_views(&spec_container, &system) {
+                    let mut output = format!(
+                        "// exported invariants for PD {} in {}\n",
+                        view.pd_name,
+                        &args.sdf_path.display(),
+                    );
+                    view.export(&mut output);
+                    let path = viper_output_dir.join(format!("{}.vpr", view.pd_name));
+                    fs::write(&path, output).unwrap_or_else(|source| {
+                        eprintln!(
+                            "ERROR: cannot write Viper output file {}: {source}",
+                            &path.display()
+                        );
+                        std::process::exit(1);
+                    });
+                }
+            }
 
             write_report(&spec_container, &kernel_config, &args.report_path);
             system_built = true;
