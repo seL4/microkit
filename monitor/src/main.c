@@ -553,7 +553,7 @@ static void print_tcb_registers(seL4_UserContext *regs)
     puts("rip : ");
     puthex64(regs->rip);
     puts("\n");
-    puts("rsp: ");
+    puts("rsp : ");
     puthex64(regs->rsp);
     puts("\n");
     puts("rflags : ");
