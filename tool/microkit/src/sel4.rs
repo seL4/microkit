@@ -310,6 +310,7 @@ pub struct Config {
 }
 
 impl Config {
+    /// Refers to 'seL4_UserTop'
     pub fn user_top(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {
@@ -325,16 +326,17 @@ impl Config {
         }
     }
 
+    /// Refers to the 'PPTR_BASE' define in kernel source
     pub fn virtual_base(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {
                 true => 0x0000008000000000,
-                false => u64::pow(2, 64) - u64::pow(2, 39),
+                false => 0xffffff8000000000,
             },
             Arch::Riscv64 => match self.riscv_pt_levels.unwrap() {
-                RiscvVirtualMemory::Sv39 => u64::pow(2, 64) - u64::pow(2, 38),
+                RiscvVirtualMemory::Sv39 => 0xffffffc000000000,
             },
-            Arch::X86_64 => u64::pow(2, 64) - u64::pow(2, 39),
+            Arch::X86_64 => 0xffffff8000000000,
         }
     }
 
