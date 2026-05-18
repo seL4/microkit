@@ -6,16 +6,35 @@
 use crate::elf::{ElfFile, ElfSegmentData};
 use crate::sel4::{Arch, Config};
 use crate::uimage::uimage_serialise;
-use crate::util::{mb, round_up, struct_to_bytes};
+use crate::util::{align_down, align_up, mask, mb, round_up, struct_to_bytes};
+use std::cmp::min;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::mem;
 use std::ops::Range;
 use std::path::Path;
 
 macro_rules! grab_symbol {
-    ($elf: expr, $symbol_name: literal) => {
+    ($elf: expr, $symbol_name: expr) => {
         $elf.find_symbol($symbol_name)
             .expect(concat!("Could not find '", $symbol_name, "' symbol"))
+    };
+}
+
+macro_rules! write_symbol {
+    ($loader_image: expr, $image_vaddr: expr, $elf: expr, $symbol: literal, $symbol_var: expr) => {
+        let (addr, size) = grab_symbol!($elf, $symbol);
+        let addr = usize::try_from(addr).expect("addr fits in usize");
+        let size = usize::try_from(size).expect("size fits in usize");
+        let image_vaddr = usize::try_from($image_vaddr).expect("vaddr fits in usize");
+
+        assert!(addr >= image_vaddr);
+        assert!(size == ::std::mem::size_of_val(&$symbol_var));
+
+        let offset: usize = (addr - image_vaddr);
+        assert!(offset <= $loader_image.len());
+
+        $loader_image[offset..(offset + size)].copy_from_slice(&$symbol_var.to_le_bytes());
     };
 }
 
@@ -32,6 +51,7 @@ pub mod aarch64 {
     pub const LVL0_BITS: u64 = 9;
     pub const LVL1_BITS: u64 = 9;
     pub const LVL2_BITS: u64 = 9;
+    pub const LVL3_BITS: u64 = 9;
 
     pub fn lvl0_index(addr: u64) -> usize {
         let idx = (addr >> (BLOCK_BITS_2MB + LVL2_BITS + LVL1_BITS)) & mask(LVL0_BITS);
@@ -45,6 +65,11 @@ pub mod aarch64 {
 
     pub fn lvl2_index(addr: u64) -> usize {
         let idx = (addr >> (BLOCK_BITS_2MB)) & mask(LVL2_BITS);
+        idx as usize
+    }
+
+    pub fn lvl3_index(addr: u64) -> usize {
+        let idx = (addr >> PAGE_BITS_4KB) & mask(LVL3_BITS);
         idx as usize
     }
 
@@ -104,6 +129,11 @@ pub mod aarch64 {
     /// > For the 4KB granule size, the level 1 descriptor n is 30,
     /// > and the level 2 descriptor n is 21.
     pub const BLOCK_BITS_2MB: u64 = 21;
+
+    // TODO:
+
+    pub const BLOCK_BITS_512GB: u64 = 39;
+    pub const PAGE_BITS_4KB: u64 = 12;
 
     /// Per "Table D8-52 Stage 1 VMSAv8-64 Block and Page descriptor fields" and
     /// "Figure D8-14 VMSAv8-64 Block descriptor formats" of ARM DDI0487L.b;
@@ -289,18 +319,18 @@ mod riscv64 {
 
 /// Checks that each region in the given list does not overlap with any other region.
 /// Panics upon finding an overlapping region
-fn check_non_overlapping(regions: &Vec<(u64, &[u8])>) {
+fn check_non_overlapping(regions: &Vec<(u64, u64)>) {
     let mut checked: Vec<(u64, u64)> = Vec::new();
-    for (base, data) in regions {
-        let end = base + data.len() as u64;
+    for &(base, size) in regions.iter() {
+        let end = base + size;
         // Check that this does not overlap with any checked regions
-        for (b, e) in &checked {
-            if !(end <= *b || *base >= *e) {
+        for &(b, e) in checked.iter() {
+            if !(end <= b || base >= e) {
                 panic!("Overlapping regions: [{base:x}..{end:x}) overlaps [{b:x}..{e:x})");
             }
         }
 
-        checked.push((*base, end));
+        checked.push((base, end));
     }
 }
 
@@ -330,6 +360,7 @@ pub struct Loader<'a> {
     header: LoaderHeader64,
     region_metadata: Vec<LoaderRegion64>,
     regions: Vec<(u64, &'a [u8])>,
+    page_table_bytes: Vec<u8>,
     word_size: usize,
     elf_machine: u16,
     entry: u64,
@@ -427,28 +458,15 @@ impl<'a> Loader<'a> {
             panic!("INTERNAL: could not determine kernel_first_paddr");
         };
 
-        let pagetable_vars = match config.arch {
-            Arch::Aarch64 => Loader::aarch64_setup_pagetables(
-                config,
-                &loader_elf,
-                kernel_first_vaddr,
-                kernel_first_paddr,
-            ),
-            Arch::Riscv64 => Loader::riscv64_setup_pagetables(
-                config,
-                &loader_elf,
-                kernel_first_vaddr,
-                kernel_first_paddr,
-            ),
-            Arch::X86_64 => unreachable!("x86_64 does not support creating a loader image"),
-        };
-
         let image_segment = loader_elf
             .segments
-            .into_iter()
+            .iter()
             .find(|segment| segment.loadable)
             .expect("Did not find loadable segment");
+
+        // Called "vaddr" but due to 1:1 mapping vaddr == paddr.
         let image_vaddr = image_segment.virt_addr;
+
         // We have to clone here as the image executable is part of this function return object,
         // and the loader ELF is deserialised in this scope, so its lifetime will be shorter than
         // the return object.
@@ -456,14 +474,6 @@ impl<'a> Loader<'a> {
 
         if image_vaddr != loader_elf.entry {
             panic!("The loader entry point must be the first byte in the image");
-        }
-
-        for (var_addr, var_size, var_data) in pagetable_vars {
-            let offset = var_addr - image_vaddr;
-            assert!(var_size == var_data.len() as u64);
-            assert!(offset > 0);
-            assert!(offset <= loader_image.len() as u64);
-            loader_image[offset as usize..(offset + var_size) as usize].copy_from_slice(&var_data);
         }
 
         let kernel_entry = kernel_elf.entry;
@@ -477,11 +487,6 @@ impl<'a> Loader<'a> {
             ui_p_reg_start + (initial_task_vaddr_range.end - initial_task_vaddr_range.start);
         assert!(ui_p_reg_end > ui_p_reg_start);
 
-        // This clone isn't too bad as it is just a Vec<(u64, &[u8])>
-        let mut all_regions_with_loader = regions.clone();
-        all_regions_with_loader.push((image_vaddr, &loader_image));
-        check_non_overlapping(&all_regions_with_loader);
-
         let mut region_metadata = Vec::new();
         let mut offset: u64 = 0;
         for (addr, data) in &regions {
@@ -494,10 +499,63 @@ impl<'a> Loader<'a> {
             offset += data.len() as u64;
         }
 
-        let size = std::mem::size_of::<LoaderHeader64>() as u64
-            + region_metadata.iter().fold(0_u64, |acc, x| {
-                acc + x.size + std::mem::size_of::<LoaderRegion64>() as u64
-            });
+        let partial_size = loader_image.len() as u64
+            + mem::size_of::<LoaderHeader64>() as u64
+            + (region_metadata.len() * mem::size_of::<LoaderRegion64>()) as u64
+            + offset;
+
+        let page_tables_paddr_start = image_vaddr + partial_size;
+
+        let mut page_table_bytes = Vec::<u8>::new();
+        match config.arch {
+            Arch::Aarch64 => {
+                let (ttbr0_el2, ttbr0_el1, ttbr1_el1) = Loader::aarch64_setup_pagetables(
+                    config,
+                    &loader_elf,
+                    kernel_first_vaddr,
+                    kernel_first_paddr,
+                    page_tables_paddr_start,
+                    &mut page_table_bytes,
+                );
+
+                write_symbol!(
+                    loader_image,
+                    image_vaddr,
+                    loader_elf,
+                    "aarch64_pt_ttbr0_el2",
+                    ttbr0_el2
+                );
+                write_symbol!(
+                    loader_image,
+                    image_vaddr,
+                    loader_elf,
+                    "aarch64_pt_ttbr0_el1",
+                    ttbr0_el1
+                );
+                write_symbol!(
+                    loader_image,
+                    image_vaddr,
+                    loader_elf,
+                    "aarch64_pt_ttbr1_el1",
+                    ttbr1_el1
+                );
+            }
+            Arch::Riscv64 => {
+                todo!();
+            }
+            Arch::X86_64 => unreachable!("x86_64 does not support creating a loader image"),
+        };
+
+        let size = partial_size + page_table_bytes.len() as u64;
+
+        let mut all_regions_with_loader: Vec<_> = regions
+            .iter()
+            .map(|&(base, data)| (base, data.len() as u64))
+            .collect();
+        all_regions_with_loader.push((image_vaddr, size));
+        check_non_overlapping(&all_regions_with_loader);
+
+        // TODO: Check contained within real RAM.
 
         let header = LoaderHeader64 {
             magic,
@@ -516,6 +574,7 @@ impl<'a> Loader<'a> {
             header,
             region_metadata,
             regions,
+            page_table_bytes,
             word_size: kernel_elf.word_size,
             elf_machine: kernel_elf.machine,
             entry: loader_elf.entry,
@@ -538,6 +597,10 @@ impl<'a> Loader<'a> {
         for (_, data) in &self.regions {
             bytes.extend_from_slice(data);
         }
+
+        bytes.extend_from_slice(&self.page_table_bytes);
+
+        assert!(bytes.len() as u64 == self.header.size);
 
         bytes
     }
@@ -671,7 +734,7 @@ impl<'a> Loader<'a> {
                 boot_lvl2_pt[start..end].copy_from_slice(&lvl3_pt_entry.to_le_bytes());
                 index_lvl2 += 1;
             }
-            let first_paddr_aligned = round_up(first_paddr, 1 << riscv64::BLOCK_BITS_2MB);
+            let first_paddr_aligned = align_up(first_paddr, riscv64::BLOCK_BITS_2MB);
             for (page, i) in (index_lvl2..512).enumerate() {
                 let start = 8 * i;
                 let end = start + 8;
@@ -786,125 +849,168 @@ impl<'a> Loader<'a> {
     /// ```
     ///
     fn aarch64_setup_pagetables(
-        _config: &Config,
+        config: &Config,
         elf: &ElfFile,
-        first_vaddr: u64,
-        first_paddr: u64,
-    ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
-        use aarch64::s1_mair_attr_index::{MT_DEVICE_nGnRnE, MT_NORMAL};
+        kernel_first_vaddr: u64,
+        kernel_first_paddr: u64,
+        page_tables_paddr_start: u64,
+        page_table_bytes: &mut Vec<u8>,
+    ) -> (u64, u64, u64) {
+        use aarch64::{
+            block_descriptor, lvl0_index, lvl1_index, lvl2_index, lvl3_index, page_descriptor,
+            s1_mair_attr_index::{MT_DEVICE_nGnRnE, MT_NORMAL},
+            table_descriptor, BLOCK_BITS_1GB, BLOCK_BITS_2MB, BLOCK_BITS_512GB, PAGE_BITS_4KB,
+        };
 
-        let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = grab_symbol!(elf, "boot_lvl1_lower");
-        let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = grab_symbol!(elf, "boot_lvl1_upper");
-        let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = grab_symbol!(elf, "boot_lvl2_upper");
-        let (boot_lvl0_lower_addr, boot_lvl0_lower_size) = grab_symbol!(elf, "boot_lvl0_lower");
-        let (boot_lvl0_upper_addr, boot_lvl0_upper_size) = grab_symbol!(elf, "boot_lvl0_upper");
-        let (boot_lvl2_lower_addr, boot_lvl2_lower_size) = grab_symbol!(elf, "boot_lvl2_lower");
+        const PAGE_TABLE_ENTRIES: usize = PAGE_TABLE_SIZE / mem::size_of::<u64>();
+
+        let mut serialise_page_table_to_paddr = {
+            let page_tables_paddr_start = {
+                let aligned_pt_paddr_start =
+                    page_tables_paddr_start.next_multiple_of(PAGE_TABLE_SIZE as u64);
+                if aligned_pt_paddr_start != page_tables_paddr_start {
+                    let alignment_diff =
+                        (aligned_pt_paddr_start - page_tables_paddr_start) as usize;
+                    page_table_bytes.resize(alignment_diff, 0);
+                }
+
+                aligned_pt_paddr_start
+            };
+
+            // This maintains the current end of the PT array.
+            let mut next_pt_paddr = page_tables_paddr_start;
+
+            move |page_table: &mut [u64; PAGE_TABLE_ENTRIES]| -> u64 {
+                let pt_paddr = next_pt_paddr;
+                page_table_bytes.extend(page_table.iter().flat_map(|pte| pte.to_le_bytes()));
+                next_pt_paddr += PAGE_TABLE_SIZE as u64;
+                page_table.fill(0);
+                pt_paddr
+            }
+        };
 
         let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
         let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
-
-        if aarch64::lvl1_index(loader_start_addr) != aarch64::lvl1_index(loader_end_addr) {
+        if lvl1_index(loader_start_addr) != lvl1_index(loader_end_addr) {
             panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
         }
 
-        let mut boot_lvl0_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let pt_entry = aarch64::table_descriptor(boot_lvl1_lower_addr);
-            boot_lvl0_lower[..8].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        let mut boot_lvl1_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-
-        // map optional UART MMIO in l1 1GB page, only available if CONFIG_PRINTING
-        if let Ok((uart_addr, uart_addr_size)) = elf.find_symbol("uart_addr") {
+        let uart_base = if let Ok((uart_addr, uart_addr_size)) = elf.find_symbol("uart_addr") {
             let data = elf
                 .get_data(uart_addr, uart_addr_size)
                 .expect("uart_addr not initialized");
 
-            let uart_base = u64::from_le_bytes(data[0..8].try_into().unwrap());
+            Some(u64::from_le_bytes(data[0..8].try_into().unwrap()))
+        } else {
+            None
+        };
 
-            let lvl1_idx = aarch64::lvl1_index(uart_base);
+        // Manufacture the constants as per the diagram.
+        let k = align_down(kernel_first_vaddr, BLOCK_BITS_512GB);
+        let l = align_down(kernel_first_vaddr, BLOCK_BITS_1GB);
+        let m = align_down(kernel_first_vaddr, BLOCK_BITS_2MB);
+        let p = align_down(kernel_first_paddr, BLOCK_BITS_2MB);
+        let i = align_down(loader_start_addr, BLOCK_BITS_1GB);
+        let u = uart_base.map(|addr| align_down(addr, BLOCK_BITS_1GB));
+        let s = align_down(loader_start_addr, BLOCK_BITS_2MB);
+        let t = align_up(loader_end_addr, BLOCK_BITS_2MB);
 
-            let pt_entry = aarch64::block_descriptor(1, uart_base, MT_DEVICE_nGnRnE);
+        // Manufacture the kernel page tables, which is relatively straightforward.
+        let kernel_lvl1_pt_paddr = {
+            // First, the Level 2 Upr table.
+            let lvl2_pt_paddr = {
+                let mut lvl2_pt_kernel = [0u64; PAGE_TABLE_ENTRIES];
 
-            let start = 8 * lvl1_idx;
-            let end = 8 * (lvl1_idx + 1);
-            boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+                let mut vaddr = m;
+                let mut paddr = p;
+                while lvl1_index(m) == lvl1_index(vaddr) {
+                    lvl2_pt_kernel[lvl2_index(vaddr)] = block_descriptor(2, paddr, MT_NORMAL);
+
+                    vaddr += 1 << BLOCK_BITS_2MB;
+                    paddr += 1 << BLOCK_BITS_2MB;
+                }
+
+                serialise_page_table_to_paddr(&mut lvl2_pt_kernel)
+            };
+
+            // Then, the Level 1 Upr table.
+            let mut lvl1_pt_kernel = [0u64; PAGE_TABLE_ENTRIES];
+            lvl1_pt_kernel[lvl1_index(l)] = table_descriptor(lvl2_pt_paddr);
+
+            serialise_page_table_to_paddr(&mut lvl1_pt_kernel)
+        };
+
+        // Manufacture the loader page tables.
+        let loader_lvl1_pt_paddr = {
+            // First, the Level 2 Lwr table
+            let lvl2_pt_paddr = {
+                let mut lvl2_pt_loader = [0u64; PAGE_TABLE_ENTRIES];
+
+                // Identity mapped: vaddr == paddr.
+                let mut addr = s;
+                while addr < t {
+                    lvl2_pt_loader[lvl2_index(addr)] = block_descriptor(2, addr, MT_NORMAL);
+
+                    addr += 1 << BLOCK_BITS_2MB;
+                }
+
+                // TODO: this is a complete hack specific to BCM2711/Raspberry Pi 4B and
+                // will be reworked with patches that re-do this loader mapping code.
+                if elf.find_symbol("cpus_release_addr").is_ok() {
+                    // Make sure we don't override the loader mappings done above;
+                    // and that this is located at 0x0.
+                    assert!(s != 0);
+                    assert!(i == 0);
+
+                    lvl2_pt_loader[lvl2_index(0)] = block_descriptor(2, 0, MT_DEVICE_nGnRnE);
+                }
+
+                serialise_page_table_to_paddr(&mut lvl2_pt_loader)
+            };
+
+            // Then, the Level 1 Lwr table.
+            let mut lvl1_pt_loader = [0u64; PAGE_TABLE_ENTRIES];
+            lvl1_pt_loader[lvl1_index(i)] = table_descriptor(lvl2_pt_paddr);
+
+            // map optional UART MMIO in l1 1GB page, only available if CONFIG_PRINTING
+            if let Some(u) = u {
+                // UART no overlap with Loader.
+                assert!(lvl1_index(i) != lvl1_index(u));
+                lvl1_pt_loader[lvl1_index(u)] = block_descriptor(1, u, MT_DEVICE_nGnRnE);
+            }
+
+            serialise_page_table_to_paddr(&mut lvl1_pt_loader)
+        };
+
+        // Depending on whether we are in hypervisor mode, we either need to
+        // return the TTBR0_EL2 or TTBR[0,1]_EL1 values. We return u64::MAX
+        // so as to return garbage - an unaligned address outside of physical
+        // memory.
+        if config.hypervisor {
+            // Manufacture the Level 0 table, containing the kernel table
+            // and the RAM tables.
+
+            let mut ttbr0_el2_pt = [0u64; PAGE_TABLE_ENTRIES];
+
+            ttbr0_el2_pt[lvl0_index(k)] = table_descriptor(kernel_lvl1_pt_paddr);
+            ttbr0_el2_pt[lvl0_index(0)] = table_descriptor(loader_lvl1_pt_paddr);
+
+            let ttbr0_el2 = serialise_page_table_to_paddr(&mut ttbr0_el2_pt);
+
+            (ttbr0_el2, u64::MAX, u64::MAX)
+        } else {
+            let mut ttbr0_el1_pt = [0u64; PAGE_TABLE_ENTRIES];
+            let mut ttbr1_el1_pt = [0u64; PAGE_TABLE_ENTRIES];
+
+            // Kernel in TTBR1 (Upper)
+            ttbr1_el1_pt[lvl0_index(k)] = table_descriptor(kernel_lvl1_pt_paddr);
+            // Loader in TTBR0 (Lower)
+            ttbr0_el1_pt[lvl0_index(k)] = table_descriptor(loader_lvl1_pt_paddr);
+
+            let ttbr0_el1 = serialise_page_table_to_paddr(&mut ttbr0_el1_pt);
+            let ttbr1_el1 = serialise_page_table_to_paddr(&mut ttbr1_el1_pt);
+
+            (u64::MAX, ttbr0_el1, ttbr1_el1)
         }
-
-        let mut boot_lvl2_lower: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-
-        // 1GB lvl1 Table entry
-        let pt_entry = aarch64::table_descriptor(boot_lvl2_lower_addr);
-        let lvl1_idx = aarch64::lvl1_index(loader_start_addr);
-        let start = 8 * lvl1_idx;
-        let end = 8 * (lvl1_idx + 1);
-        boot_lvl1_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-
-        // map the loader 1:1 access into 2MB lvl2 Block entries for a 4KB granule
-        let lvl2_idx = aarch64::lvl2_index(loader_start_addr);
-        for i in lvl2_idx..=aarch64::lvl2_index(loader_end_addr) {
-            let entry_idx: u64 =
-                ((i - aarch64::lvl2_index(loader_start_addr)) << aarch64::BLOCK_BITS_2MB) as u64;
-
-            let pt_entry =
-                aarch64::block_descriptor(2, loader_start_addr + entry_idx, MT_DEVICE_nGnRnE);
-
-            let start = 8 * i;
-            let end = 8 * (i + 1);
-            boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        // TODO: this is a complete hack specific to BCM2711/Raspberry Pi 4B and
-        // will be removed with patches that re-do this loader mapping code.
-        if elf.find_symbol("cpus_release_addr").is_ok() {
-            let lvl2_idx = aarch64::lvl2_index(0);
-            // Make sure we don't override the loader mappings done above.
-            assert!(aarch64::lvl2_index(loader_start_addr) != lvl2_idx);
-            assert!(aarch64::lvl1_index(loader_start_addr) == aarch64::lvl1_index(0));
-
-            let pt_entry = aarch64::block_descriptor(2, lvl2_idx as u64, MT_DEVICE_nGnRnE);
-
-            let start = 8 * lvl2_idx;
-            let end = 8 * (lvl2_idx + 1);
-            boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let pt_entry = aarch64::table_descriptor(boot_lvl1_upper_addr);
-            let idx = aarch64::lvl0_index(first_vaddr);
-            boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let pt_entry = aarch64::table_descriptor(boot_lvl2_upper_addr);
-            let idx = aarch64::lvl1_index(first_vaddr);
-            boot_lvl1_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        let mut boot_lvl2_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-
-        let lvl2_idx = aarch64::lvl2_index(first_vaddr);
-        for i in lvl2_idx..512 {
-            let entry_idx: u64 =
-                ((i - aarch64::lvl2_index(first_vaddr)) << aarch64::BLOCK_BITS_2MB) as u64;
-
-            let pt_entry = aarch64::block_descriptor(2, first_paddr + entry_idx, MT_NORMAL);
-
-            let start = 8 * i;
-            let end = 8 * (i + 1);
-            boot_lvl2_upper[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-        }
-
-        vec![
-            (boot_lvl0_lower_addr, boot_lvl0_lower_size, boot_lvl0_lower),
-            (boot_lvl1_lower_addr, boot_lvl1_lower_size, boot_lvl1_lower),
-            (boot_lvl0_upper_addr, boot_lvl0_upper_size, boot_lvl0_upper),
-            (boot_lvl1_upper_addr, boot_lvl1_upper_size, boot_lvl1_upper),
-            (boot_lvl2_upper_addr, boot_lvl2_upper_size, boot_lvl2_upper),
-            (boot_lvl2_lower_addr, boot_lvl2_lower_size, boot_lvl2_lower),
-        ]
     }
 }
