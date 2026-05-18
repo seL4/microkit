@@ -463,6 +463,7 @@ See `microkit --help` for a full list of options.
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
 The search paths provided tell the tool where to find any program images specified in the system description file.
+The current working directory is always included as a search path.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
