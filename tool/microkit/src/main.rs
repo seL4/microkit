@@ -126,7 +126,7 @@ fn main() -> Result<(), String> {
     available_boards.sort();
 
     let env_args: Vec<_> = std::env::args().collect();
-    let args = match Args::parse(&env_args, &available_boards) {
+    let mut args = match Args::parse(&env_args, &available_boards) {
         Ok(result) => result,
         Err(ArgsError::HelpWanted) => {
             argparse::print_help(&available_boards);
@@ -144,6 +144,7 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     };
+    args.search_paths.push(std::env::current_dir().unwrap());
 
     let board_path = boards_path.join(&args.board);
     if !board_path.exists() {
