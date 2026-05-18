@@ -14,15 +14,18 @@ than in make.
 """
 from argparse import ArgumentParser
 import copy
+import concurrent.futures
 from os import popen, system, environ
 import shutil
 from pathlib import Path
 from dataclasses import dataclass
-from sys import executable
+from sys import executable, stderr
 from tarfile import open as tar_open, TarInfo
 import platform as host_platform
 from enum import IntEnum
 import json
+import os
+import tempfile
 import subprocess
 
 from typing import Any, Dict, Union, List, Tuple, Optional
@@ -877,6 +880,22 @@ def build_initialiser(
     dest.chmod(0o744)
 
 
+# Taken and modified from Ninja's example jobserver_pool, under the Apache License
+# Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+# This code does not form part of the distribution of Microkit.
+# https://github.com/ninja-build/ninja/blob/v1.13.2/misc/jobserver_pool.py#L162-L177
+def create_jobserver_fifo(path: str, jobs_count: int) -> str:
+    """Create and fill Posix FIFO."""
+    os.mkfifo(path)
+
+    # Unused, but necessary as otherwise opening O_WRONLY will fail with ENXIO
+    read_fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    write_fd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+    assert jobs_count > 0, f"Token count must be strictly positive"
+    os.write(write_fd, (jobs_count - 1) * b"x")
+    return f" -j{jobs_count} --jobserver-auth=fifo:" + path
+
+
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
@@ -890,6 +909,7 @@ def main() -> None:
     parser.add_argument("--skip-initialiser", action="store_true", help="Initialiser will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count())
     parser.add_argument("--release-packaging", action="store_true", help="All SDKs for distribution will be produced")
     # Read from the version file as unless someone has specified
     # a version, that is the source of truth
@@ -994,20 +1014,42 @@ def main() -> None:
 
     if not args.skip_run_time:
         build_dir = Path("build")
-        for (board, configs) in build_goals:
-            for config in configs:
-                if not args.skip_sel4:
-                    build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config, args.llvm)
-                loader_printing = 1 if config.name == "debug" else 0
-                loader_defines = []
-                if not board.arch.is_x86():
-                    loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
-                    build_elf_component("loader", sdk_dir, build_dir, board, config, args.llvm, loader_defines)
 
-                build_elf_component("monitor", sdk_dir, build_dir, board, config, args.llvm, [])
-                build_lib_component("libmicrokit", sdk_dir, build_dir, board, config, args.llvm)
-                if not args.skip_initialiser:
-                    build_initialiser("initialiser", sdk_dir, build_dir, board, config)
+        def build_one_goal(board: str, config: str):
+            if not args.skip_sel4:
+                build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config, args.llvm)
+            loader_printing = 1 if config.name == "debug" else 0
+            loader_defines = []
+            if not board.arch.is_x86():
+                loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
+                build_elf_component("loader", sdk_dir, build_dir, board, config, args.llvm, loader_defines)
+
+            build_elf_component("monitor", sdk_dir, build_dir, board, config, args.llvm, [])
+            build_lib_component("libmicrokit", sdk_dir, build_dir, board, config, args.llvm)
+            if not args.skip_initialiser:
+                build_initialiser("initialiser", sdk_dir, build_dir, board, config)
+
+        # FIXME: Possible improvement here is that our ThreadPool does not know
+        # about the current state of the jobserver, so may spawn threads which
+        # will make the number of jobs exceed the capacity of the jobserver
+        # (since the protocol assumes that if you are started under a jobserver
+        # you have "1" job available to you implicitly)
+        # So we can sometimes over-allocate a bit.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as executor, \
+                tempfile.TemporaryDirectory(prefix="microkit_") as fifo_dir:
+
+            if not os.environ.get("MAKEFLAGS"):
+                os.environ["MAKEFLAGS"] = create_jobserver_fifo(fifo_dir + "/fifo", args.jobs)
+
+            goals = [(board, config) for (board, configs) in build_goals for config in configs]
+            tasks_map = {executor.submit(build_one_goal, board, config): (board, config) for (board, config) in goals}
+
+            for task in concurrent.futures.as_completed(tasks_map):
+                board, config = tasks_map[task]
+                try:
+                    task.result()
+                except Exception as exc:
+                    print(f"Build goal {board} {config} failed", file=stderr)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
