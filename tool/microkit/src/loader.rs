@@ -280,6 +280,7 @@ pub mod aarch64 {
 }
 
 mod riscv64 {
+    pub(crate) const BLOCK_BITS_1GB: u64 = 30;
     pub(crate) const BLOCK_BITS_2MB: u64 = 21;
     pub(crate) const PAGE_BITS_4K: u64 = 12;
 
@@ -541,7 +542,21 @@ impl<'a> Loader<'a> {
                 );
             }
             Arch::Riscv64 => {
-                todo!();
+                let boot_lvl1_pt = Loader::riscv64_setup_pagetables(
+                    config,
+                    &loader_elf,
+                    kernel_first_vaddr,
+                    kernel_first_paddr,
+                    page_tables_paddr_start,
+                    &mut page_table_bytes,
+                );
+                write_symbol!(
+                    loader_image,
+                    image_vaddr,
+                    loader_elf,
+                    "riscv64_boot_lvl1_pt",
+                    boot_lvl1_pt
+                );
             }
             Arch::X86_64 => unreachable!("x86_64 does not support creating a loader image"),
         };
@@ -666,95 +681,194 @@ impl<'a> Loader<'a> {
         }
     }
 
+    /// RISC-V 64 page tables for our purposes uses the Sv39 translation scheme
+    /// (3-level page tables).
+    ///
+    /// It is split into two halves: the Upper/Kernel part of the page tables,
+    /// which matches the format seL4 expects. The lower half contains an
+    /// identity mapped region for the loader.
+    ///
+    /// ```txt
+    ///            (512 GiB)
+    ///   512 +---- Level 1 ---+ 2^39
+    ///       |                |
+    ///       |     (empty)    |
+    ///       |                |
+    ///   k+1 +----------------+                   (1 GiB)
+    ///       | Level 2 Kernel | ----------> +---- Level 2 ---+             +-------------+
+    ///     k +----------------+             |                | ----------> | 2 MiB block |
+    ///       |                |         511 |----------------|             +-------------+
+    ///       |                |             |                | ----------> | 2 MiB block |
+    ///       |                |         510 |----------------|             +-------------+
+    ///       |                |             |                | ----------> | 2 MiB block |
+    ///       |                |             |----------------|             +-------------
+    ///       |                |                   (...)           (...)         (...)          Kernel Regions
+    ///       |                |             |----------------|             +-------------+
+    ///       |                |             |                | ----------> | 2 MiB block |
+    ///       |                |         l+1 |----------------|             +-------------+
+    ///       |                |             | Level 3 Kernel | ----+
+    ///       |                |           l |----------------|     |
+    ///       |                |             |                |     |           (2 MiB)
+    ///       |                |             |                |     +-----> +-- Level 3 --+             +------------+
+    ///       |                |             |                |             |             | ----------> | 4 KiB page |
+    ///       |                |             |                |         511 |-------------|             +------------+
+    ///       |                |             |     (empty)    |             |             | ----------> | 4 KiB page |
+    ///       |     (empty)    |             |                |             |-------------|             +------------+
+    ///       |                |             |                |             |             | ----------> | 4 KiB page |
+    ///       |                |             |                |           m |-------------|             +------------+ p
+    ///       |                |             |                |             |   (empty)   |
+    ///       |                |             |                |             +-------------+
+    ///       |                |             |                |
+    ///       |                |           0 +----------------+
+    ///       |                |
+    ///       |                |
+    ///       |                |
+    ///       |                |
+    ///       |                |
+    ///   s+1 +----------------+                  (1 GiB)
+    ///       | Level 2 Loader | ---------->  +-- Level 2 --+             +-------------+
+    ///     s +----------------+              |             | ----------> | 2 MiB block |
+    ///       |                |          511 +-------------+             +-------------+
+    ///       |                |              |             | ----------> | 2 MiB block |
+    ///       |    (empty)     |          510 +-------------+             +-------------+
+    ///       |                |              |             | ----------> | 2 MiB block |
+    ///       |                |              |-------------|             +-------------+
+    ///     0 +----------------+              |             | ----------> | 2 MiB block |
+    ///                                       |-------------|             +-------------+
+    ///                                            (...)         (...)         (...)          Loader Regions
+    ///                                       |-------------|             +-------------+
+    ///                                       |             | ----------> | 2 MiB block |
+    ///                                       |-------------|             +-------------+
+    ///                                       |             | ----------> | 2 MiB block |
+    ///                                     t +-------------+             +-------------+
+    ///                                       |             |
+    ///                                       |   (empty)   |
+    ///                                       |             |
+    ///                                       +-------------+
+    ///
+    ///
+    /// Where:
+    ///      k = align_down(kernel_first_vaddr, 1GiB),
+    ///      l = align_down(kernel_first_vaddr, 2MiB),
+    ///      m = align_down(kernel_first_vaddr, 4KiB),
+    ///      p = align_down(kernel_first_paddr, 4KiB),
+    ///
+    ///      s = align_down(text_addr, 1GiB),
+    ///      t = align_down(text_addr, 2MiB),
+    /// ```
+    ///
     fn riscv64_setup_pagetables(
         config: &Config,
         elf: &ElfFile,
-        first_vaddr: u64,
-        first_paddr: u64,
-    ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
+        kernel_first_vaddr: u64,
+        kernel_first_paddr: u64,
+        page_tables_paddr_start: u64,
+        page_table_bytes: &mut Vec<u8>,
+    ) -> u64 {
+        use riscv64::{pt_index, pte_leaf, pte_next, BLOCK_BITS_1GB, BLOCK_BITS_2MB, PAGE_BITS_4K};
+
         let (text_addr, _) = grab_symbol!(elf, "_text");
-        let (boot_lvl1_pt_addr, boot_lvl1_pt_size) = grab_symbol!(elf, "boot_lvl1_pt");
-        let (boot_lvl2_pt_addr, boot_lvl2_pt_size) = grab_symbol!(elf, "boot_lvl2_pt");
-        let (boot_lvl3_pt_addr, boot_lvl3_pt_size) = grab_symbol!(elf, "boot_lvl3_pt");
-        let (boot_lvl2_pt_loader_addr, boot_lvl2_pt_loader_size) =
-            grab_symbol!(elf, "boot_lvl2_pt_loader");
 
         // We map the loader using 2MB pages, so make sure the base is actually aligned.
-        assert!(text_addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
+        assert!(text_addr.is_multiple_of(1 << BLOCK_BITS_2MB));
+
+        const PAGE_TABLE_ENTRIES: usize = PAGE_TABLE_SIZE / mem::size_of::<u64>();
+
+        let mut serialise_page_table_to_paddr = {
+            let page_tables_paddr_start = {
+                let aligned_pt_paddr_start =
+                    page_tables_paddr_start.next_multiple_of(PAGE_TABLE_SIZE as u64);
+                if aligned_pt_paddr_start != page_tables_paddr_start {
+                    let alignment_diff =
+                        (aligned_pt_paddr_start - page_tables_paddr_start) as usize;
+                    page_table_bytes.resize(alignment_diff, 0);
+                }
+
+                aligned_pt_paddr_start
+            };
+
+            // This maintains the current end of the PT array.
+            let mut next_pt_paddr = page_tables_paddr_start;
+
+            move |page_table: &mut [u64; PAGE_TABLE_ENTRIES]| -> u64 {
+                let pt_paddr = next_pt_paddr;
+                page_table_bytes.extend(page_table.iter().flat_map(|pte| pte.to_le_bytes()));
+                next_pt_paddr += PAGE_TABLE_SIZE as u64;
+                page_table.fill(0);
+                pt_paddr
+            }
+        };
 
         let num_pt_levels = config.riscv_pt_levels.unwrap().levels();
+        assert!(num_pt_levels == 3);
 
-        let mut boot_lvl1_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let text_index_lvl1 = riscv64::pt_index(num_pt_levels, text_addr, 1);
-            let pt_entry = riscv64::pte_next(boot_lvl2_pt_loader_addr);
-            let start = 8 * text_index_lvl1;
-            let end = start + 8;
-            boot_lvl1_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-        }
+        // Manufacture the constants as per the diagram.
+        let k = align_down(kernel_first_vaddr, BLOCK_BITS_1GB);
+        let l = align_down(kernel_first_vaddr, BLOCK_BITS_2MB);
+        let m = align_down(kernel_first_vaddr, PAGE_BITS_4K);
+        let p = align_down(kernel_first_paddr, PAGE_BITS_4K);
 
-        let mut boot_lvl2_pt_loader: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let text_index_lvl2 = riscv64::pt_index(num_pt_levels, text_addr, 2);
-            for (page, i) in (text_index_lvl2..512).enumerate() {
-                let start = 8 * i;
-                let end = start + 8;
-                let addr = text_addr + ((page as u64) << riscv64::BLOCK_BITS_2MB);
-                let pt_entry = riscv64::pte_leaf(addr);
-                boot_lvl2_pt_loader[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-            }
-        }
+        let s = align_down(text_addr, BLOCK_BITS_1GB);
+        let t = align_down(text_addr, BLOCK_BITS_2MB);
 
-        {
-            let index = riscv64::pt_index(num_pt_levels, first_vaddr, 1);
-            let start = 8 * index;
-            let end = start + 8;
-            boot_lvl1_pt[start..end]
-                .copy_from_slice(&riscv64::pte_next(boot_lvl2_pt_addr).to_le_bytes());
-        }
+        // Manufacture the kernel page tables
+        let kernel_lvl2_pt_paddr = {
+            let mut lvl2_pt_kernel = [0u64; PAGE_TABLE_ENTRIES];
 
-        let mut boot_lvl3_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        let mut boot_lvl2_pt: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
-        {
-            let mut index_lvl2 = riscv64::pt_index(num_pt_levels, first_vaddr, 2);
-            if !first_vaddr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB) {
-                let index_lvl3 = riscv64::pt_index(num_pt_levels, first_vaddr, 3);
-                for (page, i) in (index_lvl3..512).enumerate() {
-                    let start = 8 * i;
-                    let end = start + 8;
-                    let addr = first_paddr + ((page as u64) << riscv64::PAGE_BITS_4K);
-                    assert!(addr.is_multiple_of(1 << riscv64::PAGE_BITS_4K));
-                    let pt_entry = riscv64::pte_leaf(addr);
-                    boot_lvl3_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
+            let mut paddr = p;
+            let index_l = pt_index(num_pt_levels, l, 2);
+
+            lvl2_pt_kernel[index_l] = if kernel_first_vaddr.is_multiple_of(1 << BLOCK_BITS_2MB) {
+                assert!(paddr.is_multiple_of(1 << BLOCK_BITS_2MB));
+                let pte = pte_leaf(paddr);
+                paddr += 1 << BLOCK_BITS_2MB;
+                pte
+            } else {
+                let mut lvl3_pt_kernel = [0u64; PAGE_TABLE_ENTRIES];
+
+                let index_m = pt_index(num_pt_levels, m, 3);
+
+                for index in index_m..512 {
+                    lvl3_pt_kernel[index] = pte_leaf(paddr);
+                    paddr += 1 << PAGE_BITS_4K;
                 }
-                let start = 8 * index_lvl2;
-                let end = start + 8;
-                let lvl3_pt_entry = riscv64::pte_next(boot_lvl3_pt_addr);
-                assert!(boot_lvl3_pt_addr.is_multiple_of(1 << riscv64::PAGE_BITS_4K));
-                boot_lvl2_pt[start..end].copy_from_slice(&lvl3_pt_entry.to_le_bytes());
-                index_lvl2 += 1;
-            }
-            let first_paddr_aligned = align_up(first_paddr, riscv64::BLOCK_BITS_2MB);
-            for (page, i) in (index_lvl2..512).enumerate() {
-                let start = 8 * i;
-                let end = start + 8;
-                let addr = first_paddr_aligned + ((page as u64) << riscv64::BLOCK_BITS_2MB);
-                assert!(addr.is_multiple_of(1 << riscv64::BLOCK_BITS_2MB));
-                let pt_entry = riscv64::pte_leaf(addr);
-                boot_lvl2_pt[start..end].copy_from_slice(&pt_entry.to_le_bytes());
-            }
-        }
 
-        vec![
-            (boot_lvl1_pt_addr, boot_lvl1_pt_size, boot_lvl1_pt),
-            (boot_lvl2_pt_addr, boot_lvl2_pt_size, boot_lvl2_pt),
-            (boot_lvl3_pt_addr, boot_lvl3_pt_size, boot_lvl3_pt),
-            (
-                boot_lvl2_pt_loader_addr,
-                boot_lvl2_pt_loader_size,
-                boot_lvl2_pt_loader,
-            ),
-        ]
+                let kernel_lvl3_pt_paddr = serialise_page_table_to_paddr(&mut lvl3_pt_kernel);
+                pte_next(kernel_lvl3_pt_paddr)
+            };
+
+            for index in (index_l + 1)..512 {
+                lvl2_pt_kernel[index] = pte_leaf(paddr);
+                paddr += 1 << BLOCK_BITS_2MB;
+            }
+
+            serialise_page_table_to_paddr(&mut lvl2_pt_kernel)
+        };
+
+        // Manufacture the loader page tables, which is relatively straightforward
+        let loader_lvl2_pt_paddr = {
+            let mut lvl2_pt_loader = [0u64; PAGE_TABLE_ENTRIES];
+
+            // Identity mapped, so vaddr == paddr.
+            let mut paddr = t;
+
+            for index in pt_index(num_pt_levels, t, 2)..512 {
+                lvl2_pt_loader[index] = pte_leaf(paddr);
+                paddr += 1 << BLOCK_BITS_2MB;
+            }
+
+            serialise_page_table_to_paddr(&mut lvl2_pt_loader)
+        };
+
+        // Manufacture the Level 1 table
+        let mut boot_lvl1_pt = [0u64; PAGE_TABLE_ENTRIES];
+
+        let index_s = pt_index(num_pt_levels, s, 1);
+        let index_k = pt_index(num_pt_levels, k, 1);
+        boot_lvl1_pt[index_k] = pte_next(kernel_lvl2_pt_paddr);
+        boot_lvl1_pt[index_s] = pte_next(loader_lvl2_pt_paddr);
+
+        serialise_page_table_to_paddr(&mut boot_lvl1_pt)
     }
 
     /// AArch64 loader page tables have two variations:
