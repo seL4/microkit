@@ -54,6 +54,14 @@ pub const fn round_down(n: u64, x: u64) -> u64 {
     }
 }
 
+pub const fn align_up(n: u64, bits: u64) -> u64 {
+    round_up(n, 1 << bits)
+}
+
+pub const fn align_down(n: u64, bits: u64) -> u64 {
+    round_down(n, 1 << bits)
+}
+
 pub fn is_power_of_two(n: u64) -> bool {
     assert!(n > 0);
     n & (n - 1) == 0
