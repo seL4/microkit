@@ -290,6 +290,7 @@ pub struct Config {
     pub fan_out_limit: u64,
     pub max_num_bootinfo_untypeds: u64,
     pub hypervisor: bool,
+    pub iommu: bool,
     pub benchmark: bool,
     pub num_cores: u8,
     pub fpu: bool,
@@ -444,6 +445,7 @@ pub enum ObjectType {
     SmallPage,
     LargePage,
     PageTable,
+    IOPageTable,
     Vcpu,
     AsidPool,
 }
@@ -469,6 +471,8 @@ impl ObjectType {
                 _ => panic!("Unexpected architecture asking for vCPU size bits"),
             },
             ObjectType::AsidPool => Some(object_sizes.asid_pool),
+            ObjectType::IOPageTable => Some(12),
+            // It would be best to avoid such catch all case as people might forget to add the size of new object type here.
             _ => None,
         }
     }

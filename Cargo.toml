@@ -13,11 +13,11 @@ members = [
 
 [workspace.dependencies.sel4-capdl-initializer]
 git = "https://github.com/au-ts/rust-sel4"
-rev = "9102a134c2b5925d17e021280a3d104e79805221"
+branch = "cheng/iommu_support"
 
 [workspace.dependencies.sel4-capdl-initializer-types]
 git = "https://github.com/au-ts/rust-sel4"
-rev = "9102a134c2b5925d17e021280a3d104e79805221"
+branch = "cheng/iommu_support"
 
 [profile.release.package.microkit-tool]
 strip = true

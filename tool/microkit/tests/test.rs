@@ -22,6 +22,7 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     max_num_bootinfo_untypeds: 230,
     fan_out_limit: 256,
     hypervisor: true,
+    iommu: false,
     benchmark: false,
     num_cores: 1,
     fpu: true,
@@ -46,6 +47,7 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     max_num_bootinfo_untypeds: 230,
     fan_out_limit: 256,
     hypervisor: true,
+    iommu: true,
     benchmark: false,
     num_cores: 1,
     fpu: true,
@@ -691,6 +693,15 @@ mod protection_domain {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "pd_invalid_cpu.system",
             "Error: cpu core must be less than 1, got 10 on element 'protection_domain':",
+        )
+    }
+
+    #[test]
+    fn test_iommu_valid_on_x86() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_out_of_bound.system",
+            "Error: iomap for 'region' has address 0x8000001000 which exceeds the upper limits of 549755813887 in protection domain 'test' @ iommu_out_of_bound.system:13:9",
         )
     }
 }
