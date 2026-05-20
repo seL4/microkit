@@ -105,7 +105,7 @@ pub mod aarch64 {
 
         pub const NORMAL_INNER_NC_OUTER_WBC: u64 = 0b1101;
         pub const NORMAL_INNER_WTC_OUTER_WBC: u64 = 0b1110;
-        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = 0b1111;
+        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = super::s1_mair_attr_index::MT_NORMAL;
     }
 
     pub mod descriptor_type {
@@ -933,11 +933,14 @@ impl<'a> Loader<'a> {
             boot_lvl2_lower[start..end].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
-        let boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
+        let mut boot_lvl0_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];
         {
             let pt_entry = aarch64::table_descriptor(boot_lvl1_upper_addr);
             let idx = aarch64::lvl0_index(first_vaddr);
+            // For EL2.
             boot_lvl0_lower[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
+            // For EL1.
+            boot_lvl0_upper[8 * idx..8 * (idx + 1)].copy_from_slice(&pt_entry.to_le_bytes());
         }
 
         let mut boot_lvl1_upper: [u8; PAGE_TABLE_SIZE] = [0; PAGE_TABLE_SIZE];

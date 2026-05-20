@@ -302,7 +302,6 @@ BEGIN_FUNC(el1_mmu_disable)
      */
     bl      invalidate_icache
 
-    ldp     x27, x28, [sp], #16
     ldp     x29, x30, [sp], #16
     ret
 END_FUNC(el1_mmu_disable)
@@ -372,6 +371,7 @@ BEGIN_FUNC(el1_mmu_enable)
 
     enable_mmu sctlr_el1, x8
 
+    ldp     x27, x28, [sp], #16
     ldp     x29, x30, [sp], #16
     ret
 
