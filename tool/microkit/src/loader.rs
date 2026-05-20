@@ -105,7 +105,7 @@ pub mod aarch64 {
 
         pub const NORMAL_INNER_NC_OUTER_WBC: u64 = 0b1101;
         pub const NORMAL_INNER_WTC_OUTER_WBC: u64 = 0b1110;
-        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = 0b1111;
+        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = super::s1_mair_attr_index::MT_NORMAL;
     }
 
     pub mod descriptor_type {
