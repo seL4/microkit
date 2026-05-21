@@ -27,6 +27,12 @@ seL4_Bool microkit_have_signal = seL4_False;
 seL4_CPtr microkit_signal_cap;
 seL4_MessageInfo_t microkit_signal_msg;
 
+#if defined(CONFIG_VTX)
+struct microkit_x86_vcpu_state microkit_x86_vcpu_state;
+
+static seL4_Word microkit_x86_vmenter_result;
+#endif /* CONFIG_VTX */
+
 seL4_Word microkit_irqs;
 seL4_Word microkit_notifications;
 seL4_Word microkit_pps;
@@ -71,10 +77,89 @@ static void deferred_flush(void)
     }
 }
 
+#if defined(CONFIG_VTX)
+static seL4_MessageInfo_t x86_vcpu_resume(seL4_Word *badge)
+{
+    /* There isn't a seL4 syscall that atomically send signal then perform vmenter while waiting for
+        incoming notifications. So we have to dispatch any deferred signal first. Then switch execution
+        to the bound VCPU. A PD with a VCPU can't receive PPC on x86 so no need to check `have_reply`. */
+    deferred_flush();
+
+    microkit_mr_set(SEL4_VMENTER_CALL_EIP_MR, microkit_x86_vcpu_state.rip);
+    microkit_mr_set(SEL4_VMENTER_CALL_CONTROL_PPC_MR, microkit_x86_vcpu_state.prim_proc_ctl);
+    microkit_mr_set(SEL4_VMENTER_CALL_INTERRUPT_INFO_MR, microkit_x86_vcpu_state.irq_info);
+
+    microkit_x86_vmenter_result = seL4_VMEnter(badge);
+
+    microkit_x86_vcpu_state.rip = microkit_mr_get(SEL4_VMENTER_CALL_EIP_MR);
+    microkit_x86_vcpu_state.prim_proc_ctl = microkit_mr_get(SEL4_VMENTER_CALL_CONTROL_PPC_MR);
+    microkit_x86_vcpu_state.irq_info = microkit_mr_get(SEL4_VMENTER_CALL_INTERRUPT_INFO_MR);
+
+    /* Create a dummy tag so that we can call `fault()`, as VM Exits on x86 isn't modelled as an IPC like ARM. */
+    if (microkit_x86_vmenter_result == SEL4_VMENTER_RESULT_FAULT) {
+        return seL4_MessageInfo_new(0, 0, 0, SEL4_VMENTER_NUM_FAULT_MSGS);
+    } else {
+        /* VCPU got interrupted due to a notification, no tag. */
+        return seL4_MessageInfo_new(0, 0, 0, 0);
+    }
+}
+#endif
+
+static seL4_MessageInfo_t receive_event(bool have_reply, seL4_MessageInfo_t reply_tag, seL4_Word *badge)
+{
+#if defined(CONFIG_VTX)
+    microkit_x86_vmenter_result = UINT64_MAX;
+    if (microkit_x86_vcpu_state.do_resume) {
+        return x86_vcpu_resume(badge);
+    }
+#endif
+
+    if (have_reply) {
+        deferred_flush();
+        return seL4_ReplyRecv(INPUT_CAP, reply_tag, badge, REPLY_CAP);
+    } else if (microkit_have_signal) {
+        microkit_have_signal = seL4_False;
+        return seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, badge, REPLY_CAP);
+    } else {
+        return seL4_Recv(INPUT_CAP, badge, REPLY_CAP);
+    }
+}
+
+static inline bool is_endpoint(seL4_Word badge)
+{
+    return badge >> 63;
+}
+
+static bool is_fault(seL4_Word badge)
+{
+#if defined(CONFIG_VTX)
+    if (microkit_x86_vmenter_result == SEL4_VMENTER_RESULT_FAULT) {
+        return true;
+    }
+#endif
+    return (badge >> 62) & 1;
+}
+
+static seL4_Bool handle_fault(seL4_Word badge, seL4_MessageInfo_t tag, seL4_MessageInfo_t *reply_tag)
+{
+    seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, reply_tag);
+#if defined(CONFIG_VTX)
+    if (microkit_x86_vmenter_result == SEL4_VMENTER_RESULT_FAULT) {
+        /* There won't be anything to reply to for a VCPU fault. But
+         * if fault() returns false then we shouldn't resume the VCPU. */
+        if (!reply_to_fault) {
+            microkit_x86_vcpu_state.do_resume = seL4_False;
+        }
+        reply_to_fault = seL4_False;
+    }
+#endif
+    return reply_to_fault;
+}
+
 static void handler_loop(void)
 {
     bool have_reply = false;
-    seL4_MessageInfo_t reply_tag;
+    seL4_MessageInfo_t reply_tag = seL4_MessageInfo_new(0, 0, 0, 0);
 
     /**
      * Because of https://github.com/seL4/seL4/issues/1536
@@ -94,30 +179,14 @@ static void handler_loop(void)
     }
 
     for (;;) {
-        seL4_Word badge;
-        seL4_MessageInfo_t tag;
-
-        if (have_reply) {
-            deferred_flush();
-            tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
-        } else if (microkit_have_signal) {
-            tag = seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, &badge, REPLY_CAP);
-            microkit_have_signal = seL4_False;
-        } else {
-            tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
-        }
-
-        uint64_t is_endpoint = badge >> 63;
-        uint64_t is_fault = (badge >> 62) & 1;
+        seL4_Word badge = 0;
+        seL4_MessageInfo_t tag = receive_event(have_reply, reply_tag, &badge);
 
         have_reply = false;
 
-        if (is_fault) {
-            seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, &reply_tag);
-            if (reply_to_fault) {
-                have_reply = true;
-            }
-        } else if (is_endpoint) {
+        if (is_fault(badge)) {
+            have_reply = handle_fault(badge, tag, &reply_tag);
+        } else if (is_endpoint(badge)) {
             have_reply = true;
             reply_tag = protected(badge & CHANNEL_MASK, tag);
         } else {
