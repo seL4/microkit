@@ -461,7 +461,6 @@ SUPPORTED_CONFIGS = (
             "KernelDebugBuild": False,
             "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation",
-            "KernelSignalFastpath": True,
         },
         kernel_options_arch={
             KernelArch.AARCH64: {
