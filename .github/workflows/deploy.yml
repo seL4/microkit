@@ -246,5 +246,6 @@ jobs:
         xml: ${{ needs.code.outputs.xml }}
         manifest_repo: seL4/microkit-manifest
         manifest_branch: main
+        manifest: main.xml
       env:
         GH_SSH: ${{ secrets.CI_SSH }}
