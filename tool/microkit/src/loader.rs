@@ -22,12 +22,11 @@ macro_rules! grab_symbol {
 const PAGE_TABLE_SIZE: usize = 4096;
 
 pub mod aarch64 {
-    //! For AArch64, our page tables can be both Stage 2 (if we run in EL2) or Stage
-    //! 1 (if we run in EL1, for non-hyp seL4). Generally, most attributes of the
-    //! page tables for the features we use are compatible in the layouts between
-    //! the Stage 2 descriptors and the Stage 1 descriptors. When modifying values
-    //! of the descriptors, please ensure that the values are valid for both stages
-    //! of the translation scheme.
+    //! For AArch64, our page tables use the Stage 1 descriptor formats
+    //! for both EL2 (TTBR0_EL2) and EL1 (TTBR0_EL1/TTBR1_EL1).
+    //! Stage 2 descriptors are only used when in the EL1&0 regime; which is not
+    //! the case when in EL2.
+
     use crate::util::mask;
 
     pub const LVL0_BITS: u64 = 9;
@@ -49,35 +48,10 @@ pub mod aarch64 {
         idx as usize
     }
 
-    /// The one main difference between the Stage 1 and Stage 2 translation
-    /// tables is that bit[4:2] contains AttrIndex[2:0] (Stage 1) or
-    /// MemAttr[3:0] (Stage 2).
-    /// For Stage 1, the AttrIndex depends on our configured value of `MAIR_EL1`
-    /// done in util64.S.
-    /// For Stage 2, the values are fixed in Table D8-96 "Stage 2 MemAttr[3:0] encoding"
-    #[derive(Copy, Clone)]
-    pub enum MemAttr {
-        Stage1 { attr_index: u64 },
-        Stage2 { mem_attr: u64 },
-    }
-
-    impl MemAttr {
-        pub fn value(&self) -> u64 {
-            match *self {
-                MemAttr::Stage1 { attr_index } => attr_index,
-                MemAttr::Stage2 { mem_attr } => mem_attr,
-            }
-        }
-        pub fn is_normal_cacheable(&self) -> bool {
-            match *self {
-                MemAttr::Stage1 { attr_index } => attr_index == s1_mair_attr_index::MT_NORMAL,
-                MemAttr::Stage2 { mem_attr } => mem_attr == s2_mem_attr::NORMAL_INNER_WBC_OUTER_WBC,
-            }
-        }
-    }
-
-    /// These match those in util64.S configured in the MAIR_EL1 register,
-    /// which also needs to match the values that seL4 uses.
+    /// Stage 1 translation table page/block descriptors have bits[4:2] containing
+    /// AttrIndex[2:0]. The AttrIndex values depends on our configuration of
+    /// the `MAIR_EL1` or `MAIR_EL2` registers done in util64.S;
+    /// This also needs to match the values that seL4 uses.
     #[allow(non_upper_case_globals, reason = "matching ARM naming convention")]
     pub mod s1_mair_attr_index {
         pub const MT_DEVICE_nGnRnE: u64 = 0b000;
@@ -85,27 +59,6 @@ pub mod aarch64 {
         pub const MT_DEVICE_GRE: u64 = 0b010;
         pub const MT_NORMAL_NC: u64 = 0b011;
         pub const MT_NORMAL: u64 = 0b100;
-    }
-
-    /// See fixed values in Table D8-96 "Stage 2 MemAttr[3:0] encoding"
-    #[allow(non_upper_case_globals, reason = "matching ARM naming convention")]
-    pub mod s2_mem_attr {
-        pub const DEVICE_nGnRnE: u64 = 0b0000;
-        pub const DEVICE_nGnRE: u64 = 0b0001;
-        pub const DEVICE_nGRE: u64 = 0b0010;
-        pub const DEVICE_GRE: u64 = 0b0011;
-
-        pub const NORMAL_INNER_NC_OUTER_NC: u64 = 0b0101;
-        pub const NORMAL_INNER_WTC_OUTER_NC: u64 = 0b0110;
-        pub const NORMAL_INNER_WBC_OUTER_NC: u64 = 0b0111;
-
-        pub const NORMAL_INNER_NC_OUTER_WTC: u64 = 0b1001;
-        pub const NORMAL_INNER_WTC_OUTER_WTC: u64 = 0b1010;
-        pub const NORMAL_INNER_WBC_OUTER_WTC: u64 = 0b1011;
-
-        pub const NORMAL_INNER_NC_OUTER_WBC: u64 = 0b1101;
-        pub const NORMAL_INNER_WTC_OUTER_WBC: u64 = 0b1110;
-        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = 0b1111;
     }
 
     pub mod descriptor_type {
@@ -126,8 +79,7 @@ pub mod aarch64 {
     pub mod shareability_attributes {
         //! Per §D8.6.2 "Stage 1 Shareability attributes", these contain the
         //! shareability attributes of the descriptor OA for normal-cacheable
-        //! memory. These values are the same as in §D8.6.7 "Stage 2 Shareability
-        //! attributes", so we can use the same for both Stage 1 / Stage 2.
+        //! memory.
 
         /// Non-shareable
         pub const NON_SHAREABLE: u64 = 0b00;
@@ -156,19 +108,19 @@ pub mod aarch64 {
     /// Per "Table D8-52 Stage 1 VMSAv8-64 Block and Page descriptor fields" and
     /// "Figure D8-14 VMSAv8-64 Block descriptor formats" of ARM DDI0487L.b;
     /// specifically subfigure "4KB, 16KB, and 64KB granules, 48-bit OA"
-    /// Also "Table D8-53 Stage 2 VMSAv8-64 Block and Page descriptor fields"
-    /// for the Stage 2 attributes.
-    pub fn block_descriptor(level: usize, addr: u64, mem_attr: MemAttr) -> u64 {
+    pub fn block_descriptor(level: usize, addr: u64, attr_index: u64) -> u64 {
         // Per Table D8-48, Condition for descriptor_type::BLOCK is level != 3.
         assert!(level != 3);
 
         let upper_attributes: u64 = 0;
 
-        let shareability = if mem_attr.is_normal_cacheable() {
-            // Match what the seL4 kernel uses for its page tables
+        let shareability = if attr_index == s1_mair_attr_index::MT_NORMAL {
+            // Match what the seL4 kernel uses for its page tables, which
+            // is especially necessary for SMP booting which relies on it
+            // for coherency.
             shareability_attributes::INNER_SHAREABLE
         } else {
-            // Per $R_{PYFVQ}$ (Stage 1) and $R_{RYHCTP}$ (Stage 2):
+            // Per $R_{PYFVQ}$:
             // > If a region is mapped as Device memory or Normal Non-cacheable
             // > memory after all enabled translation stages, then the region
             // > has an effective Shareability attribute of Outer Shareable.
@@ -184,7 +136,6 @@ pub mod aarch64 {
         const AP_KERNEL_RW: u64 = 0b00;
 
         // bit[11] is the not global (nG) field, we leave as 0 (global).
-        //         In Stage2 it is RES0.
         // bit[10] is the access flag; depending on FEAT_HAFDBS, when software
         //         manages the AF memory accesses to the page/block when AF=0
         //         raise an Access Fault; when hardware manages the AF it will
@@ -192,9 +143,9 @@ pub mod aarch64 {
         // bit[9:8] is SH[1:0] containing stage 1 shareability attributes
         // bit[7:6] contains AP[2:1]
         // bit[5] is RES0
-        // bit[4:2] contains AttrIndex (Stage 1) or MemAttr (Stage 2)
+        // bit[4:2] contains AttrIndex
         let lower_attributes: u64 =
-            (1 << 10) | (AP_KERNEL_RW << 6) | (shareability << 8) | (mem_attr.value() << 2);
+            (1 << 10) | (AP_KERNEL_RW << 6) | (shareability << 8) | (attr_index << 2);
 
         // bits[47:n]
         let output_address: u64 = addr
@@ -219,16 +170,16 @@ pub mod aarch64 {
     /// Per "Table D8-52 Stage 1 VMSAv8-64 Block and Page descriptor fields" and
     /// "Figure D8-15 VMSAv8-64 Page descriptor formats" of ARM DDI0487L.b;
     /// specifically subfigure "4KB granule 48-bit OA".
-    /// Also "Table D8-53 Stage 2 VMSAv8-64 Block and Page descriptor fields"
-    /// for the Stage 2 attributes.
-    pub fn page_descriptor(addr: u64, mem_attr: MemAttr) -> u64 {
+    pub fn page_descriptor(addr: u64, attr_index: u64) -> u64 {
         // The main difference between a page descriptor and block descriptor
         // is in the size of the output address (OA) and in the descriptor type.
 
         let upper_attributes: u64 = 0;
 
-        let shareability = if mem_attr.is_normal_cacheable() {
-            // Match what the seL4 kernel uses for its page tables
+        let shareability = if attr_index == s1_mair_attr_index::MT_NORMAL {
+            // Match what the seL4 kernel uses for its page tables, which
+            // is especially necessary for SMP booting which relies on it
+            // for coherency.
             shareability_attributes::INNER_SHAREABLE
         } else {
             // Per $R_{PYFVQ}$:
@@ -241,12 +192,10 @@ pub mod aarch64 {
         };
 
         // AP[2:1], which we set as 0b00 for read/write access:
-        //   stage 1: 0b00 is {PrivRead, PrivWrite} and we are EL1
-        //   stage 2: 0b00 is RW for EL2 and no perms for EL1.
+        //   stage 1: 0b00 is {PrivRead, PrivWrite} and we are EL1/El2 (priv)
         const AP_KERNEL_RW: u64 = 0b00;
 
         // bit[11] is the not global (nG) field, we leave as 0 (global).
-        //         In Stage2 it is RES0
         // bit[10] is the access flag; depending on FEAT_HAFDBS, when software
         //         manages the AF memory accesses to the page/block when AF=0
         //         raise an Access Fault; when hardware manages the AF it will
@@ -254,9 +203,9 @@ pub mod aarch64 {
         // bit[9:8] is SH[1:0] containing stage 1 shareability attributes
         // bit[7:6] contains AP[2:1]
         // bit[5] is RES0
-        // bit[4:2] contains AttrIndex (Stage 1) or MemAttr (Stage 2)
+        // bit[4:2] contains AttrIndex
         let lower_attributes: u64 =
-            (1 << 10) | (AP_KERNEL_RW << 6) | (shareability << 8) | (mem_attr.value() << 2);
+            (1 << 10) | (AP_KERNEL_RW << 6) | (shareability << 8) | (attr_index << 2);
 
         // bits[47:12]
         let output_address: u64 = addr & !mask(12);
@@ -746,7 +695,7 @@ impl<'a> Loader<'a> {
     }
 
     /// AArch64 loader page tables have two variations:
-    ///  - Loader in EL2, then Stage 2 translations in use, so we have the
+    ///  - Loader in EL2, then Stage 1 translations in use, so we have the
     ///    singular TTBR0_EL2 register containing the Level 0 table;
     ///    this allows virtual address in the range [0,2^48).
     ///  - Loader in EL1, then Stage 1 translations are in use, so we have both
@@ -837,11 +786,13 @@ impl<'a> Loader<'a> {
     /// ```
     ///
     fn aarch64_setup_pagetables(
-        config: &Config,
+        _config: &Config,
         elf: &ElfFile,
         first_vaddr: u64,
         first_paddr: u64,
     ) -> Vec<(u64, u64, [u8; PAGE_TABLE_SIZE])> {
+        use aarch64::s1_mair_attr_index::{MT_DEVICE_nGnRnE, MT_NORMAL};
+
         let (boot_lvl1_lower_addr, boot_lvl1_lower_size) = grab_symbol!(elf, "boot_lvl1_lower");
         let (boot_lvl1_upper_addr, boot_lvl1_upper_size) = grab_symbol!(elf, "boot_lvl1_upper");
         let (boot_lvl2_upper_addr, boot_lvl2_upper_size) = grab_symbol!(elf, "boot_lvl2_upper");
@@ -851,20 +802,6 @@ impl<'a> Loader<'a> {
 
         let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
         let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
-
-        // Stage 1 or 2 depends on hypervisor config.
-        #[rustfmt::skip]
-        let memattr_normal = if config.hypervisor {
-            aarch64::MemAttr::Stage2 { mem_attr: aarch64::s2_mem_attr::NORMAL_INNER_WBC_OUTER_WBC }
-        } else {
-            aarch64::MemAttr::Stage1 { attr_index: aarch64::s1_mair_attr_index::MT_NORMAL }
-        };
-        #[rustfmt::skip]
-        let memattr_device = if config.hypervisor {
-            aarch64::MemAttr::Stage2 { mem_attr: aarch64::s2_mem_attr::DEVICE_nGnRnE }
-        } else {
-            aarch64::MemAttr::Stage1 { attr_index: aarch64::s1_mair_attr_index::MT_DEVICE_nGnRnE }
-        };
 
         if aarch64::lvl1_index(loader_start_addr) != aarch64::lvl1_index(loader_end_addr) {
             panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
@@ -888,7 +825,7 @@ impl<'a> Loader<'a> {
 
             let lvl1_idx = aarch64::lvl1_index(uart_base);
 
-            let pt_entry = aarch64::block_descriptor(1, uart_base, memattr_device);
+            let pt_entry = aarch64::block_descriptor(1, uart_base, MT_DEVICE_nGnRnE);
 
             let start = 8 * lvl1_idx;
             let end = 8 * (lvl1_idx + 1);
@@ -911,7 +848,7 @@ impl<'a> Loader<'a> {
                 ((i - aarch64::lvl2_index(loader_start_addr)) << aarch64::BLOCK_BITS_2MB) as u64;
 
             let pt_entry =
-                aarch64::block_descriptor(2, loader_start_addr + entry_idx, memattr_device);
+                aarch64::block_descriptor(2, loader_start_addr + entry_idx, MT_DEVICE_nGnRnE);
 
             let start = 8 * i;
             let end = 8 * (i + 1);
@@ -926,7 +863,7 @@ impl<'a> Loader<'a> {
             assert!(aarch64::lvl2_index(loader_start_addr) != lvl2_idx);
             assert!(aarch64::lvl1_index(loader_start_addr) == aarch64::lvl1_index(0));
 
-            let pt_entry = aarch64::block_descriptor(2, lvl2_idx as u64, memattr_device);
+            let pt_entry = aarch64::block_descriptor(2, lvl2_idx as u64, MT_DEVICE_nGnRnE);
 
             let start = 8 * lvl2_idx;
             let end = 8 * (lvl2_idx + 1);
@@ -954,7 +891,7 @@ impl<'a> Loader<'a> {
             let entry_idx: u64 =
                 ((i - aarch64::lvl2_index(first_vaddr)) << aarch64::BLOCK_BITS_2MB) as u64;
 
-            let pt_entry = aarch64::block_descriptor(2, first_paddr + entry_idx, memattr_normal);
+            let pt_entry = aarch64::block_descriptor(2, first_paddr + entry_idx, MT_NORMAL);
 
             let start = 8 * i;
             let end = 8 * (i + 1);
