@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 use crate::elf::{ElfFile, ElfSegmentData};
-use crate::sel4::{Arch, Config};
+use crate::sel4::{Arch, Config, PlatformConfigRegion};
 use crate::uimage::uimage_serialise;
-use crate::util::{align_down, align_up, mask, mb, round_up, struct_to_bytes};
+use crate::util::{align_down, mb, round_up, struct_to_bytes};
 use std::cmp::min;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -19,6 +19,18 @@ macro_rules! grab_symbol {
         $elf.find_symbol($symbol_name)
             .expect(concat!("Could not find '", $symbol_name, "' symbol"))
     };
+}
+
+// XX: This could be generic on arbitrary <T> if we could specify T:: implements from_le_bytes,
+// but we can't.
+fn read_symbol_maybe(elf: &ElfFile, symbol_name: &str) -> Option<u64> {
+    let (addr, size) = elf.find_symbol(symbol_name).ok()?;
+
+    let symbol_bytes = elf.get_data(addr, size)?;
+
+    assert!(mem::size_of::<u64>() == symbol_bytes.len());
+
+    Some(u64::from_le_bytes(symbol_bytes.try_into().ok()?))
 }
 
 macro_rules! write_symbol {
@@ -147,7 +159,7 @@ pub mod aarch64 {
         let shareability = if attr_index == s1_mair_attr_index::MT_NORMAL {
             // Match what the seL4 kernel uses for its page tables, which
             // is especially necessary for SMP booting which relies on it
-            // for coherency.
+            // for coherency. See the comment in seL4 `release_secondary_cpus()`.
             shareability_attributes::INNER_SHAREABLE
         } else {
             // Per $R_{PYFVQ}$:
@@ -921,35 +933,8 @@ impl<'a> Loader<'a> {
     ///       |             |
     ///     1 +-------------+                 (512 GiB)
     ///       | Level 1 Lwr | ---------->  +-- Level 1 --+
-    ///     0 +-------------+              |             |
-    ///                                    |   (empty)   |
-    ///                                    |             |
-    ///                                u+1 +-------------+             +-------------+
-    ///                                    |  uart_base  | ----------> | 1 GiB block |
-    ///                                  u +-------------+             +-------------+
-    ///                                    |             |
-    ///                                    |   (empty)   |
-    ///                                    |             |
-    ///                               i+1  +-------------+                 (1 GiB)
-    ///                                    | Level 2 Lwr | ----------> +-- Level 2 --+
-    ///                                 i  +-------------+             |             |
-    ///                                    |             |             |   (empty)   |
-    ///                                    |   (empty)   |             |             |
-    ///                                    |             |           t +-------------+             +-------------+
-    ///                                    +-------------+             |             | ----------> | 2 MiB block |
-    ///                                                                |-------------|             +-------------+
-    ///                                                                |             | ----------> | 2 MiB block |
-    ///                                                                |-------------|             +-------------+
-    ///                                                Loader Regions       (...)         (...)         (...)
-    ///                                                                |-------------|             +-------------+
-    ///                                                                |             | ----------> | 2 MiB block |
-    ///                                                                |-------------|             +-------------+
-    ///                                                                |             | ----------> | 2 MiB block |
-    ///                                                              s +-------------+             +-------------+
-    ///                                                                |             |
-    ///                                                                |   (empty)   |
-    ///                                                                |             |
-    ///                                                                +-------------+
+    ///     0 +-------------+              TODO: RAM.
+    ///
     ///
     /// Where:
     ///      k = align_down(kernel_first_vaddr, 512GiB),
@@ -957,9 +942,6 @@ impl<'a> Loader<'a> {
     ///      m = align_down(kernel_first_vaddr, 2MiB),
     ///      p = align_down(kernel_first_paddr, 2MiB),
     ///      u = align_down(uart_base, 1GiB),
-    ///      i = align_down(loader_start_addr, 1GiB),
-    ///      s = align_down(loader_start_addr, 2MiB),
-    ///      t = align_up(loader_end_addr, 2MiB),
     /// ```
     ///
     fn aarch64_setup_pagetables(
@@ -1003,20 +985,49 @@ impl<'a> Loader<'a> {
             }
         };
 
-        let (loader_start_addr, _) = grab_symbol!(elf, "_loader_start");
-        let (loader_end_addr, _) = grab_symbol!(elf, "_loader_end");
-        if lvl1_index(loader_start_addr) != lvl1_index(loader_end_addr) {
-            panic!("We only map 1GiB, but loader paddr range covers multiple GiB");
-        }
+        let identity_mapped_regions = {
+            let ram_regions = config
+                .normal_regions
+                .as_ref()
+                .expect("AArch64 should have normal_regions");
 
-        let uart_base = if let Ok((uart_addr, uart_addr_size)) = elf.find_symbol("uart_addr") {
-            let data = elf
-                .get_data(uart_addr, uart_addr_size)
-                .expect("uart_addr not initialized");
+            // println!("{:#x?}", ram_regions);
 
-            Some(u64::from_le_bytes(data[0..8].try_into().unwrap()))
-        } else {
-            None
+            let mut regions: Vec<_> = ram_regions
+                .iter()
+                .cloned()
+                .map(|region| (region, MT_NORMAL))
+                .collect();
+
+            // FIXME: Derive from the kernel build system.
+            if let Some(uart_base) = read_symbol_maybe(elf, "uart_addr") {
+                let uart_base = align_down(uart_base, PAGE_BITS_4KB);
+                regions.push((
+                    PlatformConfigRegion {
+                        start: uart_base,
+                        end: uart_base + (1 << PAGE_BITS_4KB),
+                    },
+                    MT_DEVICE_nGnRnE,
+                ));
+            }
+
+            // FIXME: This is currently assuming implementation details of the BCM2711/
+            //        Raspberry Pi 4B spin table implementation, as it is the only
+            //        platform we have that uses spin tables. Specifically, that
+            //        it is always located at the 0 page.
+            if elf.find_symbol("cpus_release_addr").is_ok() {
+                regions.push((
+                    PlatformConfigRegion {
+                        start: 0x0,
+                        end: 1 << PAGE_BITS_4KB,
+                    },
+                    MT_DEVICE_nGnRnE,
+                ));
+            }
+
+            regions.sort_by_key(|(region, _)| region.start);
+
+            regions
         };
 
         // Manufacture the constants as per the diagram.
@@ -1024,10 +1035,6 @@ impl<'a> Loader<'a> {
         let l = align_down(kernel_first_vaddr, BLOCK_BITS_1GB);
         let m = align_down(kernel_first_vaddr, BLOCK_BITS_2MB);
         let p = align_down(kernel_first_paddr, BLOCK_BITS_2MB);
-        let i = align_down(loader_start_addr, BLOCK_BITS_1GB);
-        let u = uart_base.map(|addr| align_down(addr, BLOCK_BITS_1GB));
-        let s = align_down(loader_start_addr, BLOCK_BITS_2MB);
-        let t = align_up(loader_end_addr, BLOCK_BITS_2MB);
 
         // Manufacture the kernel page tables, which is relatively straightforward.
         let kernel_lvl1_pt_paddr = {
@@ -1054,46 +1061,291 @@ impl<'a> Loader<'a> {
             serialise_page_table_to_paddr(&mut lvl1_pt_kernel)
         };
 
-        // Manufacture the loader page tables.
-        let loader_lvl1_pt_paddr = {
-            // First, the Level 2 Lwr table
-            let lvl2_pt_paddr = {
-                let mut lvl2_pt_loader = [0u64; PAGE_TABLE_ENTRIES];
-
-                // Identity mapped: vaddr == paddr.
-                let mut addr = s;
-                while addr < t {
-                    lvl2_pt_loader[lvl2_index(addr)] = block_descriptor(2, addr, MT_NORMAL);
-
-                    addr += 1 << BLOCK_BITS_2MB;
-                }
-
-                // TODO: this is a complete hack specific to BCM2711/Raspberry Pi 4B and
-                // will be reworked with patches that re-do this loader mapping code.
-                if elf.find_symbol("cpus_release_addr").is_ok() {
-                    // Make sure we don't override the loader mappings done above;
-                    // and that this is located at 0x0.
-                    assert!(s != 0);
-                    assert!(i == 0);
-
-                    lvl2_pt_loader[lvl2_index(0)] = block_descriptor(2, 0, MT_DEVICE_nGnRnE);
-                }
-
-                serialise_page_table_to_paddr(&mut lvl2_pt_loader)
-            };
-
-            // Then, the Level 1 Lwr table.
-            let mut lvl1_pt_loader = [0u64; PAGE_TABLE_ENTRIES];
-            lvl1_pt_loader[lvl1_index(i)] = table_descriptor(lvl2_pt_paddr);
-
-            // map optional UART MMIO in l1 1GB page, only available if CONFIG_PRINTING
-            if let Some(u) = u {
-                // UART no overlap with Loader.
-                assert!(lvl1_index(i) != lvl1_index(u));
-                lvl1_pt_loader[lvl1_index(u)] = block_descriptor(1, u, MT_DEVICE_nGnRnE);
+        // Manufacture the RAM page tables, which is a little bit more complicated.
+        // We assume that normal RAM lies between 0 <= paddr < 512GiB, i.e.
+        // that lvl0_index(any ram region addr) = 0.
+        let ram_lvl1_pt_paddr = {
+            // Validation of assumptions about the identity mapped regions.
+            let mut previous_end = None;
+            for (region, _) in identity_mapped_regions.iter() {
+                assert!(lvl0_index(region.start) == 0);
+                assert!(lvl0_index(region.end - 1) == 0);
+                // This is probably an unnecessary assumption.
+                assert!(region.start.is_multiple_of(4096));
+                assert!(region.end.is_multiple_of(4096));
+                // This is definitely necessary.
+                assert!(region.start >= previous_end.unwrap_or(0));
+                previous_end = Some(region.end);
             }
 
-            serialise_page_table_to_paddr(&mut lvl1_pt_loader)
+            // We maintain three active page tables, which contain our previous
+            // known page table data. As we process regions in ascending order,
+            // once we have exceeded the bounds of the current reservation we
+            // can simply push to the page_table_bytes storage and insert into
+            // the parent PT the descriptor.
+            // When the current vaddr (/paddr, as identity mapped) exceeds the
+            // top value we rotate to a new PT.
+
+            let mut lvl1_pt = [0u64; PAGE_TABLE_ENTRIES];
+            let mut lvl2_pt = [0u64; PAGE_TABLE_ENTRIES];
+            let mut lvl3_pt = [0u64; PAGE_TABLE_ENTRIES];
+            // TODO: These should be defines. Note that the top is the size of 1 level of the next level up.
+            // TODO: LVL1_ENTRY_RANGE? idk
+            #[allow(unused_mut)]
+            let mut lvl1_vaddr_top = 1 << BLOCK_BITS_512GB;
+            let mut lvl2_vaddr_top = 1 << BLOCK_BITS_1GB;
+            let mut lvl3_vaddr_top = 1 << BLOCK_BITS_2MB;
+
+            // TODO: Tests...
+            // This is similar to aligned_power_of_two_regions() for the kernel UT,
+            // but we restrict it such that the output always is either 1GB, 2MB, or 4KB
+            // pages.
+
+            // Allowed externally for the final iteration
+            let mut base = 0u64;
+            for &(ref region, attr_index) in identity_mapped_regions.iter() {
+                // println!("RAM Region: {:#x}..{:#x}", base, region.end);
+                // println!(
+                //     "  - Current Lvl1: {:#x}..{:#x}, entries: {}",
+                //     (lvl1_vaddr_top - (1 << BLOCK_BITS_512GB)),
+                //     lvl1_vaddr_top,
+                //     lvl1_pt.iter().filter(|&&v| v != 0).count()
+                // );
+                // println!(
+                //     "  - Current Lvl2: {:#x}..{:#x}, entries: {}",
+                //     (lvl2_vaddr_top - (1 << BLOCK_BITS_1GB)),
+                //     lvl2_vaddr_top,
+                //     lvl2_pt.iter().filter(|&&v| v != 0).count()
+                // );
+                // println!(
+                //     "  - Current Lvl3: {:#x}..{:#x}, entries: {}",
+                //     (lvl3_vaddr_top - (1 << BLOCK_BITS_2MB)),
+                //     lvl3_vaddr_top,
+                //     lvl3_pt.iter().filter(|&&v| v != 0).count()
+                // );
+
+                // Handle the fact that the regions are not contiguous and that
+                // we might need to skip PT.
+
+                {
+                    if region.start >= lvl3_vaddr_top {
+                        if lvl3_pt != [0; _] {
+                            let lvl3_pt_paddr = serialise_page_table_to_paddr(&mut lvl3_pt);
+                            // println!("[iter] Serialise lvl3 table: {lvl3_pt_paddr:#x} for to {:#x}..{lvl3_vaddr_top:#x}", (lvl3_vaddr_top - (1 << BLOCK_BITS_2MB)));
+                            assert!(lvl2_pt[lvl2_index(base)] == 0);
+                            lvl2_pt[lvl2_index(base)] = table_descriptor(lvl3_pt_paddr);
+                        }
+
+                        // TODO: just compute it.
+                        while region.start >= lvl3_vaddr_top {
+                            lvl3_vaddr_top += 1 << BLOCK_BITS_2MB;
+                        }
+                    }
+
+                    if region.start >= lvl2_vaddr_top {
+                        if lvl2_pt != [0; _] {
+                            let lvl2_pt_paddr = serialise_page_table_to_paddr(&mut lvl2_pt);
+                            // println!("[iter] Serialise lvl2 table: {lvl2_pt_paddr:#x} for to {:#x}..{lvl2_vaddr_top:#x}, base: {:#x} lvl1_index(base): {:#x}", (lvl2_vaddr_top - (1 << BLOCK_BITS_1GB)), base, lvl1_index(base));
+                            assert!(lvl1_pt[lvl1_index(base)] == 0);
+                            lvl1_pt[lvl1_index(base)] = table_descriptor(lvl2_pt_paddr);
+                        }
+
+                        // TODO: just compute it.
+                        while region.start >= lvl2_vaddr_top {
+                            lvl2_vaddr_top += 1 << BLOCK_BITS_1GB;
+                        }
+                    }
+
+                    if region.start >= lvl1_vaddr_top {
+                        unreachable!(
+                            "impossible as everything should fit here: {lvl1_vaddr_top:#x}"
+                        );
+                    }
+                }
+
+                // After serialising the old base, update the new one.
+                base = region.start;
+
+                // Inner Loop:
+                // Invariant: the page tables in lvl1_pt, lvl2_pt, lvl3_pt
+                //            are either (1) for the current address range,
+                //            or (2) are empty and for a lower level than the current level.
+                //            Also, the values in lvlXXX_vaddr_top are always correct (even if empty)
+                //            Also contiguous within the loop.
+                // Loop entry: (1) holds by work at the start of each region
+                while base != region.end {
+                    // Condition is !=, but assert that we never skip it.
+                    assert!(base < region.end);
+
+                    let size_bits = region.end.wrapping_sub(base).ilog2();
+                    let align_bits = min(
+                        size_bits,
+                        // FIXME: Once MSRV is > 1.97, use .lowest_one() method.
+                        if base == 0 {
+                            size_bits
+                        } else {
+                            base.trailing_zeros()
+                        },
+                    );
+
+                    // Match the size and alignment of the current region to
+                    // the valid PT region sizes.
+                    let (level, bits) = match u64::from(align_bits) {
+                        BLOCK_BITS_1GB.. => (1, BLOCK_BITS_1GB),
+                        BLOCK_BITS_2MB.. => (2, BLOCK_BITS_2MB),
+                        PAGE_BITS_4KB.. => (3, PAGE_BITS_4KB),
+                        0.. => panic!("impossible; regions should be aligned to 4K at least"),
+                    };
+
+                    let pt_region_size = 1u64 << bits;
+                    let top = base + pt_region_size;
+
+                    // println!("- Aligned PT region: {:#x}..{:#x} (size_bits: {}, align_bits: {}, bits: {})", base, top, size_bits, align_bits, bits);
+                    // println!(
+                    //     "  - Current Lvl1: {:#x}..{:#x}, entries: {}",
+                    //     (lvl1_vaddr_top - (1 << BLOCK_BITS_512GB)),
+                    //     lvl1_vaddr_top,
+                    //     lvl1_pt.iter().filter(|&&v| v != 0).count()
+                    // );
+                    // println!(
+                    //     "  - Current Lvl2: {:#x}..{:#x}, entries: {}",
+                    //     (lvl2_vaddr_top - (1 << BLOCK_BITS_1GB)),
+                    //     lvl2_vaddr_top,
+                    //     lvl2_pt.iter().filter(|&&v| v != 0).count()
+                    // );
+                    // println!(
+                    //     "  - Current Lvl3: {:#x}..{:#x}, entries: {}",
+                    //     (lvl3_vaddr_top - (1 << BLOCK_BITS_2MB)),
+                    //     lvl3_vaddr_top,
+                    //     lvl3_pt.iter().filter(|&&v| v != 0).count()
+                    // );
+
+                    match level {
+                        1 => {
+                            // If it belongs in Level 1 PT, then it must go in
+                            // lvl1 pt. By the inavariant, base < lvl1_vaddr_top.
+                            assert!(base < lvl1_vaddr_top);
+                            // top is <= lvl1_vaddr_top (the case where it is the topmost entry)
+                            assert!(top <= lvl1_vaddr_top);
+
+                            assert!(lvl1_pt[lvl1_index(base)] == 0);
+                            lvl1_pt[lvl1_index(base)] = block_descriptor(1, base, attr_index);
+
+                            if top == lvl1_vaddr_top {
+                                // Invariant maintenance: if the new top would be now equal
+                                // the end of the page table's region top, we need a new
+                                // page table object and add it to the list.
+
+                                // This should be possible to handle - we just need to break out of this loop
+                                todo!("handle the case where top of lvl1 is occupied - this would be near the top of 512GiB");
+                            }
+
+                            // Invariant: Lower levels are empty.
+                            assert!(lvl2_pt == [0; _]);
+                            assert!(lvl3_pt == [0; _]);
+                            // Invariant maintenance: vaddr_top is right range for current PT.
+                            // it's empty so we need to increment the top to be current top (1G aligned) + 2MIB (512 lvl3 entries)
+                            lvl3_vaddr_top = top + (1 << BLOCK_BITS_2MB);
+                            // it's empty so we need to increment the top to be current top (1G aligned) + 1G (512 lvl2 entries)
+                            lvl2_vaddr_top = top + (1 << BLOCK_BITS_1GB);
+                        }
+                        2 => {
+                            // If it is a 2MiB block, it must go in the Level 2 PT;
+                            // by our invariants: base < lvl2_vaddr_top and top <= lvl2_vaddr_top
+                            assert!(base < lvl2_vaddr_top);
+                            assert!(top <= lvl2_vaddr_top);
+
+                            assert!(lvl2_pt[lvl2_index(base)] == 0);
+                            lvl2_pt[lvl2_index(base)] = block_descriptor(2, base, attr_index);
+
+                            if top == lvl2_vaddr_top {
+                                // Invariant maintenance: keep for current address range.
+                                // As we're the top of the range, we can serialise the table.
+
+                                let lvl2_pt_paddr = serialise_page_table_to_paddr(&mut lvl2_pt);
+                                // println!("Serialise lvl2 table: {lvl2_pt_paddr:#x} up to {lvl2_vaddr_top:#x}");
+                                lvl2_vaddr_top += 1 << BLOCK_BITS_1GB;
+
+                                lvl1_pt[lvl1_index(base)] = table_descriptor(lvl2_pt_paddr);
+
+                                if top == lvl1_vaddr_top {
+                                    todo!("handle the case where top of lvl1 is occupied - this would be near the top of 512GiB");
+                                }
+                            }
+
+                            // Invariant: Lower levels are empty.
+                            assert!(lvl3_pt == [0; _]);
+                            // Invariant maintenance: vaddr_top is right range for current PT.
+                            // it's empty so we need to increment the top to be current top (2MIB aligned) + 2MIB (512 lvl3 entries)
+                            lvl3_vaddr_top = top + (1 << BLOCK_BITS_2MB);
+                        }
+                        3 => {
+                            // If it is a 4K page, it must go in the Level 3 PT;
+                            // by our invariants: base < lvl3_vaddr_top and top <= lvl3_vaddr_top
+                            assert!(base < lvl3_vaddr_top);
+                            assert!(top <= lvl3_vaddr_top);
+
+                            assert!(lvl3_pt[lvl3_index(base)] == 0);
+                            lvl3_pt[lvl3_index(base)] = page_descriptor(base, attr_index);
+
+                            if top == lvl3_vaddr_top {
+                                // Invariant maintenance: keep for current address range.
+                                // As we're the top of the range, we can serialise the table.
+
+                                let lvl3_pt_paddr = serialise_page_table_to_paddr(&mut lvl3_pt);
+                                // println!("Serialise lvl3 table: {lvl3_pt_paddr:#x} for to {:#x}..{lvl3_vaddr_top:#x}", (lvl3_vaddr_top - (1 << BLOCK_BITS_2MB)));
+                                lvl3_vaddr_top += 1 << BLOCK_BITS_2MB;
+
+                                assert!(lvl2_pt[lvl2_index(base)] == 0);
+                                lvl2_pt[lvl2_index(base)] = table_descriptor(lvl3_pt_paddr);
+
+                                if top == lvl2_vaddr_top {
+                                    let lvl2_pt_paddr = serialise_page_table_to_paddr(&mut lvl2_pt);
+                                    // println!("Serialise lvl2 table: {lvl2_pt_paddr:#x} for to {:#x}..{lvl2_vaddr_top:#x}", (lvl2_vaddr_top - (1 << BLOCK_BITS_1GB)));
+                                    lvl2_vaddr_top += 1 << BLOCK_BITS_1GB;
+
+                                    assert!(lvl1_pt[lvl1_index(base)] == 0);
+                                    lvl1_pt[lvl1_index(base)] = table_descriptor(lvl2_pt_paddr);
+
+                                    if top == lvl1_vaddr_top {
+                                        todo!("handle the case where top of lvl1 is occupied - this would be near the top of 512GiB");
+                                    }
+                                }
+                            }
+
+                            // Invariant: lower levels empty is vacuuously true
+                        }
+                        _ => unreachable!("level is 1..=3"),
+                    }
+
+                    base = base + pt_region_size;
+                }
+            }
+
+            // By the loop invariant, we know that anything before has been serialised.
+            // However, as we are at the end of the loop now, we might have
+            // page tables that have been partially filled out, and we need to
+            // serialise these.
+
+            if lvl3_pt != [0; _] {
+                let lvl3_pt_paddr = serialise_page_table_to_paddr(&mut lvl3_pt);
+                // println!("[end] Serialise lvl3 table: {lvl3_pt_paddr:#x}");
+                assert!(lvl2_pt[lvl2_index(base)] == 0);
+                lvl2_pt[lvl2_index(base)] = table_descriptor(lvl3_pt_paddr);
+            }
+
+            if lvl2_pt != [0; _] {
+                let lvl2_pt_paddr = serialise_page_table_to_paddr(&mut lvl2_pt);
+                // println!("[end] Serialise lvl2 table: {lvl2_pt_paddr:#x} for to {:#x}..{lvl2_vaddr_top:#x}, base: {:#x} lvl1_index(base): {:#x}", (lvl2_vaddr_top - (1 << BLOCK_BITS_1GB)), base, lvl1_index(base));
+                assert!(lvl1_pt[lvl1_index(base)] == 0);
+                lvl1_pt[lvl1_index(base)] = table_descriptor(lvl2_pt_paddr);
+            }
+
+            // the level1 pt should not be empty. lol.
+            assert!(lvl1_pt != [0; _]);
+
+            // println!("New lvl1 table");
+            serialise_page_table_to_paddr(&mut lvl1_pt)
         };
 
         // Depending on whether we are in hypervisor mode, we either need to
@@ -1106,8 +1358,9 @@ impl<'a> Loader<'a> {
 
             let mut ttbr0_el2_pt = [0u64; PAGE_TABLE_ENTRIES];
 
+            assert!(lvl0_index(k) != lvl0_index(0));
             ttbr0_el2_pt[lvl0_index(k)] = table_descriptor(kernel_lvl1_pt_paddr);
-            ttbr0_el2_pt[lvl0_index(0)] = table_descriptor(loader_lvl1_pt_paddr);
+            ttbr0_el2_pt[lvl0_index(0)] = table_descriptor(ram_lvl1_pt_paddr);
 
             let ttbr0_el2 = serialise_page_table_to_paddr(&mut ttbr0_el2_pt);
 
@@ -1119,7 +1372,7 @@ impl<'a> Loader<'a> {
             // Kernel in TTBR1 (Upper)
             ttbr1_el1_pt[lvl0_index(k)] = table_descriptor(kernel_lvl1_pt_paddr);
             // Loader in TTBR0 (Lower)
-            ttbr0_el1_pt[lvl0_index(k)] = table_descriptor(loader_lvl1_pt_paddr);
+            ttbr0_el1_pt[lvl0_index(0)] = table_descriptor(ram_lvl1_pt_paddr);
 
             let ttbr0_el1 = serialise_page_table_to_paddr(&mut ttbr0_el1_pt);
             let ttbr1_el1 = serialise_page_table_to_paddr(&mut ttbr1_el1_pt);
