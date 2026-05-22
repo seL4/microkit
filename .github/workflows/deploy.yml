@@ -69,6 +69,7 @@ jobs:
           manifest_repo: seL4/microkit-manifest
           manifest_branch: main
           manifest: main.xml
+          depth: 0
       - name: Set version
         id: version
         run: ./ci/sdk_version.sh
@@ -114,6 +115,7 @@ jobs:
           manifest_repo: seL4/microkit-manifest
           manifest_branch: main
           manifest: main.xml
+          depth: 0
       - name: Set version
         run: ./ci/sdk_version.sh
         working-directory: ./microkit/
