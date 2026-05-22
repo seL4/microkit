@@ -120,7 +120,7 @@ It should be noted that while Microkit uses mainline seL4, it is fairly tied to 
 specific version used.
 
 For this version of Microkit please use the following tag:
-`15.0.0`.
+`771c9e43cef98a5ef7922a37014d4dd0a3de20c3`.
 
 ## Building the SDK
 
