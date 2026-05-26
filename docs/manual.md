@@ -1187,7 +1187,7 @@ The currently supported platforms are:
 * rpi4b_8gb
 * serengeti
 * star64
-* stm32mp25_ev1
+* stm32mp2
 * tqma8xqp1gb
 * ultra96v2
 * x86_64_generic
@@ -1558,7 +1558,7 @@ ZynqMP> tftpboot 0x40000000 loader.img
 ZynqMP> go 0x40000000
 ```
 
-## STM32MP25 evaluation board {#stm32mp25_ev1}
+## STM32MP2 {#stm32mp2}
 
 A newly flashed card will autoboot to Linux. You will need to break (Ctrl+c) or disable autoboot. When entering the U-Boot console, load the Microkit binary image at address 0x88000000:
 
@@ -1581,6 +1581,9 @@ STM32MP> ext2ls mmc 0:8
 STM32MP> ext2load mmc 0:8 0x88000000 loader.img
 STM32MP> go 0x88000000
 ```
+
+Note that there is a watchdog enabled by the firmware that will cause the board to reset
+after 30 seconds of runtime.
 
 ## x86-64 generic {#x86_64_generic}
 
