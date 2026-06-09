@@ -1187,6 +1187,7 @@ The currently supported platforms are:
 * rpi4b_8gb
 * serengeti
 * star64
+* stm32mp2
 * tqma8xqp1gb
 * ultra96v2
 * x86_64_generic
@@ -1556,6 +1557,33 @@ ZynqMP> tftpboot 0x40000000 loader.img
 ...
 ZynqMP> go 0x40000000
 ```
+
+## STM32MP2 {#stm32mp2}
+
+A newly flashed card will autoboot to Linux. You will need to break (Ctrl+c) or disable autoboot. When entering the U-Boot console, load the Microkit binary image at address 0x88000000:
+
+For initial SD card file system flashing using the initial first-stage boot loader TF-A,
+please see the instructions on the
+[seL4 website](https://docs.sel4.systems/Hardware/MP25EV1.html).
+
+For example, to load the image via the current SD/MMC, identify the partition
+containing the image to be loaded. Assuming it is labelized "bootfs" on the partition 8:
+
+```
+STM32MP> mmc part
+...
+8     0x00002242      0x00034241      "bootfs"
+...
+STM32MP> ext2ls mmc 0:8
+...
+     2759776 loader.img
+...
+STM32MP> ext2load mmc 0:8 0x88000000 loader.img
+STM32MP> go 0x88000000
+```
+
+Note that there is a watchdog enabled by the firmware that will cause the board to reset
+after 30 seconds of runtime.
 
 ## x86-64 generic {#x86_64_generic}
 

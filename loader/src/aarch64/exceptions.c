@@ -40,13 +40,16 @@ void exception_handler(uintptr_t ex)
     /* Read ESR/FSR based on the exception level we're at. */
     uint64_t esr;
     uintptr_t far;
+    uint64_t elr;
 
     if (is_set(CONFIG_ARM_HYPERVISOR_SUPPORT)) {
         asm volatile("mrs %0, ESR_EL2" : "=r"(esr) :: "cc");
         asm volatile("mrs %0, FAR_EL2" : "=r"(far) :: "cc");
+        asm volatile("mrs %0, ELR_EL2" : "=r"(elr) :: "cc");
     } else {
         asm volatile("mrs %0, ESR_EL1" : "=r"(esr) :: "cc");
         asm volatile("mrs %0, FAR_EL1" : "=r"(far) :: "cc");
+        asm volatile("mrs %0, ELR_EL1" : "=r"(elr) :: "cc");
     }
 
     uintptr_t ec = (esr >> 26) & 0x3f;
@@ -68,6 +71,8 @@ void exception_handler(uintptr_t ex)
     puthex64(esr & MASK(24));
     puts("\n    far: ");
     puthex64(far);
+    puts("\n    elr: ");
+    puthex64(elr);
     puts("\n");
 
     for (unsigned i = 0; i < 32; i++)  {

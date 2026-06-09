@@ -63,6 +63,8 @@ static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ROCKPRO64)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+#elif defined(CONFIG_PLAT_STM32MP2)
+static const size_t psci_target_cpus[2] = {0x00, 0x01};
 #elif defined(CONFIG_PLAT_QEMU_ARM_VIRT)
 /* QEMU is special and can have arbitrary numbers of cores */
 // TODO.
