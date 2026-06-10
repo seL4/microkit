@@ -13,7 +13,7 @@ use crate::{
     sel4::Config,
 };
 
-// Logic of seL4 setting VT-d page table level: 
+// Logic of seL4 setting VT-d page table level:
 // Determine whether three-level VT-d pt is supported by host. If supported, set PT level to three if supported.
 // If not, check whether 4, 5, 6, 2 level is supported one by one.
 // https://github.com/seL4/seL4/blob/15.0.0/src/plat/pc99/machine/intel-vtd.c#L498
@@ -48,7 +48,7 @@ pub fn create_iospace(
         }),
     });
 
-    // Domain ID cannot be negative so add one to PD ID
+    // Domain ID cannot be zero so add one to PD ID
     const PD_TO_DOMAIN_ID_OFFSET: u16 = 1;
 
     spec_container.add_root_object(CapDLNamedObject {

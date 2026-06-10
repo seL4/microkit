@@ -697,11 +697,11 @@ mod protection_domain {
     }
 
     #[test]
-    fn test_iommu_valid_on_x86() {
+    fn test_iommu_out_of_bound() {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "iommu_out_of_bound.system",
-            "Error: iomap for 'region' has address 0x8000001000 which exceeds the upper limits of 549755813887 in protection domain 'test' @ iommu_out_of_bound.system:13:9",
+            "Error: iomap for 'region' has address 0x8000001000 which exceeds the upper limits of 0x7FFFFFFFFF in protection domain 'test' @ iommu_out_of_bound.system:13:9",
         )
     }
 }

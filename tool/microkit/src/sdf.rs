@@ -1775,7 +1775,7 @@ fn io_check_maps(
                 if map_end > crate::capdl::iomem::VTD_MAX_ADDR {
                     return Err(
                         format!(
-                            "Error: iomap for '{}' has address 0x{:x} which exceeds the upper limits of 0x{:x} in {} '{}' @ {}",
+                            "Error: iomap for '{}' has address {:#x} which exceeds the upper limits of {:#x} in {} '{}' @ {}",
                             io_map.name,
                             map_end,
                             crate::capdl::iomem::VTD_MAX_ADDR,
