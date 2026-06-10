@@ -27,8 +27,6 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools",
- "log",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -50,29 +48,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "bytecheck"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0caa33a2c0edca0419d15ac723dff03f1956f7978329b1e3b5fdaaaed9d3ca8b"
-dependencies = [
- "bytecheck_derive",
- "ptr_meta",
- "rancor",
- "simdutf8",
-]
-
-[[package]]
-name = "bytecheck_derive"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89385e82b5d1821d2219e0b095efa2cc1f246cbf99080f3be46a1a85c0d392d9"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -98,7 +73,6 @@ checksum = "0b023947811758c97c59bf9d1c188fd619ad4718dcaa767947df1cadb14f39f4"
 dependencies = [
  "glob",
  "libc",
- "libloading",
 ]
 
 [[package]]
@@ -208,16 +182,6 @@ name = "libc"
 version = "0.2.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
-
-[[package]]
-name = "libloading"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
-dependencies = [
- "cfg-if",
- "windows-link",
-]
 
 [[package]]
 name = "lock_api"
@@ -340,16 +304,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prettyplease"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
-dependencies = [
- "proc-macro2",
- "syn",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -430,9 +384,6 @@ name = "rend"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cadadef317c2f20755a64d7fdc48f9e7178ee6b0e1f7fce33fa60f1d68a276e6"
-dependencies = [
- "bytecheck",
-]
 
 [[package]]
 name = "rkyv"
@@ -440,7 +391,6 @@ version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35a640b26f007713818e9a9b65d34da1cf58538207b052916a83d80e43f3ffa4"
 dependencies = [
- "bytecheck",
  "hashbrown",
  "munge",
  "ptr_meta",
@@ -494,7 +444,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "sel4"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "cfg-if",
  "sel4-config",
@@ -504,7 +454,7 @@ dependencies = [
 [[package]]
 name = "sel4-alloca"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "cfg-if",
 ]
@@ -512,7 +462,7 @@ dependencies = [
 [[package]]
 name = "sel4-bitfield-ops"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "rustversion",
 ]
@@ -520,12 +470,12 @@ dependencies = [
 [[package]]
 name = "sel4-build-env"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-capdl-initializer"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "log",
  "rkyv",
@@ -534,13 +484,16 @@ dependencies = [
  "sel4-immediate-sync-once-cell",
  "sel4-immutable-cell",
  "sel4-logging",
+ "sel4-no-allocator",
+ "sel4-phdrs",
+ "sel4-phdrs-patched",
  "sel4-root-task",
 ]
 
 [[package]]
 name = "sel4-capdl-initializer-types"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "miniz_oxide",
  "rkyv",
@@ -552,7 +505,7 @@ dependencies = [
 [[package]]
 name = "sel4-capdl-initializer-types-derive"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -562,9 +515,8 @@ dependencies = [
 [[package]]
 name = "sel4-config"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
- "prettyplease",
  "proc-macro2",
  "quote",
  "sel4-config-data",
@@ -576,17 +528,17 @@ dependencies = [
 [[package]]
 name = "sel4-config-data"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "sel4-build-env",
  "sel4-config-types",
- "serde_json",
+ "tinyjson",
 ]
 
 [[package]]
 name = "sel4-config-macros"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "fallible-iterator",
  "proc-macro2",
@@ -599,44 +551,36 @@ dependencies = [
 [[package]]
 name = "sel4-config-types"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
-dependencies = [
- "serde",
-]
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-ctors-dtors"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-dlmalloc"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "dlmalloc",
  "lock_api",
 ]
 
 [[package]]
-name = "sel4-elf-header"
-version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
-
-[[package]]
 name = "sel4-immediate-sync-once-cell"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-immutable-cell"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-initialize-tls"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "cfg-if",
  "sel4-alloca",
@@ -645,16 +589,21 @@ dependencies = [
 [[package]]
 name = "sel4-logging"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "lock_api",
  "log",
 ]
 
 [[package]]
+name = "sel4-no-allocator"
+version = "0.1.0"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
+
+[[package]]
 name = "sel4-panicking"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "cfg-if",
  "sel4-immediate-sync-once-cell",
@@ -665,12 +614,39 @@ dependencies = [
 [[package]]
 name = "sel4-panicking-env"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
+
+[[package]]
+name = "sel4-phdrs"
+version = "0.1.0"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
+dependencies = [
+ "sel4-phdrs-constants",
+]
+
+[[package]]
+name = "sel4-phdrs-constants"
+version = "0.1.0"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
+
+[[package]]
+name = "sel4-phdrs-patched"
+version = "0.1.0"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
+dependencies = [
+ "sel4-phdrs",
+ "sel4-rodata-static",
+]
+
+[[package]]
+name = "sel4-rodata-static"
+version = "0.1.0"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-root-task"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "sel4",
  "sel4-dlmalloc",
@@ -685,7 +661,7 @@ dependencies = [
 [[package]]
 name = "sel4-root-task-macros"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -695,14 +671,15 @@ dependencies = [
 [[package]]
 name = "sel4-runtime-common"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "cfg-if",
  "sel4",
  "sel4-ctors-dtors",
- "sel4-elf-header",
+ "sel4-immutable-cell",
  "sel4-initialize-tls",
  "sel4-panicking-env",
+ "sel4-phdrs",
  "sel4-stack",
  "unwinding",
 ]
@@ -710,12 +687,12 @@ dependencies = [
 [[package]]
 name = "sel4-stack"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 
 [[package]]
 name = "sel4-sync"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "lock_api",
  "sel4",
@@ -725,14 +702,13 @@ dependencies = [
 [[package]]
 name = "sel4-sys"
 version = "0.1.0"
-source = "git+https://github.com/au-ts/rust-sel4?rev=33cb132571121a8d846ad3be9066617087ee5c32#33cb132571121a8d846ad3be9066617087ee5c32"
+source = "git+https://github.com/au-ts/rust-sel4?branch=julia%2Fcompile-time-optimisation#08618bd9c0c582cf27c5cf23e65728db59310c02"
 dependencies = [
  "bindgen",
  "glob",
  "log",
  "pest",
  "pest_derive",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -805,12 +781,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "simdutf8"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
-
-[[package]]
 name = "syn"
 version = "2.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,6 +790,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "tinyjson"
+version = "2.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ab95735ea2c8fd51154d01e39cf13912a78071c2d89abc49a7ef102a7dd725a"
 
 [[package]]
 name = "tinyvec"
