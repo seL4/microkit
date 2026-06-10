@@ -248,7 +248,7 @@ domains, the attributes used for different mappings may vary.
 ### Prefilling
 
 A *memory region* may be prefilled with data from a file at build time
-by specifying the file's name in the [System Description File]{#sysdesc}.
+by specifying the file's name in the [System Description File](#sysdesc).
 
 In this case, specifying the memory region's size become optional. If
 a size isn't specified, the memory region will be sized by the length
