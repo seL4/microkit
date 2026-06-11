@@ -112,6 +112,12 @@ pub struct ExpectedAllocation {
     pub paddr: u64,
 }
 
+struct PDShadowCspace {
+    cspace: ObjectId,
+    notification: ObjectId,
+    endpoint: Option<ObjectId>,
+}
+
 pub struct CapDLSpecContainer {
     pub spec: Spec<FrameFill>,
     /// Track allocations as we build the system for later use by the report.
@@ -573,10 +579,9 @@ pub fn build_capdl_spec(
         None
     };
 
-    // Keep tabs on each PD's CSpace, Notification and Endpoint objects so we can create channels between them at a later step.
-    let mut pd_id_to_cspace_id: HashMap<usize, ObjectId> = HashMap::new();
-    let mut pd_id_to_ntfn_id: HashMap<usize, ObjectId> = HashMap::new();
-    let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
+    // This object keeps track of object IDs for various 'important' / nameable kernel objects for
+    // each PD so that we can make various references to them at later steps.
+    let mut pd_shadow_cspaces: HashMap<usize, PDShadowCspace> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -694,18 +699,21 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if let Some(pd_parent) = pd.parent {
-            assert!(pd_global_idx > pd_parent);
+        let pd_fault_ep_cap = if let Some(pd_parent_id) = pd.parent {
+            assert!(pd_global_idx > pd_parent_id);
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_ep_obj_id = &pd_id_to_ep_id[&pd_parent];
+            let parent_shadow_cspace = &pd_shadow_cspaces[&pd_parent_id];
+            let parent_ep_obj_id = parent_shadow_cspace
+                .endpoint
+                .expect("parent should have EP due to needs_ep()");
             let fault_ep_cap =
-                capdl_util_make_endpoint_cap(*parent_ep_obj_id, true, true, true, badge);
+                capdl_util_make_endpoint_cap(parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = &pd_id_to_cspace_id[&pd_parent];
+            let parent_cspace_obj_id = parent_shadow_cspace.cspace;
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
-                *parent_cspace_obj_id,
+                parent_cspace_obj_id,
                 (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
             );
@@ -744,7 +752,6 @@ pub fn build_capdl_spec(
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
-        pd_id_to_ntfn_id.insert(pd_global_idx, pd_ntfn_obj_id);
         if pd.needs_ep(pd_global_idx, &system.channels) {
             pd_ep_obj_id = Some(capdl_util_make_endpoint_obj(
                 &mut spec_container,
@@ -753,7 +760,6 @@ pub fn build_capdl_spec(
             ));
             let pd_ep_cap =
                 capdl_util_make_endpoint_cap(pd_ep_obj_id.unwrap(), true, true, true, 0);
-            pd_id_to_ep_id.insert(pd_global_idx, pd_ep_obj_id.unwrap());
             caps_to_insert_to_pd_cspace
                 .push(capdl_util_make_cte(PD_INPUT_CAP_IDX as u32, pd_ep_cap));
         } else {
@@ -1005,7 +1011,6 @@ pub fn build_capdl_spec(
             TcbBoundSlot::CSpace as u32,
             pd_cnode_cap,
         ));
-        pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
@@ -1052,16 +1057,25 @@ pub fn build_capdl_spec(
                 capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0),
             );
         }
+
+        pd_shadow_cspaces.insert(
+            pd_global_idx,
+            PDShadowCspace {
+                cspace: pd_cnode_obj_id,
+                endpoint: pd_ep_obj_id,
+                notification: pd_ntfn_obj_id,
+            },
+        );
     }
 
     // *********************************
     // Step 4. Create channels
     // *********************************
     for channel in system.channels.iter() {
-        let pd_a_cspace_id = pd_id_to_cspace_id[&channel.end_a.pd];
-        let pd_b_cspace_id = pd_id_to_cspace_id[&channel.end_b.pd];
-        let pd_a_ntfn_id = pd_id_to_ntfn_id[&channel.end_a.pd];
-        let pd_b_ntfn_id = pd_id_to_ntfn_id[&channel.end_b.pd];
+        let pd_a_cspace_id = pd_shadow_cspaces[&channel.end_a.pd].cspace;
+        let pd_b_cspace_id = pd_shadow_cspaces[&channel.end_b.pd].cspace;
+        let pd_a_ntfn_id = pd_shadow_cspaces[&channel.end_a.pd].notification;
+        let pd_b_ntfn_id = pd_shadow_cspaces[&channel.end_b.pd].notification;
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
@@ -1091,7 +1105,9 @@ pub fn build_capdl_spec(
         if channel.end_a.pp {
             let pd_a_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_a.id;
             let pd_a_ep_badge = PPC_BADGE | channel.end_b.id;
-            let pd_b_ep_id = pd_id_to_ep_id[&channel.end_b.pd];
+            let pd_b_ep_id = pd_shadow_cspaces[&channel.end_b.pd]
+                .endpoint
+                .expect("exists as needs_ep() is true");
             let pd_a_ep_cap =
                 capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
             capdl_util_insert_cap_into_cspace(
@@ -1105,7 +1121,9 @@ pub fn build_capdl_spec(
         if channel.end_b.pp {
             let pd_b_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_b.id;
             let pd_b_ep_badge = PPC_BADGE | channel.end_a.id;
-            let pd_a_ep_id = pd_id_to_ep_id[&channel.end_a.pd];
+            let pd_a_ep_id = pd_shadow_cspaces[&channel.end_a.pd]
+                .endpoint
+                .expect("exists as needs_ep() is true");
             let pd_b_ep_cap =
                 capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
             capdl_util_insert_cap_into_cspace(
