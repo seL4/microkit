@@ -119,8 +119,8 @@ Please clone seL4 from:
 It should be noted that while Microkit uses mainline seL4, it is fairly tied to the
 specific version used.
 
-For this version of Microkit please use the following commit:
-`27a52ddd4cf592b1996ba50074c85e21d832398a`.
+For this version of Microkit please use the following tag:
+`e912dff7341cf3b35475c3a7eee9a90c61b367a8`.
 
 ## Building the SDK
 

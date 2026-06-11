@@ -12,6 +12,8 @@ SECTIONS
 {
     . = LINK_ADDRESS;
 
+    _loader_start = .;
+
     .text :
     {
         _text = .;
@@ -36,4 +38,6 @@ SECTIONS
         . = ALIGN(4);
         _bss_end = .;
     } :all
+
+    _loader_end = .;
 }

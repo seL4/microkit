@@ -157,7 +157,7 @@ int main(void)
 
     arch_init();
 
-    puts("LDR|INFO: altloader for seL4 starting\n");
+    puts("LDR|INFO: loader for seL4 starting\n");
     /* Check that the loader magic number is set correctly */
     if (loader_data->magic != MAGIC) {
         puts("LDR|ERROR: mismatch on loader data structure magic number\n");

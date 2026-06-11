@@ -9,6 +9,7 @@ use microkit_tool::{
     sel4::{self},
 };
 use serde_json::json;
+use std::path::Path;
 
 const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -28,13 +29,13 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
-    x86_xsave_size: None,
     // Not necessary for SDF parsing
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
     num_domains: 32,
     num_domain_schedules: 64,
+    object_sizes: None,
 };
 
 const DEFAULT_AARCH64_SMP_KERNEL_CONFIG: sel4::Config = sel4::Config {
@@ -82,21 +83,31 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arm_pa_size_bits: None,
     arm_smc: None,
     riscv_pt_levels: None,
-    x86_xsave_size: None,
     // Not necessary for SDF parsing
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
     num_domains: 32,
     num_domain_schedules: 64,
+    object_sizes: None,
 };
 
 fn check_success(kernel_config: &sel4::Config, test_name: &str) {
-    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let mut prefill_path = env_path.clone();
+    prefill_path.push("tests/prefills");
+
+    let mut path = env_path.clone();
     path.push("tests/sdf/");
     path.push(test_name);
     let sdf = std::fs::read_to_string(path).unwrap();
-    let parse = sdf::parse(test_name, &sdf, kernel_config);
+    let parse = sdf::parse(
+        Path::new(test_name),
+        &sdf,
+        kernel_config,
+        &[prefill_path].to_vec(),
+    );
 
     if let Err(ref e) = parse {
         eprintln!("Expected no error, instead got:\n{e}")
@@ -106,11 +117,22 @@ fn check_success(kernel_config: &sel4::Config, test_name: &str) {
 }
 
 fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str) {
-    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("tests/sdf/");
-    path.push(test_name);
-    let sdf = std::fs::read_to_string(path).unwrap();
-    let parse_err = sdf::parse(test_name, &sdf, kernel_config).unwrap_err();
+    let env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    let mut prefill_path = env_path.clone();
+    prefill_path.push("tests/prefills");
+
+    let mut sdf_path = env_path.clone();
+    sdf_path.push("tests/sdf/");
+    sdf_path.push(test_name);
+    let sdf = std::fs::read_to_string(sdf_path).unwrap();
+    let parse_err = sdf::parse(
+        Path::new(test_name),
+        &sdf,
+        kernel_config,
+        &[prefill_path].to_vec(),
+    )
+    .unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
         eprintln!("Expected error:\n{expected_err}\nGot error:\n{parse_err}\n");
@@ -163,11 +185,10 @@ mod memory_region {
 
     #[test]
     fn test_missing_size() {
-        check_missing(
+        check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "mr_missing_size.system",
-            "size",
-            "memory_region",
+            "Error: size must be specified if memory region is not prefilled on element 'memory_region'",
         )
     }
 
@@ -195,6 +216,57 @@ mod memory_region {
         check_error(&DEFAULT_AARCH64_KERNEL_CONFIG,
             "mr_overlapping_phys_addr.system",
             "Error: memory region 'mr2' physical address range [0x9001000..0x9002000) overlaps with another memory region 'mr1' [0x9000000..0x9002000) @ ",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_empty_file() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_empty_file.system",
+            "Error: prefill file 'empty.bin' is empty on element 'memory_region'",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_does_not_exists() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_does_not_exists.system",
+            "Error: unable to find prefill file: 'abcxyz.bin' on element 'memory_region'",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_size_without_prefill() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_size_without_prefill.system",
+            "Error: 'setvar_prefill_size' used for MR without a `prefill_path` @",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_no_size_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_no_size_valid.system",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_page_sized_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_page_sized_valid.system",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_sized_valid() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_prefill_sized_valid.system",
         )
     }
 }
@@ -451,7 +523,16 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_ioapic_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_ioapic_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_ioapic_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
     }
 
@@ -460,7 +541,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_bus_less_than_0.system",
-            "Error: PCI bus must be >= 0 on element 'irq'",
+            "Error: PCI bus must be within [0..255] on element 'irq'",
         )
     }
 
@@ -469,7 +550,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_dev_less_than_0.system",
-            "Error: PCI device must be >= 0 on element 'irq'",
+            "Error: PCI device must be within [0..31] on element 'irq'",
         )
     }
 
@@ -478,7 +559,34 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_func_less_than_0.system",
-            "Error: PCI function must be >= 0 on element 'irq'",
+            "Error: PCI function must be within [0..7] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_bus_greater_than_255() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_bus_greater_than_255.system",
+            "Error: PCI bus must be within [0..255] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_dev_greater_than_31() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_dev_greater_than_31.system",
+            "Error: PCI device must be within [0..31] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_func_greater_than_7() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_func_greater_than_7.system",
+            "Error: PCI function must be within [0..7] on element 'irq'",
         )
     }
 
@@ -496,8 +604,31 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_vector_less_than_0.system",
-            "Error: vector must be >= 0 on element 'irq'",
+            "Error: vector must be within [0..107] on element 'irq'",
         )
+    }
+
+    #[test]
+    fn test_irq_msi_vector_greater_than_107() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_vector_greater_than_107.system",
+            "Error: vector must be within [0..107] on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_msi_pci_invalid() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_invalid.system",
+            "Error: failed to parse PCI address '0:0:0' on element 'irq'",
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_msi_pci_valid() {
+        check_success(&DEFAULT_X86_64_KERNEL_CONFIG, "irq_msi_pci_valid.system")
     }
 
     #[test]
@@ -983,6 +1114,44 @@ mod system {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "sys_too_many_pds.system",
             "Error: too many protection domains (64) defined. Maximum is 63.",
+        )
+    }
+
+    #[test]
+    fn test_fpu_flag_wrong_value() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "wrong_fpu_flag_value.system",
+            "Error: fpu must be 'true' or 'false'",
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_overlapping() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_overlapping.system",
+            r#"Error: overlapping user caps in slot 4 of protection domain 'pd_b':
+  type CSpace from 'pd_a' at 'pd_cap_mappings_overlapping.system:24:13'
+  type CSpace from 'pd_a' at 'pd_cap_mappings_overlapping.system:26:13'"#,
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_invalid() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_invalid.system",
+            "Cap type: 'gerbils' is not supported at 'pd_cap_mappings_invalid.system:16:13'",
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_invalid_pd_ref() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_invalid_pd_ref.system",
+            "Error: unknown PD name 'invalid': pd_cap_mappings_invalid_pd_ref.system:12:13",
         )
     }
 }

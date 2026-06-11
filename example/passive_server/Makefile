@@ -29,6 +29,9 @@ ifeq ($(ARCH),aarch64)
 else ifeq ($(ARCH),riscv64)
   TARGET_TRIPLE := riscv64-unknown-elf
   CFLAGS_ARCH := -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
+else ifeq ($(ARCH),x86_64)
+	TARGET_TRIPLE := x86_64-linux-gnu
+	CFLAGS_ARCH := -march=x86-64 -mtune=generic
 else
 $(error Unsupported ARCH)
 endif

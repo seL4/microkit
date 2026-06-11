@@ -19,11 +19,11 @@
 use crate::sel4::{
     Arch, ArmRiscvIrqTrigger, Config, PageSize, X86IoapicIrqPolarity, X86IoapicIrqTrigger,
 };
-use crate::util::{ranges_overlap, str_to_bool};
+use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Events that come through entry points (e.g notified or protected) are given an
@@ -38,6 +38,10 @@ use std::path::{Path, PathBuf};
 const PD_MAX_ID: u64 = 61;
 const VCPU_MAX_ID: u64 = PD_MAX_ID;
 
+/// This is the maximum slot allowed for cap maps. This can change if you wish,
+/// but also update the MICROKIT_MAX_USER_CAPS define in `microkit.h`.
+const CAP_MAP_MAX_SLOT: u64 = 128;
+
 pub const MONITOR_PRIORITY: u8 = 255;
 const PD_MAX_PRIORITY: u8 = 254;
 /// In microseconds
@@ -49,6 +53,16 @@ pub const MONITOR_PD_NAME: &str = "monitor";
 pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;
 const PD_MIN_STACK_SIZE: u64 = 0x1000;
 const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
+
+/// Maximum values for PCI bus, device, function numbers. Inclusive.
+const PCI_BUS_MAX: i64 = (1 << 8) - 1;
+const PCI_DEV_MAX: i64 = (1 << 5) - 1;
+const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
+
+/// Maximum x86 IRQ vector value. Inclusive.
+/// This value is calculated by the kernel as `irq_user_max - irq_user_min` in
+/// `src/arch/x86/object/interrupt.c`
+const X86_IRQ_VECTOR_MAX: i64 = 107;
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
@@ -76,7 +90,7 @@ fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
 }
 
 fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String {
-    format!("{}:{}:{}", xml_sdf.filename, pos.row, pos.col)
+    format!("{}:{}:{}", xml_sdf.filename.display(), pos.row, pos.col)
 }
 
 #[repr(u8)]
@@ -126,6 +140,7 @@ pub struct SysMemoryRegion {
     /// due to the user's SDF or created by the tool for setting up the
     /// stack, ELF, etc.
     pub kind: SysMemoryRegionKind,
+    pub prefill_bytes: Option<Vec<u8>>,
 }
 
 impl SysMemoryRegion {
@@ -213,6 +228,7 @@ pub enum SysSetVarKind {
     Paddr { region: String },
     Id { id: u64 },
     X86IoPortAddr { address: u64 },
+    PrefillSize { mr: String },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -258,10 +274,14 @@ pub struct ProtectionDomain {
     pub smc: bool,
     pub cpu: CpuCore,
     pub program_image: PathBuf,
+    pub program_image_for_symbols: Option<PathBuf>,
+    /// Enable FPU for this PD.
+    pub fpu: bool,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
+    pub cap_maps: Vec<CapMap>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -293,6 +313,39 @@ pub struct DomainSchedule {
     pub domain_idx_shift: Option<u64>,
 }
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+pub enum CapMapType {
+    Tcb,
+    Sc,
+    VSpace,
+    CSpace,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CapMap {
+    pub cap_type: CapMapType,
+    // FIXME: This is quite a hack. Basically, we need to be able to reference
+    // arbitrary PDs, but to gather the index, we need to know all the PDs.
+    // However, at the time of parsing the cap maps, we are in the process
+    // of parsing all the PDs. In lieu of something better (in my - @midnightveil's
+    // opinion, making everything think in terms of PD names, and something
+    // that was necessary to do for the multikernel changes); the pd idx will
+    // be filled out later during SDF parse process.
+    pub pd_name: String,
+    pub pd: Option<usize>,
+    // The destination "slot" in the CSpace: note that this is "opaque" and
+    // can be shifted depending on the location in the CSpace to work as the CPtr,
+    // but here it is given as the index into the CNode.
+    pub slot: u64,
+    /// Location in the parsed SDF file
+    text_pos: roxmltree::TextPos,
+}
+
+#[derive(Debug)]
+pub struct CSpace {
+    cap_maps: Vec<CapMap>,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct VirtualMachine {
     pub vcpus: Vec<VirtualCpu>,
@@ -307,7 +360,7 @@ pub struct VirtualMachine {
 pub struct VirtualCpu {
     pub id: u64,
     pub setvar_id: Option<String>,
-    pub cpu: CpuCore,
+    pub cpu: Option<CpuCore>,
 }
 
 /// To avoid code duplication for handling protection domains
@@ -364,6 +417,7 @@ impl SysMap {
         if allow_setvar {
             attrs.push("setvar_vaddr");
             attrs.push("setvar_size");
+            attrs.push("setvar_prefill_size");
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
@@ -476,6 +530,7 @@ impl ProtectionDomain {
             "smc",
             "domain",
             "cpu",
+            "fpu",
         ];
         if is_child {
             attrs.push("id");
@@ -616,7 +671,9 @@ impl ProtectionDomain {
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
+        let mut program_image_for_symbols = None;
         let mut virtual_machine = None;
+        let mut cspace = None;
 
         // Default to minimum priority
         let priority = if let Some(xml_priority) = node.attribute("priority") {
@@ -633,6 +690,22 @@ impl ProtectionDomain {
             ));
         }
 
+        // FPU is enabled by default
+        let fpu = if let Some(xml_fpu) = node.attribute("fpu") {
+            match str_to_bool(xml_fpu) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "fpu must be 'true' or 'false'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            true
+        };
+
         for child in node.children() {
             if !child.is_element() {
                 continue;
@@ -640,7 +713,7 @@ impl ProtectionDomain {
 
             match child.tag_name().name() {
                 "program_image" => {
-                    check_attributes(xml_sdf, &child, &["path"])?;
+                    check_attributes(xml_sdf, &child, &["path", "path_for_symbols"])?;
                     if program_image.is_some() {
                         return Err(value_error(
                             xml_sdf,
@@ -651,6 +724,9 @@ impl ProtectionDomain {
 
                     let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
                     program_image = Some(Path::new(program_image_path).to_path_buf());
+
+                    program_image_for_symbols =
+                        child.attribute("path_for_symbols").map(PathBuf::from);
                 }
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
@@ -668,6 +744,14 @@ impl ProtectionDomain {
                         let setvar = SysSetVar {
                             symbol: setvar_size.to_string(),
                             kind: SysSetVarKind::Size { mr: map.mr.clone() },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    }
+
+                    if let Some(setvar_prefill_size) = child.attribute("setvar_prefill_size") {
+                        let setvar = SysSetVar {
+                            symbol: setvar_prefill_size.to_string(),
+                            kind: SysSetVarKind::PrefillSize { mr: map.mr.clone() },
                         };
                         checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                     }
@@ -812,11 +896,11 @@ impl ProtectionDomain {
                         let vector = checked_lookup(xml_sdf, &child, "vector")?
                             .parse::<i64>()
                             .unwrap();
-                        if vector < 0 {
+                        if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
-                                "vector must be >= 0".to_string(),
+                                format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
 
@@ -847,43 +931,94 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
 
-                        let pci_parts: Vec<i64> = pcidev_str
-                            .split([':', '.'])
-                            .map(str::trim)
-                            .map(|x| {
-                                i64::from_str_radix(x, 16).expect(
-                                    "Error: Failed to parse parts of the PCI device address",
-                                )
-                            })
-                            .collect();
-                        if pci_parts.len() != 3 {
+                        // A "pcidev" attribute is in a form of Bus:Dev.Func
+                        // Split by the colon then the dot.
+
+                        // If the input is valid, index 0 contains "Bus", index 1 contains
+                        // "Dev.Func"
+                        let pci_parts_by_colon: Vec<_> =
+                            pcidev_str.split(':').map(str::trim).collect();
+
+                        if pci_parts_by_colon.len() != 2 {
                             return Err(format!(
                                 "Error: failed to parse PCI address '{}' on element '{}'",
                                 pcidev_str,
                                 child.tag_name().name()
                             ));
                         }
-                        if pci_parts[0] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI bus must be >= 0".to_string(),
+
+                        // If the input is valid, index 0 contains "Dev", index 1 contains
+                        // "Func"
+                        let pci_parts_by_dot: Vec<_> =
+                            pci_parts_by_colon[1].split('.').map(str::trim).collect();
+                        if pci_parts_by_dot.len() != 2 {
+                            return Err(format!(
+                                "Error: failed to parse PCI address '{}' on element '{}'",
+                                pcidev_str,
+                                child.tag_name().name()
                             ));
                         }
-                        if pci_parts[1] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI device must be >= 0".to_string(),
-                            ));
-                        }
-                        if pci_parts[2] < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "PCI function must be >= 0".to_string(),
-                            ));
-                        }
+
+                        let pci_bus_maybe = i64::from_str_radix(pci_parts_by_colon[0], 16);
+                        let pci_dev_maybe = i64::from_str_radix(pci_parts_by_dot[0], 16);
+                        let pci_func_maybe = i64::from_str_radix(pci_parts_by_dot[1], 16);
+
+                        match pci_bus_maybe {
+                            Ok(pci_bus_unchecked) => {
+                                if !(0..=PCI_BUS_MAX).contains(&pci_bus_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI bus must be within [0..{PCI_BUS_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI bus of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
+
+                        match pci_dev_maybe {
+                            Ok(pci_dev_unchecked) => {
+                                if !(0..=PCI_DEV_MAX).contains(&pci_dev_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI device must be within [0..{PCI_DEV_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI device of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
+
+                        match pci_func_maybe {
+                            Ok(pci_func_unchecked) => {
+                                if !(0..=PCI_FUNC_MAX).contains(&pci_func_unchecked) {
+                                    return Err(value_error(
+                                        xml_sdf,
+                                        &child,
+                                        format!("PCI function must be within [0..{PCI_FUNC_MAX}]"),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                return Err(format!(
+                                    "Error: failed to parse PCI function of '{}' on element '{}'",
+                                    pcidev_str,
+                                    child.tag_name().name()
+                                ))
+                            }
+                        };
 
                         let handle = checked_lookup(xml_sdf, &child, "handle")?
                             .parse::<i64>()
@@ -899,20 +1034,20 @@ impl ProtectionDomain {
                         let vector = checked_lookup(xml_sdf, &child, "vector")?
                             .parse::<i64>()
                             .unwrap();
-                        if vector < 0 {
+                        if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
-                                "vector must be >= 0".to_string(),
+                                format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
 
                         let irq = SysIrq {
                             id: id as u64,
                             kind: SysIrqKind::MSI {
-                                pci_bus: pci_parts[0] as u64,
-                                pci_dev: pci_parts[1] as u64,
-                                pci_func: pci_parts[2] as u64,
+                                pci_bus: pci_bus_maybe.unwrap() as u64,
+                                pci_dev: pci_dev_maybe.unwrap() as u64,
+                                pci_func: pci_func_maybe.unwrap() as u64,
                                 handle: handle as u64,
                                 vector: vector as u64,
                             },
@@ -1058,6 +1193,17 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
+                "cspace" => {
+                    if cspace.is_some() {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "cspace must only be specified once".to_string(),
+                        ));
+                    }
+
+                    cspace = Some(CSpace::from_xml(xml_sdf, &child)?);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1090,10 +1236,13 @@ impl ProtectionDomain {
             smc,
             cpu,
             program_image: program_image.unwrap(),
+            program_image_for_symbols,
+            fpu,
             maps,
             irqs,
             ioports,
             setvars,
+            cap_maps: cspace.map(|cspace| cspace.cap_maps).unwrap_or_default(),
             child_pds,
             virtual_machine,
             has_children,
@@ -1274,22 +1423,26 @@ impl VirtualMachine {
 
                     let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
 
-                    let cpu = CpuCore(
-                        sdf_parse_number(child.attribute("cpu").unwrap_or("0"), node)?
+                    let cpu = if let Some(cpu) = child.attribute("cpu") {
+                        let cpu_value: u8 = sdf_parse_number(cpu, node)?
                             .try_into()
-                            .expect("cpu # fits in u8"),
-                    );
+                            .expect("cpu # fits in u8");
 
-                    if cpu.0 >= config.num_cores {
-                        return Err(value_error(
-                            xml_sdf,
-                            &child,
-                            format!(
-                                "cpu core must be less than {}, got {}",
-                                config.num_cores, cpu
-                            ),
-                        ));
-                    }
+                        if cpu_value >= config.num_cores {
+                            return Err(value_error(
+                                xml_sdf,
+                                &child,
+                                format!(
+                                    "cpu core must be less than {}, got {}",
+                                    config.num_cores, cpu_value
+                                ),
+                            ));
+                        }
+
+                        Some(CpuCore(cpu_value))
+                    } else {
+                        None
+                    };
 
                     vcpus.push(VirtualCpu { id, setvar_id, cpu });
                 }
@@ -1329,18 +1482,138 @@ impl VirtualMachine {
     }
 }
 
+impl CapMap {
+    fn from_xml(
+        cap_type: CapMapType,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+    ) -> Result<CapMap, String> {
+        // At the moment the four cap maps we support all have the 'pd' element,
+        // so we can include it here. When that stops being the case we will
+        // have to rework this a bit.
+        check_attributes(xml_sdf, node, &["slot", "pd"])?;
+
+        let pd_name = checked_lookup(xml_sdf, node, "pd")?.to_string();
+
+        let slot = sdf_parse_number(checked_lookup(xml_sdf, node, "slot")?, node)?;
+
+        // TODO: Rework this so that we don't have a fixed upper limit.
+        if slot >= CAP_MAP_MAX_SLOT {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("There are only {CAP_MAP_MAX_SLOT} destination cspace slots available."),
+            ));
+        }
+
+        Ok(CapMap {
+            cap_type,
+            pd_name,
+            // FIXME: Hack, filled out later.
+            pd: None,
+            slot,
+            text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+        })
+    }
+}
+
+impl CSpace {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<Self, String> {
+        check_attributes(xml_sdf, node, &[])?;
+
+        let mut cap_maps = vec![];
+
+        for child in node.children().filter(|c| c.is_element()) {
+            cap_maps.push(match child.tag_name().name() {
+                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &child)?,
+                "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &child)?,
+                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &child)?,
+                "cap_cspace" => CapMap::from_xml(CapMapType::CSpace, xml_sdf, &child)?,
+                child_name => {
+                    let location = loc_string(xml_sdf, xml_sdf.doc.text_pos_at(child.range().start));
+                    if let Some(type_name) = child_name.strip_prefix("cap_") {
+                        return Err(format!("Cap type: '{type_name}' is not supported at '{location}'"));
+                    } else {
+                        return Err(format!("Element '{child_name}' is not supported in a <cspace> element at '{location}'"));
+                    }
+                }
+            })
+        }
+
+        Ok(CSpace { cap_maps })
+    }
+}
+
 impl SysMemoryRegion {
+    fn determine_size(
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        prefill_bytes_maybe: &Option<Vec<u8>>,
+        page_size: u64,
+    ) -> Result<u64, String> {
+        match checked_lookup(xml_sdf, node, "size") {
+            Ok(size_str) => {
+                // Size explicitly specified
+                let size_parsed = sdf_parse_number(size_str, node)?;
+
+                if !size_parsed.is_multiple_of(page_size) {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "size is not a multiple of the page size".to_string(),
+                    ));
+                }
+
+                match &prefill_bytes_maybe {
+                    Some(bytes) => {
+                        if bytes.len() > size_parsed as usize {
+                            return Err(value_error(
+                                xml_sdf,
+                                node,
+                                format!(
+                                    "size of prefill file exceeds memory region size: {:x} > {:x}",
+                                    bytes.len(),
+                                    size_parsed
+                                ),
+                            ));
+                        }
+
+                        Ok(size_parsed)
+                    }
+                    None => Ok(size_parsed),
+                }
+            }
+
+            Err(_) => {
+                // No size explicitly specified
+                match &prefill_bytes_maybe {
+                    Some(bytes) => Ok(round_up(bytes.len() as u64, page_size)),
+
+                    None => Err(value_error(
+                        xml_sdf,
+                        node,
+                        "size must be specified if memory region is not prefilled".to_string(),
+                    )),
+                }
+            }
+        }
+    }
+
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
+        search_paths: &Vec<PathBuf>,
     ) -> Result<SysMemoryRegion, String> {
-        check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
+        check_attributes(
+            xml_sdf,
+            node,
+            &["name", "size", "page_size", "phys_addr", "prefill_path"],
+        )?;
 
         let name = checked_lookup(xml_sdf, node, "name")?;
-        let size = sdf_parse_number(checked_lookup(xml_sdf, node, "size")?, node)?;
-        let mut page_size_specified_by_user = false;
 
+        let mut page_size_specified_by_user = false;
         let page_size = if let Some(xml_page_size) = node.attribute("page_size") {
             page_size_specified_by_user = true;
             sdf_parse_number(xml_page_size, node)?
@@ -1357,13 +1630,42 @@ impl SysMemoryRegion {
             ));
         }
 
-        if !size.is_multiple_of(page_size) {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                "size is not a multiple of the page size".to_string(),
-            ));
-        }
+        let prefill_bytes_maybe = node
+            .attribute("prefill_path")
+            .map(|path_str| {
+                get_full_path(&PathBuf::from(path_str), search_paths)
+                    .ok_or_else(|| {
+                        value_error(
+                            xml_sdf,
+                            node,
+                            format!("unable to find prefill file: '{path_str}'"),
+                        )
+                    })
+                    .and_then(|prefill_path| {
+                        fs::read(&prefill_path)
+                            .map_err(|_| {
+                                value_error(
+                                    xml_sdf,
+                                    node,
+                                    format!("failed to read file '{path_str}' at prefill_path"),
+                                )
+                            })
+                            .and_then(|bytes| {
+                                if bytes.is_empty() {
+                                    Err(value_error(
+                                        xml_sdf,
+                                        node,
+                                        format!("prefill file '{path_str}' is empty"),
+                                    ))
+                                } else {
+                                    Ok(bytes)
+                                }
+                            })
+                    })
+            })
+            .transpose()?;
+
+        let size = Self::determine_size(xml_sdf, node, &prefill_bytes_maybe, page_size)?;
 
         let phys_addr = if let Some(xml_phys_addr) = node.attribute("phys_addr") {
             SysMemoryRegionPaddr::Specified(sdf_parse_number(xml_phys_addr, node)?)
@@ -1393,6 +1695,7 @@ impl SysMemoryRegion {
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
             kind: SysMemoryRegionKind::User,
+            prefill_bytes: prefill_bytes_maybe,
         })
     }
 }
@@ -1508,7 +1811,7 @@ impl Channel {
 }
 
 struct XmlSystemDescription<'a> {
-    filename: &'a str,
+    filename: &'a Path,
     doc: &'a roxmltree::Document<'a>,
 }
 
@@ -1605,7 +1908,7 @@ fn checked_lookup<'a>(
             "Error: Missing required attribute '{}' on element '{}': {}:{}:{}",
             attribute,
             node.tag_name().name(),
-            xml_sdf.filename,
+            xml_sdf.filename.display(),
             pos.row,
             pos.col
         ))
@@ -1618,7 +1921,7 @@ fn value_error(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, err: Stri
         "Error: {} on element '{}': {}:{}:{}",
         err,
         node.tag_name().name(),
-        xml_sdf.filename,
+        xml_sdf.filename.display(),
         pos.row,
         pos.col
     )
@@ -1732,10 +2035,15 @@ fn pd_flatten(
     Ok(all_pds)
 }
 
-pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescription, String> {
+pub fn parse(
+    filename: &Path,
+    xml: &str,
+    config: &Config,
+    search_paths: &Vec<PathBuf>,
+) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
-        Err(err) => return Err(format!("Could not parse '{filename}': {err}")),
+        Err(err) => return Err(format!("Could not parse '{0}': {err}", filename.display())),
     };
 
     let xml_sdf = XmlSystemDescription {
@@ -1747,7 +2055,6 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
-
     let system = doc
         .root()
         .children()
@@ -1777,7 +2084,12 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 &domain_schedule,
             )?),
             "channel" => channel_nodes.push(child),
-            "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
+            "memory_region" => mrs.push(SysMemoryRegion::from_xml(
+                config,
+                &xml_sdf,
+                &child,
+                search_paths,
+            )?),
             "virtual_machine" => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -1836,6 +2148,27 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         channels.push(ch);
     }
 
+    // FIXME: Now we post-fill the PD ids in the capmap elements, which is
+    //        ugly, and we should rework this to be less so.
+    let pd_names_to_id: HashMap<_, _> = pds
+        .iter()
+        .enumerate()
+        .map(|(idx, pd)| (pd.name.clone(), idx))
+        .collect();
+    for pd in pds.iter_mut() {
+        for cap_map in pd.cap_maps.iter_mut() {
+            let Some(&pd) = pd_names_to_id.get(&cap_map.pd_name) else {
+                return Err(format!(
+                    "Error: unknown PD name '{}': {}",
+                    cap_map.pd_name,
+                    loc_string(&xml_sdf, cap_map.text_pos)
+                ));
+            };
+
+            cap_map.pd = Some(pd);
+        }
+    }
+
     // Now that we have parsed everything in the system description we can validate any
     // global properties (e.g no duplicate PD names etc).
 
@@ -1891,7 +2224,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     "Error: duplicate irq: {} in protection domain: '{}' @ {}:{}:{}",
                     sysirq.irq_num(),
                     pd.name,
-                    filename,
+                    filename.display(),
                     pd.text_pos.unwrap().row,
                     pd.text_pos.unwrap().col
                 ));
@@ -1910,7 +2243,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                     sysirq.id,
                     pd.name,
-                    filename,
+                    filename.display(),
                     pd.text_pos.unwrap().row,
                     pd.text_pos.unwrap().col
                 ));
@@ -1926,7 +2259,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                 ch.end_a.id,
                 pd.name,
-                filename,
+                filename.display(),
                 pd.text_pos.unwrap().row,
                 pd.text_pos.unwrap().col
             ));
@@ -1938,7 +2271,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                 ch.end_b.id,
                 pd.name,
-                filename,
+                filename.display(),
                 pd.text_pos.unwrap().row,
                 pd.text_pos.unwrap().col
             ));
@@ -1973,7 +2306,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     "Error: duplicate I/O port id: {} in protection domain: '{}' @ {}:{}:{}",
                     ioport.id,
                     pd.name,
-                    filename,
+                    filename.display(),
                     pd.text_pos.unwrap().row,
                     pd.text_pos.unwrap().col
                 ));
@@ -1997,14 +2330,14 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                             left_range.start,
                             left_range.end,
                             pd.name,
-                            filename,
+                            filename.display(),
                             this_ioport.text_pos.row,
                             this_ioport.text_pos.col,
                             seen_ioport.id,
                             right_range.start,
                             right_range.end,
                             seen_pd_name,
-                            filename,
+                            filename.display(),
                             seen_ioport.text_pos.row,
                             seen_ioport.text_pos.col
                         ));
@@ -2019,6 +2352,37 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
         if let Some(vm) = &pd.virtual_machine {
             check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+        }
+    }
+
+    // Ensure that there are no overlapping extra cap maps in the user caps region
+    // and we are not mapping in the same cap from the same source more than once
+    for pd in &pds {
+        let mut user_cap_slots = HashMap::<u64, Vec<_>>::new();
+
+        for cap_map in &pd.cap_maps {
+            user_cap_slots
+                .entry(cap_map.slot)
+                .and_modify(|v| v.push(cap_map))
+                .or_insert(vec![cap_map]);
+        }
+
+        for (slot, cap_maps) in user_cap_slots.iter() {
+            if cap_maps.len() > 1 {
+                let mut lines = String::new();
+                for mapping in cap_maps {
+                    lines.push_str(&format!(
+                        "\n  type {:?} from '{}' at '{}'",
+                        mapping.cap_type,
+                        mapping.pd_name,
+                        loc_string(&xml_sdf, mapping.text_pos)
+                    ));
+                }
+                return Err(format!(
+                    "Error: overlapping user caps in slot {slot} of protection domain '{}':{}",
+                    pd.name, lines
+                ));
+            }
         }
     }
 
@@ -2132,6 +2496,17 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             if let SysSetVarKind::Paddr { region } = &setvar.kind {
                 mr_names_with_setvar_paddr.insert(region);
             };
+            if let SysSetVarKind::PrefillSize { mr } = &setvar.kind {
+                for matching_mr in &mrs {
+                    if matching_mr.name == *mr && matching_mr.prefill_bytes.is_none() {
+                        return Err(format!(
+                            "Error: 'setvar_prefill_size' used for MR without a `prefill_path` @ '{}' {}",
+                            matching_mr.name,
+                            loc_string(&xml_sdf, matching_mr.text_pos.unwrap()),
+                        ));
+                    }
+                }
+            }
         }
     }
     for mr in mrs.iter_mut() {
@@ -2212,7 +2587,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                         domain_name
                     ));
                 }
-                
+
             }
         }
     }

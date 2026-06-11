@@ -6,7 +6,7 @@
   description = "A flake for building microkit";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/25.11";
     utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     treefmt-nix = {
@@ -37,7 +37,8 @@
           }
         );
 
-        pythonTool = pkgs.python312.withPackages (ps: [
+        python = pkgs.python312;
+        pythonPackages = python.withPackages (ps: [
           ps.mypy
           ps.black
           ps.flake8
@@ -61,9 +62,16 @@
           aarch64-linux = [];
         }.${system} or (throw "Unsupported system: ${system}");
 
+        # For the initialiser
+        crossTargets = [
+          "aarch64-unknown-none"
+          "riscv64gc-unknown-none-elf"
+          "x86_64-unknown-none"
+        ];
+
         rustTool = pkgs.rust-bin.stable.${microkitToolVersion}.default.override {
           extensions = [ "rust-src" ];
-          targets = [ pkgs.pkgsStatic.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets;
+          targets = [ pkgs.pkgsStatic.stdenv.hostPlatform.rust.rustcTarget ] ++ rustAdditionalTargets ++ crossTargets;
         };
       in
       {
@@ -85,12 +93,13 @@
             gnumake
             dtc
             expect
-            pythonTool
+            python
+            pythonPackages
             git
             rustTool
             pandoc
             (texlive.combine {
-              inherit (texlive) scheme-medium titlesec enumitem sfmath roboto fontaxes isodate substr tcolorbox environ pdfcol;
+              inherit (texlive) scheme-small fancyvrb parskip titlesec enumitem sfmath roboto fontaxes isodate substr tcolorbox environ pdfcol;
             })
             cmake
             ninja

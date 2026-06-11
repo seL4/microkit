@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::ops::Range;
-
 use serde_json;
+use std::ops::Range;
+use std::path::{Path, PathBuf};
 
 pub fn msb(x: u64) -> u64 {
     64 - x.leading_zeros() as u64 - 1
@@ -201,6 +201,17 @@ pub fn monitor_serialise_names(names: &[String], max_len: usize, max_name_len: u
     }
 
     names_bytes
+}
+
+pub fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
+    for search_path in search_paths {
+        let full_path = search_path.join(path);
+        if full_path.exists() {
+            return Some(full_path.to_path_buf());
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]

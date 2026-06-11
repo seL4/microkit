@@ -18,11 +18,12 @@ from os import popen, system, environ
 import shutil
 from pathlib import Path
 from dataclasses import dataclass
-from sys import executable
+from sys import executable, stderr
 from tarfile import open as tar_open, TarInfo
 import platform as host_platform
 from enum import IntEnum
 import json
+import subprocess
 
 from typing import Any, Dict, Union, List, Tuple, Optional
 
@@ -88,11 +89,11 @@ class KernelArch(IntEnum):
 
     def rust_toolchain(self) -> str:
         if self == KernelArch.AARCH64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"aarch64-unknown-none"
         elif self == KernelArch.RISCV64:
-            return f"{self.to_str()}imac-sel4-minimal"
+            return f"riscv64gc-unknown-none-elf"
         elif self == KernelArch.X86_64:
-            return f"{self.to_str()}-sel4-minimal"
+            return f"x86_64-unknown-none"
         else:
             raise Exception(f"Unsupported toolchain target triple '{self}'")
 
@@ -163,10 +164,21 @@ SUPPORTED_BOARDS = (
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
+        name="stm32mp2",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a35",
+        loader_link_address=0x88000000,
+        smp_cores=2,
+        kernel_options={
+            "KernelPlatform": "stm32mp2",
+            "KernelARMPlatform": "stm32mp257f-ev1",
+        } | DEFAULT_KERNEL_OPTIONS_AARCH64,
+    ),
+    BoardInfo(
         name="tqma8xqp1gb",
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a35",
-        loader_link_address=0x80280000,
+        loader_link_address=0x90000000,
         smp_cores=4,
         kernel_options={
             "KernelPlatform": "tqma8xqp1gb",
@@ -444,7 +456,14 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "HardwareDebugAPI": True,
+            },
+            KernelArch.X86_64: {
+                "HardwareDebugAPI": True,
+            }
+        },
     ),
     ConfigInfo(
         name="benchmark",
@@ -579,7 +598,8 @@ def build_tool(tool_target: Path, target_triple: str) -> None:
 
 def build_sel4(
     sel4_dir: Path,
-    root_dir: Path,
+    tool_dir: Path,
+    sdk_dir: Path,
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
@@ -595,7 +615,7 @@ def build_sel4(
     sel4_install_dir.mkdir(exist_ok=True, parents=True)
     sel4_build_dir.mkdir(exist_ok=True, parents=True)
 
-    print(f"Building sel4: {sel4_dir=} {root_dir=} {build_dir=} {board=} {config=}")
+    print(f"Building sel4: {sel4_dir=} {sdk_dir=} {build_dir=} {board=} {config=}")
 
     config_args = [
         *board.kernel_options.items(),
@@ -648,7 +668,7 @@ def build_sel4(
 
     elf = sel4_install_dir / "bin" / "kernel.elf"
     elf64_dest = (
-        root_dir / "board" / board.name / config.name / "elf" / "sel4.elf"
+        sdk_dir / "board" / board.name / config.name / "elf" / "sel4.elf"
     )
     elf64_dest.unlink(missing_ok=True)
     shutil.copy(elf, elf64_dest)
@@ -661,7 +681,7 @@ def build_sel4(
     # Otherwise, you get this "qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one."
     if board.arch.is_x86():
         elf32_dest = (
-            root_dir / "board" / board.name / config.name / "elf" / "sel4_32.elf"
+            sdk_dir / "board" / board.name / config.name / "elf" / "sel4_32.elf"
         )
         objcopy_arg = f"-O elf32-i386 {str(elf64_dest)} {str(elf32_dest)}"
         if llvm:
@@ -674,12 +694,12 @@ def build_sel4(
         elf32_dest.chmod(0o744)
 
     invocations_all = sel4_build_dir / "generated" / "invocations_all.json"
-    dest = (root_dir / "board" / board.name / config.name / "invocations_all.json")
+    dest = (sdk_dir / "board" / board.name / config.name / "invocations_all.json")
     dest.unlink(missing_ok=True)
     shutil.copy(invocations_all, dest)
     dest.chmod(0o744)
 
-    include_dir = root_dir / "board" / board.name / config.name / "include"
+    include_dir = sdk_dir / "board" / board.name / config.name / "include"
     for source in ("kernel_Config", "libsel4", "libsel4/sel4_Config", "libsel4/autoconf"):
         source_dir = sel4_install_dir / source / "include"
         for p in source_dir.rglob("*"):
@@ -695,15 +715,44 @@ def build_sel4(
     if not board.arch.is_x86():
         # only non-x86 platforms have this file to describe memory regions
         platform_gen = sel4_build_dir / "gen_headers" / "plat" / "machine" / "platform_gen.json"
-        dest = root_dir / "board" / board.name / config.name / "platform_gen.json"
+        dest = sdk_dir / "board" / board.name / config.name / "platform_gen.json"
         dest.unlink(missing_ok=True)
         shutil.copy(platform_gen, dest)
+        dest.chmod(0o744)
+
+    # Use the preprocessor to convert the seL4 object size constants to readable JSON
+    # for the tool.
+    object_sizes_header = tool_dir / "object_sizes.h"
+    dest = sdk_dir / "board" / board.name / config.name / "object_sizes.json"
+    preprocessor = "clang" if (llvm) else f"{target_triple}-cpp"
+    preprocess_cmd = [
+        preprocessor,
+        "-E",
+        "-P",
+        f"-I{include_dir}",
+        object_sizes_header,
+    ]
+    r = subprocess.run(preprocess_cmd, capture_output=True)
+    if r.returncode != 0:
+        raise Exception(f"Failed creating object_sizes.json: cmd={preprocess_cmd}")
+
+    preprocessor_out = r.stdout.decode("utf-8")
+    object_sizes = []
+    for l in preprocessor_out.split("\n"):
+        # Preprocessor emits commented lines etc that we want to ignore
+        if ": " in l:
+            assert len(l.split(": ")) == 2
+            obj_name, size = l.split(": ")
+            object_sizes.append((obj_name, int(size)))
+
+    with open(dest, "w") as out_file:
+        json.dump(dict(object_sizes), out_file)
         dest.chmod(0o744)
 
 
 def build_elf_component(
     component_name: str,
-    root_dir: Path,
+    sdk_dir: Path,
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
@@ -714,7 +763,7 @@ def build_elf_component(
 
     Right now this is either the loader or the monitor
     """
-    sel4_dir = root_dir / "board" / board.name / config.name
+    sel4_dir = sdk_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
     target_triple = f"{board.arch.target_triple()}"
@@ -733,7 +782,7 @@ def build_elf_component(
         )
     elf = build_dir / f"{component_name}.elf"
     dest = (
-        root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
+        sdk_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
     )
     dest.unlink(missing_ok=True)
     shutil.copy(elf, dest)
@@ -741,8 +790,8 @@ def build_elf_component(
     dest.chmod(0o744)
 
 
-def build_doc(root_dir: Path):
-    output = root_dir / "doc" / "microkit_user_manual.pdf"
+def build_doc(sdk_dir: Path):
+    output = sdk_dir / "doc" / "microkit_user_manual.pdf"
 
     environ["TEXINPUTS"] = "style:"
     r = system(f'cd docs && pandoc manual.md -o ../{output}')
@@ -751,7 +800,7 @@ def build_doc(root_dir: Path):
 
 def build_lib_component(
     component_name: str,
-    root_dir: Path,
+    sdk_dir: Path,
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
@@ -761,7 +810,7 @@ def build_lib_component(
 
     Right now this is just libmicrokit.a
     """
-    sel4_dir = root_dir / "board" / board.name / config.name
+    sel4_dir = sdk_dir / "board" / board.name / config.name
     build_dir = build_dir / board.name / config.name / component_name
     build_dir.mkdir(exist_ok=True, parents=True)
 
@@ -779,7 +828,7 @@ def build_lib_component(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"
         )
     lib = build_dir / f"{component_name}.a"
-    lib_dir = root_dir / "board" / board.name / config.name / "lib"
+    lib_dir = sdk_dir / "board" / board.name / config.name / "lib"
     dest = lib_dir / f"{component_name}.a"
     dest.unlink(missing_ok=True)
     shutil.copy(lib, dest)
@@ -793,7 +842,7 @@ def build_lib_component(
     # Make output read-only
     dest.chmod(0o744)
 
-    include_dir = root_dir / "board" / board.name / config.name / "include"
+    include_dir = sdk_dir / "board" / board.name / config.name / "include"
     source_dir = Path(component_name) / "include"
     for p in source_dir.rglob("*"):
         if not p.is_file():
@@ -808,19 +857,17 @@ def build_lib_component(
 
 def build_initialiser(
     component_name: str,
-    root_dir: Path,
+    sdk_dir: Path,
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
 ) -> None:
     sel4_src_dir = build_dir / board.name / config.name / "sel4" / "install"
 
-    cargo_cross_options = "-Z build-std=core,alloc,compiler_builtins -Z build-std-features=compiler-builtins-mem"
     cargo_target = board.arch.rust_toolchain()
-    rust_target_path = Path("initialiser/support/targets").absolute()
 
     dest = (
-        root_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
+        sdk_dir / "board" / board.name / config.name / "elf" / f"{component_name}.elf"
     )
 
     # To save on build times, we share a single 'build target' dir for the component,
@@ -830,11 +877,10 @@ def build_initialiser(
     component_build_dir = build_dir / board.name / config.name / component_name
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
-    capdl_init_elf = rust_target_dir / cargo_target / "release" / "initialiser.elf"
     r = system(f"""
         RUSTC_BOOTSTRAP=1 \
-        RUST_TARGET_PATH={rust_target_path} SEL4_PREFIX={sel4_src_dir.absolute()} \
-            cargo build {cargo_cross_options} \
+        SEL4_PREFIX={sel4_src_dir.absolute()} \
+            cargo build \
                 --target {cargo_target} \
                 --locked \
                 --target-dir {rust_target_dir} \
@@ -847,9 +893,24 @@ def build_initialiser(
         )
 
     dest.unlink(missing_ok=True)
+    capdl_init_elf = rust_target_dir / cargo_target / "release" / "initialiser"
     shutil.copy(capdl_init_elf, dest)
     # Make output read-only
     dest.chmod(0o744)
+
+
+def github_actions_board_matrix(
+    matrix_file: Path, build_goals: list[tuple[BoardInfo, list[ConfigInfo]]]
+) -> None:
+
+    board_matrix = [
+        {"board": board.name, "march": board.arch.to_str(), "config": config.name}
+        for (board, configs) in build_goals
+        for config in configs
+    ]
+
+    with open(matrix_file, "w") as f:
+        json.dump(board_matrix, f)
 
 
 def main() -> None:
@@ -866,6 +927,7 @@ def main() -> None:
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
     parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
     parser.add_argument("--release-packaging", action="store_true", help="All SDKs for distribution will be produced")
+    parser.add_argument("--matrix", type=Path, help="Print out elaborated configs to a matrix for GitHub actions")
     # Read from the version file as unless someone has specified
     # a version, that is the source of truth
     with open("VERSION", "r") as f:
@@ -914,21 +976,26 @@ def main() -> None:
 
         build_goals.append((board, elaborated_configs))
 
+    if args.matrix is not None:
+        github_actions_board_matrix(args.matrix, build_goals)
+        return
+
     sel4_dir = args.sel4.expanduser()
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
 
-    root_dir = Path("release") / f"{NAME}-sdk-{version}"
+    tool_dir = Path("tool/microkit")
+    sdk_dir = Path("release") / f"{NAME}-sdk-{version}"
     tar_file = Path("release") / f"{NAME}-sdk-{version}.tar.gz"
     source_tar_file = Path("release") / f"{NAME}-source-{version}.tar.gz"
     dir_structure = [
-        root_dir / "bin",
-        root_dir / "board",
+        sdk_dir / "bin",
+        sdk_dir / "board",
     ]
     if not args.skip_docs:
-        dir_structure.append(root_dir / "doc")
+        dir_structure.append(sdk_dir / "doc")
     for (board, configs) in build_goals:
-        board_dir = root_dir / "board" / board.name
+        board_dir = sdk_dir / "board" / board.name
         dir_structure.append(board_dir)
         for config in configs:
             config_dir = board_dir / config.name
@@ -942,12 +1009,12 @@ def main() -> None:
     for dr in dir_structure:
         dr.mkdir(exist_ok=True, parents=True)
 
-    with open(root_dir / "VERSION", "w+") as f:
+    with open(sdk_dir / "VERSION", "w+") as f:
         f.write(version + "\n")
 
-    shutil.copy(Path("LICENSE.md"), root_dir)
+    shutil.copy(Path("LICENSE.md"), sdk_dir)
     licenses_dir = Path("LICENSES")
-    licenses_dest_dir = root_dir / "LICENSES"
+    licenses_dest_dir = sdk_dir / "LICENSES"
     for p in licenses_dir.rglob("*"):
         if not p.is_file():
             continue
@@ -959,33 +1026,33 @@ def main() -> None:
         dest.chmod(0o744)
 
     if not args.skip_tool:
-        tool_target = root_dir / "bin" / "microkit"
+        tool_target = sdk_dir / "bin" / "microkit"
         test_tool()
         build_tool(tool_target, args.tool_target_triple)
 
     if not args.skip_docs:
-        build_doc(root_dir)
+        build_doc(sdk_dir)
 
     if not args.skip_run_time:
         build_dir = Path("build")
         for (board, configs) in build_goals:
             for config in configs:
                 if not args.skip_sel4:
-                    build_sel4(sel4_dir, root_dir, build_dir, board, config, args.llvm)
+                    build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config, args.llvm)
                 loader_printing = 1 if config.name == "debug" else 0
                 loader_defines = []
                 if not board.arch.is_x86():
                     loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
-                    build_elf_component("loader", root_dir, build_dir, board, config, args.llvm, loader_defines)
+                    build_elf_component("loader", sdk_dir, build_dir, board, config, args.llvm, loader_defines)
 
-                build_elf_component("monitor", root_dir, build_dir, board, config, args.llvm, [])
-                build_lib_component("libmicrokit", root_dir, build_dir, board, config, args.llvm)
+                build_elf_component("monitor", sdk_dir, build_dir, board, config, args.llvm, [])
+                build_lib_component("libmicrokit", sdk_dir, build_dir, board, config, args.llvm)
                 if not args.skip_initialiser:
-                    build_initialiser("initialiser", root_dir, build_dir, board, config)
+                    build_initialiser("initialiser", sdk_dir, build_dir, board, config)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
-        include_dir = root_dir / "example" / example
+        include_dir = sdk_dir / "example" / example
         source_dir = example_path
         for p in source_dir.rglob("*"):
             if not p.is_file():
@@ -1001,7 +1068,7 @@ def main() -> None:
         print(f"Generating {tar_file}")
         # At this point we create a tar.gz file
         with tar_open(tar_file, "w:gz") as tar:
-            tar.add(root_dir, arcname=root_dir.name, filter=tar_filter)
+            tar.add(sdk_dir, arcname=sdk_dir.name, filter=tar_filter)
 
         # Build the source tar
         process = popen("git ls-files")

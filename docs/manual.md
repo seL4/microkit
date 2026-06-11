@@ -4,7 +4,7 @@
 -->
 
 ---
-title: Microkit User Manual (v2.1.0-dev)
+title: Microkit User Manual (v2.2.0)
 documentclass: article
 classoption:
 - english
@@ -252,6 +252,16 @@ The mapping has a number of attributes, which include:
 **Note:** When a memory region is mapped into multiple protection
 domains, the attributes used for different mappings may vary.
 
+### Prefilling
+
+A *memory region* may be prefilled with data from a file at build time
+by specifying the file's name in the [System Description File](#sysdesc).
+
+In this case, specifying the memory region's size become optional. If
+a size isn't specified, the memory region will be sized by the length
+of the prefill file, rounded up to the smallest page size or the user
+specified page size.
+
 ## Channels {#channels}
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
@@ -457,13 +467,14 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [-o OUTPUT] [-r REPORT]
-              [--capdl-json CAPDL_SPEC] [--image-type {binary,elf,uimage}]
-              --board [BOARD] --config CONFIG [--search-path [SEARCH_PATH ...]] system
+    microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system
+
+See `microkit --help` for a full list of options.
 
 The path to the system description file, board to build the system for, and configuration to build for must be provided.
 
 The search paths provided tell the tool where to find any program images specified in the system description file.
+The current working directory is always included as a search path.
 
 In the case of errors, a diagnostic message shall be output to `stderr` and a non-zero code returned.
 
@@ -476,6 +487,11 @@ The report is a plain text file describing important information about the syste
 The report can be useful when debugging potential system problems.
 This report does not have a fixed format and may change between versions.
 It is not intended to be machine readable.
+
+The `--override-kernel` option will override the kernel ELF used for the system rather than from the SDK.
+It is important to note that this is largely just for debugging purposes and the Microkit is
+highly tied to a specific version and configuration of the kernel. When using this option the kernel
+should be the same version and compiled with the same configuration options.
 
 ## Image format
 
@@ -724,9 +740,7 @@ This will set the program counter of the vCPU to `entry_point`.
 
 Stop the execution of the VM's virtual CPU with ID `vcpu`.
 
-## `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq,
-seL4_Uint8 priority, seL4_Uint8 group,
-seL4_Uint8 index)`
+## `void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq, seL4_Uint8 priority, seL4_Uint8 group, seL4_Uint8 index)`
 
 Inject a virtual ARM interrupt for a virtual CPU `vcpu` with IRQ number `irq`.
 The `priority` (0-31) determines what ARM GIC (generic interrupt controller)
@@ -981,6 +995,13 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
+## `seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_slot_to_cptr}
+
+Converts the slot identifier of the `<cspace>`'s capability element into an
+`seL4_CPtr` value to be used in `libsel4` calls by the PD.
+
+If the slot exceeds the valid range of inputs (`0 <= slot < MICROKIT_MAX_USER_CAPS`), it returns the value `seL4_CapNull`.
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -1012,6 +1033,7 @@ It supports the following attributes:
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
+* `fpu`: (optional) whether this PD can access the FPU. Defaults to true.
 * `domain`: (optional) Specifies the name of the scheduling domain the PD belongs to.
 
 Additionally, it supports the following child elements:
@@ -1023,8 +1045,13 @@ Additionally, it supports the following child elements:
 * `protection_domain`: (zero or more) Describes a child protection domain.
 * `virtual_machine`: (zero or one) Describes a child virtual machine.
 * `ioport`: (zero or more) Describes an I/O port, x86-64 only.
+* `cspace`: (zero or one) Describes ["extra" capabilities](#sdf-cspace) in the microkit-provided CSpace.
 
-The `program_image` element has a single `path` attribute describing the path to an ELF file.
+The `program_image` element has the following attributes:
+
+* `path`: path to an ELF file.
+* `path_for_symbols`: (optional) path to an ELF that will be used just for searching up and patching symbols rather than
+                      the ELF specified in `path`.
 
 The `map` element has the following attributes:
 
@@ -1035,6 +1062,7 @@ The `map` element has the following attributes:
 * `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
 * `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 * `setvar_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the memory region.
+* `setvar_prefill_size`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the size of the prefilled data.
 
 The `irq` element has the following attributes on ARM and RISC-V:
 
@@ -1047,7 +1075,7 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
 * `pin`: IOAPIC pin that generates the interrupt.
-* `vector`: CPU vector to deliver the interrupt to.
+* `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
 * `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
 * `polarity`: (optional) Whether the line polarity is high ("high") or low ("low"). Defaults to "high".
@@ -1056,9 +1084,9 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 The `irq` element has the following attributes when registering x86-64 MSI interrupts:
 
 * `id`: The channel identifier. Must be at least 0 and less than 63.
-* `pcidev`: The PCI device address of the device that will generate the interrupt, in BUS:DEV:FUNC notation (e.g. 01:1f:2).
+* `pcidev`: The PCI device address of the device that will generate the interrupt in hexadecimal, in BUS:DEV.FUNC notation (e.g. 01:1f.2).
 * `handle`: Value of the handle programmed into the data portion of the MSI.
-* `vector`: CPU vector to deliver the interrupt to.
+* `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `ioport` element has the following attributes:
@@ -1096,6 +1124,8 @@ Additionally, it supports the following child elements:
 The `vcpu` element has the following attributes:
 
 * `id`: The vCPU identifier. Must be at least 0 and less than 62.
+* `cpu`: (optional) set the physical CPU core that the vCPU will run on. Defaults to the same CPU
+                    core of the PD that the virtual machine belongs to.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the vCPU identifier.
 
 The `map` element has the same attributes as the protection domain with the exception of `setvar_vaddr`.
@@ -1107,11 +1137,37 @@ The `memory_region` element describes a memory region.
 It supports the following attributes:
 
 * `name`: A unique name for the memory region
-* `size`: Size of the memory region in bytes (must be a multiple of the page size)
+* `size`: Size of the memory region in bytes (must be a multiple of the page size). This can
+          be omitted if the memory region is has `prefill_path`, the size will be determined by
+          the length of the file given.
 * `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the largest page size for the target architecture that the memory region is aligned to.
 * `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
+* `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at initialisation.
 
 The `memory_region` element does not support any child elements.
+
+## `cspace` {#sdf-cspace}
+
+The `cspace` element represents the *Capability Space* of each protection domain.
+This is an advanced feature designed for users of Microkit who want more complex runtime behaviour than the system description file allows.
+For more details on how CSpaces and capabilities work, please see the ['Capability Spaces' section of the seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf#chapter.3).
+
+It supports no attributes, but supports the following elements as children:
+
+* `cap_tcb`: A capability to a protection domain's Thread Control Block (TCB).
+* `cap_sc`: A capability to a protection domain's Scheduling Context (SC).
+  If the protection domain is passive, this is a capability to the notification's scheduling context.
+* `cap_vspace`: A capability to a protection domain's VSpace.
+* `cap_cspace`: A capability to a protection domain's CSpace.
+
+All of the elements support the `slot` attribute, which is is an opaque identifier used to address the capability at runtime.
+To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_slot_to_cptr) function.
+
+See the 'cap_sharing' example packaged in your SDK or [on GitHub](https://github.com/seL4/microkit/tree/main/example/cap_sharing).
+
+All capability elements (currently) all support the `pd` attribute, the name of the protection domain that the capability is from.
+For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' in the CSpace of the current PD.
+
 
 ### Page sizes by architecture
 
@@ -1195,6 +1251,7 @@ The currently supported platforms are:
 * rpi4b_8gb
 * serengeti
 * star64
+* stm32mp2
 * tqma8xqp1gb
 * ultra96v2
 * x86_64_generic
@@ -1444,9 +1501,9 @@ Microkit will produce a raw binary file by default, so when using U-Boot run the
 
     => go 0x30000000
 
-## Radxa Rock3b {#rock3b}
+## Radxa ROCK 3B {#rock3b}
 
-Support is available for the Radxa Rock3b platform which is based on the Rockchip rk3568 SoC.
+Support is available for the Radxa ROCK 3B platform which is based on the Rockchip RK3568 SoC.
 
 Since the platform relies on some closed-source binary blobs for first stage bootloader and then ARM's TrustZone A, we need to compile the U-Boot including these images. Detailed instructions on how to do that are available [here](https://docs.sel4.systems/Hardware/rock3b.html).
 
@@ -1534,7 +1591,7 @@ For example:
 To use tftp you also need to set the file to load and the memory address to load it to:
 
     => env set bootfile loader.img
-    => env set loadaddr 0x80280000
+    => env set loadaddr 0x90000000
     => env save
 
 The system image generated by the Microkit tool by default is a raw binary file.
@@ -1564,6 +1621,33 @@ ZynqMP> tftpboot 0x40000000 loader.img
 ...
 ZynqMP> go 0x40000000
 ```
+
+## STM32MP2 {#stm32mp2}
+
+A newly flashed card will autoboot to Linux. You will need to break (Ctrl+c) or disable autoboot. When entering the U-Boot console, load the Microkit binary image at address 0x88000000:
+
+For initial SD card file system flashing using the initial first-stage boot loader TF-A,
+please see the instructions on the
+[seL4 website](https://docs.sel4.systems/Hardware/MP25EV1.html).
+
+For example, to load the image via the current SD/MMC, identify the partition
+containing the image to be loaded. Assuming it is labelized "bootfs" on the partition 8:
+
+```
+STM32MP> mmc part
+...
+8     0x00002242      0x00034241      "bootfs"
+...
+STM32MP> ext2ls mmc 0:8
+...
+     2759776 loader.img
+...
+STM32MP> ext2load mmc 0:8 0x88000000 loader.img
+STM32MP> go 0x88000000
+```
+
+Note that there is a watchdog enabled by the firmware that will cause the board to reset
+after 30 seconds of runtime.
 
 ## x86-64 generic {#x86_64_generic}
 

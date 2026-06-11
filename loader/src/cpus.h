@@ -11,6 +11,11 @@
 
 #include <kernel/gen_config.h>
 
+#if defined(CONFIG_PLAT_BCM2711) || defined(BOARD_kria_k26)
+/* There are a couple of cases where we cannot rely on having ARM PSCI available. */
+#define ARM_PSCI_UNAVAILABLE
+#endif
+
 /* Define our own variant of the seL4 config */
 #define NUM_ACTIVE_CPUS CONFIG_MAX_NUM_NODES
 

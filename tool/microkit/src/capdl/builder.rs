@@ -19,13 +19,13 @@ use crate::{
     capdl::{
         irq::create_irq_handler_cap,
         memory::{create_vspace, create_vspace_ept, map_page},
-        spec::{capdl_obj_physical_size_bits, ElfContent, ElfIndex},
+        spec::{capdl_obj_physical_size_bits, BytesContent, ElfContent, ElfIndex, FillContent},
         util::*,
     },
     elf::ElfFile,
     sdf::{
-        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY,
+        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT,
+        MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -95,8 +95,14 @@ const PD_BASE_PD_TCB_CAP: u64 = PD_BASE_IRQ_CAP + 64;
 const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
+// The following region can be used for whatever the user wants to map into their
+// cspace. We restrict them to use this region so that they don't accidently
+// overwrite other parts of the cspace. The cspace slot that the users provide
+// for mapping in extra caps such as TCBs and SCs will be as an offset to this
+// index. We are bounding this to 128 slots for now.
+const PD_BASE_USER_CAPS: u64 = PD_BASE_IOPORT_CAP + 64;
 
-pub const PD_CAP_SIZE: u32 = 512;
+pub const PD_CAP_SIZE: u32 = 1024;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
 const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() as u64;
@@ -104,7 +110,7 @@ const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() 
 pub const SLOT_BITS: u64 = 5;
 pub const SLOT_SIZE: u64 = 1 << SLOT_BITS;
 
-pub type FrameFill = Fill<ElfContent>;
+pub type FrameFill = Fill<FillContent>;
 pub type CapDLNamedObject = NamedObject<FrameFill>;
 
 const US_IN_S: u64 = 1000000;
@@ -112,6 +118,15 @@ const US_IN_S: u64 = 1000000;
 pub struct ExpectedAllocation {
     pub ut_idx: usize,
     pub paddr: u64,
+}
+
+struct PDShadowCspace {
+    cspace: ObjectId,
+    notification: ObjectId,
+    endpoint: Option<ObjectId>,
+    sched_context: ObjectId,
+    tcb: ObjectId,
+    vspace: ObjectId,
 }
 
 pub struct CapDLSpecContainer {
@@ -143,6 +158,9 @@ impl CapDLSpecContainer {
                 untyped_covers: Vec::new(),
                 cached_orig_cap_slots: None,
                 log_level: None,
+                domain_idx_shift: None,
+                domain_schedule: None,
+                domain_set_start: None,
             },
             expected_allocations: HashMap::new(),
         }
@@ -237,10 +255,12 @@ impl CapDLSpecContainer {
                         },
                         content: FillEntryContent::Data(ElfContent {
                             elf_id: elf_id.clone(),
+                        content: FillEntryContent::Data(FillContent::ElfContent(ElfContent {
+                            elf_id,
                             elf_seg_idx: seg_idx,
                             elf_seg_data_range: (section_offset as usize
                                 ..((section_offset + len_to_cpy) as usize)),
-                        }),
+                        })),
                     });
                 }
 
@@ -328,10 +348,12 @@ impl CapDLSpecContainer {
             max_prio: 0,
             resume: false,
             domain: None,
+            fpu_disabled: false,
             ip: entry_point.into(),
             sp: 0.into(),
             gprs: Vec::new(),
             master_fault_ep: None,
+            domain: None,
         };
 
         let tcb_inner_obj = object::Tcb {
@@ -492,7 +514,7 @@ pub fn build_capdl_spec(
         )
         .unwrap();
 
-        // At this point, all of the required objects for the monitor have been created and it caps inserted into
+        // At this point, all of the required objects for the monitor have been created and its caps inserted into
         // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
         // In addition, `add_elf_to_spec()` doesn't fill most the details in the TCB.
         // Now fill them in: stack ptr, priority, ipc buf vaddr, etc.
@@ -523,6 +545,84 @@ pub fn build_capdl_spec(
         } else {
             unreachable!("internal bug: build_capdl_spec() got a non TCB object ID when trying to set TCB parameters for the monitor.");
         }
+
+    // Create monitor scheduling context object + cap
+    let mon_sc_obj_id = capdl_util_make_sc_obj(
+        &mut spec_container,
+        MONITOR_PD_NAME,
+        PD_SCHEDCONTEXT_EXTRA_SIZE_BITS as u8,
+        BUDGET_DEFAULT,
+        BUDGET_DEFAULT,
+        0,
+    );
+    let mon_sc_cap = capdl_util_make_sc_cap(mon_sc_obj_id);
+
+    // Create monitor CSpace and pre-insert the fault EP and reply caps into the correct slots in CSpace.
+    let mon_cnode_obj_id = capdl_util_make_cnode_obj(
+        &mut spec_container,
+        MONITOR_PD_NAME,
+        PD_CAP_BITS,
+        [
+            capdl_util_make_cte(MON_FAULT_EP_CAP_IDX as u32, mon_fault_ep_cap),
+            capdl_util_make_cte(MON_REPLY_CAP_IDX as u32, mon_reply_cap),
+        ]
+        .to_vec(),
+    );
+    let mon_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
+    let mon_cnode_cap = capdl_util_make_cnode_cap(mon_cnode_obj_id, 0, mon_guard_size as u8);
+
+    // Create monitor stack frame
+    let mon_stack_frame_obj_id = capdl_util_make_frame_obj(
+        &mut spec_container,
+        Fill {
+            entries: [].to_vec(),
+        },
+        &format!("{MONITOR_PD_NAME}_stack"),
+        None,
+        PageSize::Small.fixed_size_bits(kernel_config) as u8,
+    );
+    let mon_stack_frame_cap =
+        capdl_util_make_frame_cap(mon_stack_frame_obj_id, true, true, false, true);
+    let mon_vspace_obj_id =
+        capdl_util_get_vspace_id_from_tcb_id(&spec_container, monitor_tcb_obj_id);
+    map_page(
+        &mut spec_container,
+        kernel_config,
+        MONITOR_PD_NAME,
+        mon_vspace_obj_id,
+        mon_stack_frame_cap,
+        PageSize::Small as u64,
+        kernel_config.pd_stack_bottom(MON_STACK_SIZE),
+    )
+    .unwrap();
+
+    // At this point, all of the required objects for the monitor have been created and its caps inserted into
+    // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
+    // In addition, `add_elf_to_spec()` doesn't fill most the details in the TCB.
+    // Now fill them in: stack ptr, priority, ipc buf vaddr, etc.
+    if let Object::Tcb(monitor_tcb) = &mut spec_container
+        .get_root_object_mut(monitor_tcb_obj_id)
+        .unwrap()
+        .object
+    {
+        // Special case, monitor has its stack statically allocated.
+        monitor_tcb.extra.sp = Word(kernel_config.pd_stack_top());
+        // While there is nothing stopping us from running the monitor at the highest priority alongside the
+        // CapDL initialiser, the debug kernel serial output can get garbled when the monitor TCB is resumed.
+        monitor_tcb.extra.prio = MONITOR_PRIORITY;
+        monitor_tcb.extra.max_prio = MONITOR_PRIORITY;
+        monitor_tcb.extra.resume = true;
+
+        monitor_tcb.slots.push(capdl_util_make_cte(
+            TcbBoundSlot::CSpace as u32,
+            mon_cnode_cap,
+        ));
+        monitor_tcb.slots.push(capdl_util_make_cte(
+            TcbBoundSlot::SchedContext as u32,
+            mon_sc_cap,
+        ));
+    } else {
+        unreachable!("internal bug: build_capdl_spec() got a non TCB object ID when trying to set TCB parameters for the monitor.");
     }
 
     // *********************************
@@ -537,11 +637,39 @@ pub fn build_capdl_spec(
             let paddr = mr
                 .paddr()
                 .map(|base_paddr| Word(base_paddr + (frame_sequence * mr.page_size_bytes())));
+
+            let frame_fill = if let Some(prefill_bytes) = &mr.prefill_bytes {
+                let starting_byte_idx = frame_sequence * mr.page_size_bytes();
+                let remaining_bytes_to_fill = prefill_bytes.len() as u64 - starting_byte_idx;
+                let num_bytes_to_fill = min(mr.page_size_bytes(), remaining_bytes_to_fill);
+
+                let mut frame_bytes = vec![];
+                frame_bytes.extend_from_slice(
+                    &prefill_bytes[starting_byte_idx as usize
+                        ..(starting_byte_idx + num_bytes_to_fill) as usize],
+                );
+
+                FrameFill {
+                    entries: [FillEntry {
+                        range: Range {
+                            start: 0,
+                            end: num_bytes_to_fill,
+                        },
+                        content: FillEntryContent::Data(FillContent::BytesContent(BytesContent {
+                            bytes: frame_bytes,
+                        })),
+                    }]
+                    .to_vec(),
+                }
+            } else {
+                FrameFill {
+                    entries: [].to_vec(),
+                }
+            };
+
             frame_ids.push(capdl_util_make_frame_obj(
                 &mut spec_container,
-                Fill {
-                    entries: [].to_vec(),
-                },
+                frame_fill,
                 &format!("mr_{}_{:09}", mr.name, frame_sequence),
                 paddr,
                 frame_size_bits as u8,
@@ -567,10 +695,9 @@ pub fn build_capdl_spec(
         None
     };
 
-    // Keep tabs on each PD's CSpace, Notification and Endpoint objects so we can create channels between them at a later step.
-    let mut pd_id_to_cspace_id: HashMap<usize, ObjectId> = HashMap::new();
-    let mut pd_id_to_ntfn_id: HashMap<usize, ObjectId> = HashMap::new();
-    let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
+    // This object keeps track of object IDs for various 'important' / nameable kernel objects for
+    // each PD so that we can make various references to them at later steps.
+    let mut pd_shadow_cspaces: HashMap<usize, PDShadowCspace> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -700,19 +827,23 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if let Some(parent) = pd.parent {
+        let pd_fault_ep_cap = if let Some(pd_parent_id) = pd.parent {
             // @kwinter: Should we enforce domain boundaries here?
-            assert!(pd_global_idx > parent);
+            assert!(pd_global_idx > pd_parent_id);
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_ep_obj_id = &pd_id_to_ep_id[&parent];
+            let parent_shadow_cspace = &pd_shadow_cspaces[&pd_parent_id];
+            let parent_ep_obj_id = parent_shadow_cspace
+                .endpoint
+                .expect("parent should have EP due to needs_ep()");
+
             let fault_ep_cap =
-                capdl_util_make_endpoint_cap(*parent_ep_obj_id, true, true, true, badge);
+                capdl_util_make_endpoint_cap(parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = &pd_id_to_cspace_id[&parent];
+            let parent_cspace_obj_id = parent_shadow_cspace.cspace;
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
-                *parent_cspace_obj_id,
+                parent_cspace_obj_id,
                 (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
             );
@@ -751,7 +882,6 @@ pub fn build_capdl_spec(
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
-        pd_id_to_ntfn_id.insert(pd_global_idx, pd_ntfn_obj_id);
         if pd.needs_ep(pd_global_idx, &system.channels) {
             pd_ep_obj_id = Some(capdl_util_make_endpoint_obj(
                 &mut spec_container,
@@ -760,7 +890,6 @@ pub fn build_capdl_spec(
             ));
             let pd_ep_cap =
                 capdl_util_make_endpoint_cap(pd_ep_obj_id.unwrap(), true, true, true, 0);
-            pd_id_to_ep_id.insert(pd_global_idx, pd_ep_obj_id.unwrap());
             caps_to_insert_to_pd_cspace
                 .push(capdl_util_make_cte(PD_INPUT_CAP_IDX as u32, pd_ep_cap));
         } else {
@@ -943,14 +1072,18 @@ pub fn build_capdl_spec(
                         capdl_util_make_vcpu_cap(vm_vcpu_obj_id),
                     ));
 
+                    // vCPU should default to CPU that the PD runs if not explicitly specified.
+                    let vcpu_affinity = vcpu.cpu.unwrap_or(pd.cpu);
                     // Finally create TCB, unlike PDs, VMs are suspended by default until resume'd by their parent.
                     let vm_vcpu_tcb_inner_obj = object::Tcb {
                         slots: caps_to_bind_to_vm_tcbs,
                         extra: Box::new(object::TcbExtraInfo {
                             ipc_buffer_addr: Word(0),
-                            affinity: Word(vcpu.cpu.0.into()),
+                            affinity: Word(vcpu_affinity.0.into()),
                             prio: virtual_machine.priority,
                             max_prio: virtual_machine.priority,
+                            // Given the use cases of VMs, for now we always give them FPU access.
+                            fpu_disabled: false,
                             resume: false,
                             domain: pd.domain_id,
                             // VMs do not have program images associated with them so these are always zero.
@@ -958,6 +1091,7 @@ pub fn build_capdl_spec(
                             sp: Word(0),
                             gprs: [].to_vec(),
                             master_fault_ep: None, // Not used on MCS kernel.
+                            domain: None,
                         }),
                     };
                     let vm_vcpu_tcb_obj_id = spec_container.add_root_object(NamedObject {
@@ -1008,7 +1142,6 @@ pub fn build_capdl_spec(
             TcbBoundSlot::CSpace as u32,
             pd_cnode_cap,
         ));
-        pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
@@ -1020,6 +1153,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.master_fault_ep = None; // Not used on MCS kernel.
             pd_tcb.extra.prio = pd.priority;
             pd_tcb.extra.max_prio = pd.priority;
+            pd_tcb.extra.fpu_disabled = !pd.fpu;
             pd_tcb.extra.resume = true;
             pd_tcb.extra.domain = pd.domain_id;
 
@@ -1057,16 +1191,28 @@ pub fn build_capdl_spec(
         }
 
         mon_pd_idx_by_dom[pd_domain_id as usize] = mon_pd_idx + 1;
+
+        pd_shadow_cspaces.insert(
+            pd_global_idx,
+            PDShadowCspace {
+                cspace: pd_cnode_obj_id,
+                endpoint: pd_ep_obj_id,
+                notification: pd_ntfn_obj_id,
+                sched_context: pd_sc_obj_id,
+                vspace: pd_vspace_obj_id,
+                tcb: pd_tcb_obj_id,
+            },
+        );
     }
 
     // *********************************
     // Step 4. Create channels
     // *********************************
     for channel in system.channels.iter() {
-        let pd_a_cspace_id = pd_id_to_cspace_id[&channel.end_a.pd];
-        let pd_b_cspace_id = pd_id_to_cspace_id[&channel.end_b.pd];
-        let pd_a_ntfn_id = pd_id_to_ntfn_id[&channel.end_a.pd];
-        let pd_b_ntfn_id = pd_id_to_ntfn_id[&channel.end_b.pd];
+        let pd_a_cspace_id = pd_shadow_cspaces[&channel.end_a.pd].cspace;
+        let pd_b_cspace_id = pd_shadow_cspaces[&channel.end_b.pd].cspace;
+        let pd_a_ntfn_id = pd_shadow_cspaces[&channel.end_a.pd].notification;
+        let pd_b_ntfn_id = pd_shadow_cspaces[&channel.end_b.pd].notification;
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
@@ -1096,7 +1242,9 @@ pub fn build_capdl_spec(
         if channel.end_a.pp {
             let pd_a_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_a.id;
             let pd_a_ep_badge = PPC_BADGE | channel.end_b.id;
-            let pd_b_ep_id = pd_id_to_ep_id[&channel.end_b.pd];
+            let pd_b_ep_id = pd_shadow_cspaces[&channel.end_b.pd]
+                .endpoint
+                .expect("exists as needs_ep() is true");
             let pd_a_ep_cap =
                 capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
             capdl_util_insert_cap_into_cspace(
@@ -1110,7 +1258,9 @@ pub fn build_capdl_spec(
         if channel.end_b.pp {
             let pd_b_ep_cap_idx = PD_BASE_OUTPUT_ENDPOINT_CAP + channel.end_b.id;
             let pd_b_ep_badge = PPC_BADGE | channel.end_a.id;
-            let pd_a_ep_id = pd_id_to_ep_id[&channel.end_a.pd];
+            let pd_a_ep_id = pd_shadow_cspaces[&channel.end_a.pd]
+                .endpoint
+                .expect("exists as needs_ep() is true");
             let pd_b_ep_cap =
                 capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
             capdl_util_insert_cap_into_cspace(
@@ -1123,7 +1273,7 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Parse domain schedule
+    // Step 5. Handle domain schedules
     // *********************************
 
     if let Some(sys_domain_schedule) = &system.domain_schedule {
@@ -1148,6 +1298,35 @@ pub fn build_capdl_spec(
         spec_container.spec.domain_schedule = Some(domain_schedule);
         spec_container.spec.domain_set_start = sys_domain_schedule.domain_start_idx.map(Word);
         spec_container.spec.domain_idx_shift = sys_domain_schedule.domain_idx_shift.map(Word);
+    }
+
+    // *********************************
+    // Step 5. Handle extra cap mappings
+    // *********************************
+
+    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
+        let pd_dest_cspace_id = pd_shadow_cspaces[&pd_dest_idx].cspace;
+
+        for cap_map in pd.cap_maps.iter() {
+            // TODO: Once we add more CapMap options, they might not all have
+            // the pd_name. But for now, they do.
+            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];
+
+            let cap_map_obj = match cap_map.cap_type {
+                CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
+                CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
+                CapMapType::VSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.vspace),
+                CapMapType::CSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.cspace),
+            };
+
+            // Map this into the destination pd's cspace and the specified slot.
+            capdl_util_insert_cap_into_cspace(
+                &mut spec_container,
+                pd_dest_cspace_id,
+                (PD_BASE_USER_CAPS + cap_map.slot) as u32,
+                cap_map_obj,
+            );
+        }
     }
 
     // *********************************
