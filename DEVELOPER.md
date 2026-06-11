@@ -107,20 +107,26 @@ prefix to the default one the SDK build script expects.
 When you build the SDK, provide two extra arguments:
 `--gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf`.
 
-## seL4 Version
+## Getting the Code
 
-The SDK includes a binary of the seL4 kernel.
-During the SDK build process the kernel is build from source.
+This is the git repository for the Microkit components.
+We use the [Google repo tool](https://docs.sel4.systems/projects/buildsystem/host-dependencies.html#get-googles-repo-tool) to manage seL4 project source code.
+For more information on repo manifest files, please see [the 'Manifests' section on the seL4 docsite](https://docs.sel4.systems/releases.html#manifests).
 
-Please clone seL4 from:
+```shell
+$ mkdir microkit
+$ cd microkit
+$ repo init -u https://github.com/seL4/microkit-manifest.git
+$ repo sync
+$ ls
+# microkit/  seL4/
+```
 
-    https://github.com/seL4/seL4.git
+One can also clone microkit and seL4 directly, but please keep in mind that the
+supported seL4 version (and what is tested in CI) is as described by the Manifest XML file.
+Microkit will generally work with other seL4 commits, but certain features or board
+support might not be available in older kernel releases.
 
-It should be noted that while Microkit uses mainline seL4, it is fairly tied to the
-specific version used.
-
-For this version of Microkit please use the following tag:
-`e912dff7341cf3b35475c3a7eee9a90c61b367a8`.
 
 ## Building the SDK
 
@@ -131,6 +137,8 @@ The SDK will be in `release/`.
 See the help menu of `build_sdk.py` for configuring how the SDK is built:
 
     $ ./pyenv/bin/python build_sdk.py --help
+
+During the build process, the seL4 kernel is built from source for each board.
 
 ## Using the SDK
 
