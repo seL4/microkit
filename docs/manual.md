@@ -826,7 +826,7 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
-## `seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_slot_to_cptr}
+## `seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_root_slot_to_cptr}
 
 Converts the slot identifier of the `<cspace>`'s capability element into an
 `seL4_CPtr` value to be used in `libsel4` calls by the PD.
@@ -990,7 +990,7 @@ It supports no attributes, but supports the following elements as children:
 * `cap_cspace`: A capability to a protection domain's CSpace.
 
 All of the elements support the `slot` attribute, which is is an opaque identifier used to address the capability at runtime.
-To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_slot_to_cptr) function.
+To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_root_slot_to_cptr) function.
 
 See the 'cap_sharing' example packaged in your SDK or [on GitHub](https://github.com/seL4/microkit/tree/main/example/cap_sharing).
 
