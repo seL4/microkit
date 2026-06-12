@@ -9,10 +9,10 @@
 #define CH_SECONDARY ((microkit_channel)0)
 
 // As per cap_sharing.system
-#define CAP_SECONDARY_SC  (microkit_cspace_slot_to_cptr(1))
-#define CAP_SECONDARY_TCB (microkit_cspace_slot_to_cptr(2))
-#define CAP_MY_SC         (microkit_cspace_slot_to_cptr(3))
-#define CAP_MY_TCB        (microkit_cspace_slot_to_cptr(4))
+#define CAP_SECONDARY_SC  (microkit_cspace_root_slot_to_cptr(1))
+#define CAP_SECONDARY_TCB (microkit_cspace_root_slot_to_cptr(2))
+#define CAP_MY_SC         (microkit_cspace_root_slot_to_cptr(3))
+#define CAP_MY_TCB        (microkit_cspace_root_slot_to_cptr(4))
 
 static void halt(void)
 {

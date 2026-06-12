@@ -516,7 +516,7 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
  * If the slot exceeds the valid range of inputs (0 <= slot < MICROKIT_MAX_USER_CAPS),
  * it returns the value `seL4_CapNull`.
  **/
-static inline seL4_CPtr microkit_cspace_slot_to_cptr(seL4_Word slot)
+static inline seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)
 {
     if (slot > MICROKIT_MAX_USER_CAPS) {
         return seL4_CapNull;
