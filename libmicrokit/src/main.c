@@ -63,6 +63,14 @@ static void run_init_funcs(void)
     }
 }
 
+static void deferred_flush(void)
+{
+    if (microkit_have_signal) {
+        seL4_Send(microkit_signal_cap, microkit_signal_msg);
+        microkit_have_signal = seL4_False;
+    }
+}
+
 static void handler_loop(void)
 {
     bool have_reply = false;
@@ -90,6 +98,7 @@ static void handler_loop(void)
         seL4_MessageInfo_t tag;
 
         if (have_reply) {
+            deferred_flush();
             tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
         } else if (microkit_have_signal) {
             tag = seL4_NBSendRecv(microkit_signal_cap, microkit_signal_msg, INPUT_CAP, &badge, REPLY_CAP);
