@@ -649,6 +649,43 @@ To find the full list of possible faults that could occur and details regarding 
 kind of fault, please see the 'Faults' section of the
 [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
 
+### x86 VCPU fault
+Please see the 'VMX BASIC EXIT REASONS' section of the
+[Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4]
+(https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html) for a list of possible VM Exit reasons.
+
+These message registers contain data relating to the VM Exit:
+- `SEL4_VMENTER_CALL_EIP_MR`: Instruction Pointer,
+- `SEL4_VMENTER_CALL_CONTROL_PPC_MR`: Primary Processor Based VM Execution Controls,
+- `SEL4_VMENTER_CALL_INTERRUPT_INFO_MR`: VM Entry Interruption-Information`,
+- `SEL4_VMENTER_FAULT_REASON_MR`: VM Exit reason,
+- `SEL4_VMENTER_FAULT_QUALIFICATION_MR`: VM Exit qualification,
+- `SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR`: Length of instruction that caused the VM Exit,
+- `SEL4_VMENTER_FAULT_GUEST_PHYSICAL_MR`: Guest Physical Address of the VM Exit,
+- `SEL4_VMENTER_FAULT_RFLAGS_MR`: Guest FLAGS register,
+- `SEL4_VMENTER_FAULT_GUEST_INT_MR`: Guest interruptability,
+- `SEL4_VMENTER_FAULT_CR3_MR`: Guest CR3.
+
+Some of these message registers may not contain valid data depending on the VM Exit reason,
+please consult the Intel SDM for more details.
+
+These message registers contain the guest general purpose registers at the time of VM Exit:
+- `SEL4_VMENTER_FAULT_EAX`
+- `SEL4_VMENTER_FAULT_EBX`
+- `SEL4_VMENTER_FAULT_ECX`
+- `SEL4_VMENTER_FAULT_EDX`
+- `SEL4_VMENTER_FAULT_ESI`
+- `SEL4_VMENTER_FAULT_EDI`
+- `SEL4_VMENTER_FAULT_EBP`
+- `SEL4_VMENTER_FAULT_R8`
+- `SEL4_VMENTER_FAULT_R9`
+- `SEL4_VMENTER_FAULT_R10`
+- `SEL4_VMENTER_FAULT_R11`
+- `SEL4_VMENTER_FAULT_R12`
+- `SEL4_VMENTER_FAULT_R13`
+- `SEL4_VMENTER_FAULT_R14`
+- `SEL4_VMENTER_FAULT_R15`
+
 ## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
 Performs a call to a protected procedure in a different PD.
@@ -826,6 +863,20 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
+## `void microkit_vcpu_x86_on(void)`
+
+Allow the PD to switch to guest execution mode with the bound vCPU every time `init()`, `notified()` or `fault()` return.
+
+The caller is responsible for initialising the VCPU's instruction pointer, Primary Processor-Based VM-Execution Controls,
+VM-Entry Interruption-Information Field and other architectural states to the corresponding VMCS fields via
+`microkit_vcpu_x86_write_vmcs()`. For more details, please see the 'Virtualisation' section of the
+[seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf). For architectural details,
+please consult the [Intel SDM](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html).
+
+## `void microkit_vcpu_x86_off(void)`
+
+Stop the PD from switching to guest execution mode when `init()`, `notified()` or `fault()` return.
+
 ## `seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_root_slot_to_cptr}
 
 Converts the slot identifier of the `<cspace>`'s capability element into an
@@ -948,6 +999,7 @@ The `virtual_machine` element has the following attributes:
 Additionally, it supports the following child elements:
 
 * `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
+    * On x86-64, there is a limit of one VCPU per PD.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
 The `vcpu` element has the following attributes:
@@ -1027,6 +1079,7 @@ The `end` element has the following attributes:
 * `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
 * `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
         Protected procedure calls can only be to PDs of strictly higher priority.
+        On x86-64, PDs with virtual machines cannot receive protected procedure calls.
 * `notify`: (optional) Indicates that the protection domain for this end can send a notification to the other end; defaults to true.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier.
 

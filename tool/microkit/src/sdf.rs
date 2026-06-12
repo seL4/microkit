@@ -2151,6 +2151,25 @@ pub fn parse(
             ));
         }
 
+        // When seL4_VMEnter() is called, the kernel only checks the VMM's bound
+        // notification for pending signals. Because the endpoint object isn't passed
+        // or checked for pending messages, PPC won't work while the VCPU is on.
+        // Technically, PPC could still work when the VCPU is off, but we shouldn't
+        // expose this footgun to users.
+        if config.arch == Arch::X86_64
+            && ((ch.end_a.pp && pd_b.virtual_machine.is_some())
+                || (ch.end_b.pp && pd_a.virtual_machine.is_some()))
+        {
+            return Err(format!(
+                "Error: It is not possible to PPC to PD '{}' with a bound vCPU from PD '{}' on x86_64 @ {}:{}:{}",
+                    if ch.end_a.pp {&pd_b.name} else {&pd_a.name},
+                    if ch.end_a.pp {&pd_a.name} else {&pd_b.name},
+                    filename.display(),
+                    pd_a.text_pos.unwrap().row,
+                    pd_a.text_pos.unwrap().col
+            ));
+        }
+
         ch_ids[ch.end_a.pd].push(ch.end_a.id);
         ch_ids[ch.end_b.pd].push(ch.end_b.id);
     }
