@@ -61,6 +61,27 @@ pub mod aarch64 {
         pub const MT_NORMAL: u64 = 0b100;
     }
 
+    /// See fixed values in Table D8-96 "Stage 2 MemAttr[3:0] encoding"
+    #[allow(non_upper_case_globals, reason = "matching ARM naming convention")]
+    pub mod s2_mem_attr {
+        pub const DEVICE_nGnRnE: u64 = 0b0000;
+        pub const DEVICE_nGnRE: u64 = 0b0001;
+        pub const DEVICE_nGRE: u64 = 0b0010;
+        pub const DEVICE_GRE: u64 = 0b0011;
+
+        pub const NORMAL_INNER_NC_OUTER_NC: u64 = 0b0101;
+        pub const NORMAL_INNER_WTC_OUTER_NC: u64 = 0b0110;
+        pub const NORMAL_INNER_WBC_OUTER_NC: u64 = 0b0111;
+
+        pub const NORMAL_INNER_NC_OUTER_WTC: u64 = 0b1001;
+        pub const NORMAL_INNER_WTC_OUTER_WTC: u64 = 0b1010;
+        pub const NORMAL_INNER_WBC_OUTER_WTC: u64 = 0b1011;
+
+        pub const NORMAL_INNER_NC_OUTER_WBC: u64 = 0b1101;
+        pub const NORMAL_INNER_WTC_OUTER_WBC: u64 = 0b1110;
+        pub const NORMAL_INNER_WBC_OUTER_WBC: u64 = super::s1_mair_attr_index::MT_NORMAL;
+    }
+
     pub mod descriptor_type {
         //! The translation table descriptor formats, as per §D8.3 "Translation
         //! table descriptor formats" of ARM DDI 0487 L.b. Specifically,
