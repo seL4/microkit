@@ -190,13 +190,8 @@ static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_po
 {
     seL4_Error err;
     seL4_UserContext ctxt = {0};
-#if defined(CONFIG_ARCH_AARCH64)
     ctxt.pc = entry_point;
-#elif defined(CONFIG_ARCH_X86_64)
-    ctxt.rip = entry_point;
-#else
-#error "unknown architecture for 'microkit_vcpu_restart'"
-#endif
+
     err = seL4_TCB_WriteRegisters(
               BASE_VM_TCB_CAP + vcpu,
               seL4_True,
@@ -220,9 +215,7 @@ static inline void microkit_vcpu_stop(microkit_child vcpu)
         microkit_internal_crash(err);
     }
 }
-#endif
 
-#if defined(CONFIG_ARM_HYPERVISOR_SUPPORT)
 static inline void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16 irq, seL4_Uint8 priority,
                                                 seL4_Uint8 group, seL4_Uint8 index)
 {
@@ -265,7 +258,7 @@ static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word re
         microkit_internal_crash(err);
     }
 }
-#endif
+#endif /* CONFIG_ARM_HYPERVISOR_SUPPORT */
 
 #if defined(CONFIG_ALLOW_SMC_CALLS)
 static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)
@@ -277,7 +270,7 @@ static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMC
         microkit_internal_crash(err);
     }
 }
-#endif
+#endif /* CONFIG_ALLOW_SMC_CALLS */
 
 #if defined(CONFIG_ARCH_X86_64)
 static inline void microkit_x86_ioport_write_8(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data)
