@@ -637,7 +637,10 @@ as to what fault occurred.
 The `reply_msginfo` argument is given by libmicrokit and can be used to reply to the fault.
 
 The returned `seL4_Bool` is whether or not to reply to the fault with the message `reply_msginfo`.
-Returning `seL4_True` will reply to the fault. Returning `seL4_False` will not reply to the fault.
+Returning `seL4_True` will reply to the fault and resume the child PD or vCPU at the fault restart program counter.
+For more details, please see the "Faults" section of the [seL4 Manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
+Returning `seL4_False` will not reply to the fault and causes the child PD or vCPU to no longer run.
 
 You can use `microkit_msginfo_get_label` on `msginfo` to deduce what kind of fault happened
 (for example, whether it was a user exception or a virtual memory fault).
@@ -648,6 +651,43 @@ to handle it.
 To find the full list of possible faults that could occur and details regarding to replying to a particular
 kind of fault, please see the 'Faults' section of the
 [seL4 reference manual](https://sel4.systems/Info/Docs/seL4-manual-latest.pdf).
+
+### x86 VCPU fault
+Please see the 'VMX BASIC EXIT REASONS' section of the
+[Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4]
+(https://cdrdv2.intel.com/v1/dl/getContent/671200) for a list of possible VM Exit reasons.
+
+These message registers contain data relating to the VM Exit:
+- `SEL4_VMENTER_CALL_EIP_MR`: Instruction Pointer,
+- `SEL4_VMENTER_CALL_CONTROL_PPC_MR`: Primary Processor Based VM Execution Controls,
+- `SEL4_VMENTER_CALL_INTERRUPT_INFO_MR`: VM Entry Interruption-Information,
+- `SEL4_VMENTER_FAULT_REASON_MR`: VM Exit reason,
+- `SEL4_VMENTER_FAULT_QUALIFICATION_MR`: VM Exit qualification,
+- `SEL4_VMENTER_FAULT_INSTRUCTION_LEN_MR`: Length of instruction that caused the VM Exit,
+- `SEL4_VMENTER_FAULT_GUEST_PHYSICAL_MR`: Guest Physical Address of the VM Exit,
+- `SEL4_VMENTER_FAULT_RFLAGS_MR`: Guest FLAGS register,
+- `SEL4_VMENTER_FAULT_GUEST_INT_MR`: Guest interruptability,
+- `SEL4_VMENTER_FAULT_CR3_MR`: Guest CR3.
+
+Some of these message registers may not contain valid data depending on the VM Exit reason,
+please consult the Intel SDM for more details.
+
+These message registers contain the guest general purpose registers at the time of VM Exit:
+- `SEL4_VMENTER_FAULT_EAX`
+- `SEL4_VMENTER_FAULT_EBX`
+- `SEL4_VMENTER_FAULT_ECX`
+- `SEL4_VMENTER_FAULT_EDX`
+- `SEL4_VMENTER_FAULT_ESI`
+- `SEL4_VMENTER_FAULT_EDI`
+- `SEL4_VMENTER_FAULT_EBP`
+- `SEL4_VMENTER_FAULT_R8`
+- `SEL4_VMENTER_FAULT_R9`
+- `SEL4_VMENTER_FAULT_R10`
+- `SEL4_VMENTER_FAULT_R11`
+- `SEL4_VMENTER_FAULT_R12`
+- `SEL4_VMENTER_FAULT_R13`
+- `SEL4_VMENTER_FAULT_R14`
+- `SEL4_VMENTER_FAULT_R15`
 
 ## `microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)`
 
@@ -826,6 +866,22 @@ virtual CPU with ID `vcpu`.
 Write the registers of a given virtual CPU with ID `vcpu`. The `regs` argument is the pointer to
 the struct of registers `seL4_VCPUContext` that are written from.
 
+## `void microkit_vcpu_x86_on(void)`
+
+Start running the vCPU bound to this PD.
+
+The vCPU runs after every return from a Microkit entrypoint; it does not run concurrently with the native thread.
+
+The kernel performs minimal setup of the vCPU's architectural state, configuring only the hardware-mandated
+fixed bits and setting VMCS fields required to safely context-switch between VMX root and non-root operations.
+The caller is responsible for initialising all other architectural state such as the instruction pointer using
+`microkit_vcpu_x86_write_vmcs()`, in accordance with the
+[Intel SDM](https://cdrdv2.intel.com/v1/dl/getContent/671200).
+
+## `void microkit_vcpu_x86_off(void)`
+
+Stop the PD from switching to guest execution mode when a Microkit entrypoint returns.
+
 ## `seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)` {#libmicrokit_cspace_root_slot_to_cptr}
 
 Converts the slot identifier of the `<cspace>`'s capability element into an
@@ -938,6 +994,8 @@ The `protection_domain` element has the same attributes as any other protection 
 * `id`: The ID of the child for the parent to refer to.
 * `setvar_id`: (optional) Specifies a symbol in the parent program image. This symbol will be rewritten with the ID of the child.
 
+On x86-64, a PD with a VCPU cannot have child PDs.
+
 The `virtual_machine` element has the following attributes:
 
 * `name`: A unique name for the virtual machine
@@ -948,6 +1006,7 @@ The `virtual_machine` element has the following attributes:
 Additionally, it supports the following child elements:
 
 * `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
+    * On x86-64, there is a limit of one VCPU per PD.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
 The `vcpu` element has the following attributes:
@@ -1027,6 +1086,7 @@ The `end` element has the following attributes:
 * `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
 * `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
         Protected procedure calls can only be to PDs of strictly higher priority.
+        On x86-64, PDs with virtual machines cannot receive protected procedure calls.
 * `notify`: (optional) Indicates that the protection domain for this end can send a notification to the other end; defaults to true.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier.
 

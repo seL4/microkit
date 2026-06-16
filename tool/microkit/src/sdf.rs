@@ -2071,6 +2071,18 @@ pub fn parse(
             }
             vms.push(&vm.name);
         }
+
+        if config.arch == Arch::X86_64 && pd.virtual_machine.is_some() && pd.has_children {
+            // When seL4_VMEnter() is called, the kernel only checks the VMM's bound
+            // notification for pending signals. Because the endpoint object isn't passed
+            // or checked for pending messages, Child PDs won't work while the VCPU is on.
+            // Technically, Child PDs could still work when the VCPU is off, but we shouldn't
+            // expose this footgun to users.
+            return Err(format!(
+                    "Error: It is not possible for PD '{}' with a bound vCPU to have children on x86_64: {}",
+                    pd.name(),
+                    loc_string(&xml_sdf, pd.text_pos.unwrap())));
+        }
     }
 
     // Ensure no duplicate IRQs
@@ -2148,6 +2160,21 @@ pub fn parse(
                 "Error: PPCs must be to protection domains of strictly higher priorities; \
                         channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
                 pd_b.name, pd_b.priority, pd_a.name, pd_a.priority
+            ));
+        }
+
+        if config.arch == Arch::X86_64
+            && ((ch.end_a.pp && pd_b.virtual_machine.is_some())
+                || (ch.end_b.pp && pd_a.virtual_machine.is_some()))
+        {
+            // Same cause as child PD above
+            return Err(format!(
+                "Error: It is not possible to PPC to PD '{}' with a bound vCPU from PD '{}' on x86_64 @ {}:{}:{}",
+                    if ch.end_a.pp {&pd_b.name} else {&pd_a.name},
+                    if ch.end_a.pp {&pd_a.name} else {&pd_b.name},
+                    filename.display(),
+                    pd_a.text_pos.unwrap().row,
+                    pd_a.text_pos.unwrap().col
             ));
         }
 
