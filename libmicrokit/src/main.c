@@ -17,6 +17,9 @@
 #define PD_MASK 0xff
 #define CHANNEL_MASK 0x3f
 
+#define BADGE_FAULT_BIT 62
+#define BADGE_ENDPOINT_BIT 63
+
 /* All globals are prefixed with microkit_* to avoid clashes with user defined globals. */
 
 bool microkit_passive;
@@ -26,6 +29,10 @@ char microkit_name[MICROKIT_PD_NAME_LENGTH];
 seL4_Bool microkit_have_signal = seL4_False;
 seL4_CPtr microkit_signal_cap;
 seL4_MessageInfo_t microkit_signal_msg;
+
+#if defined(CONFIG_VTX)
+struct microkit_x86_vcpu_state microkit_x86_vcpu_state;
+#endif /* CONFIG_VTX */
 
 seL4_Word microkit_irqs;
 seL4_Word microkit_notifications;
@@ -71,10 +78,49 @@ static void deferred_flush(void)
     }
 }
 
+#if defined(CONFIG_VTX)
+static seL4_MessageInfo_t x86_vcpu_resume(seL4_Word *badge)
+{
+    /* There is no seL4 invocation which combines a VMEnter and a non-blocking send.
+     * Thus, we must perform any deferred signals from `microkit_deferred_notify()` /
+     * `microkit_deferred_irq_ack()` before invoking VMEnter. */
+    deferred_flush();
+
+    seL4_Word is_fault, fault_reason;
+    struct microkit_x86_vcpu_state *s = &microkit_x86_vcpu_state;
+
+    x64_sys_send_recv(seL4_SysVMEnter, 0, badge, 0, &is_fault,
+                      &s->rip, &s->prim_proc_ctl, &s->irq_info, &fault_reason, 0);
+    /* We want to follow the documented kernel behaviour where these 4 values are
+     * always populated in the message registers. However, due to `setMR()`'s behaviour
+     * in include/object/tcb.h of the kernel, these 4 values will only be set in
+     * CPU registers. So we need to copy them to the IPC buffer to conform to the
+     * documented kernel behaviour.
+     *
+     * The other reason why we want to manage these values is so that the user does not
+     * have to worry about saving/updating them when servicing a notification. */
+    microkit_mr_set(SEL4_VMENTER_CALL_EIP_MR, s->rip);
+    microkit_mr_set(SEL4_VMENTER_CALL_CONTROL_PPC_MR, s->prim_proc_ctl);
+    microkit_mr_set(SEL4_VMENTER_CALL_INTERRUPT_INFO_MR, s->irq_info);
+    /* The 4th value (SEL4_VMENTER_FAULT_REASON_MR) is only valid when is_fault is true. */
+
+    /* Create a dummy msgInfo so that we can call `fault()`, as on x86 a VMExit is
+     * not an IPC as on other architectures. */
+    if (is_fault) {
+        microkit_mr_set(SEL4_VMENTER_FAULT_REASON_MR, fault_reason);
+        *badge |= 1ull << BADGE_FAULT_BIT;
+        return seL4_MessageInfo_new(0, 0, 0, SEL4_VMENTER_NUM_FAULT_MSGS);
+    } else {
+        /* VCPU got interrupted due to a notification, no msgInfo. */
+        return seL4_MessageInfo_new(0, 0, 0, 0);
+    }
+}
+#endif
+
 static void handler_loop(void)
 {
     bool have_reply = false;
-    seL4_MessageInfo_t reply_tag;
+    seL4_MessageInfo_t reply_tag = seL4_MessageInfo_new(0, 0, 0, 0);
 
     /**
      * Because of https://github.com/seL4/seL4/issues/1536
@@ -97,7 +143,16 @@ static void handler_loop(void)
         seL4_Word badge;
         seL4_MessageInfo_t tag;
 
+#if defined(CONFIG_VTX)
+        if (microkit_x86_vcpu_state.is_on) {
+            /* We should never have a reply message from the `protected()` endpoint,
+            * as on x86 a PD with a bound vCPU cannot receive PPCs.*/
+            // assert(!have_reply);
+            tag = x86_vcpu_resume(&badge);
+        } else if (have_reply) {
+#else
         if (have_reply) {
+#endif
             deferred_flush();
             tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
         } else if (microkit_have_signal) {
@@ -107,13 +162,21 @@ static void handler_loop(void)
             tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
         }
 
-        uint64_t is_endpoint = badge >> 63;
-        uint64_t is_fault = (badge >> 62) & 1;
+        uint64_t is_endpoint = badge >> BADGE_ENDPOINT_BIT;
+        uint64_t is_fault = (badge >> BADGE_FAULT_BIT) & 1;
 
         have_reply = false;
 
         if (is_fault) {
             seL4_Bool reply_to_fault = fault(badge & PD_MASK, tag, &reply_tag);
+#if defined(CONFIG_VTX)
+            /* If fault() returns false then we shouldn't resume the VCPU. */
+            if (!reply_to_fault) {
+                microkit_x86_vcpu_state.is_on = seL4_False;
+            }
+            /* There won't be anything to reply to for a VCPU fault. */
+            reply_to_fault = seL4_False;
+#endif
             if (reply_to_fault) {
                 have_reply = true;
             }

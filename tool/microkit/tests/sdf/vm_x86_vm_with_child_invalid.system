@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="VMM" priority="100" stack_size="0x2000">
+        <program_image path="vmm_x86_64.elf" />
+        <map mr="guest_ram" vaddr="0x80000000" perms="rw" setvar_vaddr="guest_ram_vaddr" setvar_size="guest_ram_size" />
+
+        <virtual_machine name="linux">
+            <vcpu id="0" />
+            <map mr="guest_ram" vaddr="0x0" perms="rwx" cached="true" />
+        </virtual_machine>
+
+        <protection_domain id="1" name="children_service" priority="1" >
+            <program_image path="children_service.elf" />
+        </protection_domain>
+    </protection_domain>
+</system>
