@@ -1111,6 +1111,7 @@ The currently supported platforms are:
 * odroidc2
 * odroidc4
 * qemu_virt_aarch64
+* qemu_virt_aarch64_el1
 * qemu_virt_riscv64
 * rockpro64
 * rock3b
@@ -1290,9 +1291,9 @@ you can load the image and DTB at another address.
 
 ## QEMU virt (AArch64) {#qemu_virt_aarch64}
 
-Support is available for the virtual AArch64 QEMU platform. This is a platform that is not based
-on any specific SoC or hardware platform and is intended for simulating systems for
-development or testing.
+Support is available for the virtual AArch64 QEMU platform running in EL2. This is a
+platform that is not based on any specific SoC or hardware platform and is intended for simulating
+systems for development or testing.
 
 It should be noted that the platform support is configured with 2GB of main memory and the
 Cortex-A53 CPU. seL4 needs to know the memory layout and CPU at build-time so if
@@ -1303,6 +1304,30 @@ You can use the following command to simulate a Microkit system:
 
     $ qemu-system-aarch64 \
         -machine virt,virtualization=on \
+        -cpu cortex-a53 \
+        -nographic \
+        -serial mon:stdio \
+        -device loader,file=[SYSTEM IMAGE],addr=0x70000000,cpu-num=0 \
+        -m size=2G
+
+When using the [SMP configurations](#multicore_config) add the `-smp 4` argument to the QEMU command.
+
+## QEMU virt (AArch64) in EL1 {#qemu_virt_aarch64_el1}
+
+Support is available for the virtual AArch64 QEMU platform running in EL1. This is a platform that
+is not based on any specific SoC or hardware platform and is intended for simulating systems for
+development or testing. This platform differs from the standard QEMU virt platform in that seL4 runs
+in EL1, making it usable on KVM based virtual machines.
+
+It should be noted that the platform support is configured with 2GB of main memory and the
+Cortex-A53 CPU. seL4 needs to know the memory layout and CPU at build-time so if
+you want to change these parameters (e.g to allow more memory), you will have to change the kernel
+options for `qemu_virt_aarch64_el1` in `build_sdk.py`.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-aarch64 \
+        -machine virt \
         -cpu cortex-a53 \
         -nographic \
         -serial mon:stdio \
