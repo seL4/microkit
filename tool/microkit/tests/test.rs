@@ -641,7 +641,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_invalid.system",
-            "Error: failed to parse PCI address '0:0:0' on element 'irq'",
+            "Error: expected PCI address in bus:device.function form on element 'irq'",
         )
     }
 
@@ -713,6 +713,14 @@ mod protection_domain {
     }
 
     #[test]
+    fn test_overlapping_mixed_page_size_maps() {
+        check_error(&DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_overlapping_mixed_page_sizes.system",
+            "Error: map for 'small_region' has virtual address range [0x201000..0x202000) which overlaps with map for 'large_region' [0x200000..0x400000) in protection domain 'test' @"
+        )
+    }
+
+    #[test]
     fn test_overlapping_x86_io_ports_1() {
         check_error(&DEFAULT_X86_64_KERNEL_CONFIG,
             "pd_overlapping_x86_io_ports_1.system",
@@ -743,6 +751,159 @@ mod protection_domain {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "pd_invalid_cpu.system",
             "Error: cpu core must be less than 1, got 10 on element 'protection_domain':",
+        )
+    }
+}
+
+#[cfg(test)]
+mod iommu {
+    use super::*;
+
+    #[test]
+    fn test_out_of_bound() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_out_of_bound.system",
+            "Error: iovaddr (0x8000000000) must be less than 0x8000000000 on element 'iomap': iommu_out_of_bound.system:10:9",
+        )
+    }
+
+    #[test]
+    fn test_range_out_of_bound() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_range_out_of_bound.system",
+            "Error: iomap for 'region' has io address range [0x7fff800000..0x8000200000) which exceeds valid address space [0x0..0x8000000000) @",
+        )
+    }
+
+    #[test]
+    fn test_address_overflow() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_address_overflow.system",
+            "Error: iomap for 'region' has address range that overflows @",
+        )
+    }
+
+    #[test]
+    fn test_valid_perms_and_bound() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_valid_perms_and_bound.system",
+        )
+    }
+
+    #[test]
+    fn test_perms_read_write() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_perms_read_write.system",
+        )
+    }
+
+    #[test]
+    fn test_perms_write_only() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_perms_write_only.system",
+        )
+    }
+
+    #[test]
+    fn test_perms_execute_invalid() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_perms_execute_invalid.system",
+            "Error: perms for io mapped memory must only be a combination of 'r' and 'w' on element 'iomap':",
+        )
+    }
+
+    #[test]
+    fn test_overlap_different_devices() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_overlap_different_devices.system",
+        )
+    }
+
+    #[test]
+    fn test_overlap_same_device() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_overlap_same_device.system",
+            "Error: map for 'region_b' has io address range [0x0..0x1000) which overlaps with map for 'region_a' [0x0..0x1000) in PCI device 00:03.0 @ iommu_overlap_same_device.system:12:9",
+        )
+    }
+
+    #[test]
+    fn test_same_mr_different_devices() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_same_mr_different_devices.system",
+        )
+    }
+
+    #[test]
+    fn test_overlap_mixed_page_sizes() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_overlap_mixed_page_sizes.system",
+            "Error: map for 'small_region' has io address range [0x1000..0x2000) which overlaps with map for 'large_region' [0x0..0x200000) in PCI device 00:03.0 @",
+        )
+    }
+
+    #[test]
+    fn test_pci_invalid() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_pci_invalid.system",
+            "Error: failed to parse device peripheral_id '0:g.0': failed to parse PCI device on element 'io_address_space': iommu_pci_invalid.system:9:5",
+        )
+    }
+
+    #[test]
+    fn test_pci_negative_bus() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_pci_negative_bus.system",
+            "Error: failed to parse device peripheral_id '-1:0.0': PCI bus must be within [0..255] on element 'io_address_space':",
+        )
+    }
+
+    #[test]
+    fn test_pci_negative_device() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_pci_negative_device.system",
+            "Error: failed to parse device peripheral_id '0:-1.0': PCI device must be within [0..31] on element 'io_address_space':",
+        )
+    }
+
+    #[test]
+    fn test_pci_negative_function() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_pci_negative_function.system",
+            "Error: failed to parse device peripheral_id '0:0.-1': PCI function must be within [0..7] on element 'io_address_space':",
+        )
+    }
+
+    #[test]
+    fn test_duplicate_device() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_duplicate_device.system",
+            "Error: duplicate device name 'test_device' on element 'io_address_space':",
+        )
+    }
+
+    #[test]
+    fn test_duplicate_device_identifier() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_duplicate_device_identifier.system",
+            "Error: duplicate device peripheral_id 'PCI device 00:03.0' on element 'io_address_space':",
         )
     }
 }
@@ -1060,6 +1221,15 @@ mod system {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "sys_map_too_high.system",
             "Error: vaddr (0x1000000000000000) must be less than 0xffffffc000 on element 'map'",
+        )
+    }
+
+    #[test]
+    fn test_map_range_too_high() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "sys_map_range_too_high.system",
+            "Error: map for 'foo' has virtual address range [0xffffffe000..0x10000000000) which exceeds valid address space [0x0..0xfffffff000) @",
         )
     }
 
