@@ -113,6 +113,40 @@ pub struct SysMap {
     pub text_pos: Option<roxmltree::TextPos>,
 }
 
+trait Map {
+    fn mr_name(&self) -> &str;
+    fn addr(&self) -> u64;
+    fn text_pos(&self) -> Option<roxmltree::TextPos>;
+    fn element(&self) -> &'static str;
+    fn addr_name(&self) -> &'static str;
+    fn range_name(&self) -> &'static str;
+}
+
+impl Map for SysMap {
+    fn mr_name(&self) -> &str {
+        &self.mr
+    }
+
+    fn addr(&self) -> u64 {
+        self.vaddr
+    }
+
+    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+        self.text_pos
+    }
+
+    fn element(&self) -> &'static str {
+        "map"
+    }
+
+    fn addr_name(&self) -> &'static str {
+        "vaddr"
+    }
+
+    fn range_name(&self) -> &'static str {
+        "virtual address range"
+    }
+}
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SysMemoryRegionKind {
     User,
@@ -350,49 +384,6 @@ pub struct VirtualCpu {
     pub id: u64,
     pub setvar_id: Option<String>,
     pub cpu: Option<CpuCore>,
-}
-
-/// To avoid code duplication for handling protection domains
-/// and virtual machines, which have a lot in common.
-trait ExecutionContext {
-    fn name(&self) -> &String;
-    fn kind(&self) -> &'static str;
-}
-
-impl ExecutionContext for ProtectionDomain {
-    fn name(&self) -> &String {
-        &self.name
-    }
-
-    fn kind(&self) -> &'static str {
-        "protection domain"
-    }
-}
-
-impl ExecutionContext for VirtualMachine {
-    fn name(&self) -> &String {
-        &self.name
-    }
-
-    fn kind(&self) -> &'static str {
-        "virtual machine"
-    }
-}
-
-impl SysMapPerms {
-    fn from_str(s: &str) -> Result<u8, ()> {
-        let mut perms = 0;
-        for c in s.chars() {
-            match c {
-                'r' => perms |= SysMapPerms::Read as u8,
-                'w' => perms |= SysMapPerms::Write as u8,
-                'x' => perms |= SysMapPerms::Execute as u8,
-                _ => return Err(()),
-            }
-        }
-
-        Ok(perms)
-    }
 }
 
 impl SysMap {
@@ -1779,55 +1770,93 @@ pub struct SystemDescription {
     pub channels: Vec<Channel>,
 }
 
-fn check_maps(
+fn location_suffix_format(
+    xml_sdf: &XmlSystemDescription,
+    text_pos: Option<roxmltree::TextPos>,
+) -> String {
+    text_pos
+        .map(|pos| format!("@ {}", loc_string(xml_sdf, pos)))
+        .unwrap_or_default()
+}
+
+// max_end is the first invalid virtual address
+fn check_maps<'a, M, I>(
     xml_sdf: &XmlSystemDescription,
     mrs: &[SysMemoryRegion],
-    e: &dyn ExecutionContext,
-    maps: &[SysMap],
-) -> Result<(), String> {
-    let mut checked_maps = Vec::with_capacity(maps.len());
+    maps: I,
+    address_space: &str,
+    max_end: u64,
+) -> Result<(), String>
+where
+    M: Map + 'a,
+    I: IntoIterator<Item = &'a M>,
+{
+    let mut checked_maps: Vec<(&str, u64, u64)> = Vec::new();
+
     for map in maps {
-        let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
-        let pos = map.text_pos.unwrap();
-        match maybe_mr {
+        let element = map.element();
+        match mrs.iter().find(|mr| mr.name == map.mr_name()) {
             Some(mr) => {
-                if !map.vaddr.is_multiple_of(mr.page_size_bytes()) {
+                if !map.addr().is_multiple_of(mr.page_size_bytes()) {
                     return Err(format!(
-                        "Error: invalid vaddr alignment on 'map' @ {}",
-                        loc_string(xml_sdf, pos)
+                        "Error: invalid {} alignment on '{element}' {}",
+                        map.addr_name(),
+                        location_suffix_format(xml_sdf, map.text_pos())
                     ));
                 }
 
-                let map_start = map.vaddr;
-                let map_end = map.vaddr + mr.size;
-                for (name, start, end) in &checked_maps {
+                let map_start = map.addr();
+                let Some(map_end) = map_start.checked_add(mr.size) else {
+                    return Err(format!(
+                        "Error: {element} for '{}' has address range that overflows {}",
+                        map.mr_name(),
+                        location_suffix_format(xml_sdf, map.text_pos())
+                    ));
+                };
+
+                if map_end > max_end {
+                    return Err(format!(
+                        "Error: {element} for '{}' has {} [{:#x}..{:#x}) which exceeds valid address space [{:#x}..{:#x}) {}",
+                        map.mr_name(),
+                        map.range_name(),
+                        map_start,
+                        map_end,
+                        0,
+                        max_end,
+                        location_suffix_format(xml_sdf, map.text_pos())
+                    ));
+                }
+
+                for (name, start, end) in checked_maps.iter() {
                     if !(map_start >= *end || map_end <= *start) {
-                        return Err(
-                            format!(
-                                "Error: map for '{}' has virtual address range [{:#x}..{:#x}) which overlaps with map for '{}' [{:#x}..{:#x}) in {} '{}' @ {}",
-                                map.mr,
-                                map_start,
-                                map_end,
-                                name,
-                                start,
-                                end,
-                                e.kind(),
-                                e.name(),
-                                loc_string(xml_sdf, map.text_pos.unwrap())
-                            )
-                        );
+                        return Err(format!(
+                            "Error: map for '{}' has {} [{:#x}..{:#x}) which overlaps with map for '{}' [{:#x}..{:#x}) in {} {}",
+                            map.mr_name(),
+                            map.range_name(),
+                            map_start,
+                            map_end,
+                            name,
+                            start,
+                            end,
+                            address_space,
+                            location_suffix_format(xml_sdf, map.text_pos())
+                        ));
                     }
                 }
-                checked_maps.push((&map.mr, map_start, map_end));
+                checked_maps.push((map.mr_name(), map_start, map_end));
             }
             None => {
                 return Err(format!(
-                    "Error: invalid memory region name '{}' on 'map' @ {}",
-                    map.mr,
-                    loc_string(xml_sdf, pos)
-                ))
+                    "Error: invalid memory region name '{}' on '{element}' {}",
+                    map.mr_name(),
+                    location_suffix_format(xml_sdf, map.text_pos())
+                ));
             }
-        };
+        }
+    }
+
+    Ok(())
+}
     }
 
     Ok(())
@@ -2322,9 +2351,21 @@ pub fn parse(
 
     // Ensure that all maps are correct
     for pd in &pds {
-        check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
+        check_maps(
+            &xml_sdf,
+            &mrs,
+            pd.maps.iter(),
+            &format!("protection domain '{}'", pd.name),
+            config.pd_map_max_vaddr(pd.stack_size),
+        )?;
         if let Some(vm) = &pd.virtual_machine {
-            check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+            check_maps(
+                &xml_sdf,
+                &mrs,
+                vm.maps.iter(),
+                &format!("virtual machine '{}'", vm.name),
+                config.vm_map_max_vaddr(),
+            )?;
         }
     }
 
