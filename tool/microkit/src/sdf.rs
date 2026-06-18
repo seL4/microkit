@@ -417,7 +417,7 @@ impl SysMap {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"),
+                format!("vaddr ({vaddr:#x}) must be less than {max_vaddr:#x}"),
             ));
         }
 
@@ -633,7 +633,7 @@ impl ProtectionDomain {
                 xml_sdf,
                 node,
                 format!(
-                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
+                    "stack size must be between {PD_MIN_STACK_SIZE:#x} bytes and {PD_MAX_STACK_SIZE:#x} bytes"
                 ),
             ));
         }
@@ -1545,7 +1545,7 @@ impl SysMemoryRegion {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("page size 0x{page_size:x} not supported"),
+                format!("page size {page_size:#x} not supported"),
             ));
         }
 
@@ -1804,7 +1804,7 @@ fn check_maps(
                     if !(map_start >= *end || map_end <= *start) {
                         return Err(
                             format!(
-                                "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
+                                "Error: map for '{}' has virtual address range [{:#x}..{:#x}) which overlaps with map for '{}' [{:#x}..{:#x}) in {} '{}' @ {}",
                                 map.mr,
                                 map_start,
                                 map_end,
@@ -2371,7 +2371,7 @@ pub fn parse(
                     let pos = mr.text_pos.unwrap();
                     return Err(
                         format!(
-                            "Error: memory region '{}' physical address range [0x{:x}..0x{:x}) overlaps with another memory region '{}' [0x{:x}..0x{:x}) @ {}",
+                            "Error: memory region '{}' physical address range [{:#x}..{:#x}) overlaps with another memory region '{}' [{:#x}..{:#x}) @ {}",
                             mr.name,
                             mr_start,
                             mr_end,
