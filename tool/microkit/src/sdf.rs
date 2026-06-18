@@ -22,9 +22,10 @@ use crate::sel4::{
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
@@ -53,11 +54,6 @@ pub const MONITOR_PD_NAME: &str = "monitor";
 pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;
 const PD_MIN_STACK_SIZE: u64 = 0x1000;
 const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
-
-/// Maximum values for PCI bus, device, function numbers. Inclusive.
-const PCI_BUS_MAX: i64 = (1 << 8) - 1;
-const PCI_DEV_MAX: i64 = (1 << 5) - 1;
-const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
 
 /// Maximum x86 IRQ vector value. Inclusive.
 /// This value is calculated by the kernel as `irq_user_max - irq_user_min` in
@@ -93,6 +89,105 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
     format!("{}:{}:{}", xml_sdf.filename.display(), pos.row, pos.col)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PciDevice {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+}
+
+impl PciDevice {
+    /// Maximum values for PCI bus, device, function numbers. Inclusive.
+    const PCI_BUS_MAX: i64 = (1 << 8) - 1;
+    const PCI_DEV_MAX: i64 = (1 << 5) - 1;
+    const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PciDeviceParseError {
+    Malformed,
+    BusParse,
+    DeviceParse,
+    FunctionParse,
+    BusOutOfRange,
+    DeviceOutOfRange,
+    FunctionOutOfRange,
+}
+
+impl fmt::Display for PciDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02x}:{:02x}.{:x}",
+            self.bus, self.device, self.function
+        )
+    }
+}
+
+impl fmt::Display for PciDeviceParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PciDeviceParseError::Malformed => {
+                write!(f, "expected PCI address in bus:device.function form")
+            }
+            PciDeviceParseError::BusParse => write!(f, "failed to parse PCI bus"),
+            PciDeviceParseError::DeviceParse => write!(f, "failed to parse PCI device"),
+            PciDeviceParseError::FunctionParse => write!(f, "failed to parse PCI function"),
+            PciDeviceParseError::BusOutOfRange => {
+                write!(f, "PCI bus must be within [0..{}]", PciDevice::PCI_BUS_MAX)
+            }
+            PciDeviceParseError::DeviceOutOfRange => {
+                write!(
+                    f,
+                    "PCI device must be within [0..{}]",
+                    PciDevice::PCI_DEV_MAX
+                )
+            }
+            PciDeviceParseError::FunctionOutOfRange => {
+                write!(
+                    f,
+                    "PCI function must be within [0..{}]",
+                    PciDevice::PCI_FUNC_MAX
+                )
+            }
+        }
+    }
+}
+
+impl FromStr for PciDevice {
+    type Err = PciDeviceParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (bus_str, device_function_str) =
+            s.split_once(':').ok_or(PciDeviceParseError::Malformed)?;
+        let (device_str, function_str) = device_function_str
+            .split_once('.')
+            .ok_or(PciDeviceParseError::Malformed)?;
+
+        let bus =
+            i64::from_str_radix(bus_str.trim(), 16).map_err(|_| PciDeviceParseError::BusParse)?;
+        let device = i64::from_str_radix(device_str.trim(), 16)
+            .map_err(|_| PciDeviceParseError::DeviceParse)?;
+        let function = i64::from_str_radix(function_str.trim(), 16)
+            .map_err(|_| PciDeviceParseError::FunctionParse)?;
+
+        if !(0..=PciDevice::PCI_BUS_MAX).contains(&bus) {
+            return Err(PciDeviceParseError::BusOutOfRange);
+        }
+        if !(0..=PciDevice::PCI_DEV_MAX).contains(&device) {
+            return Err(PciDeviceParseError::DeviceOutOfRange);
+        }
+        if !(0..=PciDevice::PCI_FUNC_MAX).contains(&function) {
+            return Err(PciDeviceParseError::FunctionOutOfRange);
+        }
+
+        Ok(PciDevice {
+            bus: bus as u8,
+            device: device as u8,
+            function: function as u8,
+        })
+    }
+}
 #[repr(u8)]
 pub enum SysMapPerms {
     Read = 1,
@@ -220,9 +315,7 @@ pub enum SysIrqKind {
     },
     /// x86-64 specific
     MSI {
-        pci_bus: u64,
-        pci_dev: u64,
-        pci_func: u64,
+        pci_device: PciDevice,
         handle: u64,
         vector: u64,
     },
@@ -289,7 +382,7 @@ pub struct Channel {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CpuCore(pub u8);
 
-impl Display for CpuCore {
+impl fmt::Display for CpuCore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("cpu{:02}", self.0))
     }
@@ -897,94 +990,8 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
 
-                        // A "pcidev" attribute is in a form of Bus:Dev.Func
-                        // Split by the colon then the dot.
-
-                        // If the input is valid, index 0 contains "Bus", index 1 contains
-                        // "Dev.Func"
-                        let pci_parts_by_colon: Vec<_> =
-                            pcidev_str.split(':').map(str::trim).collect();
-
-                        if pci_parts_by_colon.len() != 2 {
-                            return Err(format!(
-                                "Error: failed to parse PCI address '{}' on element '{}'",
-                                pcidev_str,
-                                child.tag_name().name()
-                            ));
-                        }
-
-                        // If the input is valid, index 0 contains "Dev", index 1 contains
-                        // "Func"
-                        let pci_parts_by_dot: Vec<_> =
-                            pci_parts_by_colon[1].split('.').map(str::trim).collect();
-                        if pci_parts_by_dot.len() != 2 {
-                            return Err(format!(
-                                "Error: failed to parse PCI address '{}' on element '{}'",
-                                pcidev_str,
-                                child.tag_name().name()
-                            ));
-                        }
-
-                        let pci_bus_maybe = i64::from_str_radix(pci_parts_by_colon[0], 16);
-                        let pci_dev_maybe = i64::from_str_radix(pci_parts_by_dot[0], 16);
-                        let pci_func_maybe = i64::from_str_radix(pci_parts_by_dot[1], 16);
-
-                        match pci_bus_maybe {
-                            Ok(pci_bus_unchecked) => {
-                                if !(0..=PCI_BUS_MAX).contains(&pci_bus_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI bus must be within [0..{PCI_BUS_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI bus of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
-
-                        match pci_dev_maybe {
-                            Ok(pci_dev_unchecked) => {
-                                if !(0..=PCI_DEV_MAX).contains(&pci_dev_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI device must be within [0..{PCI_DEV_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI device of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
-
-                        match pci_func_maybe {
-                            Ok(pci_func_unchecked) => {
-                                if !(0..=PCI_FUNC_MAX).contains(&pci_func_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI function must be within [0..{PCI_FUNC_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI function of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
+                        let pci_device = PciDevice::from_str(pcidev_str)
+                            .map_err(|err| value_error(xml_sdf, &child, err.to_string()))?;
 
                         let handle = checked_lookup(xml_sdf, &child, "handle")?
                             .parse::<i64>()
@@ -1011,9 +1018,7 @@ impl ProtectionDomain {
                         let irq = SysIrq {
                             id: id as u64,
                             kind: SysIrqKind::MSI {
-                                pci_bus: pci_bus_maybe.unwrap() as u64,
-                                pci_dev: pci_dev_maybe.unwrap() as u64,
-                                pci_func: pci_func_maybe.unwrap() as u64,
+                                pci_device,
                                 handle: handle as u64,
                                 vector: vector as u64,
                             },
