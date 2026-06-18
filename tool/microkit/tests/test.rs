@@ -22,6 +22,7 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     max_num_bootinfo_untypeds: 230,
     fan_out_limit: 256,
     hypervisor: true,
+    iommu: true,
     benchmark: false,
     num_cores: 1,
     fpu: true,
@@ -46,6 +47,7 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     max_num_bootinfo_untypeds: 230,
     fan_out_limit: 256,
     hypervisor: true,
+    iommu: true,
     benchmark: false,
     num_cores: 1,
     fpu: true,
@@ -706,6 +708,68 @@ mod protection_domain {
 #[cfg(test)]
 mod iommu {
     use super::*;
+
+    #[test]
+    fn test_iommu_missing_from_config() {
+        check_error(
+            &sel4::Config {
+                iommu: false,
+                ..DEFAULT_X86_64_KERNEL_CONFIG
+            },
+            "iommu_missing_from_config.system",
+            "Error: io address space requires seL4 to be built with IOMMU support: ",
+        );
+    }
+
+    #[test]
+    fn test_iommu_missing_from_aarch64_config() {
+        check_error(
+            &sel4::Config {
+                iommu: false,
+                ..DEFAULT_AARCH64_KERNEL_CONFIG
+            },
+            "iommu_missing_from_config.system",
+            "Error: io address space requires seL4 to be built with IOMMU support: ",
+        );
+    }
+
+    #[test]
+    fn test_iommu_missing_from_riscv64_config() {
+        check_error(
+            &sel4::Config {
+                arch: sel4::Arch::Riscv64,
+                iommu: false,
+                ..DEFAULT_AARCH64_KERNEL_CONFIG
+            },
+            "iommu_missing_from_config.system",
+            "Error: io address space requires seL4 to be built with IOMMU support: ",
+        );
+    }
+
+    #[test]
+    fn test_iommu_unsupported_on_aarch64() {
+        check_error(
+            &sel4::Config {
+                iommu: true,
+                ..DEFAULT_AARCH64_KERNEL_CONFIG
+            },
+            "iommu_missing_from_config.system",
+            "Error: failed to parse device peripheral_id '0:3.0': IOMMU device identifiers are not supported on AArch64 on element 'io_address_space':",
+        );
+    }
+
+    #[test]
+    fn test_iommu_unsupported_on_riscv64() {
+        check_error(
+            &sel4::Config {
+                arch: sel4::Arch::Riscv64,
+                iommu: true,
+                ..DEFAULT_AARCH64_KERNEL_CONFIG
+            },
+            "iommu_missing_from_config.system",
+            "Error: failed to parse device peripheral_id '0:3.0': IOMMU device identifiers are not supported on RISC-V (64-bit) on element 'io_address_space':",
+        );
+    }
 
     #[test]
     fn test_out_of_bound() {

@@ -696,20 +696,12 @@ impl SysMap {
 
 impl SysIOMap {
     fn from_xml(
-        config: &Config,
+        _config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         device: &str,
         identifier: IommuDeviceIdentifier,
     ) -> Result<SysIOMap, String> {
-        if config.arch != Arch::X86_64 {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                "IOMMU is not yet supported on ARM and RISC-V by Microkit".to_string(),
-            ));
-        }
-
         let attrs = vec!["mr", "iovaddr", "perms"];
 
         check_attributes(xml_sdf, node, &attrs)?;
@@ -771,6 +763,14 @@ impl IOAddressSpace {
         device_names: &mut HashSet<String>,
         iommu_device_identifiers: &mut HashSet<IommuDeviceIdentifier>,
     ) -> Result<IOAddressSpace, String> {
+        let pos = xml_sdf.doc.text_pos_at(node.range().start);
+        if !config.iommu {
+            return Err(format!(
+                "Error: io address space requires seL4 to be built with IOMMU support: {}",
+                loc_string(xml_sdf, pos)
+            ));
+        }
+
         check_attributes(xml_sdf, node, &["name", "peripheral_id"])?;
         let device_name = checked_lookup(xml_sdf, node, "name")?;
         if !device_names.insert(device_name.to_string()) {
