@@ -60,6 +60,12 @@ const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
 /// `src/arch/x86/object/interrupt.c`
 const X86_IRQ_VECTOR_MAX: i64 = 107;
 
+// In reality the kernel dynamically determines this value. The tool assumes
+// at least 512GiB of IO virtual address space. This handles all values reported
+// to us by the kernel at runtime except for the 1GiB or no-iommu cases.
+// This is currently applied to any iommu mapping independent of the architecture.
+const IOMAP_MAX_VADDR: u64 = (1 << 39) - 1;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -188,11 +194,76 @@ impl FromStr for PciDevice {
         })
     }
 }
+
+// This can be extended in future to support devices on an SMMU enabled Arm device
+// or IOMMU enabled RISC-V device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IommuDeviceIdentifier {
+    X86Pci(PciDevice),
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum IommuDeviceIdentifierParseError {
+    UnsupportedArch(Arch),
+    Pci(PciDeviceParseError),
+}
+
+impl IommuDeviceIdentifier {
+    fn from_str_for_arch(
+        config: &Config,
+        s: &str,
+    ) -> Result<Self, IommuDeviceIdentifierParseError> {
+        match config.arch {
+            Arch::X86_64 => PciDevice::from_str(s)
+                .map(IommuDeviceIdentifier::X86Pci)
+                .map_err(IommuDeviceIdentifierParseError::Pci),
+            Arch::Aarch64 | Arch::Riscv64 => Err(IommuDeviceIdentifierParseError::UnsupportedArch(
+                config.arch,
+            )),
+        }
+    }
+}
+
+impl fmt::Display for IommuDeviceIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IommuDeviceIdentifier::X86Pci(pci_device) => write!(f, "PCI device {pci_device}"),
+        }
+    }
+}
+
+impl fmt::Display for IommuDeviceIdentifierParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IommuDeviceIdentifierParseError::UnsupportedArch(arch) => {
+                write!(f, "IOMMU device identifiers are not supported on {arch}")
+            }
+            IommuDeviceIdentifierParseError::Pci(err) => write!(f, "{err}"),
+        }
+    }
+}
+
 #[repr(u8)]
 pub enum SysMapPerms {
     Read = 1,
     Write = 2,
     Execute = 4,
+}
+
+impl SysMapPerms {
+    fn from_str(s: &str) -> Result<u8, ()> {
+        let mut perms = 0;
+        for c in s.chars() {
+            match c {
+                'r' => perms |= SysMapPerms::Read as u8,
+                'w' => perms |= SysMapPerms::Write as u8,
+                'x' => perms |= SysMapPerms::Execute as u8,
+                _ => return Err(()),
+            }
+        }
+
+        Ok(perms)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +274,53 @@ pub struct SysMap {
     pub cached: bool,
     /// Location in the parsed SDF file. Because this struct is
     /// used in a non-XML context, we make the position optional.
+    pub text_pos: Option<roxmltree::TextPos>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum SysIOMapPerms {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+impl SysIOMapPerms {
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let mut read = false;
+        let mut write = false;
+
+        for c in s.chars() {
+            match c {
+                'r' => read = true,
+                'w' => write = true,
+                _ => return Err(()),
+            }
+        }
+
+        match (read, write) {
+            (true, true) => Ok(SysIOMapPerms::ReadWrite),
+            (true, false) => Ok(SysIOMapPerms::Read),
+            (false, true) => Ok(SysIOMapPerms::Write),
+            (false, false) => Err(()),
+        }
+    }
+
+    pub fn read(self) -> bool {
+        matches!(self, SysIOMapPerms::Read | SysIOMapPerms::ReadWrite)
+    }
+
+    pub fn write(self) -> bool {
+        matches!(self, SysIOMapPerms::Write | SysIOMapPerms::ReadWrite)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct SysIOMap {
+    pub device: String,
+    pub mr: String,
+    pub identifier: IommuDeviceIdentifier,
+    pub iovaddr: u64,
+    pub perms: SysIOMapPerms,
     pub text_pos: Option<roxmltree::TextPos>,
 }
 
@@ -238,6 +356,32 @@ impl Map for SysMap {
 
     fn range_name(&self) -> &'static str {
         "virtual address range"
+    }
+}
+
+impl Map for SysIOMap {
+    fn mr_name(&self) -> &str {
+        &self.mr
+    }
+
+    fn addr(&self) -> u64 {
+        self.iovaddr
+    }
+
+    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+        self.text_pos
+    }
+
+    fn element(&self) -> &'static str {
+        "iomap"
+    }
+
+    fn addr_name(&self) -> &'static str {
+        "iovaddr"
+    }
+
+    fn range_name(&self) -> &'static str {
+        "io address range"
     }
 }
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -547,6 +691,137 @@ impl SysMap {
             cached,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
+    }
+}
+
+impl SysIOMap {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        device: &str,
+        identifier: IommuDeviceIdentifier,
+    ) -> Result<SysIOMap, String> {
+        if config.arch != Arch::X86_64 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "IOMMU is not yet supported on ARM and RISC-V by Microkit".to_string(),
+            ));
+        }
+
+        let attrs = vec!["mr", "iovaddr", "perms"];
+
+        check_attributes(xml_sdf, node, &attrs)?;
+
+        let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
+        let iovaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "iovaddr")?, node)?;
+
+        if iovaddr > IOMAP_MAX_VADDR {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "iovaddr ({iovaddr:#x}) must be less than {:#x}",
+                    IOMAP_MAX_VADDR + 1
+                ),
+            ));
+        }
+
+        let perms = if let Some(xml_perms) = node.attribute("perms") {
+            match SysIOMapPerms::from_str(xml_perms) {
+                Ok(parsed_perms) => parsed_perms,
+                Err(()) => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "perms for io mapped memory must only be a combination of 'r' and 'w'"
+                            .to_string(),
+                    ))
+                }
+            }
+        } else {
+            // Default to read-write
+            SysIOMapPerms::ReadWrite
+        };
+
+        Ok(SysIOMap {
+            device: device.to_string(),
+            mr,
+            identifier,
+            iovaddr,
+            perms,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+        })
+    }
+}
+
+// This is implemented in such a way that each device will have its own address space.
+// If devices need to share physical memory, this can be done by mapping the same memory_region
+// into each address space.
+struct IOAddressSpace {
+    iomaps: Vec<SysIOMap>,
+}
+
+impl IOAddressSpace {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        device_names: &mut HashSet<String>,
+        iommu_device_identifiers: &mut HashSet<IommuDeviceIdentifier>,
+    ) -> Result<IOAddressSpace, String> {
+        check_attributes(xml_sdf, node, &["name", "peripheral_id"])?;
+        let device_name = checked_lookup(xml_sdf, node, "name")?;
+        if !device_names.insert(device_name.to_string()) {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("duplicate device name '{device_name}'"),
+            ));
+        }
+
+        // In the SDF we use peripheral_id as an architecture agnostic way to describe
+        // how a device is identified in a system. For example on x86 the IOMMU identifies
+        // devices by the PCI tuple (bus,dev,fn)
+        let identifier_str = checked_lookup(xml_sdf, node, "peripheral_id")?;
+        let identifier =
+            IommuDeviceIdentifier::from_str_for_arch(config, identifier_str).map_err(|err| {
+                value_error(
+                    xml_sdf,
+                    node,
+                    format!("failed to parse device peripheral_id '{identifier_str}': {err}"),
+                )
+            })?;
+        if !iommu_device_identifiers.insert(identifier) {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("duplicate device peripheral_id '{identifier}'"),
+            ));
+        }
+
+        let mut iomaps = Vec::new();
+
+        for child in node.children().filter(|node| node.is_element()) {
+            match child.tag_name().name() {
+                "iomap" => {
+                    let iomap =
+                        SysIOMap::from_xml(config, xml_sdf, &child, device_name, identifier)?;
+                    iomaps.push(iomap);
+                }
+                _ => {
+                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    return Err(format!(
+                        "Error: invalid XML element '{}': {}",
+                        child.tag_name().name(),
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+            }
+        }
+
+        Ok(IOAddressSpace { iomaps })
     }
 }
 
@@ -1690,6 +1965,7 @@ struct XmlSystemDescription<'a> {
 pub struct SystemDescription {
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
+    pub iomaps: Vec<SysIOMap>,
     pub channels: Vec<Channel>,
 }
 
@@ -1780,6 +2056,21 @@ where
 
     Ok(())
 }
+
+fn check_io_maps(
+    xml_sdf: &XmlSystemDescription,
+    mrs: &[SysMemoryRegion],
+    iomaps: &[SysIOMap],
+) -> Result<(), String> {
+    let mut by_device: HashMap<IommuDeviceIdentifier, Vec<&SysIOMap>> = HashMap::new();
+
+    for iomap in iomaps {
+        by_device.entry(iomap.identifier).or_default().push(iomap);
+    }
+
+    for (identifier, maps) in by_device {
+        let address_space = identifier.to_string();
+        check_maps(xml_sdf, mrs, maps, &address_space, IOMAP_MAX_VADDR + 1)?;
     }
 
     Ok(())
@@ -1961,6 +2252,9 @@ pub fn parse(
 
     let mut root_pds = vec![];
     let mut mrs = vec![];
+    let mut iomaps = vec![];
+    let mut device_names = HashSet::new();
+    let mut iommu_device_identifiers = HashSet::new();
     let mut channels = vec![];
     let system = doc
         .root()
@@ -1993,6 +2287,18 @@ pub fn parse(
                 &child,
                 search_paths,
             )?),
+            "io_address_space" => {
+                iomaps.extend(
+                    IOAddressSpace::from_xml(
+                        config,
+                        &xml_sdf,
+                        &child,
+                        &mut device_names,
+                        &mut iommu_device_identifiers,
+                    )?
+                    .iomaps,
+                );
+            }
             "virtual_machine" => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -2114,7 +2420,7 @@ pub fn parse(
             // expose this footgun to users.
             return Err(format!(
                     "Error: It is not possible for PD '{}' with a bound vCPU to have children on x86_64: {}",
-                    pd.name(),
+                    pd.name,
                     loc_string(&xml_sdf, pd.text_pos.unwrap())));
         }
     }
@@ -2285,6 +2591,8 @@ pub fn parse(
             )?;
         }
     }
+
+    check_io_maps(&xml_sdf, &mrs, &iomaps)?;
 
     // Ensure that there are no overlapping extra cap maps in the user caps region
     // and we are not mapping in the same cap from the same source more than once
@@ -2463,6 +2771,7 @@ pub fn parse(
     Ok(SystemDescription {
         protection_domains: pds,
         memory_regions: mrs,
+        iomaps,
         channels,
     })
 }
