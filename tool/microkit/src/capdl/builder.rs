@@ -31,9 +31,6 @@ use crate::{
     util::{ranges_overlap, round_down, round_up},
 };
 
-// Corresponds to the IPC buffer symbol in libmicrokit and the monitor
-const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
-
 const FAULT_BADGE: u64 = 1 << 62;
 const PPC_BADGE: u64 = 1 << 63;
 
@@ -187,8 +184,8 @@ impl CapDLSpecContainer {
 
     /// Add the details of the given ELF into the given CapDL spec while inferring as much information
     /// as possible. These are the objects that will be created:
-    /// -> TCB: PC, SP and IPC buffer vaddr set. VSpace and IPC buffer frame caps bound.
-    /// -> VSpace: all ELF loadable pages and IPC buffer mapped in.
+    /// -> TCB: Program counter set and VSpace capability bound.
+    /// -> VSpace: all pages from the ELF mapped in.
     /// Returns the object ID of the TCB
     /// NOTE that all ELF frames will just be reference to the original ELF object rather than the actual data.
     /// So that symbols can be patched before the frames' data are filled in.
@@ -293,47 +290,11 @@ impl CapDLSpecContainer {
             }
         }
 
-        // Create and map the IPC buffer for this ELF
-        let ipcbuf_frame_obj_id = capdl_util_make_frame_obj(
-            self,
-            Fill {
-                entries: [].to_vec(),
-            },
-            &format!("ipcbuf_{pd_name}"),
-            None,
-            PageSize::Small.fixed_size_bits(sel4_config) as u8,
-        );
-        let ipcbuf_frame_cap =
-            capdl_util_make_frame_cap(ipcbuf_frame_obj_id, true, true, false, true);
-        // We need to clone the IPC buf cap because in addition to mapping the frame into the VSpace, we need to bind
-        // this frame to the TCB as well.
-        let ipcbuf_frame_cap_for_tcb = ipcbuf_frame_cap.clone();
-        let ipcbuf_vaddr = elf
-            .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
-            .0;
-        match map_page(
-            self,
-            sel4_config,
-            pd_name,
-            vspace_obj_id,
-            ipcbuf_frame_cap,
-            PageSize::Small as u64,
-            ipcbuf_vaddr,
-        ) {
-            Ok(_) => {}
-            Err(map_err_reason) => {
-                return Err(format!(
-                    "build_capdl_spec(): failed to map ipc buffer frame to {pd_name} because: {map_err_reason}"
-                ))
-            }
-        };
-
         let tcb_name = format!("tcb_{pd_name}");
         let entry_point = elf.entry;
 
         let tcb_extra_info = object::TcbExtraInfo {
-            ipc_buffer_addr: ipcbuf_vaddr.into(),
+            ipc_buffer_addr: 0.into(),
             affinity: Word(pd_cpu.0.into()),
             prio: 0,
             max_prio: 0,
@@ -348,11 +309,7 @@ impl CapDLSpecContainer {
 
         let tcb_inner_obj = object::Tcb {
             // Bind the VSpace into the TCB
-            slots: [
-                capdl_util_make_cte(TcbBoundSlot::VSpace as u32, vspace_cap),
-                capdl_util_make_cte(TcbBoundSlot::IpcBuffer as u32, ipcbuf_frame_cap_for_tcb),
-            ]
-            .to_vec(),
+            slots: vec![capdl_util_make_cte(TcbBoundSlot::VSpace as u32, vspace_cap)],
             extra: Box::new(tcb_extra_info),
         };
 
@@ -486,6 +443,27 @@ pub fn build_capdl_spec(
     )
     .unwrap();
 
+    // Create monitor IPC Bufffer
+    let mon_ipcbuf_frame_obj_id = capdl_util_make_frame_obj(
+        &mut spec_container,
+        Fill { entries: vec![] },
+        &format!("ipcbuf_{MONITOR_PD_NAME}"),
+        None,
+        PageSize::Small.fixed_size_bits(kernel_config) as u8,
+    );
+    let mon_ipcbuf_frame_cap =
+        capdl_util_make_frame_cap(mon_ipcbuf_frame_obj_id, true, true, false, true);
+    map_page(
+        &mut spec_container,
+        kernel_config,
+        MONITOR_PD_NAME,
+        mon_vspace_obj_id,
+        mon_ipcbuf_frame_cap.clone(),
+        PageSize::Small as u64,
+        kernel_config.pd_ipc_buffer(),
+    )
+    .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
+
     // At this point, all of the required objects for the monitor have been created and its caps inserted into
     // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
     // In addition, `add_elf_to_spec()` doesn't fill most the details in the TCB.
@@ -495,6 +473,7 @@ pub fn build_capdl_spec(
         .unwrap()
         .object
     {
+        monitor_tcb.extra.ipc_buffer_addr = Word(kernel_config.pd_ipc_buffer());
         // Special case, monitor has its stack statically allocated.
         monitor_tcb.extra.sp = Word(kernel_config.pd_stack_top());
         // While there is nothing stopping us from running the monitor at the highest priority alongside the
@@ -502,6 +481,11 @@ pub fn build_capdl_spec(
         monitor_tcb.extra.prio = MONITOR_PRIORITY;
         monitor_tcb.extra.max_prio = MONITOR_PRIORITY;
         monitor_tcb.extra.resume = true;
+
+        monitor_tcb.slots.push(capdl_util_make_cte(
+            TcbBoundSlot::IpcBuffer as u32,
+            mon_ipcbuf_frame_cap,
+        ));
 
         monitor_tcb.slots.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
@@ -636,17 +620,27 @@ pub fn build_capdl_spec(
             // We perform this check here, otherwise the tool will panic with quite cryptic page-table related errors.
             let mr_vaddr_range = map.vaddr..(map.vaddr + (page_size_bytes * frames.len() as u64));
 
-            let pd_stack_range =
-                kernel_config.pd_stack_bottom(pd.stack_size)..kernel_config.pd_stack_top();
-            if ranges_overlap(&mr_vaddr_range, &pd_stack_range) {
-                return Err(format!("ERROR: mapping MR '{}' to PD '{}' with vaddr [0x{:x}..0x{:x}) will overlap with the stack at [0x{:x}..0x{:x})", map.mr, pd.name, mr_vaddr_range.start, mr_vaddr_range.end, pd_stack_range.start, pd_stack_range.end));
+            let pd_reserved_range =
+                kernel_config.pd_map_max_vaddr(pd.stack_size)..kernel_config.user_top();
+            if ranges_overlap(&mr_vaddr_range, &pd_reserved_range) {
+                return Err(
+                    format!(
+                        "ERROR: mapping MR '{}' to PD '{}' with vaddr [0x{:x}..0x{:x}) will overlap with the PD reserved range at [0x{:x}..0x{:x})",
+                        map.mr, pd.name, mr_vaddr_range.start, mr_vaddr_range.end, pd_reserved_range.start, pd_reserved_range.end,
+                    )
+                );
             }
 
             for elf_seg in elf_obj.loadable_segments().iter() {
                 let elf_seg_vaddr_range = elf_seg.virt_addr
                     ..elf_seg.virt_addr + round_up(elf_seg.mem_size(), PageSize::Small as u64);
                 if ranges_overlap(&mr_vaddr_range, &elf_seg_vaddr_range) {
-                    return Err(format!("ERROR: mapping MR '{}' to PD '{}' with vaddr [0x{:x}..0x{:x}) will overlap with an ELF segment at [0x{:x}..0x{:x})", map.mr, pd.name, mr_vaddr_range.start, mr_vaddr_range.end, elf_seg_vaddr_range.start, elf_seg_vaddr_range.end));
+                    return Err(
+                        format!(
+                            "ERROR: mapping MR '{}' to PD '{}' with vaddr [0x{:x}..0x{:x}) will overlap with an ELF segment at [0x{:x}..0x{:x})",
+                            map.mr, pd.name, mr_vaddr_range.start, mr_vaddr_range.end, elf_seg_vaddr_range.start, elf_seg_vaddr_range.end,
+                        )
+                    );
                 }
             }
 
@@ -661,7 +655,32 @@ pub fn build_capdl_spec(
             );
         }
 
-        // Step 3-3: Create and map in the stack (bottom up)
+        // Step 3-3a: Create and map in the IPC buffer
+        let ipcbuf_frame_obj_id = capdl_util_make_frame_obj(
+            &mut spec_container,
+            Fill { entries: vec![] },
+            &format!("ipcbuf_{}", pd.name),
+            None,
+            PageSize::Small.fixed_size_bits(kernel_config) as u8,
+        );
+        let ipcbuf_frame_cap =
+            capdl_util_make_frame_cap(ipcbuf_frame_obj_id, true, true, false, true);
+        map_page(
+            &mut spec_container,
+            kernel_config,
+            &pd.name,
+            pd_vspace_obj_id,
+            ipcbuf_frame_cap.clone(),
+            PageSize::Small as u64,
+            kernel_config.pd_ipc_buffer(),
+        )
+        .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
+        caps_to_bind_to_tcb.push(capdl_util_make_cte(
+            TcbBoundSlot::IpcBuffer as u32,
+            ipcbuf_frame_cap,
+        ));
+
+        // Step 3-3b: Create and map in the stack (bottom up)
         let mut cur_stack_vaddr = kernel_config.pd_stack_bottom(pd.stack_size);
         pd_stack_bottoms.push(cur_stack_vaddr);
         let num_stack_frames = pd.stack_size / PageSize::Small as u64;
@@ -1043,6 +1062,7 @@ pub fn build_capdl_spec(
             .unwrap()
             .object
         {
+            pd_tcb.extra.ipc_buffer_addr = Word(kernel_config.pd_ipc_buffer());
             pd_tcb.extra.sp = Word(kernel_config.pd_stack_top());
             pd_tcb.extra.master_fault_ep = None; // Not used on MCS kernel.
             pd_tcb.extra.prio = pd.priority;

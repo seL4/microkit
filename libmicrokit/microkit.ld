@@ -66,9 +66,4 @@ SECTIONS
         . = ALIGN(4);
         _bss_end = .;
     } :data
-
-    . = ALIGN(0x1000);
-    .ipc_buffer (NOLOAD): {
-        __sel4_ipc_buffer_obj = .;
-    } :NONE
 }
