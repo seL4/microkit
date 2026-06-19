@@ -1817,6 +1817,7 @@ At build-time, the Microkit tool embeds the capDL specification that describe
 all kernel objects that needs to be created. Then for each kernel object, the spec
 describe what state they need to be in and what capabilities exist to that object
 (i.e. who has access to this kernel object). For example, the spec would specify the:
+
 - starting Instruction Pointer (IP), Stack Pointer (SP) and IPC buffer pointer of a Thread Control Block (TCB),
 - page table structure and mapping attributes of an address space (VSpace),
 - interrupts (IRQ),
@@ -1868,7 +1869,7 @@ In order to do this however, the Microkit tool needs to emulate how the seL4 ker
 to obtain the list of free untyped objects that the kernel would give to the initial task.
 
 While this is non-trivial to do, it comes with the useful property that if the tool
-produces a valid image, there should be no errors upon initialising the system
+produces a valid image, there should be no errors upon initialising the system.
 If there are any errors with configuring the system (e.g running out of memory),
 they will be caught at build-time. This can only reasonably be done due to the
 static-architecture of Microkit systems.
