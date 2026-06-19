@@ -522,6 +522,9 @@ impl ElfFile {
         round_down(self.highest_vaddr() + page_size as u64, page_size as u64)
     }
 
+    /// Add a segment, its data and a corresponding program header with loadable type to the ELF.
+    /// The caller can pass a Some value to `meta_phdr_type_maybe` to create an additional
+    /// program header with a specific type identifier.
     pub fn add_segment(
         &mut self,
         read: bool,
@@ -529,6 +532,7 @@ impl ElfFile {
         execute: bool,
         vaddr: u64,
         data: ElfSegmentData,
+        meta_phdr_type_maybe: Option<u32>,
     ) {
         let r = if read { PF_R } else { 0 };
         let w = if write { PF_W } else { 0 };
@@ -547,6 +551,13 @@ impl ElfFile {
             segment_idx: self.segments.len() - 1,
             type_: PHENT_TYPE_LOADABLE,
         });
+
+        if let Some(meta_phdr_type) = meta_phdr_type_maybe {
+            self.program_headers.push(ProgramHeader {
+                segment_idx: self.segments.len() - 1,
+                type_: meta_phdr_type,
+            });
+        }
     }
 
     pub fn loadable_segments(&self) -> Vec<&ElfSegment> {
@@ -660,7 +671,7 @@ impl ElfFile {
                 });
         }
 
-        // Then the section headers table, which describe the same thing as the program headers.
+        // Next step is the section headers table, which describe mostly the same thing as the program headers.
         // This is needed for U-Boot's `bootelf` command to work properly without adding the `-p` flag
         // when booting the loader image on ARM and RISC-V platforms.
         // First entry is reserved!
