@@ -29,8 +29,13 @@
 #define BASE_SCHED_CONTEXT_CAP 138
 #define BASE_NOTIFICATION_CAP 202
 
-extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
-seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
+#define BIT(n) (1ULL << (n))
+#define MASK(n) (BIT(n) - 1ULL)
+
+/* The tool assumes the IPC buffer in the top page of user memory */
+seL4_IPCBuffer *__sel4_ipc_buffer = (seL4_IPCBuffer *)(seL4_UserVSpaceTop & ~MASK(seL4_PageBits));
+_Static_assert(sizeof(seL4_IPCBuffer) <= BIT(seL4_PageBits),
+               "IPC Buffer is expected to need less than one page in size");
 
 char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;

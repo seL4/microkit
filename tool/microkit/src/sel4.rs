@@ -310,19 +310,20 @@ pub struct Config {
 }
 
 impl Config {
-    /// Refers to 'seL4_UserTop'
-    pub fn user_top(&self) -> u64 {
+    /// Refers to 'seL4_UserVSpaceTop'. Is inclusive.
+    // TODO: We should auto-extract this from libsel4 headers.
+    pub fn user_vspace_top(&self) -> u64 {
         match self.arch {
             Arch::Aarch64 => match self.hypervisor {
                 true => match self.arm_pa_size_bits.unwrap() {
-                    40 => 0x10000000000,
-                    44 => 0x100000000000,
+                    40 => 0x00ffffffffff,
+                    44 => 0x0fffffffffff,
                     _ => panic!("Unknown ARM physical address size bits"),
                 },
-                false => 0x800000000000,
+                false => 0x7fffffffffff,
             },
-            Arch::Riscv64 => 0x0000003ffffff000,
-            Arch::X86_64 => 0x7ffffffff000,
+            Arch::Riscv64 => 0x0000003fffffefff,
+            Arch::X86_64 => 0x7fffffffefff,
         }
     }
 
@@ -346,30 +347,38 @@ impl Config {
         }
     }
 
+    /// IPC Buffer is located at the highest possible virtual memory page
+    pub fn pd_ipc_buffer(&self) -> u64 {
+        // user_top is inclusive, so we mask off the bits inside the page.
+        self.user_vspace_top() & !(PageSize::Small as u64 - 1)
+    }
+
+    /// The stack is located in the third highest possible virtual memory pages,
+    /// as the IPC buffer lives in the top, and we add a guard page inbetween.
     pub fn pd_stack_top(&self) -> u64 {
-        self.user_top()
+        // Subtract off the guard page.
+        self.pd_ipc_buffer() - PageSize::Small as u64
     }
 
     pub fn pd_stack_bottom(&self, stack_size: u64) -> u64 {
         self.pd_stack_top() - stack_size
     }
 
-    /// For simplicity and consistency, the stack of each PD occupies the highest
-    /// possible virtual memory region. That means that the highest possible address
-    /// for a user to be able to create a mapping at is below the stack region.
+    /// For simplicity and consistency, the stack & IPC buffers of each PD
+    /// occupy the highest memory regions near seL4_UserVSpaceTop.
+    /// So the maximum vaddr allowed for mapping is the stack bottom.
+    /// Value is exclusive ..max)
     pub fn pd_map_max_vaddr(&self, stack_size: u64) -> u64 {
-        // This function depends on the invariant that the stack of a PD
-        // consumes the highest possible address of the virtual address space.
-        assert!(self.pd_stack_top() == self.user_top());
-
         self.pd_stack_bottom(stack_size)
     }
 
-    /// Unlike PDs, virtual machines do not have a stack and so the max virtual
-    /// address of a mapping is whatever seL4 chooses as the maximum virtual address
-    /// in a VSpace.
+    /// Unlike PDs, virtual machines do not have a stack or IPC buffer and so
+    /// the max virtual address of a mapping is whatever seL4 chooses as the
+    /// maximum virtual address in a VSpace.
+    /// Value is exclusive ..max)
     pub fn vm_map_max_vaddr(&self) -> u64 {
-        self.user_top()
+        // Add 1, because user_top is inclusive. Note this assumes no overflow.
+        self.user_vspace_top() + 1
     }
 
     pub fn paddr_to_kernel_vaddr(&self, paddr: u64) -> u64 {
