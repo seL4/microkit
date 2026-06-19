@@ -67,6 +67,7 @@ impl CapDLInitialiser {
             false,
             spec_vaddr,
             ElfSegmentData::RealData(spec_payload.into()),
+            None,
         );
 
         let embedded_frame_data_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
@@ -76,6 +77,7 @@ impl CapDLInitialiser {
             false,
             embedded_frame_data_vaddr,
             ElfSegmentData::RealData(embedded_frame_data),
+            None,
         );
 
         // These symbol names must match rust-sel4/crates/sel4-capdl-initializer/src/main.rs
