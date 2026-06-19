@@ -1007,7 +1007,7 @@ mod system {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "sys_map_too_high.system",
-            "Error: vaddr (0x1000000000000000) must be less than 0xffffffe000 on element 'map'",
+            "Error: vaddr (0x1000000000000000) must be less than 0xffffffc000 on element 'map'",
         )
     }
 

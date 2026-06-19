@@ -39,9 +39,20 @@ seL4_Word microkit_notifications;
 seL4_Word microkit_pps;
 seL4_Word microkit_ioports;
 
-extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
+#define BIT(n) (1ULL << (n))
+#define MASK(n) (BIT(n) - 1ULL)
 
-seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
+// Workaround: https://github.com/seL4/seL4/issues/1693
+#if (seL4_UserTop & MASK(seL4_PageBits)) == 0
+#define user_top_inclusive (seL4_UserTop - 1)
+#else
+#define user_top_inclusive (seL4_UserTop)
+#endif
+
+/* The tool assumes the IPC buffer in the top page of user memory */
+seL4_IPCBuffer *__sel4_ipc_buffer = (seL4_IPCBuffer *)(user_top_inclusive & ~MASK(seL4_PageBits));
+_Static_assert(sizeof(seL4_IPCBuffer) <= BIT(seL4_PageBits),
+               "IPC Buffer is expected to need less than one page in size");
 
 extern const void (*const __init_array_start [])(void);
 extern const void (*const __init_array_end [])(void);

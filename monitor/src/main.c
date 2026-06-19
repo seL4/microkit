@@ -29,8 +29,20 @@
 #define BASE_SCHED_CONTEXT_CAP 138
 #define BASE_NOTIFICATION_CAP 202
 
-extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
-seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
+#define BIT(n) (1ULL << (n))
+#define MASK(n) (BIT(n) - 1ULL)
+
+// Workaround: https://github.com/seL4/seL4/issues/1693
+#if (seL4_UserTop & MASK(seL4_PageBits)) == 0
+#define user_top_inclusive (seL4_UserTop - 1)
+#else
+#define user_top_inclusive (seL4_UserTop)
+#endif
+
+/* The tool assumes the IPC buffer in the top page of user memory */
+seL4_IPCBuffer *__sel4_ipc_buffer = (seL4_IPCBuffer *)(user_top_inclusive & ~MASK(seL4_PageBits));
+_Static_assert(sizeof(seL4_IPCBuffer) <= BIT(seL4_PageBits),
+               "IPC Buffer is expected to need less than one page in size");
 
 char pd_names[MAX_PDS][MAX_NAME_LEN];
 seL4_Word pd_names_len;
