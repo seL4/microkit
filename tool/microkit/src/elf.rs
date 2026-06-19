@@ -62,7 +62,7 @@ struct ElfSectionHeader64 {
 }
 
 #[repr(C, packed)]
-struct ElfProgramHeader64 {
+pub struct ElfProgramHeader64 {
     type_: u32,
     flags: u32,
     offset: u64,
@@ -553,6 +553,29 @@ impl ElfFile {
         self.segments.iter().filter(|s| s.loadable).collect()
     }
 
+    /// Returns a vec of program headers in ELF format without the file data offset filled and its linked segment.
+    pub fn phdrs_table_serialised(&self) -> Vec<(ElfProgramHeader64, usize)> {
+        let mut table = vec![];
+        for program_header in self.program_headers.iter() {
+            let linked_segment = &self.segments[program_header.segment_idx];
+
+            let phdr = ElfProgramHeader64 {
+                type_: program_header.type_,
+                flags: linked_segment.attrs,
+                offset: 0,
+                vaddr: linked_segment.virt_addr,
+                paddr: linked_segment.phys_addr,
+                filesz: linked_segment.file_size(),
+                memsz: linked_segment.mem_size(),
+                align: 0,
+            };
+
+            table.push((phdr, program_header.segment_idx));
+        }
+
+        table
+    }
+
     /// Re-create a minimal ELF file with all the program and section headers.
     pub fn reserialise(&self, out: &std::path::Path) -> Result<u64, String> {
         let ehsize = size_of::<ElfHeader64>();
@@ -621,25 +644,17 @@ impl ElfFile {
         }
 
         // Then write out the program headers table
-        for (i, program_header) in self.program_headers.iter().enumerate() {
-            let linked_segment = &self.segments[program_header.segment_idx];
-            let ph_serialised = ElfProgramHeader64 {
-                type_: program_header.type_,
-                flags: linked_segment.attrs,
-                offset: seg_idx_to_data_off[&program_header.segment_idx],
-                vaddr: linked_segment.virt_addr,
-                paddr: linked_segment.phys_addr,
-                filesz: linked_segment.file_size(),
-                memsz: linked_segment.mem_size(),
-                align: 0,
-            };
+        for (phdr, seg_idx) in self.phdrs_table_serialised().iter_mut() {
+            phdr.offset = seg_idx_to_data_off[seg_idx];
 
+            let phdr_type = phdr.type_;
             elf_file
-                .write_all(unsafe { struct_to_bytes(&ph_serialised) })
+                .write_all(unsafe { struct_to_bytes(phdr) })
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Failed to write ELF program header #{} for '{}'",
-                        i,
+                        "Failed to write ELF program header type {:x} linked to segment index {} for '{}'",
+                        phdr_type,
+                        seg_idx,
                         out.display()
                     )
                 });
