@@ -19,7 +19,7 @@ typedef unsigned int microkit_child;
 typedef unsigned int microkit_ioport;
 typedef seL4_MessageInfo_t microkit_msginfo;
 
-#define MONITOR_EP 5
+/* Index 5 is unused */
 /* Only valid in the 'benchmark' configuration */
 #define TCB_CAP 6
 /* Only valid when the PD has been configured to make SMC calls */

@@ -74,16 +74,13 @@ const MON_FAULT_EP_CAP_IDX: u64 = 1;
 const MON_REPLY_CAP_IDX: u64 = 2;
 const MON_BASE_PD_TCB_CAP: u64 = 10;
 const MON_BASE_VM_TCB_CAP: u64 = MON_BASE_PD_TCB_CAP + 64;
-const MON_BASE_SCHED_CONTEXT_CAP: u64 = MON_BASE_VM_TCB_CAP + 64;
-const MON_BASE_NOTIFICATION_CAP: u64 = MON_BASE_SCHED_CONTEXT_CAP + 64;
 
 // Where caps must be in a PD's CSpace
 const PD_INPUT_CAP_IDX: u64 = 1;
 const PD_FAULT_EP_CAP_IDX: u64 = 2;
 const PD_VSPACE_CAP_IDX: u64 = 3;
 const PD_REPLY_CAP_IDX: u64 = 4;
-// Valid only if the PD is passive.
-const PD_MONITOR_EP_CAP_IDX: u64 = 5;
+// Index 5 is unused
 // Valid only in benchmark configuration.
 const PD_TCB_CAP_IDX: u64 = 6;
 const PD_ARM_SMC_CAP_IDX: u64 = 7;
@@ -346,6 +343,7 @@ impl CapDLSpecContainer {
             gprs: Vec::new(),
             master_fault_ep: None,
             domain: None,
+            passive: false,
         };
 
         let tcb_inner_obj = object::Tcb {
@@ -742,21 +740,6 @@ pub fn build_capdl_spec(
             pd_fault_ep_cap.clone(),
         ));
 
-        // Step 3-6 Create cap to Monitor's endpoint for passive PDs.
-        if pd.passive {
-            let pd_monitor_ep_cap = capdl_util_make_endpoint_cap(
-                mon_fault_ep_obj_id,
-                true,
-                true,
-                true,
-                pd_global_idx as u64 + 1,
-            );
-            caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
-                PD_MONITOR_EP_CAP_IDX as u32,
-                pd_monitor_ep_cap,
-            ));
-        }
-
         // Step 3-7 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
@@ -970,6 +953,7 @@ pub fn build_capdl_spec(
                             gprs: [].to_vec(),
                             master_fault_ep: None, // Not used on MCS kernel.
                             domain: None,
+                            passive: false, // VMs should not be passive.
                         }),
                     };
                     let vm_vcpu_tcb_obj_id = spec_container.add_root_object(NamedObject {
@@ -1033,6 +1017,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.max_prio = pd.priority;
             pd_tcb.extra.fpu_disabled = !pd.fpu;
             pd_tcb.extra.resume = true;
+            pd_tcb.extra.passive = pd.passive;
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);
             // Stylistic purposes only
@@ -1043,29 +1028,13 @@ pub fn build_capdl_spec(
 
         // Step 3-15 bind this PD's TCB to the monitor, this accomplish two purposes:
         // 1. Allow PDs' TCBs to be named to their proper name in SDF in debug config.
-        // 2. Allow passive PDs.
+        // 2. Allow the PD's execution thread registers to be printed on a fault.
         capdl_util_insert_cap_into_cspace(
             &mut spec_container,
             mon_cnode_obj_id,
             (MON_BASE_PD_TCB_CAP as usize + pd_global_idx) as u32,
             capdl_util_make_tcb_cap(pd_tcb_obj_id),
         );
-        if pd.passive {
-            // When a PD is passive, it will signal the Monitor once init() returns. The monitor will
-            // then unbind the PD's TCB from its Scheduling Context and bind it to its Notification.
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                mon_cnode_obj_id,
-                (MON_BASE_SCHED_CONTEXT_CAP as usize + pd_global_idx) as u32,
-                capdl_util_make_sc_cap(pd_sc_obj_id),
-            );
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                mon_cnode_obj_id,
-                (MON_BASE_NOTIFICATION_CAP as usize + pd_global_idx) as u32,
-                capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0),
-            );
-        }
 
         pd_shadow_cspaces.insert(
             pd_global_idx,
