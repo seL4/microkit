@@ -482,6 +482,12 @@ It is important to note that this is largely just for debugging purposes and the
 highly tied to a specific version and configuration of the kernel. When using this option the kernel
 should be the same version and compiled with the same configuration options.
 
+If the `--viper-output PREFIX` argument is set, then for each protection domain `name` specified in
+the system description file, a file `PREFIX/name.vpr` will be output, containing a description of the
+capability table of the given PD in the Viper verification language. These output files can be used
+for verification purposes, but the exact format may change in future versions of the tool.
+
+
 ## Image format
 
 ### ARM
