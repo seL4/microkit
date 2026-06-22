@@ -8,13 +8,18 @@ use std::ops::Range;
 
 use rkyv::util::AlignedVec;
 
-use crate::elf::ElfSegmentData;
-use crate::util::round_up;
+use crate::elf::{ElfProgramHeader64, ElfSegmentData, PF_R, PHENT_TYPE_LOADABLE, PHENT_TYPE_PHDR};
+use crate::util::{round_up, struct_to_bytes};
 use crate::{elf::ElfFile, sel4::PageSize};
 use crate::{serialise_ut, UntypedObject};
 
 // Page size used for allocating the spec and embedded frames segments.
 pub const INITIALISER_GRANULE_SIZE: PageSize = PageSize::Small;
+
+// Magic numbers for the initialiser to identify the data type.
+// See rust-sel4 crates/sel4-phdrs/constants/src/lib.rs
+const PT_SEL4_CAPDL_SPEC: u32 = 0x64c3_4003;
+const PT_SEL4_CAPDL_FRAME_DATA: u32 = 0x64c3_4004;
 
 pub struct CapDLInitialiserSpecMetadata {
     pub spec_size: u64,
@@ -59,6 +64,7 @@ impl CapDLInitialiser {
             self.spec_metadata = None;
         }
 
+        // Follow implementation in rust-sel4: crates/sel4-capdl-initializer/add-spec/src/lib.rs
         let spec_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
         let spec_size = spec_payload.len() as u64;
         self.elf.add_segment(
@@ -67,7 +73,7 @@ impl CapDLInitialiser {
             false,
             spec_vaddr,
             ElfSegmentData::RealData(spec_payload.into()),
-            None,
+            Some(PT_SEL4_CAPDL_SPEC),
         );
 
         let embedded_frame_data_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
@@ -77,40 +83,73 @@ impl CapDLInitialiser {
             false,
             embedded_frame_data_vaddr,
             ElfSegmentData::RealData(embedded_frame_data),
-            None,
+            Some(PT_SEL4_CAPDL_FRAME_DATA),
         );
 
-        // These symbol names must match rust-sel4/crates/sel4-capdl-initializer/src/main.rs
+        // Now make the program headers table and inject it into the ELF as the initialiser look at
+        // it to figure out its virtual address bound, spec location in memory etc.
+        // It would have been nicer if we can perform this step in ElfFile::reserialise() but
+        // that function is only relevant for x86.
+        let phdrs_table_vaddr = self.elf.next_vaddr(INITIALISER_GRANULE_SIZE);
+        let phdrs_table = self.elf.phdrs_table_serialised();
+        // Accounts for a PHENT_TYPE_PHDR meta phdr + PHENT_TYPE_LOADABLE phdr when we eventually inject
+        // the table as a segment.
+        let expected_phnum = phdrs_table.len() + 2;
+        let expected_phdrs_table_size_bytes = size_of::<ElfProgramHeader64>() * expected_phnum;
+
+        let mut phdrs_table_bytes = vec![];
+        phdrs_table.iter().for_each(|phdr| {
+            phdrs_table_bytes.extend(unsafe { struct_to_bytes(&phdr.0) });
+        });
+
+        // Simulate what happens in ElfFile::add_segment() to derive the final program headers table.
+        // We do this due to a chicken and egg problem, the real program headers table won't be finalised
+        // until we add it as a segment. But we can't add it as a segment until we finalise it.
+        phdrs_table_bytes.extend(unsafe {
+            struct_to_bytes(&ElfProgramHeader64 {
+                type_: PHENT_TYPE_PHDR,
+                flags: PF_R,
+                offset: 0,
+                vaddr: phdrs_table_vaddr,
+                paddr: phdrs_table_vaddr,
+                filesz: expected_phdrs_table_size_bytes as u64,
+                memsz: expected_phdrs_table_size_bytes as u64,
+                align: 0,
+            })
+        });
+        phdrs_table_bytes.extend(unsafe {
+            struct_to_bytes(&ElfProgramHeader64 {
+                type_: PHENT_TYPE_LOADABLE,
+                flags: PF_R,
+                offset: 0,
+                vaddr: phdrs_table_vaddr,
+                paddr: phdrs_table_vaddr,
+                filesz: expected_phdrs_table_size_bytes as u64,
+                memsz: expected_phdrs_table_size_bytes as u64,
+                align: 0,
+            })
+        });
+
+        self.elf.add_segment(
+            true,
+            false,
+            false,
+            phdrs_table_vaddr,
+            ElfSegmentData::RealData(phdrs_table_bytes),
+            Some(PHENT_TYPE_PHDR),
+        );
+
         self.elf
             .write_symbol(
-                "sel4_capdl_initializer_embedded_frames_data_start",
-                &embedded_frame_data_vaddr.to_le_bytes(),
+                "sel4_phdrs_patched__vaddr",
+                &phdrs_table_vaddr.to_le_bytes(),
             )
             .unwrap();
 
         self.elf
             .write_symbol(
-                "sel4_capdl_initializer_serialized_spec_data_start",
-                &spec_vaddr.to_le_bytes(),
-            )
-            .unwrap();
-        self.elf
-            .write_symbol(
-                "sel4_capdl_initializer_serialized_spec_data_size",
-                &spec_size.to_le_bytes(),
-            )
-            .unwrap();
-
-        self.elf
-            .write_symbol(
-                "sel4_capdl_initializer_image_start",
-                &self.elf.lowest_vaddr().to_le_bytes(),
-            )
-            .unwrap();
-        self.elf
-            .write_symbol(
-                "sel4_capdl_initializer_image_end",
-                &self.elf.highest_vaddr().to_le_bytes(),
+                "sel4_phdrs_patched__phnum",
+                &(expected_phnum as u16).to_le_bytes(),
             )
             .unwrap();
 

@@ -63,14 +63,14 @@ struct ElfSectionHeader64 {
 
 #[repr(C, packed)]
 pub struct ElfProgramHeader64 {
-    type_: u32,
-    flags: u32,
-    offset: u64,
-    vaddr: u64,
-    paddr: u64,
-    filesz: u64,
-    memsz: u64,
-    align: u64,
+    pub type_: u32,
+    pub flags: u32,
+    pub offset: u64,
+    pub vaddr: u64,
+    pub paddr: u64,
+    pub filesz: u64,
+    pub memsz: u64,
+    pub align: u64,
 }
 
 #[repr(C, packed)]
@@ -100,12 +100,13 @@ struct ElfHeader64 {
 
 const ELF_MAGIC: &[u8; 4] = b"\x7FELF";
 
-const PHENT_TYPE_LOADABLE: u32 = 1;
+pub const PHENT_TYPE_LOADABLE: u32 = 1;
+pub const PHENT_TYPE_PHDR: u32 = 6;
 
 /// ELF program-header flags (`p_flags`)
 const PF_X: u32 = 0x1;
 const PF_W: u32 = 0x2;
-const PF_R: u32 = 0x4;
+pub const PF_R: u32 = 0x4;
 
 /// ELF section-header type (`sh_type`)
 const SHT_PROGBITS: u32 = 0x1;
