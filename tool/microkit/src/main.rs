@@ -229,11 +229,22 @@ fn main() -> Result<(), String> {
         _ => None,
     };
 
+    // TODO - x86 builds do not have to statically define PC99_TSC_FREQUENCY, so we are
+    // defaulting to using timer ticks. Need to have a better solution for this problem
+    let timer_freq = match arch {
+        Arch::Aarch64 => Some(json_str_as_u64(&kernel_config_json, "TIMER_FREQUENCY")? as u64),
+        Arch::Riscv64 => Some(json_str_as_u64(&kernel_config_json, "TIMER_FREQUENCY")? as u64),
+        _ => None,
+    };
+
     let kernel_frame_size = match arch {
         Arch::Aarch64 => 1 << 12,
         Arch::Riscv64 => 1 << 21,
         Arch::X86_64 => 1 << 12,
     };
+
+    let num_domains = json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")?;
+    let num_domain_schedules = json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?;
 
     let kernel_config = Config {
         arch,
@@ -258,12 +269,15 @@ fn main() -> Result<(), String> {
             1
         },
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+        timer_freq,
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
         invocations_labels,
         device_regions,
         normal_regions,
+        num_domains,
+        num_domain_schedules,
         object_sizes,
     };
 
@@ -384,8 +398,17 @@ fn main() -> Result<(), String> {
         }
     }
 
-    // The monitor is just a special PD
-    system_elfs.push(monitor_elf);
+    // Create a copy of the monitor elf for every domain in the system
+    let mut num_domains = 1;
+    if system.domain_schedule.is_some() {
+        num_domains = system.domain_schedule.clone().unwrap().domain_ids.len();
+    }
+
+    let mut monitor_elfs = Vec::with_capacity(num_domains);
+
+    for _ in 0..num_domains {
+        monitor_elfs.push(monitor_elf.clone());
+    }
 
     let mut capdl_initialiser = CapDLInitialiser::new(capdl_initialiser_elf);
 
@@ -398,17 +421,21 @@ fn main() -> Result<(), String> {
         spec_need_refinement = false;
 
         // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
-        if let Err(err) = patch_symbols(&kernel_config, &mut system_elfs, &system) {
+        if let Err(err) =
+            patch_symbols(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)
+        {
             eprintln!("ERROR: {err}");
             std::process::exit(1);
         }
 
-        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
+        let mut spec_container =
+            build_capdl_spec(&kernel_config, &mut system_elfs, &mut monitor_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,
             args.config.as_str(),
             &spec_container,
             &system_elfs,
+            &monitor_elfs,
             &mut capdl_initialiser,
         );
 
