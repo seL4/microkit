@@ -618,20 +618,9 @@ pub fn build_capdl_spec(
                 1 << capdl_util_get_frame_size_bits(&spec_container, *frames.first().unwrap());
 
             // sdf.rs sanity checks that the memory regions doesn't overlap with each others, etc.
-            // But it doesn't actually check for whether they overlap with a PD's stack or ELF segments.
+            // But it doesn't actually check for whether they overlap with a PD's ELF segments.
             // We perform this check here, otherwise the tool will panic with quite cryptic page-table related errors.
             let mr_vaddr_range = map.vaddr..(map.vaddr + (page_size_bytes * frames.len() as u64));
-
-            let pd_reserved_range =
-                kernel_config.pd_map_max_vaddr(pd.stack_size)..kernel_config.user_top();
-            if ranges_overlap(&mr_vaddr_range, &pd_reserved_range) {
-                return Err(
-                    format!(
-                        "ERROR: mapping MR '{}' to PD '{}' with vaddr [0x{:x}..0x{:x}) will overlap with the PD reserved range at [0x{:x}..0x{:x})",
-                        map.mr, pd.name, mr_vaddr_range.start, mr_vaddr_range.end, pd_reserved_range.start, pd_reserved_range.end,
-                    )
-                );
-            }
 
             for elf_seg in elf_obj.loadable_segments().iter() {
                 let elf_seg_vaddr_range = elf_seg.virt_addr
