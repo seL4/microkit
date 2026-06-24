@@ -1166,7 +1166,7 @@ pub fn build_capdl_spec(
                     }
                 };
                 table_metadata.pgd[pt_copy.table_index] = offset - (512 * 8);
-                page_table_size = match top_level_page_table {
+                page_table_size += match top_level_page_table {
                     TopLevelPageTable::Aarch64 { top_level } => top_level.get_size(),
                     TopLevelPageTable::Riscv64 { top_level } => top_level.get_size(),
                 };
