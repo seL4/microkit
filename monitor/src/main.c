@@ -26,8 +26,6 @@
 #define REPLY_CAP 2
 #define BASE_PD_TCB_CAP 10
 #define BASE_VM_TCB_CAP 74
-#define BASE_SCHED_CONTEXT_CAP 138
-#define BASE_NOTIFICATION_CAP 202
 
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;
@@ -730,20 +728,6 @@ static void monitor(void)
 
         seL4_Word pd_id = badge - 1;
         seL4_Word tcb_cap = BASE_PD_TCB_CAP + pd_id;
-
-        if (label == seL4_Fault_NullFault && pd_id < MAX_PDS) {
-            /* This is a request from our PD to become passive */
-            err = seL4_SchedContext_Bind(BASE_SCHED_CONTEXT_CAP + pd_id, BASE_NOTIFICATION_CAP + pd_id);
-            if (err != seL4_NoError) {
-                puts("MON|ERROR: could not bind scheduling context to notification object\n");
-            } else {
-                puts("MON|INFO: PD '");
-                puts(pd_names[pd_id]);
-                puts("' is now passive!\n");
-            }
-
-            continue;
-        }
 
         puts("MON|ERROR: received message ");
         puthex32(label);
