@@ -236,6 +236,32 @@ mod memory_region {
             "mr_prefill_sized_valid.system",
         )
     }
+
+    #[test]
+    fn test_mr_prefill_bootinfo_valid() {
+        check_success(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "mr_prefill_bootinfo_valid.system",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_bootinfo_type_invalid() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "mr_prefill_bootinfo_type_invalid.system",
+            "Error: BootInfoMap type: 'x86_invalid_bootinfo' is not supported on element 'memory_region'",
+        )
+    }
+
+    #[test]
+    fn test_mr_prefill_path_bootinfo_both_specified() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "mr_prefill_path_bootinfo_both_specified.system",
+            "Error: prefill_path and prefill_bootinfo cannot be both specified on element 'memory_region'",
+        )
+    }
 }
 
 #[cfg(test)]
