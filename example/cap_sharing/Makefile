@@ -55,6 +55,8 @@ LIBS := -lmicrokit -Tmicrokit.ld
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
+SPEC = $(BUILD_DIR)/capdl_spec.json
+KERNEL_32B = $(BUILD_DIR)/sel4_32.elf
 
 all: $(IMAGE_FILE)
 
@@ -67,5 +69,34 @@ $(BUILD_DIR)/%.o: %.c Makefile | $(BUILD_DIR)
 $(BUILD_DIR)/%.elf: $(BUILD_DIR)/%.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) cap_sharing.system
-	$(MICROKIT_TOOL) cap_sharing.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+$(IMAGE_FILE) $(KERNEL_32B) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) cap_sharing.system
+	$(MICROKIT_TOOL) cap_sharing.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE) --capdl-json $(SPEC)
+
+ifeq ($(ARCH),x86_64)
+qemu: $(KERNEL_32B) $(IMAGE_FILE)
+	qemu-system-x86_64                                \
+		-cpu qemu64,+fsgsbase,+pdpe1gb,+xsaveopt,+xsave \
+		-m "1G"                                         \
+		-display none                                   \
+		-serial mon:stdio                               \
+		-kernel $(KERNEL_32B)                           \
+		-initrd $(IMAGE_FILE)
+else ifeq ($(ARCH),aarch64)
+qemu: $(IMAGE_FILE)
+	qemu-system-aarch64                               \
+		-machine virt,virtualization=on -cpu cortex-a53 \
+		-nographic                                      \
+		-m size=2G                                      \
+		-serial mon:stdio                               \
+		-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0
+else ifeq ($(ARCH),riscv64)
+qemu: $(IMAGE_FILE)
+	qemu-system-riscv64                               \
+		-machine virt                                   \
+		-kernel $(IMAGE_FILE)                           \
+		-nographic                                      \
+		-m size=2G                                      \
+		-serial mon:stdio
+else
+$(error Unsupported ARCH)
+endif
