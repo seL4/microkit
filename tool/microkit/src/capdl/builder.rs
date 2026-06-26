@@ -95,14 +95,11 @@ const PD_BASE_PD_TCB_CAP: u64 = PD_BASE_IRQ_CAP + 64;
 const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
-// The following region can be used for whatever the user wants to map into their
-// cspace. We restrict them to use this region so that they don't accidently
-// overwrite other parts of the cspace. The cspace slot that the users provide
-// for mapping in extra caps such as TCBs and SCs will be as an offset to this
-// index. We are bounding this to 128 slots for now.
-const PD_BASE_USER_CAPS: u64 = PD_BASE_IOPORT_CAP + 64;
 
-pub const PD_CAP_SIZE: u32 = 1024;
+/* This should be kept in sync with `PD_ROOT_CAP_BITS` in libmicrokit/include/microkit.h */
+const PD_ROOT_CAP_SIZE: u32 = 64;
+const PD_ROOT_CAP_BITS: u8 = PD_ROOT_CAP_SIZE.ilog2() as u8;
+pub const PD_CAP_SIZE: u32 = 512;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
 const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() as u64;
@@ -120,6 +117,7 @@ pub struct ExpectedAllocation {
 
 struct PDShadowCspace {
     cspace: ObjectId,
+    microkit_cnode: ObjectId,
     notification: ObjectId,
     endpoint: Option<ObjectId>,
     sched_context: ObjectId,
@@ -1014,11 +1012,29 @@ pub fn build_capdl_spec(
             PD_CAP_BITS,
             caps_to_insert_to_pd_cspace,
         );
-        let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
+        let pd_guard_size =
+            kernel_config.cap_address_bits - PD_CAP_BITS as u64 - PD_ROOT_CAP_BITS as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
+
+        let pd_root_cnode_obj_id = capdl_util_make_cnode_obj(
+            &mut spec_container,
+            &(pd.name.clone() + "_root"),
+            PD_ROOT_CAP_BITS,
+            Vec::new(),
+        );
+        // leave the guard size root cnode as 0
+        let pd_root_cnode_cap = capdl_util_make_cnode_cap(pd_root_cnode_obj_id, 0, 0);
+        // place microkit managed cnode at slot 0
+        capdl_util_insert_cap_into_cspace(
+            &mut spec_container,
+            pd_root_cnode_obj_id,
+            0,
+            pd_cnode_cap,
+        );
+
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
-            pd_cnode_cap,
+            pd_root_cnode_cap,
         ));
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
@@ -1070,7 +1086,8 @@ pub fn build_capdl_spec(
         pd_shadow_cspaces.insert(
             pd_global_idx,
             PDShadowCspace {
-                cspace: pd_cnode_obj_id,
+                cspace: pd_root_cnode_obj_id,
+                microkit_cnode: pd_cnode_obj_id,
                 endpoint: pd_ep_obj_id,
                 notification: pd_ntfn_obj_id,
                 sched_context: pd_sc_obj_id,
@@ -1084,8 +1101,8 @@ pub fn build_capdl_spec(
     // Step 4. Create channels
     // *********************************
     for channel in system.channels.iter() {
-        let pd_a_cspace_id = pd_shadow_cspaces[&channel.end_a.pd].cspace;
-        let pd_b_cspace_id = pd_shadow_cspaces[&channel.end_b.pd].cspace;
+        let pd_a_cspace_id = pd_shadow_cspaces[&channel.end_a.pd].microkit_cnode;
+        let pd_b_cspace_id = pd_shadow_cspaces[&channel.end_b.pd].microkit_cnode;
         let pd_a_ntfn_id = pd_shadow_cspaces[&channel.end_a.pd].notification;
         let pd_b_ntfn_id = pd_shadow_cspaces[&channel.end_b.pd].notification;
 
@@ -1162,15 +1179,33 @@ pub fn build_capdl_spec(
             let cap_map_obj = match cap_map.cap_type {
                 CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
                 CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
-                CapMapType::VSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.vspace),
-                CapMapType::CSpace => capdl_util_make_sc_cap(pd_src_shadow_cspace.cspace),
+                CapMapType::VSpace => capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace),
+                CapMapType::CSpace => {
+                    let Some(named_object) =
+                        spec_container.get_root_object(pd_src_shadow_cspace.cspace)
+                    else {
+                        unreachable!("internal bug: couldn't find cnode with given obj id.");
+                    };
+                    let Object::CNode(ref cnode) = named_object.object else {
+                        unreachable!(
+                            "internal bug: got a non-CNode object id {} with name '{}'",
+                            usize::from(pd_src_shadow_cspace.cspace),
+                            named_object.name.as_ref().unwrap()
+                        );
+                    };
+
+                    let guard_size =
+                        kernel_config.cap_address_bits as u8 - PD_ROOT_CAP_BITS - cnode.size_bits;
+
+                    capdl_util_make_cnode_cap(pd_src_shadow_cspace.cspace, 0, guard_size)
+                }
             };
 
             // Map this into the destination pd's cspace and the specified slot.
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 pd_dest_cspace_id,
-                (PD_BASE_USER_CAPS + cap_map.slot) as u32,
+                cap_map.slot as u32,
                 cap_map_obj,
             );
         }
