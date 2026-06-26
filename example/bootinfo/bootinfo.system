@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="bootinfo_x86_tsc_freq" prefill_bootinfo="x86_tsc_freq" />
+    <protection_domain name="bootinfo">
+        <program_image path="bootinfo.elf" />
+        <map mr="bootinfo_x86_tsc_freq" vaddr="0x2_000_000" perms="r" cached="true" setvar_vaddr="bootinfo_tsc_freq" />
+    </protection_domain>
+</system>
