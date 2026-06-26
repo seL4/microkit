@@ -33,6 +33,10 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_IOPORT_CAP 394
 #define BASE_USER_CAPS 458
 
+/* This should be kept in sync with `PD_ROOT_CAP_BITS` in capdl/builder.rs */
+#define PD_ROOT_CAP_BITS 6
+#define PD_ROOT_CAP_SIZE (1ULL << PD_ROOT_CAP_BITS)
+
 #define MICROKIT_MAX_USER_CAPS 128
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_MAX_CHANNEL_ID (MICROKIT_MAX_CHANNELS - 1)
@@ -594,9 +598,9 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
  **/
 static inline seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)
 {
-    if (slot > MICROKIT_MAX_USER_CAPS) {
+    if (slot == 0 || slot >= PD_ROOT_CAP_SIZE) {
         return seL4_CapNull;
     }
 
-    return BASE_USER_CAPS + slot;
+    return slot << (seL4_WordBits - PD_ROOT_CAP_BITS);
 }
