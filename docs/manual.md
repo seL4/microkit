@@ -255,6 +255,17 @@ a size isn't specified, the memory region will be sized by the length
 of the prefill file, rounded up to the smallest page size or the user
 specified page size.
 
+A *memory region* can also be prefilled with bootinfo by the capDL Initialiser
+via the parameter `prefill_bootinfo` in the [System Description File](#sysdesc).
+If a size isn't specified, the memory region defaults to a single smallest page.
+The supported bootinfo types include:
+
+* `x86_vbe`
+* `x86_mbmap`
+* `x86_acpi_rsdp`
+* `x86_framebuffer`
+* `x86_tsc_freq`
+
 ## Channels {#channels}
 
 A *channel* enables two protection domains to interact using protected procedures or notifications.
@@ -1037,6 +1048,7 @@ It supports the following attributes:
 * `page_size`: (optional) Size of the pages used in the memory region; must be a supported page size if provided. Defaults to the largest page size for the target architecture that the memory region is aligned to.
 * `phys_addr`: (optional) The physical address for the start of the memory region (must be a multiple of the page size).
 * `prefill_path`: (optional) Path to a file containing data that the memory region will be filled with at initialisation.
+* `prefill_bootinfo`: (optional) Bootinfo type that the memmory region will be filled with by the capDL initialiser.
 
 The `memory_region` element does not support any child elements.
 
