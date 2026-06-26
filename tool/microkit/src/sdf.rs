@@ -1372,6 +1372,14 @@ impl CapMap {
 
         let slot = sdf_parse_number(checked_lookup(xml_sdf, node, "slot")?, node)?;
 
+        if slot == 0 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("The destination slot 0 has been reserved for Microkit CNode"),
+            ));
+        }
+
         // TODO: Rework this so that we don't have a fixed upper limit.
         if slot >= CAP_MAP_MAX_SLOT {
             return Err(value_error(

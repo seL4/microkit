@@ -1041,6 +1041,15 @@ mod system {
     }
 
     #[test]
+    fn test_cap_mappings_slot_invalid() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "cap_mappings_slot_invalid.system",
+            "Error: The destination slot 0 has been reserved for Microkit CNode on element 'cap_sc'",
+        )
+    }
+
+    #[test]
     fn test_cap_mappings_invalid() {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
