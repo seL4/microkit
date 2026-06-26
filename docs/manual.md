@@ -109,6 +109,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [interrupt](#irq)
 * [fault](#fault)
 * [ioport](#ioport)
+* [io address space](#io_address_space)
 
 ## System {#system}
 
@@ -242,6 +243,13 @@ The mapping has a number of attributes, which include:
 * caching attributes (mostly relevant for device memory)
 * permissions (read, write and execute)
 
+*Note:* On x86 a memory region can also be *mapped* into one or more
+io address spaces. This type of mapping is known as an *iomap*. It supports
+a number of attributes, which include:
+
+* the io virtual address at which the region is mapped in the io address space
+* permissions (read, write)
+
 **Note:** When a memory region is mapped into multiple protection
 domains, the attributes used for different mappings may vary.
 
@@ -355,6 +363,12 @@ delivered to another PD, the fault being handled depends on when the parent PD i
 ## I/O Ports {#ioport}
 
 I/O ports are x86 mechanisms to access certain physical devices (e.g. PC serial ports or PCI) using the `in` and `out` CPU instructions. The system description specifies if a protection domain have access to certain port address ranges. These accesses will be executed by seL4 and the result returned to protection domains.
+
+## IO Address Spaces {#io_address_space}
+
+IO Address Spaces provide a way to isolate device memory accesses within a fixed virtual address space. The isolation provided by the address space is enforced by the underlying hardware IOMMU or SMMU.
+
+IO Address Spaces allow *memory regions* to be mapped to a provided base IO virtual address. These IO virtual addresses will be translated by the hardware IOMMU or SMMU to the underlying physical memory that backs the memory region.
 
 # SDK {#sdk}
 
@@ -1062,6 +1076,23 @@ See the 'cap_sharing' example packaged in your SDK or [on GitHub](https://github
 All capability elements (currently) all support the `pd` attribute, the name of the protection domain that the capability is from.
 For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' in the CSpace of the current PD.
 
+## `io_address_space`
+
+The `io_address_space` element describes an address space used to isolate a given device.
+
+It supports the following attributes:
+* `name`: A unique name for the io address space
+* `peripheral_id`: A unique identifier. This must match the identifier used by the hardware IOMMU or SMMU to identify devices.
+
+The `io_address_space` element supports the following elements as children:
+
+* `iomap`: This is used to map a *memory_region* into the io address space.
+
+The `iomap` element supports the following attributes:
+* `mr`: Identifies the memory region to map.
+* `iovaddr`: Identifies the io virtual address at which to map the memory region.
+* `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), and `w` (write).
+           Defaults to read-write.
 
 ### Page sizes by architecture
 

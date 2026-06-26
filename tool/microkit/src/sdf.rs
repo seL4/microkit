@@ -22,9 +22,10 @@ use crate::sel4::{
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 /// Events that come through entry points (e.g notified or protected) are given an
 /// identifier that is used as the badge at runtime.
@@ -54,15 +55,16 @@ pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;
 const PD_MIN_STACK_SIZE: u64 = 0x1000;
 const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
 
-/// Maximum values for PCI bus, device, function numbers. Inclusive.
-const PCI_BUS_MAX: i64 = (1 << 8) - 1;
-const PCI_DEV_MAX: i64 = (1 << 5) - 1;
-const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
-
 /// Maximum x86 IRQ vector value. Inclusive.
 /// This value is calculated by the kernel as `irq_user_max - irq_user_min` in
 /// `src/arch/x86/object/interrupt.c`
 const X86_IRQ_VECTOR_MAX: i64 = 107;
+
+// In reality the kernel dynamically determines this value. The tool assumes
+// at least 512GiB of IO virtual address space. This handles all values reported
+// to us by the kernel at runtime except for the 1GiB or no-iommu cases.
+// This is currently applied to any iommu mapping independent of the architecture.
+const IOMAP_MAX_VADDR: u64 = (1 << 39) - 1;
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
@@ -93,11 +95,175 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
     format!("{}:{}:{}", xml_sdf.filename.display(), pos.row, pos.col)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PciDevice {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+}
+
+impl PciDevice {
+    /// Maximum values for PCI bus, device, function numbers. Inclusive.
+    const PCI_BUS_MAX: i64 = (1 << 8) - 1;
+    const PCI_DEV_MAX: i64 = (1 << 5) - 1;
+    const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PciDeviceParseError {
+    Malformed,
+    BusParse,
+    DeviceParse,
+    FunctionParse,
+    BusOutOfRange,
+    DeviceOutOfRange,
+    FunctionOutOfRange,
+}
+
+impl fmt::Display for PciDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:02x}:{:02x}.{:x}",
+            self.bus, self.device, self.function
+        )
+    }
+}
+
+impl fmt::Display for PciDeviceParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PciDeviceParseError::Malformed => {
+                write!(f, "expected PCI address in bus:device.function form")
+            }
+            PciDeviceParseError::BusParse => write!(f, "failed to parse PCI bus"),
+            PciDeviceParseError::DeviceParse => write!(f, "failed to parse PCI device"),
+            PciDeviceParseError::FunctionParse => write!(f, "failed to parse PCI function"),
+            PciDeviceParseError::BusOutOfRange => {
+                write!(f, "PCI bus must be within [0..{}]", PciDevice::PCI_BUS_MAX)
+            }
+            PciDeviceParseError::DeviceOutOfRange => {
+                write!(
+                    f,
+                    "PCI device must be within [0..{}]",
+                    PciDevice::PCI_DEV_MAX
+                )
+            }
+            PciDeviceParseError::FunctionOutOfRange => {
+                write!(
+                    f,
+                    "PCI function must be within [0..{}]",
+                    PciDevice::PCI_FUNC_MAX
+                )
+            }
+        }
+    }
+}
+
+impl FromStr for PciDevice {
+    type Err = PciDeviceParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (bus_str, device_function_str) =
+            s.split_once(':').ok_or(PciDeviceParseError::Malformed)?;
+        let (device_str, function_str) = device_function_str
+            .split_once('.')
+            .ok_or(PciDeviceParseError::Malformed)?;
+
+        let bus =
+            i64::from_str_radix(bus_str.trim(), 16).map_err(|_| PciDeviceParseError::BusParse)?;
+        let device = i64::from_str_radix(device_str.trim(), 16)
+            .map_err(|_| PciDeviceParseError::DeviceParse)?;
+        let function = i64::from_str_radix(function_str.trim(), 16)
+            .map_err(|_| PciDeviceParseError::FunctionParse)?;
+
+        if !(0..=PciDevice::PCI_BUS_MAX).contains(&bus) {
+            return Err(PciDeviceParseError::BusOutOfRange);
+        }
+        if !(0..=PciDevice::PCI_DEV_MAX).contains(&device) {
+            return Err(PciDeviceParseError::DeviceOutOfRange);
+        }
+        if !(0..=PciDevice::PCI_FUNC_MAX).contains(&function) {
+            return Err(PciDeviceParseError::FunctionOutOfRange);
+        }
+
+        Ok(PciDevice {
+            bus: bus as u8,
+            device: device as u8,
+            function: function as u8,
+        })
+    }
+}
+
+// This can be extended in future to support devices on an SMMU enabled Arm device
+// or IOMMU enabled RISC-V device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IommuDeviceIdentifier {
+    X86Pci(PciDevice),
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum IommuDeviceIdentifierParseError {
+    UnsupportedArch(Arch),
+    Pci(PciDeviceParseError),
+}
+
+impl IommuDeviceIdentifier {
+    fn from_str_for_arch(
+        config: &Config,
+        s: &str,
+    ) -> Result<Self, IommuDeviceIdentifierParseError> {
+        match config.arch {
+            Arch::X86_64 => PciDevice::from_str(s)
+                .map(IommuDeviceIdentifier::X86Pci)
+                .map_err(IommuDeviceIdentifierParseError::Pci),
+            Arch::Aarch64 | Arch::Riscv64 => Err(IommuDeviceIdentifierParseError::UnsupportedArch(
+                config.arch,
+            )),
+        }
+    }
+}
+
+impl fmt::Display for IommuDeviceIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IommuDeviceIdentifier::X86Pci(pci_device) => write!(f, "PCI device {pci_device}"),
+        }
+    }
+}
+
+impl fmt::Display for IommuDeviceIdentifierParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IommuDeviceIdentifierParseError::UnsupportedArch(arch) => {
+                write!(f, "IOMMU device identifiers are not supported on {arch}")
+            }
+            IommuDeviceIdentifierParseError::Pci(err) => write!(f, "{err}"),
+        }
+    }
+}
+
 #[repr(u8)]
 pub enum SysMapPerms {
     Read = 1,
     Write = 2,
     Execute = 4,
+}
+
+impl SysMapPerms {
+    fn from_str(s: &str) -> Result<u8, ()> {
+        let mut perms = 0;
+        for c in s.chars() {
+            match c {
+                'r' => perms |= SysMapPerms::Read as u8,
+                'w' => perms |= SysMapPerms::Write as u8,
+                'x' => perms |= SysMapPerms::Execute as u8,
+                _ => return Err(()),
+            }
+        }
+
+        Ok(perms)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +277,113 @@ pub struct SysMap {
     pub text_pos: Option<roxmltree::TextPos>,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum SysIOMapPerms {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+impl SysIOMapPerms {
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let mut read = false;
+        let mut write = false;
+
+        for c in s.chars() {
+            match c {
+                'r' => read = true,
+                'w' => write = true,
+                _ => return Err(()),
+            }
+        }
+
+        match (read, write) {
+            (true, true) => Ok(SysIOMapPerms::ReadWrite),
+            (true, false) => Ok(SysIOMapPerms::Read),
+            (false, true) => Ok(SysIOMapPerms::Write),
+            (false, false) => Err(()),
+        }
+    }
+
+    pub fn read(self) -> bool {
+        matches!(self, SysIOMapPerms::Read | SysIOMapPerms::ReadWrite)
+    }
+
+    pub fn write(self) -> bool {
+        matches!(self, SysIOMapPerms::Write | SysIOMapPerms::ReadWrite)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct SysIOMap {
+    pub device: String,
+    pub mr: String,
+    pub identifier: IommuDeviceIdentifier,
+    pub iovaddr: u64,
+    pub perms: SysIOMapPerms,
+    pub text_pos: Option<roxmltree::TextPos>,
+}
+
+trait Map {
+    fn mr_name(&self) -> &str;
+    fn addr(&self) -> u64;
+    fn text_pos(&self) -> Option<roxmltree::TextPos>;
+    fn element(&self) -> &'static str;
+    fn addr_name(&self) -> &'static str;
+    fn range_name(&self) -> &'static str;
+}
+
+impl Map for SysMap {
+    fn mr_name(&self) -> &str {
+        &self.mr
+    }
+
+    fn addr(&self) -> u64 {
+        self.vaddr
+    }
+
+    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+        self.text_pos
+    }
+
+    fn element(&self) -> &'static str {
+        "map"
+    }
+
+    fn addr_name(&self) -> &'static str {
+        "vaddr"
+    }
+
+    fn range_name(&self) -> &'static str {
+        "virtual address range"
+    }
+}
+
+impl Map for SysIOMap {
+    fn mr_name(&self) -> &str {
+        &self.mr
+    }
+
+    fn addr(&self) -> u64 {
+        self.iovaddr
+    }
+
+    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+        self.text_pos
+    }
+
+    fn element(&self) -> &'static str {
+        "iomap"
+    }
+
+    fn addr_name(&self) -> &'static str {
+        "iovaddr"
+    }
+
+    fn range_name(&self) -> &'static str {
+        "io address range"
+    }
+}
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SysMemoryRegionKind {
     User,
@@ -186,9 +459,7 @@ pub enum SysIrqKind {
     },
     /// x86-64 specific
     MSI {
-        pci_bus: u64,
-        pci_dev: u64,
-        pci_func: u64,
+        pci_device: PciDevice,
         handle: u64,
         vector: u64,
     },
@@ -255,7 +526,7 @@ pub struct Channel {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CpuCore(pub u8);
 
-impl Display for CpuCore {
+impl fmt::Display for CpuCore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("cpu{:02}", self.0))
     }
@@ -346,49 +617,6 @@ pub struct VirtualCpu {
     pub cpu: Option<CpuCore>,
 }
 
-/// To avoid code duplication for handling protection domains
-/// and virtual machines, which have a lot in common.
-trait ExecutionContext {
-    fn name(&self) -> &String;
-    fn kind(&self) -> &'static str;
-}
-
-impl ExecutionContext for ProtectionDomain {
-    fn name(&self) -> &String {
-        &self.name
-    }
-
-    fn kind(&self) -> &'static str {
-        "protection domain"
-    }
-}
-
-impl ExecutionContext for VirtualMachine {
-    fn name(&self) -> &String {
-        &self.name
-    }
-
-    fn kind(&self) -> &'static str {
-        "virtual machine"
-    }
-}
-
-impl SysMapPerms {
-    fn from_str(s: &str) -> Result<u8, ()> {
-        let mut perms = 0;
-        for c in s.chars() {
-            match c {
-                'r' => perms |= SysMapPerms::Read as u8,
-                'w' => perms |= SysMapPerms::Write as u8,
-                'x' => perms |= SysMapPerms::Execute as u8,
-                _ => return Err(()),
-            }
-        }
-
-        Ok(perms)
-    }
-}
-
 impl SysMap {
     fn from_xml(
         xml_sdf: &XmlSystemDescription,
@@ -411,7 +639,7 @@ impl SysMap {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"),
+                format!("vaddr ({vaddr:#x}) must be less than {max_vaddr:#x}"),
             ));
         }
 
@@ -463,6 +691,137 @@ impl SysMap {
             cached,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
+    }
+}
+
+impl SysIOMap {
+    fn from_xml(
+        _config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        device: &str,
+        identifier: IommuDeviceIdentifier,
+    ) -> Result<SysIOMap, String> {
+        let attrs = vec!["mr", "iovaddr", "perms"];
+
+        check_attributes(xml_sdf, node, &attrs)?;
+
+        let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
+        let iovaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "iovaddr")?, node)?;
+
+        if iovaddr > IOMAP_MAX_VADDR {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "iovaddr ({iovaddr:#x}) must be less than {:#x}",
+                    IOMAP_MAX_VADDR + 1
+                ),
+            ));
+        }
+
+        let perms = if let Some(xml_perms) = node.attribute("perms") {
+            match SysIOMapPerms::from_str(xml_perms) {
+                Ok(parsed_perms) => parsed_perms,
+                Err(()) => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "perms for io mapped memory must only be a combination of 'r' and 'w'"
+                            .to_string(),
+                    ))
+                }
+            }
+        } else {
+            // Default to read-write
+            SysIOMapPerms::ReadWrite
+        };
+
+        Ok(SysIOMap {
+            device: device.to_string(),
+            mr,
+            identifier,
+            iovaddr,
+            perms,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+        })
+    }
+}
+
+// This is implemented in such a way that each device will have its own address space.
+// If devices need to share physical memory, this can be done by mapping the same memory_region
+// into each address space.
+struct IOAddressSpace {
+    iomaps: Vec<SysIOMap>,
+}
+
+impl IOAddressSpace {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        device_names: &mut HashSet<String>,
+        iommu_device_identifiers: &mut HashSet<IommuDeviceIdentifier>,
+    ) -> Result<IOAddressSpace, String> {
+        let pos = xml_sdf.doc.text_pos_at(node.range().start);
+        if !config.iommu {
+            return Err(format!(
+                "Error: io address space requires seL4 to be built with IOMMU support: {}",
+                loc_string(xml_sdf, pos)
+            ));
+        }
+
+        check_attributes(xml_sdf, node, &["name", "peripheral_id"])?;
+        let device_name = checked_lookup(xml_sdf, node, "name")?;
+        if !device_names.insert(device_name.to_string()) {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("duplicate device name '{device_name}'"),
+            ));
+        }
+
+        // In the SDF we use peripheral_id as an architecture agnostic way to describe
+        // how a device is identified in a system. For example on x86 the IOMMU identifies
+        // devices by the PCI tuple (bus,dev,fn)
+        let identifier_str = checked_lookup(xml_sdf, node, "peripheral_id")?;
+        let identifier =
+            IommuDeviceIdentifier::from_str_for_arch(config, identifier_str).map_err(|err| {
+                value_error(
+                    xml_sdf,
+                    node,
+                    format!("failed to parse device peripheral_id '{identifier_str}': {err}"),
+                )
+            })?;
+        if !iommu_device_identifiers.insert(identifier) {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("duplicate device peripheral_id '{identifier}'"),
+            ));
+        }
+
+        let mut iomaps = Vec::new();
+
+        for child in node.children().filter(|node| node.is_element()) {
+            match child.tag_name().name() {
+                "iomap" => {
+                    let iomap =
+                        SysIOMap::from_xml(config, xml_sdf, &child, device_name, identifier)?;
+                    iomaps.push(iomap);
+                }
+                _ => {
+                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    return Err(format!(
+                        "Error: invalid XML element '{}': {}",
+                        child.tag_name().name(),
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+            }
+        }
+
+        Ok(IOAddressSpace { iomaps })
     }
 }
 
@@ -623,7 +982,7 @@ impl ProtectionDomain {
                 xml_sdf,
                 node,
                 format!(
-                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
+                    "stack size must be between {PD_MIN_STACK_SIZE:#x} bytes and {PD_MAX_STACK_SIZE:#x} bytes"
                 ),
             ));
         }
@@ -906,94 +1265,8 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
 
-                        // A "pcidev" attribute is in a form of Bus:Dev.Func
-                        // Split by the colon then the dot.
-
-                        // If the input is valid, index 0 contains "Bus", index 1 contains
-                        // "Dev.Func"
-                        let pci_parts_by_colon: Vec<_> =
-                            pcidev_str.split(':').map(str::trim).collect();
-
-                        if pci_parts_by_colon.len() != 2 {
-                            return Err(format!(
-                                "Error: failed to parse PCI address '{}' on element '{}'",
-                                pcidev_str,
-                                child.tag_name().name()
-                            ));
-                        }
-
-                        // If the input is valid, index 0 contains "Dev", index 1 contains
-                        // "Func"
-                        let pci_parts_by_dot: Vec<_> =
-                            pci_parts_by_colon[1].split('.').map(str::trim).collect();
-                        if pci_parts_by_dot.len() != 2 {
-                            return Err(format!(
-                                "Error: failed to parse PCI address '{}' on element '{}'",
-                                pcidev_str,
-                                child.tag_name().name()
-                            ));
-                        }
-
-                        let pci_bus_maybe = i64::from_str_radix(pci_parts_by_colon[0], 16);
-                        let pci_dev_maybe = i64::from_str_radix(pci_parts_by_dot[0], 16);
-                        let pci_func_maybe = i64::from_str_radix(pci_parts_by_dot[1], 16);
-
-                        match pci_bus_maybe {
-                            Ok(pci_bus_unchecked) => {
-                                if !(0..=PCI_BUS_MAX).contains(&pci_bus_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI bus must be within [0..{PCI_BUS_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI bus of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
-
-                        match pci_dev_maybe {
-                            Ok(pci_dev_unchecked) => {
-                                if !(0..=PCI_DEV_MAX).contains(&pci_dev_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI device must be within [0..{PCI_DEV_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI device of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
-
-                        match pci_func_maybe {
-                            Ok(pci_func_unchecked) => {
-                                if !(0..=PCI_FUNC_MAX).contains(&pci_func_unchecked) {
-                                    return Err(value_error(
-                                        xml_sdf,
-                                        &child,
-                                        format!("PCI function must be within [0..{PCI_FUNC_MAX}]"),
-                                    ));
-                                }
-                            }
-                            Err(_) => {
-                                return Err(format!(
-                                    "Error: failed to parse PCI function of '{}' on element '{}'",
-                                    pcidev_str,
-                                    child.tag_name().name()
-                                ))
-                            }
-                        };
+                        let pci_device = PciDevice::from_str(pcidev_str)
+                            .map_err(|err| value_error(xml_sdf, &child, err.to_string()))?;
 
                         let handle = checked_lookup(xml_sdf, &child, "handle")?
                             .parse::<i64>()
@@ -1020,9 +1293,7 @@ impl ProtectionDomain {
                         let irq = SysIrq {
                             id: id as u64,
                             kind: SysIrqKind::MSI {
-                                pci_bus: pci_bus_maybe.unwrap() as u64,
-                                pci_dev: pci_dev_maybe.unwrap() as u64,
-                                pci_func: pci_func_maybe.unwrap() as u64,
+                                pci_device,
                                 handle: handle as u64,
                                 vector: vector as u64,
                             },
@@ -1501,7 +1772,7 @@ impl SysMemoryRegion {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("page size 0x{page_size:x} not supported"),
+                format!("page size {page_size:#x} not supported"),
             ));
         }
 
@@ -1694,58 +1965,112 @@ struct XmlSystemDescription<'a> {
 pub struct SystemDescription {
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
+    pub iomaps: Vec<SysIOMap>,
     pub channels: Vec<Channel>,
 }
 
-fn check_maps(
+fn location_suffix_format(
+    xml_sdf: &XmlSystemDescription,
+    text_pos: Option<roxmltree::TextPos>,
+) -> String {
+    text_pos
+        .map(|pos| format!("@ {}", loc_string(xml_sdf, pos)))
+        .unwrap_or_default()
+}
+
+// max_end is the first invalid virtual address
+fn check_maps<'a, M, I>(
     xml_sdf: &XmlSystemDescription,
     mrs: &[SysMemoryRegion],
-    e: &dyn ExecutionContext,
-    maps: &[SysMap],
-) -> Result<(), String> {
-    let mut checked_maps = Vec::with_capacity(maps.len());
+    maps: I,
+    address_space: &str,
+    max_end: u64,
+) -> Result<(), String>
+where
+    M: Map + 'a,
+    I: IntoIterator<Item = &'a M>,
+{
+    let mut checked_maps: Vec<(&str, u64, u64)> = Vec::new();
+
     for map in maps {
-        let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
-        let pos = map.text_pos.unwrap();
-        match maybe_mr {
+        let element = map.element();
+        match mrs.iter().find(|mr| mr.name == map.mr_name()) {
             Some(mr) => {
-                if !map.vaddr.is_multiple_of(mr.page_size_bytes()) {
+                if !map.addr().is_multiple_of(mr.page_size_bytes()) {
                     return Err(format!(
-                        "Error: invalid vaddr alignment on 'map' @ {}",
-                        loc_string(xml_sdf, pos)
+                        "Error: invalid {} alignment on '{element}' {}",
+                        map.addr_name(),
+                        location_suffix_format(xml_sdf, map.text_pos())
                     ));
                 }
 
-                let map_start = map.vaddr;
-                let map_end = map.vaddr + mr.size;
-                for (name, start, end) in &checked_maps {
+                let map_start = map.addr();
+                let Some(map_end) = map_start.checked_add(mr.size) else {
+                    return Err(format!(
+                        "Error: {element} for '{}' has address range that overflows {}",
+                        map.mr_name(),
+                        location_suffix_format(xml_sdf, map.text_pos())
+                    ));
+                };
+
+                if map_end > max_end {
+                    return Err(format!(
+                        "Error: {element} for '{}' has {} [{:#x}..{:#x}) which exceeds valid address space [{:#x}..{:#x}) {}",
+                        map.mr_name(),
+                        map.range_name(),
+                        map_start,
+                        map_end,
+                        0,
+                        max_end,
+                        location_suffix_format(xml_sdf, map.text_pos())
+                    ));
+                }
+
+                for (name, start, end) in checked_maps.iter() {
                     if !(map_start >= *end || map_end <= *start) {
-                        return Err(
-                            format!(
-                                "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in {} '{}' @ {}",
-                                map.mr,
-                                map_start,
-                                map_end,
-                                name,
-                                start,
-                                end,
-                                e.kind(),
-                                e.name(),
-                                loc_string(xml_sdf, map.text_pos.unwrap())
-                            )
-                        );
+                        return Err(format!(
+                            "Error: map for '{}' has {} [{:#x}..{:#x}) which overlaps with map for '{}' [{:#x}..{:#x}) in {} {}",
+                            map.mr_name(),
+                            map.range_name(),
+                            map_start,
+                            map_end,
+                            name,
+                            start,
+                            end,
+                            address_space,
+                            location_suffix_format(xml_sdf, map.text_pos())
+                        ));
                     }
                 }
-                checked_maps.push((&map.mr, map_start, map_end));
+                checked_maps.push((map.mr_name(), map_start, map_end));
             }
             None => {
                 return Err(format!(
-                    "Error: invalid memory region name '{}' on 'map' @ {}",
-                    map.mr,
-                    loc_string(xml_sdf, pos)
-                ))
+                    "Error: invalid memory region name '{}' on '{element}' {}",
+                    map.mr_name(),
+                    location_suffix_format(xml_sdf, map.text_pos())
+                ));
             }
-        };
+        }
+    }
+
+    Ok(())
+}
+
+fn check_io_maps(
+    xml_sdf: &XmlSystemDescription,
+    mrs: &[SysMemoryRegion],
+    iomaps: &[SysIOMap],
+) -> Result<(), String> {
+    let mut by_device: HashMap<IommuDeviceIdentifier, Vec<&SysIOMap>> = HashMap::new();
+
+    for iomap in iomaps {
+        by_device.entry(iomap.identifier).or_default().push(iomap);
+    }
+
+    for (identifier, maps) in by_device {
+        let address_space = identifier.to_string();
+        check_maps(xml_sdf, mrs, maps, &address_space, IOMAP_MAX_VADDR + 1)?;
     }
 
     Ok(())
@@ -1927,6 +2252,9 @@ pub fn parse(
 
     let mut root_pds = vec![];
     let mut mrs = vec![];
+    let mut iomaps = vec![];
+    let mut device_names = HashSet::new();
+    let mut iommu_device_identifiers = HashSet::new();
     let mut channels = vec![];
     let system = doc
         .root()
@@ -1959,6 +2287,18 @@ pub fn parse(
                 &child,
                 search_paths,
             )?),
+            "io_address_space" => {
+                iomaps.extend(
+                    IOAddressSpace::from_xml(
+                        config,
+                        &xml_sdf,
+                        &child,
+                        &mut device_names,
+                        &mut iommu_device_identifiers,
+                    )?
+                    .iomaps,
+                );
+            }
             "virtual_machine" => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -2080,7 +2420,7 @@ pub fn parse(
             // expose this footgun to users.
             return Err(format!(
                     "Error: It is not possible for PD '{}' with a bound vCPU to have children on x86_64: {}",
-                    pd.name(),
+                    pd.name,
                     loc_string(&xml_sdf, pd.text_pos.unwrap())));
         }
     }
@@ -2234,11 +2574,25 @@ pub fn parse(
 
     // Ensure that all maps are correct
     for pd in &pds {
-        check_maps(&xml_sdf, &mrs, pd, &pd.maps)?;
+        check_maps(
+            &xml_sdf,
+            &mrs,
+            pd.maps.iter(),
+            &format!("protection domain '{}'", pd.name),
+            config.pd_map_max_vaddr(pd.stack_size),
+        )?;
         if let Some(vm) = &pd.virtual_machine {
-            check_maps(&xml_sdf, &mrs, vm, &vm.maps)?;
+            check_maps(
+                &xml_sdf,
+                &mrs,
+                vm.maps.iter(),
+                &format!("virtual machine '{}'", vm.name),
+                config.vm_map_max_vaddr(),
+            )?;
         }
     }
+
+    check_io_maps(&xml_sdf, &mrs, &iomaps)?;
 
     // Ensure that there are no overlapping extra cap maps in the user caps region
     // and we are not mapping in the same cap from the same source more than once
@@ -2283,7 +2637,7 @@ pub fn parse(
                     let pos = mr.text_pos.unwrap();
                     return Err(
                         format!(
-                            "Error: memory region '{}' physical address range [0x{:x}..0x{:x}) overlaps with another memory region '{}' [0x{:x}..0x{:x}) @ {}",
+                            "Error: memory region '{}' physical address range [{:#x}..{:#x}) overlaps with another memory region '{}' [{:#x}..{:#x}) @ {}",
                             mr.name,
                             mr_start,
                             mr_end,
@@ -2417,6 +2771,7 @@ pub fn parse(
     Ok(SystemDescription {
         protection_domains: pds,
         memory_regions: mrs,
+        iomaps,
         channels,
     })
 }

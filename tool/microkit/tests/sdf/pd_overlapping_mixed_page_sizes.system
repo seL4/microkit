@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="large_region" size="0x200000" page_size="0x200000" />
+    <memory_region name="small_region" size="0x1000" />
+    <protection_domain name="test">
+        <program_image path="test" />
+        <map mr="large_region" vaddr="0x200000" />
+        <map mr="small_region" vaddr="0x201000" />
+    </protection_domain>
+</system>

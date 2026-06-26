@@ -86,18 +86,14 @@ fn create_irq_obj(
             }),
         }),
         SysIrqKind::MSI {
-            pci_bus,
-            pci_dev,
-            pci_func,
-            handle,
-            ..
+            pci_device, handle, ..
         } => Object::IrqMsi(object::IrqMsi {
             slots: [].to_vec(),
             extra: Box::new(object::IrqMsiExtraInfo {
                 handle: Word(handle),
-                pci_bus: Word(pci_bus),
-                pci_dev: Word(pci_dev),
-                pci_func: Word(pci_func),
+                pci_bus: Word(pci_device.bus as u64),
+                pci_dev: Word(pci_device.device as u64),
+                pci_func: Word(pci_device.function as u64),
             }),
         }),
     };
