@@ -11,8 +11,8 @@ use std::{
 };
 
 use sel4_capdl_initializer_types::{
-    object, CapTableEntry, Fill, FillEntry, FillEntryContent, NamedObject, Object, ObjectId, Spec,
-    Word,
+    object, CapTableEntry, Fill, FillEntry, FillEntryContent, FillEntryContentBootInfo,
+    NamedObject, Object, ObjectId, Spec, Word,
 };
 
 use crate::{
@@ -531,8 +531,9 @@ pub fn build_capdl_spec(
                 .paddr()
                 .map(|base_paddr| Word(base_paddr + (frame_sequence * mr.page_size_bytes())));
 
+            let starting_byte_idx = frame_sequence * mr.page_size_bytes();
+
             let frame_fill = if let Some(prefill_bytes) = &mr.prefill_bytes {
-                let starting_byte_idx = frame_sequence * mr.page_size_bytes();
                 let remaining_bytes_to_fill = prefill_bytes.len() as u64 - starting_byte_idx;
                 let num_bytes_to_fill = min(mr.page_size_bytes(), remaining_bytes_to_fill);
 
@@ -551,6 +552,23 @@ pub fn build_capdl_spec(
                         content: FillEntryContent::Data(FillContent::BytesContent(BytesContent {
                             bytes: frame_bytes,
                         })),
+                    }]
+                    .to_vec(),
+                }
+            } else if let Some(prefill_bootinfo) = mr.prefill_bootinfo {
+                let remaining_bytes_to_fill = mr.size - starting_byte_idx;
+                let num_bytes_to_fill = min(mr.page_size_bytes(), remaining_bytes_to_fill);
+
+                FrameFill {
+                    entries: [FillEntry {
+                        range: Range {
+                            start: 0,
+                            end: num_bytes_to_fill,
+                        },
+                        content: FillEntryContent::BootInfo(FillEntryContentBootInfo {
+                            id: prefill_bootinfo,
+                            offset: starting_byte_idx,
+                        }),
                     }]
                     .to_vec(),
                 }

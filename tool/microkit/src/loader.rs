@@ -572,6 +572,7 @@ impl<'a> Loader<'a> {
             true,
             self.entry,
             ElfSegmentData::RealData(self.to_bytes()),
+            None,
         );
 
         loader_elf

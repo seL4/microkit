@@ -19,8 +19,10 @@
 use crate::sel4::{
     Arch, ArmRiscvIrqTrigger, Config, PageSize, X86IoapicIrqPolarity, X86IoapicIrqTrigger,
 };
+
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
+use sel4_capdl_initializer_types::FillEntryContentBootInfoId;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::fs;
@@ -116,6 +118,7 @@ pub enum SysMemoryRegionKind {
     User,
     Elf,
     Stack,
+    BootInfo,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -141,6 +144,7 @@ pub struct SysMemoryRegion {
     /// stack, ELF, etc.
     pub kind: SysMemoryRegionKind,
     pub prefill_bytes: Option<Vec<u8>>,
+    pub prefill_bootinfo: Option<FillEntryContentBootInfoId>,
 }
 
 impl SysMemoryRegion {
@@ -1424,6 +1428,7 @@ impl SysMemoryRegion {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         prefill_bytes_maybe: &Option<Vec<u8>>,
+        prefill_bootinfo_maybe: Option<FillEntryContentBootInfoId>,
         page_size: u64,
     ) -> Result<u64, String> {
         match checked_lookup(xml_sdf, node, "size") {
@@ -1460,15 +1465,19 @@ impl SysMemoryRegion {
             }
 
             Err(_) => {
-                // No size explicitly specified
-                match &prefill_bytes_maybe {
-                    Some(bytes) => Ok(round_up(bytes.len() as u64, page_size)),
+                if prefill_bootinfo_maybe.is_some() {
+                    Ok(page_size)
+                } else {
+                    // No size explicitly specified
+                    match &prefill_bytes_maybe {
+                        Some(bytes) => Ok(round_up(bytes.len() as u64, page_size)),
 
-                    None => Err(value_error(
-                        xml_sdf,
-                        node,
-                        "size must be specified if memory region is not prefilled".to_string(),
-                    )),
+                        None => Err(value_error(
+                            xml_sdf,
+                            node,
+                            "size must be specified if memory region is not prefilled".to_string(),
+                        )),
+                    }
                 }
             }
         }
@@ -1483,7 +1492,14 @@ impl SysMemoryRegion {
         check_attributes(
             xml_sdf,
             node,
-            &["name", "size", "page_size", "phys_addr", "prefill_path"],
+            &[
+                "name",
+                "size",
+                "page_size",
+                "phys_addr",
+                "prefill_path",
+                "prefill_bootinfo",
+            ],
         )?;
 
         let name = checked_lookup(xml_sdf, node, "name")?;
@@ -1540,7 +1556,44 @@ impl SysMemoryRegion {
             })
             .transpose()?;
 
-        let size = Self::determine_size(xml_sdf, node, &prefill_bytes_maybe, page_size)?;
+        let prefill_bootinfo_maybe = node
+            .attribute("prefill_bootinfo")
+            .map(|xml_bi_type| match xml_bi_type {
+                "x86_vbe" => Ok(FillEntryContentBootInfoId::X86Vbe),
+                "x86_mbmmap" => Ok(FillEntryContentBootInfoId::X86Mbmmap),
+                "x86_acpi_rsdp" => Ok(FillEntryContentBootInfoId::X86AcpiRsdp),
+                "x86_framebuffer" => Ok(FillEntryContentBootInfoId::X86FrameBuffer),
+                "x86_tsc_freq" => Ok(FillEntryContentBootInfoId::X86TscFreq),
+                "fdt" => Ok(FillEntryContentBootInfoId::Fdt),
+                _ => Err(value_error(
+                    xml_sdf,
+                    node,
+                    format!("BootInfoMap type: '{xml_bi_type}' is not supported"),
+                )),
+            })
+            .transpose()?;
+
+        if prefill_bytes_maybe.is_some() && prefill_bootinfo_maybe.is_some() {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "prefill_path and prefill_bootinfo cannot be both specified".to_string(),
+            ));
+        }
+
+        let mr_kind = if prefill_bootinfo_maybe.is_none() {
+            SysMemoryRegionKind::User
+        } else {
+            SysMemoryRegionKind::BootInfo
+        };
+
+        let size = Self::determine_size(
+            xml_sdf,
+            node,
+            &prefill_bytes_maybe,
+            prefill_bootinfo_maybe,
+            page_size,
+        )?;
 
         let phys_addr = if let Some(xml_phys_addr) = node.attribute("phys_addr") {
             SysMemoryRegionPaddr::Specified(sdf_parse_number(xml_phys_addr, node)?)
@@ -1569,8 +1622,9 @@ impl SysMemoryRegion {
             page_count,
             phys_addr,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
-            kind: SysMemoryRegionKind::User,
+            kind: mr_kind,
             prefill_bytes: prefill_bytes_maybe,
+            prefill_bootinfo: prefill_bootinfo_maybe,
         })
     }
 }
