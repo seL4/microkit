@@ -512,8 +512,10 @@ EXAMPLES = {
 
 
 def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
-    elaborated_configs = list(SUPPORTED_CONFIGS)
+    elaborated_configs = list()
 
+    # We cannot build configs supporting SMP and domains. We will first elaborate
+    # the configs for smp, then for domains
     if board.smp_cores is not None:
         for config in SUPPORTED_CONFIGS:
             config = copy.deepcopy(config)
@@ -522,6 +524,15 @@ def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
                 "KernelMaxNumNodes": str(board.smp_cores),
             }
             elaborated_configs.append(config)
+
+    for config in SUPPORTED_CONFIGS:
+        config = copy.deepcopy(config)
+        config.kernel_options |= {
+            "KernelTimerFrequency": True,
+            "KernelNumDomains": 32,
+            "KernelNumDomainSchedules": 64,
+        }
+        elaborated_configs.append(config)
 
     return elaborated_configs
 

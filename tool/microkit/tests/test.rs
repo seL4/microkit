@@ -25,6 +25,7 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     benchmark: false,
     num_cores: 1,
     fpu: true,
+    timer_freq: None,
     arm_pa_size_bits: Some(40),
     arm_smc: None,
     riscv_pt_levels: None,
@@ -32,7 +33,36 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    num_domains: 32,
+    num_domain_schedules: 64,
     object_sizes: None,
+};
+
+const DEFAULT_AARCH64_SMP_KERNEL_CONFIG: sel4::Config = sel4::Config {
+    arch: sel4::Arch::Aarch64,
+    word_size: 64,
+    minimum_page_size: 4096,
+    paddr_user_device_top: 1 << 40,
+    kernel_frame_size: 1 << 12,
+    init_cnode_bits: 12,
+    cap_address_bits: 64,
+    max_num_bootinfo_untypeds: 230,
+    fan_out_limit: 256,
+    hypervisor: true,
+    benchmark: false,
+    num_cores: 4,
+    fpu: true,
+    timer_freq: None,
+    arm_pa_size_bits: Some(40),
+    arm_smc: None,
+    riscv_pt_levels: None,
+    x86_xsave_size: None,
+    // Not necessary for SDF parsing
+    invocations_labels: json!(null),
+    device_regions: None,
+    normal_regions: None,
+    num_domains: 1,
+    num_domain_schedules: 1,
 };
 
 const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
@@ -49,6 +79,7 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     benchmark: false,
     num_cores: 1,
     fpu: true,
+    timer_freq: None,
     arm_pa_size_bits: None,
     arm_smc: None,
     riscv_pt_levels: None,
@@ -56,6 +87,8 @@ const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     invocations_labels: json!(null),
     device_regions: None,
     normal_regions: None,
+    num_domains: 32,
+    num_domain_schedules: 64,
     object_sizes: None,
 };
 
@@ -906,6 +939,102 @@ mod channel {
             "Error: PPCs must be to protection domains of strictly higher priorities; channel with PPC exists from pd test1 (priority: 2) to pd test2 (priority: 1)",
         )
     }
+}
+
+#[cfg(test)]
+mod domains {
+    use super::*;
+
+    #[test]
+    fn test_domain_smp() {
+        check_error(
+            &DEFAULT_AARCH64_SMP_KERNEL_CONFIG,
+            "domain_smp.system",
+            "Error: Attempting to set a domain schedule when kernel config does not support more than 1 domain",
+        )
+    }
+
+    #[test]
+    fn test_domain_too_many_domains() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_exceed_max_domains.system",
+            "Error: number of domains exceeds maximum of 32",
+        )
+    }
+
+    #[test]
+    fn test_domain_assign_pd_to_invalid_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_assign_pd_to_invalid_domain.system",
+            "Protection domain test1 specifies a domain domain_2 that is not in the domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_timeslice() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_timeslice.system",
+            "Error: invalid domain timeslice for domain: domain_1",
+        )
+    }
+
+    #[test]
+    fn test_domain_no_schedule() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_schedule.system",
+            "Protection domain test1 specifies a domain 'domain_1', but user has not declared a domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_pd_no_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_pd_domain.system",
+            "Protection domain test1 doesn't specify a domain, but user has declared a domain schedule",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_start_index.system",
+            "Error: invalid domain start index",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_start_index.system",
+            "Error: Domain index of '2' is out of bounds for domain schedule length '1'. Note that the schedule is 0 indexed.",
+        )
+    }
+    
+    #[test]
+    fn test_domain_invalid_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_shift.system",
+            "Error: invalid domain index shift",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_shift.system",
+            "Error: Schedule length '1' with shift of '1000' exceeds max schedule length '64'.",
+        )
+    }
+
 }
 
 #[cfg(test)]
