@@ -1041,6 +1041,42 @@ mod system {
     }
 
     #[test]
+    fn test_cap_mappings_invalid_parameter() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_invalid_parameter.system",
+            "Error: invalid attribute 'cnode' on element 'cap_sc'",
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_pd_cnode_both_specified() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_pd_cnode_both_specified.system",
+            "Error: 'pd' and 'cnode_name' cannot be both specified on element 'cap_cspace'",
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_src_not_specified() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_src_not_specified.system",
+            "Error: Either 'pd' and 'cnode_name' should be specified on element 'cap_cspace'"
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_slot_invalid() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "cap_mappings_slot_invalid.system",
+            "Error: The destination slot 0 has been reserved for Microkit CNode on element 'cap_sc'",
+        )
+    }
+
+    #[test]
     fn test_cap_mappings_invalid() {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
@@ -1055,6 +1091,15 @@ mod system {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "pd_cap_mappings_invalid_pd_ref.system",
             "Error: unknown PD name 'invalid': pd_cap_mappings_invalid_pd_ref.system:12:13",
+        )
+    }
+
+    #[test]
+    fn test_cap_mappings_invalid_cnode_ref() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_invalid_cnode_ref.system",
+            "Error: unknown CNode name 'invalid': pd_cap_mappings_invalid_cnode_ref.system:12:13"
         )
     }
 }

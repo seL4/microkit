@@ -170,6 +170,27 @@ impl SysMemoryRegion {
     }
 }
 
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CNode {
+    pub name: String,
+    pub size_bits: u8,
+}
+
+impl CNode {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<CNode, String> {
+        check_attributes(xml_sdf, node, &["name", "type", "size_bits"])?;
+
+        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+        let size_bits = sdf_parse_number(checked_lookup(xml_sdf, node, "size_bits")?, node)? as u8;
+
+        Ok(CNode {
+            name,
+            size_bits,
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum SysIrqKind {
     Conventional {
@@ -314,8 +335,10 @@ pub struct CapMap {
     // opinion, making everything think in terms of PD names, and something
     // that was necessary to do for the multikernel changes); the pd idx will
     // be filled out later during SDF parse process.
-    pub pd_name: String,
+    pub pd_name: Option<String>,
+    pub cnode_name: Option<String>,
     pub pd: Option<usize>,
+    pub cnode: Option<usize>,
     // The destination "slot" in the CSpace: note that this is "opaque" and
     // can be shifted depending on the location in the CSpace to work as the CPtr,
     // but here it is given as the index into the CNode.
@@ -1363,14 +1386,45 @@ impl CapMap {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
     ) -> Result<CapMap, String> {
-        // At the moment the four cap maps we support all have the 'pd' element,
-        // so we can include it here. When that stops being the case we will
-        // have to rework this a bit.
-        check_attributes(xml_sdf, node, &["slot", "pd"])?;
+        check_attributes(xml_sdf, node, &["slot", "pd", "cnode_name"])?;
 
-        let pd_name = checked_lookup(xml_sdf, node, "pd")?.to_string();
+        let pd_name_maybe = node.attribute("pd").map(|pd_name_str| pd_name_str.to_string());
+
+        let cnode_name_maybe = node.attribute("cnode_name").map(|cnode_name_str| cnode_name_str.to_string());
+
+        if cap_type != CapMapType::CSpace && cnode_name_maybe.is_some() {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("invalid paramter 'cnode_name' for target CapMapType"),
+            ));
+        }
+
+        if pd_name_maybe.is_some() && cnode_name_maybe.is_some() {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("'pd' and 'cnode_name' cannot be both specified"),
+            ));
+        }
+
+        if pd_name_maybe.is_none() && cnode_name_maybe.is_none() {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("Either 'pd' and 'cnode_name' should be specified"),
+            ));
+        }
 
         let slot = sdf_parse_number(checked_lookup(xml_sdf, node, "slot")?, node)?;
+
+        if slot == 0 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                ("The destination slot 0 has been reserved for Microkit CNode").to_string(),
+            ));
+        }
 
         // TODO: Rework this so that we don't have a fixed upper limit.
         if slot >= CAP_MAP_MAX_SLOT {
@@ -1383,9 +1437,11 @@ impl CapMap {
 
         Ok(CapMap {
             cap_type,
-            pd_name,
+            pd_name: pd_name_maybe,
+            cnode_name: cnode_name_maybe,
             // FIXME: Hack, filled out later.
             pd: None,
+            cnode: None,
             slot,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
         })
@@ -1694,6 +1750,7 @@ struct XmlSystemDescription<'a> {
 pub struct SystemDescription {
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
+    pub cnodes: Vec<CNode>,
     pub channels: Vec<Channel>,
 }
 
@@ -1927,6 +1984,7 @@ pub fn parse(
 
     let mut root_pds = vec![];
     let mut mrs = vec![];
+    let mut cnodes = vec![];
     let mut channels = vec![];
     let system = doc
         .root()
@@ -1966,6 +2024,7 @@ pub fn parse(
                     loc_string(&xml_sdf, pos)
                 ));
             }
+            "cnode" => cnodes.push(CNode::from_xml(&xml_sdf, &child)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -2008,17 +2067,35 @@ pub fn parse(
         .enumerate()
         .map(|(idx, pd)| (pd.name.clone(), idx))
         .collect();
+    let cnode_names_to_id: HashMap<_, _> = cnodes
+        .iter()
+        .enumerate()
+        .map(|(idx, cnode)| (cnode.name.clone(), idx))
+        .collect();
     for pd in pds.iter_mut() {
         for cap_map in pd.cap_maps.iter_mut() {
-            let Some(&pd) = pd_names_to_id.get(&cap_map.pd_name) else {
-                return Err(format!(
-                    "Error: unknown PD name '{}': {}",
-                    cap_map.pd_name,
-                    loc_string(&xml_sdf, cap_map.text_pos)
-                ));
-            };
+            if let Some(pd_name) = &cap_map.pd_name {
+                let Some(&pd) = pd_names_to_id.get(pd_name) else {
+                    return Err(format!(
+                        "Error: unknown PD name '{}': {}",
+                        pd_name,
+                        loc_string(&xml_sdf, cap_map.text_pos)
+                    ));
+                };
 
-            cap_map.pd = Some(pd);
+                cap_map.pd = Some(pd);
+            }
+            if let Some(cnode_name) = &cap_map.cnode_name {
+                let Some(&cnode) = cnode_names_to_id.get(cnode_name) else {
+                    return Err(format!(
+                        "Error: unknown CNode name '{}': {}",
+                        cnode_name,
+                        loc_string(&xml_sdf, cap_map.text_pos)
+                    ));
+                };
+
+                cap_map.cnode = Some(cnode);
+            }
         }
     }
 
@@ -2256,12 +2333,22 @@ pub fn parse(
             if cap_maps.len() > 1 {
                 let mut lines = String::new();
                 for mapping in cap_maps {
-                    lines.push_str(&format!(
-                        "\n  type {:?} from '{}' at '{}'",
-                        mapping.cap_type,
-                        mapping.pd_name,
-                        loc_string(&xml_sdf, mapping.text_pos)
-                    ));
+                    if let Some(pd_name) = &mapping.pd_name {
+                        lines.push_str(&format!(
+                            "\n  type {:?} from '{}' at '{}'",
+                            mapping.cap_type,
+                            pd_name,
+                            loc_string(&xml_sdf, mapping.text_pos)
+                        ));
+                    }
+                    if let Some(cnode_name) = &mapping.cnode_name {
+                        lines.push_str(&format!(
+                            "\n  type {:?} from '{}' at '{}'",
+                            mapping.cap_type,
+                            cnode_name,
+                            loc_string(&xml_sdf, mapping.text_pos)
+                        ));
+                    }
                 }
                 return Err(format!(
                     "Error: overlapping user caps in slot {slot} of protection domain '{}':{}",
@@ -2417,6 +2504,7 @@ pub fn parse(
     Ok(SystemDescription {
         protection_domains: pds,
         memory_regions: mrs,
+        cnodes,
         channels,
     })
 }
