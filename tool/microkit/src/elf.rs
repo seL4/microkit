@@ -21,7 +21,7 @@ struct ElfHeader32 {
     ident_osabi: u8,
     ident_abiversion: u8,
     _padding: [u8; 7],
-    type_: u16,
+    r#type: u16,
     machine: u16,
     version: u32,
     entry: u32,
@@ -50,7 +50,7 @@ struct ElfSymbol64 {
 #[repr(C, packed)]
 struct ElfSectionHeader64 {
     name: u32,
-    type_: u32,
+    r#type: u32,
     flags: u64,
     addr: u64,
     offset: u64,
@@ -63,7 +63,7 @@ struct ElfSectionHeader64 {
 
 #[repr(C, packed)]
 pub struct ElfProgramHeader64 {
-    pub type_: u32,
+    pub r#type: u32,
     pub flags: u32,
     pub offset: u64,
     pub vaddr: u64,
@@ -83,7 +83,7 @@ struct ElfHeader64 {
     ident_osabi: u8,
     ident_abiversion: u8,
     _padding: [u8; 7],
-    type_: u16,
+    r#type: u16,
     machine: u16,
     version: u32,
     entry: u64,
@@ -201,7 +201,7 @@ impl ElfSegment {
 #[derive(Eq, PartialEq, Clone)]
 pub struct ProgramHeader {
     pub segment_idx: usize,
-    pub type_: u32,
+    pub r#type: u32,
 }
 
 #[derive(Eq, PartialEq, Clone)]
@@ -249,7 +249,7 @@ impl ElfFile {
             .enumerate()
             .map(|(i, _)| ProgramHeader {
                 segment_idx: i,
-                type_: PHENT_TYPE_LOADABLE,
+                r#type: PHENT_TYPE_LOADABLE,
             })
             .collect();
 
@@ -348,7 +348,7 @@ impl ElfFileReader {
             let segment_start = phent.offset as usize;
             let segment_end = phent.offset as usize + phent.filesz as usize;
 
-            if phent.type_ != PHENT_TYPE_LOADABLE {
+            if phent.r#type != PHENT_TYPE_LOADABLE {
                 continue;
             }
 
@@ -363,7 +363,7 @@ impl ElfFileReader {
                 data: segment_data,
                 phys_addr: phent.paddr,
                 virt_addr: phent.vaddr,
-                loadable: phent.type_ == PHENT_TYPE_LOADABLE,
+                loadable: phent.r#type == PHENT_TYPE_LOADABLE,
                 attrs: flags,
             };
 
@@ -385,7 +385,7 @@ impl ElfFileReader {
             let shent_bytes = &self.bytes[shent_start as usize..shent_end as usize];
 
             let shent = unsafe { bytes_to_struct::<ElfSectionHeader64>(shent_bytes) };
-            if shent.type_ == 2 {
+            if shent.r#type == 2 {
                 symtab_shent = Some(shent)
             }
             shents.push(shent);
@@ -550,13 +550,13 @@ impl ElfFile {
 
         self.program_headers.push(ProgramHeader {
             segment_idx: self.segments.len() - 1,
-            type_: PHENT_TYPE_LOADABLE,
+            r#type: PHENT_TYPE_LOADABLE,
         });
 
         if let Some(meta_phdr_type) = meta_phdr_type_maybe {
             self.program_headers.push(ProgramHeader {
                 segment_idx: self.segments.len() - 1,
-                type_: meta_phdr_type,
+                r#type: meta_phdr_type,
             });
         }
     }
@@ -572,7 +572,7 @@ impl ElfFile {
             let linked_segment = &self.segments[program_header.segment_idx];
 
             let phdr = ElfProgramHeader64 {
-                type_: program_header.type_,
+                r#type: program_header.r#type,
                 flags: linked_segment.attrs,
                 offset: 0,
                 vaddr: linked_segment.virt_addr,
@@ -620,7 +620,7 @@ impl ElfFile {
             ident_osabi: 0,
             ident_abiversion: 0,
             _padding: [0; 7],
-            type_: 2, // executable file
+            r#type: 2, // executable file
             machine: self.machine,
             version: 1,
             entry: self.entry,
@@ -659,7 +659,7 @@ impl ElfFile {
         for (phdr, seg_idx) in self.phdrs_table_serialised().iter_mut() {
             phdr.offset = seg_idx_to_data_off[seg_idx];
 
-            let phdr_type = phdr.type_;
+            let phdr_type = phdr.r#type;
             elf_file
                 .write_all(unsafe { struct_to_bytes(phdr) })
                 .unwrap_or_else(|_| {
@@ -687,7 +687,7 @@ impl ElfFile {
         for (i, seg) in self.loadable_segments().iter().enumerate() {
             let sh_serialised = ElfSectionHeader64 {
                 name: 0,
-                type_: SHT_PROGBITS,
+                r#type: SHT_PROGBITS,
                 flags: seg.section_flags(),
                 addr: seg.phys_addr,
                 offset: seg_idx_to_data_off[&i],
@@ -710,7 +710,7 @@ impl ElfFile {
         }
         let strtab_seg = ElfSectionHeader64 {
             name: 0,
-            type_: SHT_STRTAB,
+            r#type: SHT_STRTAB,
             flags: 0,
             addr: 0,
             offset: data_off_watermark,

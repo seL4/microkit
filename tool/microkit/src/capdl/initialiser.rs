@@ -107,7 +107,7 @@ impl CapDLInitialiser {
         // until we add it as a segment. But we can't add it as a segment until we finalise it.
         phdrs_table_bytes.extend(unsafe {
             struct_to_bytes(&ElfProgramHeader64 {
-                type_: PHENT_TYPE_PHDR,
+                r#type: PHENT_TYPE_PHDR,
                 flags: PF_R,
                 offset: 0,
                 vaddr: phdrs_table_vaddr,
@@ -119,7 +119,7 @@ impl CapDLInitialiser {
         });
         phdrs_table_bytes.extend(unsafe {
             struct_to_bytes(&ElfProgramHeader64 {
-                type_: PHENT_TYPE_LOADABLE,
+                r#type: PHENT_TYPE_LOADABLE,
                 flags: PF_R,
                 offset: 0,
                 vaddr: phdrs_table_vaddr,
