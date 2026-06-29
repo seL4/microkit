@@ -145,9 +145,13 @@ pub fn simulate_capdl_object_alloc_algorithm(
             let target_is_obj_with_paddr = target < ut.end();
 
             while cur_paddr < target {
-                let max_size_bits = usize::try_from(cur_paddr.trailing_zeros())
-                    .unwrap()
-                    .min((target - cur_paddr).trailing_zeros().try_into().unwrap());
+                let max_size_bits = {
+                    let alignment_bits = (cur_paddr - ut.base())
+                        .checked_ilog2()
+                        .unwrap_or(kernel_config.word_size.try_into().unwrap());
+                    let distance_bits = (target - cur_paddr).checked_ilog2().expect("never 0");
+                    alignment_bits.min(distance_bits).try_into().unwrap()
+                };
                 let mut created = false;
 
                 // If this UT is in main memory, allocate all the objects that does not specify a paddr first.
