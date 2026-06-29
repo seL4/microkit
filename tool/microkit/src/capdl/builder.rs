@@ -18,14 +18,14 @@ use sel4_capdl_initializer_types::{
 use crate::{
     capdl::{
         irq::create_irq_handler_cap,
-        memory::{create_vspace, create_vspace_ept, map_page},
+        memory::{create_vspace, create_vspace_ept, AddressSpace},
         spec::{capdl_obj_physical_size_bits, BytesContent, ElfContent, FillContent},
         util::*,
     },
     elf::ElfFile,
     sdf::{
-        CapMapType, CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT,
-        MONITOR_PD_NAME, MONITOR_PRIORITY,
+        CapMapType, CpuCore, Map, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
+        MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -145,6 +145,11 @@ impl PDShadowCspace {
     }
 }
 
+struct ElfSpecResult {
+    tcb: ObjectId,
+    address_space: AddressSpace,
+}
+
 pub struct CapDLSpecContainer {
     pub spec: Spec<FrameFill>,
     /// Track allocations as we build the system for later use by the report.
@@ -209,7 +214,7 @@ impl CapDLSpecContainer {
     /// as possible. These are the objects that will be created:
     /// -> TCB: Program counter set and VSpace capability bound.
     /// -> VSpace: all pages from the ELF mapped in.
-    /// Returns the object ID of the TCB
+    /// Returns ElfSpecResult containing the TCB object ID and the PDs address space.
     /// NOTE that all ELF frames will just be reference to the original ELF object rather than the actual data.
     /// So that symbols can be patched before the frames' data are filled in.
     fn add_elf_to_spec(
@@ -219,9 +224,10 @@ impl CapDLSpecContainer {
         pd_cpu: CpuCore,
         elf_id: usize,
         elf: &ElfFile,
-    ) -> Result<ObjectId, String> {
+    ) -> Result<ElfSpecResult, String> {
         // We assumes that ELFs and PDs have a one-to-one relationship. So for each ELF we create a VSpace.
-        let vspace_obj_id = create_vspace(self, sel4_config, pd_name);
+        let address_space = create_vspace(self, sel4_config, pd_name);
+        let vspace_obj_id = address_space.root();
         let vspace_cap = capdl_util_make_page_table_cap(vspace_obj_id);
 
         // For each loadable segment in the ELF, map it into the address space of this PD.
@@ -291,11 +297,9 @@ impl CapDLSpecContainer {
                     true,
                 );
 
-                match map_page(
+                match address_space.map_page(
                     self,
                     sel4_config,
-                    pd_name,
-                    vspace_obj_id,
                     frame_cap,
                     page_size_bytes,
                     cur_vaddr,
@@ -309,7 +313,7 @@ impl CapDLSpecContainer {
                             "add_elf_to_spec(): failed to map segment page to ELF because: {map_err_reason}"
                         ))
                     }
-                };
+                }
             }
         }
 
@@ -341,42 +345,47 @@ impl CapDLSpecContainer {
             object: Object::Tcb(tcb_inner_obj),
         };
 
-        Ok(self.add_root_object(tcb_obj))
+        Ok(ElfSpecResult {
+            tcb: self.add_root_object(tcb_obj),
+            address_space,
+        })
     }
 }
 
-/// Given a SysMap, page size, VSpace object ID, and a Vec of frame object ids,
-/// map all frames into the given VSpace at the requested vaddr.
-fn map_memory_region(
+/// Given a map, page size, address space, and a Vec of frame object ids, map
+/// all frames into the requested address space at the requested address.
+fn map_memory_region<M: Map>(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
-    pd_name: &str,
-    map: &SysMap,
+    map: &M,
     page_sz: u64,
-    target_vspace: ObjectId,
+    target_address_space: &AddressSpace,
     frames: &[ObjectId],
-) {
-    let mut cur_vaddr = map.vaddr;
-    let read = map.perms & SysMapPerms::Read as u8 != 0;
-    let write = map.perms & SysMapPerms::Write as u8 != 0;
-    let execute = map.perms & SysMapPerms::Execute as u8 != 0;
-    let cached = map.cached;
+) -> Result<(), String> {
+    let mut cur_vaddr = map.addr();
+    let read = map.read();
+    let write = map.write();
+    let execute = map.execute();
     for frame_obj_id in frames.iter() {
         // Make a cap for this frame.
-        let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, execute, cached);
+        let frame_cap =
+            capdl_util_make_frame_cap(*frame_obj_id, read, write, execute, map.cached());
         // Map it into this PD address space.
-        map_page(
-            spec_container,
-            sel4_config,
-            pd_name,
-            target_vspace,
-            frame_cap,
-            page_sz,
-            cur_vaddr,
-        )
-        .unwrap();
+        target_address_space
+            .map_page(spec_container, sel4_config, frame_cap, page_sz, cur_vaddr)
+            .map_err(|err| {
+                format!(
+                    "failed to map {} for MR '{}' into address-space '{}' at {} {:#x}: {err}",
+                    map.element(),
+                    map.mr_name(),
+                    target_address_space.name(),
+                    map.addr_name(),
+                    cur_vaddr
+                )
+            })?;
         cur_vaddr += page_sz;
     }
+    Ok(())
 }
 
 /// Build a CapDL Spec according to the System Description File.
@@ -394,18 +403,16 @@ pub fn build_capdl_spec(
     // We expect the PD ELFs to be first and the monitor ELF last in the list of ELFs.
     let mon_elf_id = elfs.len() - 1;
     assert!(elfs.len() == system.protection_domains.len() + 1);
-    let monitor_tcb_obj_id = {
-        let monitor_elf = &elfs[mon_elf_id];
-        spec_container
-            .add_elf_to_spec(
-                kernel_config,
-                MONITOR_PD_NAME,
-                CpuCore(0),
-                mon_elf_id,
-                monitor_elf,
-            )
-            .unwrap()
-    };
+    let monitor_elf_spec = spec_container
+        .add_elf_to_spec(
+            kernel_config,
+            MONITOR_PD_NAME,
+            CpuCore(0),
+            mon_elf_id,
+            &elfs[mon_elf_id],
+        )
+        .unwrap();
+    let monitor_tcb_obj_id = monitor_elf_spec.tcb;
 
     // Create monitor fault endpoint object + cap
     let mon_fault_ep_obj_id =
@@ -453,18 +460,16 @@ pub fn build_capdl_spec(
     );
     let mon_stack_frame_cap =
         capdl_util_make_frame_cap(mon_stack_frame_obj_id, true, true, false, true);
-    let mon_vspace_obj_id =
-        capdl_util_get_vspace_id_from_tcb_id(&spec_container, monitor_tcb_obj_id);
-    map_page(
-        &mut spec_container,
-        kernel_config,
-        MONITOR_PD_NAME,
-        mon_vspace_obj_id,
-        mon_stack_frame_cap,
-        PageSize::Small as u64,
-        kernel_config.pd_stack_bottom(MON_STACK_SIZE),
-    )
-    .unwrap();
+    monitor_elf_spec
+        .address_space
+        .map_page(
+            &mut spec_container,
+            kernel_config,
+            mon_stack_frame_cap,
+            PageSize::Small as u64,
+            kernel_config.pd_stack_bottom(MON_STACK_SIZE),
+        )
+        .unwrap();
 
     // Create monitor IPC Bufffer
     let mon_ipcbuf_frame_obj_id = capdl_util_make_frame_obj(
@@ -476,16 +481,16 @@ pub fn build_capdl_spec(
     );
     let mon_ipcbuf_frame_cap =
         capdl_util_make_frame_cap(mon_ipcbuf_frame_obj_id, true, true, false, true);
-    map_page(
-        &mut spec_container,
-        kernel_config,
-        MONITOR_PD_NAME,
-        mon_vspace_obj_id,
-        mon_ipcbuf_frame_cap.clone(),
-        PageSize::Small as u64,
-        kernel_config.pd_ipc_buffer(),
-    )
-    .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
+    monitor_elf_spec
+        .address_space
+        .map_page(
+            &mut spec_container,
+            kernel_config,
+            mon_ipcbuf_frame_cap.clone(),
+            PageSize::Small as u64,
+            kernel_config.pd_ipc_buffer(),
+        )
+        .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
 
     // At this point, all of the required objects for the monitor have been created and its caps inserted into
     // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
@@ -628,9 +633,11 @@ pub fn build_capdl_spec(
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
-        let pd_tcb_obj_id = spec_container
+        let pd_elf_spec = spec_container
             .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj)
             .unwrap();
+
+        let pd_tcb_obj_id = pd_elf_spec.tcb;
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
@@ -676,12 +683,11 @@ pub fn build_capdl_spec(
             map_memory_region(
                 &mut spec_container,
                 kernel_config,
-                &pd.name,
                 map,
                 page_size_bytes,
-                pd_vspace_obj_id,
+                &pd_elf_spec.address_space,
                 frames,
-            );
+            )?;
         }
 
         // Step 3-3a: Create and map in the IPC buffer
@@ -694,16 +700,16 @@ pub fn build_capdl_spec(
         );
         let ipcbuf_frame_cap =
             capdl_util_make_frame_cap(ipcbuf_frame_obj_id, true, true, false, true);
-        map_page(
-            &mut spec_container,
-            kernel_config,
-            &pd.name,
-            pd_vspace_obj_id,
-            ipcbuf_frame_cap.clone(),
-            PageSize::Small as u64,
-            kernel_config.pd_ipc_buffer(),
-        )
-        .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
+        pd_elf_spec
+            .address_space
+            .map_page(
+                &mut spec_container,
+                kernel_config,
+                ipcbuf_frame_cap.clone(),
+                PageSize::Small as u64,
+                kernel_config.pd_ipc_buffer(),
+            )
+            .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::IpcBuffer as u32,
             ipcbuf_frame_cap,
@@ -725,16 +731,16 @@ pub fn build_capdl_spec(
             );
             let stack_frame_cap =
                 capdl_util_make_frame_cap(stack_frame_obj_id, true, true, false, true);
-            map_page(
-                &mut spec_container,
-                kernel_config,
-                &pd.name,
-                pd_vspace_obj_id,
-                stack_frame_cap,
-                PageSize::Small as u64,
-                cur_stack_vaddr,
-            )
-            .unwrap();
+            pd_elf_spec
+                .address_space
+                .map_page(
+                    &mut spec_container,
+                    kernel_config,
+                    stack_frame_cap,
+                    PageSize::Small as u64,
+                    cur_stack_vaddr,
+                )
+                .unwrap();
             cur_stack_vaddr += PageSize::Small as u64;
         }
 
@@ -867,12 +873,13 @@ pub fn build_capdl_spec(
 
             // Create VM's Address Space and map in all memory regions.
             // This address space is shared across all vCPUs. The virtual address that we "map" the region is guest-physical.
-            let vm_vspace_obj_id = match kernel_config.arch {
+            let vm_address_space = match kernel_config.arch {
                 Arch::X86_64 => {
                     create_vspace_ept(&mut spec_container, kernel_config, &virtual_machine.name)
                 }
                 _ => create_vspace(&mut spec_container, kernel_config, &virtual_machine.name),
             };
+            let vm_vspace_obj_id = vm_address_space.root();
             let vm_vspace_cap = capdl_util_make_page_table_cap(vm_vspace_obj_id);
             for map in virtual_machine.maps.iter() {
                 let frames = &mr_name_to_frames[&map.mr];
@@ -881,12 +888,11 @@ pub fn build_capdl_spec(
                 map_memory_region(
                     &mut spec_container,
                     kernel_config,
-                    &virtual_machine.name,
                     map,
                     page_size_bytes,
-                    vm_vspace_obj_id,
+                    &vm_address_space,
                     frames,
-                );
+                )?;
             }
 
             if kernel_config.arch == Arch::X86_64 {
