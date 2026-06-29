@@ -198,12 +198,19 @@ impl ElfSegment {
 }
 
 #[derive(Eq, PartialEq, Clone)]
+pub struct ProgramHeader {
+    pub segment_idx: usize,
+    pub type_: u32,
+}
+
+#[derive(Eq, PartialEq, Clone)]
 pub struct ElfFile {
     pub path: PathBuf,
     pub word_size: usize,
     pub entry: u64,
     pub machine: u16,
     pub segments: Vec<ElfSegment>,
+    pub program_headers: Vec<ProgramHeader>,
     symbols: HashMap<String, (ElfSymbol64, bool)>,
 }
 
@@ -214,7 +221,8 @@ impl ElfFile {
             word_size,
             entry,
             machine,
-            segments: [].into(),
+            segments: vec![],
+            program_headers: vec![],
             symbols: HashMap::new(),
         }
     }
@@ -233,12 +241,24 @@ impl ElfFile {
             Some(path_for_symbols) => ElfFileReader::from_path(path_for_symbols)?.symbols()?,
             None => reader.symbols()?,
         };
+        // Initially create a one to one mapping of segments -> program headers.
+        // So that we can create two program headers of different types that point to the same segment.
+        let program_headers = segments
+            .iter()
+            .enumerate()
+            .map(|(i, _)| ProgramHeader {
+                segment_idx: i,
+                type_: PHENT_TYPE_LOADABLE,
+            })
+            .collect();
+
         Ok(ElfFile {
             path: path.to_owned(),
             word_size: reader.word_size,
             entry: reader.hdr.entry,
             machine: reader.hdr.machine,
             segments,
+            program_headers,
             symbols,
         })
     }
@@ -522,6 +542,11 @@ impl ElfFile {
             attrs: r | w | x,
         };
         self.segments.push(elf_segment);
+
+        self.program_headers.push(ProgramHeader {
+            segment_idx: self.segments.len() - 1,
+            type_: PHENT_TYPE_LOADABLE,
+        });
     }
 
     pub fn loadable_segments(&self) -> Vec<&ElfSegment> {
@@ -532,7 +557,7 @@ impl ElfFile {
     pub fn reserialise(&self, out: &std::path::Path) -> Result<u64, String> {
         let ehsize = size_of::<ElfHeader64>();
 
-        let phnum = self.loadable_segments().len();
+        let phnum = self.program_headers.len();
         let phentsize = size_of::<ElfProgramHeader64>();
 
         // First entry is reserved, last entry is dummy strtab
@@ -587,21 +612,27 @@ impl ElfFile {
         let mut data_off_watermark = (ehsize as u64)
             + (phnum as u64) * (phentsize as u64)
             + (shnum as u64) * (shentsize as u64);
-        let mut data_offs = [].to_vec();
 
-        // First write out the program headers table
+        // First thing to do is work out where to place all the data segments
+        let mut seg_idx_to_data_off: HashMap<usize, u64> = Default::default();
         for (i, seg) in self.loadable_segments().iter().enumerate() {
+            seg_idx_to_data_off.insert(i, data_off_watermark);
+            data_off_watermark += seg.file_size();
+        }
+
+        // Then write out the program headers table
+        for (i, program_header) in self.program_headers.iter().enumerate() {
+            let linked_segment = &self.segments[program_header.segment_idx];
             let ph_serialised = ElfProgramHeader64 {
-                type_: PHENT_TYPE_LOADABLE, // loadable
-                flags: seg.attrs,
-                offset: data_off_watermark,
-                vaddr: seg.virt_addr,
-                paddr: seg.phys_addr,
-                filesz: seg.file_size(),
-                memsz: seg.mem_size(),
+                type_: program_header.type_,
+                flags: linked_segment.attrs,
+                offset: seg_idx_to_data_off[&program_header.segment_idx],
+                vaddr: linked_segment.virt_addr,
+                paddr: linked_segment.phys_addr,
+                filesz: linked_segment.file_size(),
+                memsz: linked_segment.mem_size(),
                 align: 0,
             };
-            data_offs.push(data_off_watermark);
 
             elf_file
                 .write_all(unsafe { struct_to_bytes(&ph_serialised) })
@@ -612,8 +643,6 @@ impl ElfFile {
                         out.display()
                     )
                 });
-
-            data_off_watermark += seg.file_size();
         }
 
         // Then the section headers table, which describe the same thing as the program headers.
@@ -634,7 +663,7 @@ impl ElfFile {
                 type_: SHT_PROGBITS,
                 flags: seg.section_flags(),
                 addr: seg.phys_addr,
-                offset: data_offs[i],
+                offset: seg_idx_to_data_off[&i],
                 size: seg.file_size(),
                 link: 0,
                 info: 0,
