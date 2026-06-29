@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <cnode name="shared_cnode" size_bits="8" />
+
+    <protection_domain name="pd_a">
+        <program_image path="test" />
+    </protection_domain>
+
+    <protection_domain name="pd_b">
+        <program_image path="test" />
+
+        <cspace>
+            <cap_sc slot="4" pd="pd_a" cnode="shared_cnode" />
+        </cspace>
+    </protection_domain>
+</system>
