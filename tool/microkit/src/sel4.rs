@@ -249,7 +249,7 @@ pub fn emulate_kernel_boot(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct PlatformConfigRegion {
     pub start: u64,
     pub end: u64,
