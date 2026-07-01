@@ -19,7 +19,7 @@ on:
       - '*.*.*'
 
 env:
-  SEL4_VERSION: e912dff7341cf3b35475c3a7eee9a90c61b367a8
+  SEL4_VERSION: c8526a426f150bc11474ef21449efd87c5b8b6e3
 
 # To reduce the load we cancel any older runs of this workflow for the current
 # PR. For deployment to the main branch, the workflow will run on each push,
