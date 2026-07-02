@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="edu_mmio_window" size="0x10_0000" page_size="0x1000" phys_addr="0xfe00_0000" />
+    <memory_region name="dma_buffer" size="0x1000" page_size="0x1000" />
+    <io_address_space name="QEMU EDU" peripheral_id="0:4.0">
+        <iomap mr="dma_buffer" iovaddr="0x10_0000" />
+    </io_address_space>
+
+    <protection_domain name="x86_64_iommu_dma_test" priority="100">
+        <program_image path="x86_64_iommu_dma_test.elf" />
+        <map mr="edu_mmio_window" vaddr="0x2000_0000" perms="rw" cached="false" setvar_vaddr="edu_mmio_window_vaddr" />
+        <map mr="dma_buffer" vaddr="0x3000_0000" perms="rw" cached="true" setvar_vaddr="dma_buffer_vaddr" />
+        <ioport id="0" addr="0xcf8" size="8" setvar_id="pci_config_ioport_id" />
+    </protection_domain>
+</system>

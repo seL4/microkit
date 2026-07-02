@@ -289,6 +289,7 @@ pub struct Config {
     pub cap_address_bits: u64,
     pub fan_out_limit: u64,
     pub max_num_bootinfo_untypeds: u64,
+    pub iommu: bool,
     pub hypervisor: bool,
     pub benchmark: bool,
     pub num_cores: u8,
