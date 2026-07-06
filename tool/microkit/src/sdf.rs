@@ -390,19 +390,24 @@ impl SysMapPerms {
 }
 
 impl SysMap {
-    fn new(mr: String, vaddr: u64, perms: Option<u8>, cached: Option<bool>, max_vaddr: u64) -> Result<SysMap, String>
-    {
+    pub fn new(
+        mr: String,
+        vaddr: u64,
+        perms: Option<u8>,
+        cached: Option<bool>,
+        max_vaddr: u64,
+    ) -> Result<SysMap, String> {
         if vaddr >= max_vaddr {
             return Err(format!(
                 "vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"
             ));
         }
-        let perms: u8 = perms.unwrap_or_else(|| SysMapPerms::Read as u8 | SysMapPerms::Write as u8);
+        let perms: u8 = perms.unwrap_or(SysMapPerms::Read as u8 | SysMapPerms::Write as u8);
         if perms == SysMapPerms::Write as u8 {
             return Err("perms must not be 'w', write-only mappings are not allowed".to_string());
         }
 
-        let cached: bool = cached.unwrap_or_else(|| true);
+        let cached: bool = cached.unwrap_or(true);
         Ok(SysMap {
             mr,
             vaddr,
@@ -533,30 +538,27 @@ impl ProtectionDomain {
         maps: Vec<SysMap>,
         irqs: Vec<SysIrq>,
         ioports: Vec<IOPort>,
-        setvars: Vec<SysSetVar>,
+        mut setvars: Vec<SysSetVar>,
         cap_maps: Vec<CapMap>,
         virtual_machine: Option<VirtualMachine>,
         child_pds: Vec<ProtectionDomain>,
         parent: Option<usize>,
         setvar_id: Option<String>,
-    ) -> Result<ProtectionDomain, String>
-    {
-       let priority = priority.unwrap_or_else(|| 0); 
+    ) -> Result<ProtectionDomain, String> {
+        let priority = priority.unwrap_or(0);
 
         if priority > PD_MAX_PRIORITY {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                format!("priority must be between 0 and {PD_MAX_PRIORITY}"),
+            return Err(format!("priority must be between 0 and {PD_MAX_PRIORITY}"));
+        }
+        let budget = budget.unwrap_or(BUDGET_DEFAULT);
+        let period = period.unwrap_or(budget);
+        if budget > period {
+            return Err(format!(
+                "budget ({budget}) must be less than, or equal to, period ({period})"
             ));
         }
-        let budget = budget.unwrap_or_else(|| BUDGET_DEFAULT);
-        let period = period.unwrap_or_else(|| budget);
-        if budget > period {
-            return Err(format!("budget ({budget}) must be less than, or equal to, period ({period})"));
-        }
-        let passive = passive.unwrap_or_else(|| false);
-        let stack_size = stack_size.unwrap_or_else(|| PD_DEFAULT_STACK_SIZE);
+        let passive = passive.unwrap_or(false);
+        let stack_size = stack_size.unwrap_or(PD_DEFAULT_STACK_SIZE);
 
         #[allow(clippy::manual_range_contains)]
         if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
@@ -568,14 +570,12 @@ impl ProtectionDomain {
         }
 
         if !stack_size.is_multiple_of(config.page_sizes()[0]) {
-            return Err(
-                format!(
-                    "stack size must be aligned to the smallest page size, {} bytes",
-                    config.page_sizes()[0]
-                ),
-            );
+            return Err(format!(
+                "stack size must be aligned to the smallest page size, {} bytes",
+                config.page_sizes()[0]
+            ));
         }
-        let smc = smc.unwrap_or_else(|| false);
+        let smc = smc.unwrap_or(false);
         if smc {
             match config.arm_smc {
                 Some(smc_allowed) => {
@@ -591,37 +591,33 @@ impl ProtectionDomain {
                 }
             }
         }
-        let cpu = CpuCore(cpu.unwrap_or_else(|| 0));
+        let cpu = CpuCore(cpu.unwrap_or(0));
         if cpu.0 >= config.num_cores {
-            return Err(
-                format!(
-                    "cpu core must be less than {}, got {}",
-                    config.num_cores, cpu.0
-                ),
-            );
+            return Err(format!(
+                "cpu core must be less than {}, got {}",
+                config.num_cores, cpu.0
+            ));
         }
-        let fpu = fpu.unwrap_or_else(|| true);
+        let fpu = fpu.unwrap_or(true);
 
         // Check that the protection domain is a child before allowing setvar_id to be set.
-        let setvar_id = if (id.is_some()) {setvar_id} else {None}; 
+        let setvar_id = if id.is_some() { setvar_id } else { None };
 
-        let mut setvars: Vec<SysSetVar> = Vec::new();
-        for child in child_pds
-        {
-            if(!child.id.is_some())
-            {
-                return Err(format!("child pds must have an id"));
+        let has_children: bool = child_pds.is_empty();
+        for child in &child_pds {
+            if child.id.is_none() {
+                return Err("child pds must have an id".to_string());
             }
-            if let Some(setvar) = child.setvar_id { 
-                        let setvar = SysSetVar {
-                            symbol: setvar.to_string(),
-                            kind: SysSetVarKind::Id {
-                                id: child.id.unwrap(),
-                            },
-                        };
+            if let Some(setvar) = &child.setvar_id {
+                let setvar = SysSetVar {
+                    symbol: setvar.to_string(),
+                    kind: SysSetVarKind::Id {
+                        id: child.id.unwrap(),
+                    },
+                };
+                setvars.push(setvar);
             }
         }
-
 
         Ok(ProtectionDomain {
             id,
@@ -1645,32 +1641,38 @@ impl SysMemoryRegion {
         page_size: Option<u64>,
         phys_addr: Option<u64>,
         kind: SysMemoryRegionKind,
-        prefill_path: Option<&PathBuf>
-    ) -> Result<SysMemoryRegion, String>
-    {
-        let page_size_specified_by_user = true;
-        let page_size = page_size.unwrap_or_else(|| {page_size_specified_by_user = false; config.page_sizes()[0]});
+        prefill_path: Option<&str>,
+        search_paths: &Vec<PathBuf>,
+    ) -> Result<SysMemoryRegion, String> {
+        let mut page_size_specified_by_user = true;
+        let page_size = page_size.unwrap_or_else(|| {
+            page_size_specified_by_user = false;
+            config.page_sizes()[0]
+        });
 
         let page_size_valid = config.page_sizes().contains(&page_size);
         if !page_size_valid {
-            return Err(
-                format!("page size 0x{page_size:x} not supported"),
-            );
+            return Err(format!("page size 0x{page_size:x} not supported"));
         }
-        let prefill_bytes_maybe: Option<Vec<u8>> = None;
-        if let Some(prefill_path) = prefill_path {prefill_bytes_maybe = Some(fs::read(&prefill_path)
+        let prefill_bytes = prefill_path
+            .map(|path_str| {
+                get_full_path(&PathBuf::from(path_str), search_paths)
+                    .ok_or_else(|| format!("unable to find prefill file: '{path_str}'"))
+                    .and_then(|prefill_path| {
+                        fs::read(&prefill_path)
                             .map_err(|_| {
-                                    format!("failed to read file '{path_str}' at prefill_path")
+                                format!("failed to read file '{path_str}' at prefill_path")
                             })
                             .and_then(|bytes| {
                                 if bytes.is_empty() {
-                                    Err(
-                                        format!("prefill file '{path_str}' is empty"),
-                                    )
+                                    Err(format!("prefill file '{path_str}' is empty"))
                                 } else {
                                     Ok(bytes)
                                 }
-                            })).transpose()?;}
+                            })
+                    })
+            })
+            .transpose()?;
 
         let phys_addr = if let Some(paddr) = phys_addr {
             SysMemoryRegionPaddr::Specified(paddr)
@@ -1681,9 +1683,7 @@ impl SysMemoryRegion {
 
         if let SysMemoryRegionPaddr::Specified(sdf_paddr) = phys_addr {
             if !sdf_paddr.is_multiple_of(page_size) {
-                return Err(
-                    "phys_addr is not aligned to the page size".to_string(),
-                );
+                return Err("phys_addr is not aligned to the page size".to_string());
             }
         }
         let page_count = size / page_size;
@@ -1809,29 +1809,23 @@ impl ChannelEnd {
         pp: Option<bool>,
         setvar_id: Option<String>,
         pds: &[ProtectionDomain],
-    ) -> Result<ChannelEnd, String>
-    {
-
+    ) -> Result<ChannelEnd, String> {
         if id > PD_MAX_ID {
-            return Err(
-                format!("id must be < {}", PD_MAX_ID + 1),
-            );
+            return Err(format!("id must be < {}", PD_MAX_ID + 1));
         }
-        let notify = notify.unwrap_or_else(|| true);
-        let pp = pp.unwrap_or_else(|| false);
+        let notify = notify.unwrap_or(true);
+        let pp = pp.unwrap_or(false);
 
         if let Some(pd_idx) = pds.iter().position(|pd| pd.name == pd_name) {
             Ok(ChannelEnd {
                 pd: pd_idx,
-                id: id.try_into().unwrap(),
+                id,
                 notify,
                 pp,
                 setvar_id,
             })
         } else {
-            Err(
-                format!("invalid PD name '{end_pd}'"),
-            )
+            Err(format!("invalid PD name '{pd_name}'"))
         }
     }
 
@@ -1906,21 +1900,12 @@ impl ChannelEnd {
 }
 
 impl Channel {
-    pub fn new(
-        end_a: ChannelEnd,
-        end_b: ChannelEnd,
-    ) -> Result<Channel, String>
-    {
+    pub fn new(end_a: ChannelEnd, end_b: ChannelEnd) -> Result<Channel, String> {
         if end_a.pp && end_b.pp {
-            return Err(
-                "cannot ppc bidirectionally".to_string(),
-            );
+            return Err("cannot ppc bidirectionally".to_string());
         }
 
-        Ok(Channel {
-            end_a,
-            end_b,
-        })
+        Ok(Channel { end_a, end_b })
     }
 
     /// It should be noted that this function assumes that `pds` is populated
