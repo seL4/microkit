@@ -306,14 +306,6 @@ impl SysIOMapPerms {
             (false, false) => Err(()),
         }
     }
-
-    pub fn read(self) -> bool {
-        matches!(self, SysIOMapPerms::Read | SysIOMapPerms::ReadWrite)
-    }
-
-    pub fn write(self) -> bool {
-        matches!(self, SysIOMapPerms::Write | SysIOMapPerms::ReadWrite)
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -327,13 +319,17 @@ pub struct SysIOMap {
     pub text_pos: Option<roxmltree::TextPos>,
 }
 
-trait Map {
+pub trait Map {
     fn mr_name(&self) -> &str;
     fn addr(&self) -> u64;
     fn text_pos(&self) -> Option<roxmltree::TextPos>;
     fn element(&self) -> &'static str;
     fn addr_name(&self) -> &'static str;
     fn range_name(&self) -> &'static str;
+    fn read(&self) -> bool;
+    fn write(&self) -> bool;
+    fn execute(&self) -> bool;
+    fn cached(&self) -> bool;
 }
 
 impl Map for SysMap {
@@ -359,6 +355,22 @@ impl Map for SysMap {
 
     fn range_name(&self) -> &'static str {
         "virtual address range"
+    }
+
+    fn read(&self) -> bool {
+        self.perms & SysMapPerms::Read as u8 != 0
+    }
+
+    fn write(&self) -> bool {
+        self.perms & SysMapPerms::Write as u8 != 0
+    }
+
+    fn execute(&self) -> bool {
+        self.perms & SysMapPerms::Execute as u8 != 0
+    }
+
+    fn cached(&self) -> bool {
+        self.cached
     }
 }
 
@@ -386,7 +398,24 @@ impl Map for SysIOMap {
     fn range_name(&self) -> &'static str {
         "io address range"
     }
+
+    fn read(&self) -> bool {
+        matches!(self.perms, SysIOMapPerms::Read | SysIOMapPerms::ReadWrite)
+    }
+
+    fn write(&self) -> bool {
+        matches!(self.perms, SysIOMapPerms::Write | SysIOMapPerms::ReadWrite)
+    }
+
+    fn execute(&self) -> bool {
+        false
+    }
+
+    fn cached(&self) -> bool {
+        false
+    }
 }
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SysMemoryRegionKind {
     User,
