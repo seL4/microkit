@@ -1638,6 +1638,68 @@ impl SysMemoryRegion {
         }
     }
 
+    pub fn new(
+        config: &Config,
+        name: String,
+        size: u64,
+        page_size: Option<u64>,
+        phys_addr: Option<u64>,
+        kind: SysMemoryRegionKind,
+        prefill_path: Option<&PathBuf>
+    ) -> Result<SysMemoryRegion, String>
+    {
+        let page_size_specified_by_user = true;
+        let page_size = page_size.unwrap_or_else(|| {page_size_specified_by_user = false; config.page_sizes()[0]});
+
+        let page_size_valid = config.page_sizes().contains(&page_size);
+        if !page_size_valid {
+            return Err(
+                format!("page size 0x{page_size:x} not supported"),
+            );
+        }
+        let prefill_bytes_maybe: Option<Vec<u8>> = None;
+        if let Some(prefill_path) = prefill_path {prefill_bytes_maybe = Some(fs::read(&prefill_path)
+                            .map_err(|_| {
+                                    format!("failed to read file '{path_str}' at prefill_path")
+                            })
+                            .and_then(|bytes| {
+                                if bytes.is_empty() {
+                                    Err(
+                                        format!("prefill file '{path_str}' is empty"),
+                                    )
+                                } else {
+                                    Ok(bytes)
+                                }
+                            })).transpose()?;}
+
+        let phys_addr = if let Some(paddr) = phys_addr {
+            SysMemoryRegionPaddr::Specified(paddr)
+        } else {
+            // At this point it is unsure whether this MR is a subject of a setvar region_paddr.
+            SysMemoryRegionPaddr::Unspecified
+        };
+
+        if let SysMemoryRegionPaddr::Specified(sdf_paddr) = phys_addr {
+            if !sdf_paddr.is_multiple_of(page_size) {
+                return Err(
+                    "phys_addr is not aligned to the page size".to_string(),
+                );
+            }
+        }
+        let page_count = size / page_size;
+        Ok(SysMemoryRegion {
+            name,
+            size,
+            page_size_specified_by_user,
+            page_size: page_size.into(),
+            page_count,
+            phys_addr,
+            text_pos: None,
+            kind,
+            prefill_bytes,
+        })
+    }
+
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
@@ -1740,6 +1802,39 @@ impl SysMemoryRegion {
 }
 
 impl ChannelEnd {
+    pub fn new(
+        pd_name: String,
+        id: u64,
+        notify: Option<bool>,
+        pp: Option<bool>,
+        setvar_id: Option<String>,
+        pds: &[ProtectionDomain],
+    ) -> Result<ChannelEnd, String>
+    {
+
+        if id > PD_MAX_ID {
+            return Err(
+                format!("id must be < {}", PD_MAX_ID + 1),
+            );
+        }
+        let notify = notify.unwrap_or_else(|| true);
+        let pp = pp.unwrap_or_else(|| false);
+
+        if let Some(pd_idx) = pds.iter().position(|pd| pd.name == pd_name) {
+            Ok(ChannelEnd {
+                pd: pd_idx,
+                id: id.try_into().unwrap(),
+                notify,
+                pp,
+                setvar_id,
+            })
+        } else {
+            Err(
+                format!("invalid PD name '{end_pd}'"),
+            )
+        }
+    }
+
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
         node: &'a roxmltree::Node,
@@ -1811,6 +1906,23 @@ impl ChannelEnd {
 }
 
 impl Channel {
+    pub fn new(
+        end_a: ChannelEnd,
+        end_b: ChannelEnd,
+    ) -> Result<Channel, String>
+    {
+        if end_a.pp && end_b.pp {
+            return Err(
+                "cannot ppc bidirectionally".to_string(),
+            );
+        }
+
+        Ok(Channel {
+            end_a,
+            end_b,
+        })
+    }
+
     /// It should be noted that this function assumes that `pds` is populated
     /// with all the Protection Domains that could potentially be connected with
     /// the channel.
