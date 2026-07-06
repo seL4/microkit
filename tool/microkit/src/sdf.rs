@@ -390,6 +390,28 @@ impl SysMapPerms {
 }
 
 impl SysMap {
+    fn new(mr: String, vaddr: u64, perms: Option<u8>, cached: Option<bool>, max_vaddr: u64) -> Result<SysMap, String>
+    {
+        if vaddr >= max_vaddr {
+            return Err(format!(
+                "vaddr (0x{vaddr:x}) must be less than 0x{max_vaddr:x}"
+            ));
+        }
+        let perms: u8 = perms.unwrap_or_else(|| SysMapPerms::Read as u8 | SysMapPerms::Write as u8);
+        if perms == SysMapPerms::Write as u8 {
+            return Err("perms must not be 'w', write-only mappings are not allowed".to_string());
+        }
+
+        let cached: bool = cached.unwrap_or_else(|| true);
+        Ok(SysMap {
+            mr,
+            vaddr,
+            perms,
+            cached,
+            text_pos: None,
+        })
+    }
+
     fn from_xml(
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
@@ -492,6 +514,140 @@ impl ProtectionDomain {
         }
 
         ioports
+    }
+
+    pub fn new(
+        config: &Config,
+        id: Option<u64>,
+        name: String,
+        priority: Option<u8>,
+        budget: Option<u64>,
+        period: Option<u64>,
+        passive: Option<bool>,
+        stack_size: Option<u64>,
+        smc: Option<bool>,
+        cpu: Option<u8>,
+        program_image: PathBuf,
+        program_image_for_symbols: Option<PathBuf>,
+        fpu: Option<bool>,
+        maps: Vec<SysMap>,
+        irqs: Vec<SysIrq>,
+        ioports: Vec<IOPort>,
+        setvars: Vec<SysSetVar>,
+        cap_maps: Vec<CapMap>,
+        virtual_machine: Option<VirtualMachine>,
+        child_pds: Vec<ProtectionDomain>,
+        parent: Option<usize>,
+        setvar_id: Option<String>,
+    ) -> Result<ProtectionDomain, String>
+    {
+       let priority = priority.unwrap_or_else(|| 0); 
+
+        if priority > PD_MAX_PRIORITY {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("priority must be between 0 and {PD_MAX_PRIORITY}"),
+            ));
+        }
+        let budget = budget.unwrap_or_else(|| BUDGET_DEFAULT);
+        let period = period.unwrap_or_else(|| budget);
+        if budget > period {
+            return Err(format!("budget ({budget}) must be less than, or equal to, period ({period})"));
+        }
+        let passive = passive.unwrap_or_else(|| false);
+        let stack_size = stack_size.unwrap_or_else(|| PD_DEFAULT_STACK_SIZE);
+
+        #[allow(clippy::manual_range_contains)]
+        if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
+            return Err(
+                format!(
+                    "stack size must be between 0x{PD_MIN_STACK_SIZE:x} bytes and 0x{PD_MAX_STACK_SIZE:x} bytes"
+                ),
+            );
+        }
+
+        if !stack_size.is_multiple_of(config.page_sizes()[0]) {
+            return Err(
+                format!(
+                    "stack size must be aligned to the smallest page size, {} bytes",
+                    config.page_sizes()[0]
+                ),
+            );
+        }
+        let smc = smc.unwrap_or_else(|| false);
+        if smc {
+            match config.arm_smc {
+                Some(smc_allowed) => {
+                    if !smc_allowed {
+                        return Err("Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string());
+                    }
+                }
+                None => {
+                    return Err(
+                        "ARM SMC forwarding support is not available for this architecture"
+                            .to_string(),
+                    )
+                }
+            }
+        }
+        let cpu = CpuCore(cpu.unwrap_or_else(|| 0));
+        if cpu.0 >= config.num_cores {
+            return Err(
+                format!(
+                    "cpu core must be less than {}, got {}",
+                    config.num_cores, cpu.0
+                ),
+            );
+        }
+        let fpu = fpu.unwrap_or_else(|| true);
+
+        // Check that the protection domain is a child before allowing setvar_id to be set.
+        let setvar_id = if (id.is_some()) {setvar_id} else {None}; 
+
+        let mut setvars: Vec<SysSetVar> = Vec::new();
+        for child in child_pds
+        {
+            if(!child.id.is_some())
+            {
+                return Err(format!("child pds must have an id"));
+            }
+            if let Some(setvar) = child.setvar_id { 
+                        let setvar = SysSetVar {
+                            symbol: setvar.to_string(),
+                            kind: SysSetVarKind::Id {
+                                id: child.id.unwrap(),
+                            },
+                        };
+            }
+        }
+
+
+        Ok(ProtectionDomain {
+            id,
+            name,
+            priority,
+            budget,
+            period,
+            passive,
+            stack_size,
+            smc,
+            cpu,
+            program_image,
+            program_image_for_symbols,
+            fpu,
+            maps,
+            irqs,
+            ioports,
+            setvars,
+            cap_maps,
+            virtual_machine,
+            child_pds,
+            has_children,
+            parent,
+            setvar_id,
+            text_pos: None,
+        })
     }
 
     fn from_xml(
