@@ -5,9 +5,9 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="foo" size="0x2_000" />
+    <memory_region name="foo" size="0x2_000_000_000_000" />
     <protection_domain name="test1" stack_size="0x1000">
         <program_image path="test" />
-        <map mr="foo" vaddr="0xffffffe000" />
+        <map mr="foo" vaddr="0xe_000_000_000" />
     </protection_domain>
 </system>
