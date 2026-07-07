@@ -734,20 +734,39 @@ def build_sel4(
         "-E",
         "-P",
         f"-I{include_dir}",
-        object_sizes_header,
     ]
+    if board.arch.is_x86():
+        preprocess_cmd += [
+            f"-I{sel4_dir / 'include'}",
+            f"-I{sel4_dir / 'include' / '64'}",
+            f"-I{sel4_dir / 'include' / 'arch' / 'x86'}",
+            f"-I{sel4_dir / 'include' / 'arch' / 'x86' / 'arch' / '64'}",
+            f"-I{sel4_dir / 'include' / 'plat' / 'pc99'}",
+            f"-I{sel4_dir / 'include' / 'plat' / 'pc99' / 'plat' / '64'}",
+            f"-I{sel4_build_dir / 'generated'}",
+            f"-I{sel4_build_dir / 'generated_prune'}",
+            "-imacros",
+            str(sel4_dir / "include" / "arch" / "x86" / "arch" / "object" / "structures.h"),
+        ]
+    preprocess_cmd.append(object_sizes_header)
     r = subprocess.run(preprocess_cmd, capture_output=True)
     if r.returncode != 0:
         raise Exception(f"Failed creating object_sizes.json: cmd={preprocess_cmd}")
 
     preprocessor_out = r.stdout.decode("utf-8")
     object_sizes = []
+    # Process the format specified in tool/microkit/object_sizes.h
     for l in preprocessor_out.split("\n"):
-        # Preprocessor emits commented lines etc that we want to ignore
-        if ": " in l:
-            assert len(l.split(": ")) == 2
-            obj_name, size = l.split(": ")
-            object_sizes.append((obj_name, int(size)))
+        parts = l.split(maxsplit=2)
+        if len(parts) == 0 or parts[0] != "microkit_constant":
+            continue
+
+        _, obj_name, size = parts
+        if "-" in size:
+            lhs, rhs = size.strip("( )").split("-", 1)
+            size = str(int(lhs.strip(), 0) - int(rhs.strip(), 0))
+
+        object_sizes.append((obj_name, int(size, 0)))
 
     with open(dest, "w") as out_file:
         json.dump(dict(object_sizes), out_file)

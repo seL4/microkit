@@ -261,9 +261,21 @@ pub struct PlatformConfig {
     pub memory: Vec<PlatformConfigRegion>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct ObjectSizesJson {
+    #[serde(flatten)]
+    pub object_sizes: ObjectSizes,
+    pub page_table_index_bits: u64,
+    #[serde(default)]
+    pub vspace_index_bits: Option<u64>,
+    #[serde(default)]
+    pub io_page_table_index_bits: Option<u64>,
+    pub user_top: u64,
+}
+
 /// Deserialised from a generated 'object_sizes.json' file in the SDK
 /// Maps a kernel object to the size of the object, specified in bits.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ObjectSizes {
     pub tcb: u64,
     pub endpoint: u64,
@@ -305,26 +317,22 @@ pub struct Config {
     pub invocations_labels: serde_json::Value,
     /// Kernel object sizes, used for kernel boot emulation and untyped allocation.
     pub object_sizes: Option<ObjectSizes>,
+    pub page_table_index_bits: u64,
+    /// Only emitted for aarch builds
+    pub vspace_index_bits: Option<u64>,
+    // Only emitted for x86 VT-D builds
+    pub io_page_table_index_bits: Option<u64>,
     /// The two remaining fields are only valid on ARM and RISC-V
     pub device_regions: Option<Vec<PlatformConfigRegion>>,
     pub normal_regions: Option<Vec<PlatformConfigRegion>>,
+    /// Emitted on all builds corresponds to seL4_UserVSpaceTop.
+    pub user_top: u64,
 }
 
 impl Config {
-    /// Refers to 'seL4_UserTop'
+    /// Refers to 'seL4_UserVSpaceTop' + 1. This is the first invalid virtual address for user level.
     pub fn user_top(&self) -> u64 {
-        match self.arch {
-            Arch::Aarch64 => match self.hypervisor {
-                true => match self.arm_pa_size_bits.unwrap() {
-                    40 => 0x10000000000,
-                    44 => 0x100000000000,
-                    _ => panic!("Unknown ARM physical address size bits"),
-                },
-                false => 0x800000000000,
-            },
-            Arch::Riscv64 => 0x0000003ffffff000,
-            Arch::X86_64 => 0x7ffffffff000,
-        }
+        self.user_top + 1
     }
 
     /// Refers to the 'PPTR_BASE' define in kernel source
@@ -394,6 +402,33 @@ impl Config {
             Arch::Riscv64 => self.riscv_pt_levels.unwrap().levels(),
             // seL4 only supports 4-level page table on x86-64.
             Arch::X86_64 => 4,
+        }
+    }
+
+    pub fn vspace_root_level(&self) -> usize {
+        if self.arch == Arch::Aarch64 && self.aarch64_vspace_s2_start_l1() {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub fn vspace_level_index_bits(&self, level: usize) -> u64 {
+        assert!(level < self.num_page_table_levels());
+
+        if self.arch == Arch::Aarch64 && level == self.vspace_root_level() {
+            self.vspace_index_bits.expect("Error: An Aarch64 build should have seL4_VSpaceIndexBits defined by seL4, captured in tool/microkit/object_sizes.h")
+        } else {
+            self.page_table_index_bits
+        }
+    }
+
+    pub fn io_page_table_index_bits(&self) -> u64 {
+        match (self.arch, self.iommu) {
+            (Arch::X86_64, true) => self
+                .io_page_table_index_bits
+                .expect("Error: An x86 VT-D build should have VTD_PT_INDEX_BITS defined by seL4, captured in tool/microkit/object_sizes.h"),
+            _ => panic!("Error: currently not supported by Microkit."),
         }
     }
 }

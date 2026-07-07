@@ -21,8 +21,8 @@ use microkit_tool::report::write_report;
 use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr};
 use microkit_tool::sdk::Sdk;
 use microkit_tool::sel4::{
-    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, PlatformConfig,
-    RiscvVirtualMemory,
+    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, ObjectSizesJson,
+    PlatformConfig, RiscvVirtualMemory,
 };
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{
@@ -196,12 +196,11 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let object_sizes = {
-        let object_sizes_path = current_config.config_dir.join("object_sizes.json");
-        bail_if_not_exists("kernel object sizes file", &object_sizes_path)?;
-
-        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
-    };
+    let object_sizes_path = current_config.config_dir.join("object_sizes.json");
+    bail_if_not_exists("kernel object sizes file", &object_sizes_path)?;
+    let object_sizes_json: ObjectSizesJson =
+        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap())
+            .expect("Unable to parse the object size information from {object_sizes_path}");
 
     let hypervisor = match arch {
         Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
@@ -242,7 +241,7 @@ fn main() -> Result<(), String> {
     let kernel_config = Config {
         arch,
         word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
-        minimum_page_size: 4096,
+        minimum_page_size: 1 << object_sizes_json.object_sizes.small_page,
         paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
         kernel_frame_size,
         init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
@@ -269,7 +268,11 @@ fn main() -> Result<(), String> {
         invocations_labels,
         device_regions,
         normal_regions,
-        object_sizes,
+        object_sizes: Some(object_sizes_json.object_sizes),
+        page_table_index_bits: object_sizes_json.page_table_index_bits,
+        vspace_index_bits: object_sizes_json.vspace_index_bits,
+        io_page_table_index_bits: object_sizes_json.io_page_table_index_bits,
+        user_top: object_sizes_json.user_top,
     };
 
     if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {

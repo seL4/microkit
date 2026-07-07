@@ -8,7 +8,7 @@ use crate::{
         spec::capdl_obj_human_name, util::capdl_util_make_cte, CapDLNamedObject,
         CapDLSpecContainer, FrameFill,
     },
-    sel4::{Arch, Config, PageSize},
+    sel4::{Arch, Config, ObjectType, PageSize},
 };
 use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
 use std::ops::Range;
@@ -81,7 +81,7 @@ impl AddressSpace {
             spec_container,
             sel4_config,
             self.root(),
-            Self::get_root_level(sel4_config),
+            self.get_root_level(sel4_config),
             frame_cap,
             frame_size_bytes,
             addr,
@@ -114,40 +114,39 @@ impl AddressSpace {
         }
     }
 
+    fn get_leaf_bits(&self, sel4_config: &Config) -> u64 {
+        match self {
+            Self::VSpace { .. } => ObjectType::SmallPage.fixed_size_bits(sel4_config).unwrap(),
+        }
+    }
+
+    fn level_index_bits(&self, sel4_config: &Config, level: usize) -> u64 {
+        match self {
+            Self::VSpace { .. } => sel4_config.vspace_level_index_bits(level),
+        }
+    }
+
     fn get_level_index(&self, sel4_config: &Config, level: usize, vaddr: u64) -> usize {
         let levels = self.address_space_levels(sel4_config);
-
         assert!(level < levels);
 
-        let index_bits = |level: usize| -> u64 {
-            if matches!(self, AddressSpace::VSpace { .. })
-                && level == Self::get_root_level(sel4_config)
-                && sel4_config.arch == Arch::Aarch64
-                && sel4_config.aarch64_vspace_s2_start_l1()
-            {
-                // Special case for first level on AArch64 platforms with hyp and 40 bits PA.
-                // It have 10 bits index for VSpace.
-                // match up with seL4_VSpaceBits in seL4/libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h
-                10
-            } else {
-                9
-            }
-        };
-
-        let page_bits = 12;
-        let bits_from_higher_lvls: u64 = ((level + 1)..levels).map(index_bits).sum();
+        let page_bits = self.get_leaf_bits(sel4_config);
+        let bits_from_higher_lvls: u64 = ((level + 1)..levels)
+            .map(|level| self.level_index_bits(sel4_config, level))
+            .sum();
         let shift = page_bits + bits_from_higher_lvls;
-        let width = index_bits(level);
+        let width = self.level_index_bits(sel4_config, level);
         let mask = (1u64 << width) - 1;
 
         ((vaddr >> shift) & mask) as usize
     }
 
     fn get_level_coverage(&self, sel4_config: &Config, level: usize, vaddr: u64) -> Range<u64> {
-        let levels = self.address_space_levels(sel4_config) as u64;
-
-        let page_bits = 12;
-        let bits_from_higher_lvls: u64 = (levels - (level as u64)) * 9;
+        let levels = self.address_space_levels(sel4_config);
+        let page_bits = self.get_leaf_bits(sel4_config);
+        let bits_from_higher_lvls: u64 = ((level + 1)..levels)
+            .map(|level| self.level_index_bits(sel4_config, level))
+            .sum();
 
         let coverage_bits = page_bits + bits_from_higher_lvls;
 
@@ -347,11 +346,9 @@ impl AddressSpace {
         }
     }
 
-    fn get_root_level(sel4_config: &Config) -> usize {
-        if sel4_config.arch == Arch::Aarch64 && sel4_config.aarch64_vspace_s2_start_l1() {
-            1
-        } else {
-            0
+    fn get_root_level(&self, sel4_config: &Config) -> usize {
+        match self {
+            AddressSpace::VSpace { .. } => sel4_config.vspace_root_level(),
         }
     }
 }
@@ -362,7 +359,7 @@ fn create_vspace_address_space(
     name: &str,
     x86_ept: bool,
 ) -> AddressSpace {
-    let root_level = AddressSpace::get_root_level(sel4_config);
+    let root_level = sel4_config.vspace_root_level();
 
     let root = spec_container.add_root_object(CapDLNamedObject {
         name: format!("{}_{}", get_pt_level_name(sel4_config, root_level), name).into(),
