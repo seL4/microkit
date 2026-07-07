@@ -109,7 +109,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [interrupt](#irq)
 * [fault](#fault)
 * [ioport](#ioport)
-* [io address space](#io_address_space)
+* [IO address space](#io_address_space)
 
 ## System {#system}
 
@@ -244,10 +244,10 @@ The mapping has a number of attributes, which include:
 * permissions (read, write and execute)
 
 *Note:* On x86 a memory region can also be *mapped* into one or more
-io address spaces. This type of mapping is known as an *iomap*. It supports
+IO address spaces. This type of mapping is known as an *iomap*. It supports
 a number of attributes, which include:
 
-* the io virtual address at which the region is mapped in the io address space
+* the io virtual address at which the region is mapped in the IO address space
 * permissions (read, write)
 
 **Note:** When a memory region is mapped into multiple protection
@@ -1101,12 +1101,12 @@ For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' i
 The `io_address_space` element describes an address space used to isolate a given device.
 
 It supports the following attributes:
-* `name`: A unique name for the io address space
+* `name`: A unique name for the IO address space
 * `peripheral_id`: A unique identifier. This must match the identifier used by the hardware IOMMU or SMMU to identify devices.
 
 The `io_address_space` element supports the following elements as children:
 
-* `iomap`: This is used to map a *memory_region* into the io address space.
+* `iomap`: This is used to map a *memory_region* into the IO address space.
 
 The `iomap` element supports the following attributes:
 * `mr`: Identifies the memory region to map.
