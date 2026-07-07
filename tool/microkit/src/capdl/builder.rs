@@ -18,14 +18,14 @@ use sel4_capdl_initializer_types::{
 use crate::{
     capdl::{
         irq::create_irq_handler_cap,
-        memory::{create_vspace, create_vspace_ept, AddressSpace},
+        memory::{create_iospace, create_vspace, create_vspace_ept, AddressSpace},
         spec::{capdl_obj_physical_size_bits, BytesContent, ElfContent, FillContent},
         util::*,
     },
     elf::ElfFile,
     sdf::{
-        CapMapType, CpuCore, Map, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY,
+        CapMapType, CpuCore, IommuDeviceIdentifier, Map, SystemDescription, BUDGET_DEFAULT,
+        MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -1239,7 +1239,46 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 6. Sort the root objects
+    // Step 6. Create IOMMU Address Spaces
+    // *********************************
+    let mut iospace_by_device: HashMap<IommuDeviceIdentifier, AddressSpace> = HashMap::new();
+    for iomap in system.iomaps.iter() {
+        let address_space = iospace_by_device
+            .entry(iomap.identifier)
+            .or_insert_with(|| {
+                create_iospace(
+                    &mut spec_container,
+                    kernel_config,
+                    &iomap.device,
+                    iomap.identifier,
+                    iomap.domain_id,
+                )
+            });
+        let page_size_bytes = mr_name_to_frames
+            .get(&iomap.mr)
+            .ok_or(format!(
+                "Error: Memory region {} referenced by iomap not found.",
+                iomap.mr
+            ))?
+            .first()
+            .map(|&object_id| 1 << capdl_util_get_frame_size_bits(&spec_container, object_id))
+            .ok_or(format!(
+                "Error: Memory region {} referenced by iomap has no frames.",
+                &iomap.mr
+            ))?;
+
+        map_memory_region(
+            &mut spec_container,
+            kernel_config,
+            iomap,
+            page_size_bytes,
+            address_space,
+            &mr_name_to_frames[&iomap.mr],
+        )?;
+    }
+
+    // *********************************
+    // Step 7. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.

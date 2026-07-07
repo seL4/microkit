@@ -21,6 +21,7 @@ const DEFAULT_OBJECT_SIZES: sel4::ObjectSizes = sel4::ObjectSizes {
     huge_page: 0,
     large_page: 0,
     small_page: 0,
+    io_page_table: None,
     asid_pool: 0,
     vcpu: None,
 };

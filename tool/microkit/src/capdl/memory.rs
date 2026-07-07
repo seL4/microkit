@@ -8,9 +8,12 @@ use crate::{
         spec::capdl_obj_human_name, util::capdl_util_make_cte, CapDLNamedObject,
         CapDLSpecContainer, FrameFill,
     },
+    sdf::IommuDeviceIdentifier,
     sel4::{Arch, Config, ObjectType, PageSize},
 };
-use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
+use sel4_capdl_initializer_types::{
+    cap, object, x86_io_address_space, Cap, Object, ObjectId, Word,
+};
 use std::ops::Range;
 
 /// For naming and debugging purposes only, no functional purpose.
@@ -48,6 +51,14 @@ fn get_pt_level_name(sel4_config: &Config, level: usize) -> &str {
     }
 }
 
+fn get_iopt_level_name(level: usize) -> String {
+    if level == 0 {
+        "iospace".to_string()
+    } else {
+        format!("iopt_level_{}", level - 1)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddressSpace {
     VSpace {
@@ -55,17 +66,22 @@ pub enum AddressSpace {
         root: ObjectId,
         x86_ept: bool,
     },
+    IOSpace {
+        name: String,
+        root: ObjectId,
+        device: IommuDeviceIdentifier,
+    },
 }
 
 impl AddressSpace {
     pub fn root(&self) -> ObjectId {
         match self {
-            &Self::VSpace { root, .. } => root,
+            &Self::VSpace { root, .. } | &Self::IOSpace { root, .. } => root,
         }
     }
     pub fn name(&self) -> &str {
         match self {
-            Self::VSpace { name, .. } => name,
+            Self::VSpace { name, .. } | Self::IOSpace { name, .. } => name,
         }
     }
 
@@ -105,32 +121,42 @@ impl AddressSpace {
     fn get_level_name(&self, sel4_config: &Config, level: usize) -> String {
         match self {
             Self::VSpace { .. } => get_pt_level_name(sel4_config, level).to_string(),
+            Self::IOSpace { .. } => get_iopt_level_name(level),
         }
     }
 
     fn get_addr_label(&self) -> &'static str {
         match self {
             Self::VSpace { .. } => "vaddr",
+            Self::IOSpace { .. } => "ioaddr",
         }
     }
 
-    fn get_leaf_bits(&self, sel4_config: &Config) -> u64 {
-        match self {
-            Self::VSpace { .. } => ObjectType::SmallPage.fixed_size_bits(sel4_config).unwrap(),
-        }
+    fn get_leaf_bits(sel4_config: &Config) -> u64 {
+        ObjectType::SmallPage.fixed_size_bits(sel4_config).unwrap()
     }
 
     fn level_index_bits(&self, sel4_config: &Config, level: usize) -> u64 {
         match self {
             Self::VSpace { .. } => sel4_config.vspace_level_index_bits(level),
+            Self::IOSpace { .. } => {
+                if level > 0 {
+                    sel4_config.io_page_table_index_bits()
+                } else {
+                    panic!("IODevice root is not indexed by address bits");
+                }
+            }
         }
     }
 
     fn get_level_index(&self, sel4_config: &Config, level: usize, vaddr: u64) -> usize {
+        if matches!(self, AddressSpace::IOSpace { .. }) && level == 0 {
+            return x86_io_address_space::IOSPACE_ROOT_IOPT_SLOT;
+        }
         let levels = self.address_space_levels(sel4_config);
         assert!(level < levels);
 
-        let page_bits = self.get_leaf_bits(sel4_config);
+        let page_bits = Self::get_leaf_bits(sel4_config);
         let bits_from_higher_lvls: u64 = ((level + 1)..levels)
             .map(|level| self.level_index_bits(sel4_config, level))
             .sum();
@@ -143,7 +169,7 @@ impl AddressSpace {
 
     fn get_level_coverage(&self, sel4_config: &Config, level: usize, vaddr: u64) -> Range<u64> {
         let levels = self.address_space_levels(sel4_config);
-        let page_bits = self.get_leaf_bits(sel4_config);
+        let page_bits = Self::get_leaf_bits(sel4_config);
         let bits_from_higher_lvls: u64 = ((level + 1)..levels)
             .map(|level| self.level_index_bits(sel4_config, level))
             .sum();
@@ -300,12 +326,22 @@ impl AddressSpace {
                 level: Some(level as u8),
                 slots: vec![],
             }),
+            AddressSpace::IOSpace { .. } => {
+                let iopt_level = level
+                    .checked_sub(1)
+                    .expect("Error: cannot create an intermediate IOPT for the root level.");
+                Object::IOPT(object::IOPT {
+                    slots: vec![],
+                    level: Word(iopt_level as u64),
+                })
+            }
         }
     }
 
     fn make_intermediate_cap(&self, object: ObjectId) -> Cap {
         match self {
             AddressSpace::VSpace { .. } => Cap::PageTable(cap::PageTable { object }),
+            AddressSpace::IOSpace { .. } => Cap::IOPT(cap::IOPT { object }),
         }
     }
 
@@ -327,6 +363,13 @@ impl AddressSpace {
     ) -> Result<(), String> {
         let valid = match self {
             AddressSpace::VSpace { .. } => matches!(object, Object::PageTable(_)),
+            AddressSpace::IOSpace { .. } => {
+                if cur_level == 0 {
+                    matches!(object, Object::IODevice(_))
+                } else {
+                    matches!(object, Object::IOPT(_))
+                }
+            }
         };
         if valid {
             Ok(())
@@ -343,14 +386,80 @@ impl AddressSpace {
     fn address_space_levels(&self, sel4_config: &Config) -> usize {
         match self {
             AddressSpace::VSpace { .. } => sel4_config.num_page_table_levels(),
+            // IOSpace level 0 is the IODevice root. Slot 0 points to the
+            // normal IOPT tree root, and slots 1.. hold spare IOPTs for
+            // runtime prefix levels.
+            AddressSpace::IOSpace { .. } => x86_io_address_space::CAPDL_NUM_IOPT_LEVELS + 1,
         }
     }
 
     fn get_root_level(&self, sel4_config: &Config) -> usize {
         match self {
             AddressSpace::VSpace { .. } => sel4_config.vspace_root_level(),
+            AddressSpace::IOSpace { .. } => 0,
         }
     }
+}
+
+// In future supporting SMMU can be done by matching on the IommuDeviceIdentifier or creating a new function.
+pub fn create_iospace(
+    spec_container: &mut CapDLSpecContainer,
+    sel4_config: &Config,
+    device_name: &str,
+    device_identifier: IommuDeviceIdentifier,
+    domain_id: Option<u64>,
+) -> AddressSpace {
+    let IommuDeviceIdentifier::X86Pci(pci_device) = device_identifier;
+
+    let root = spec_container.add_root_object(CapDLNamedObject {
+        name: format!("{}_{}", get_iopt_level_name(0), device_name).into(),
+        object: Object::IODevice(object::IODevice {
+            slots: vec![],
+            domain_id: domain_id.unwrap().into(),
+            pci_device: (
+                Word(pci_device.bus.into()),
+                Word(pci_device.device.into()),
+                Word(pci_device.function.into()),
+            ),
+        }),
+    });
+
+    let address_space = AddressSpace::IOSpace {
+        name: device_name.to_string(),
+        root,
+        device: device_identifier,
+    };
+
+    // The IODevice root has two roles: slot 0 is reserved for the root of the
+    // normal 3-level IOPT tree, while slots 1.. hold spare IOPTs that the
+    // initialiser can use when seL4 reports a wider IOVA space at runtime.
+    for spare_idx in 0..x86_io_address_space::SPARE_NUM_LEVELS {
+        let slot = x86_io_address_space::IOSPACE_ROOT_IOPT_SLOT + 1 + spare_idx;
+        let next_obj_id = spec_container.add_root_object(CapDLNamedObject {
+            name: format!(
+                "{}_{}_spare_{}",
+                get_iopt_level_name(1),
+                address_space.name(),
+                slot
+            )
+            .into(),
+            object: address_space.make_intermediate_object(1),
+        });
+        let next_cap = address_space.make_intermediate_cap(next_obj_id);
+
+        address_space
+            .insert_cap_into_level(
+                spec_container,
+                sel4_config,
+                address_space.root(),
+                address_space.get_root_level(sel4_config),
+                slot,
+                next_cap,
+            )
+            .unwrap_or_else(|err| panic!("Error: create_iospace() failed allocating spare IOPT capabilities with error {err}"));
+    }
+
+    address_space
 }
 
 fn create_vspace_address_space(

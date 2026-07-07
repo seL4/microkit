@@ -285,6 +285,7 @@ pub struct ObjectSizes {
     pub reply: u64,
     pub vspace: u64,
     pub page_table: u64,
+    pub io_page_table: Option<u64>,
     pub huge_page: u64,
     pub large_page: u64,
     pub small_page: u64,
@@ -489,6 +490,7 @@ pub enum ObjectType {
     PageTable,
     Vcpu,
     AsidPool,
+    IOPageTable,
 }
 
 impl ObjectType {
@@ -503,6 +505,10 @@ impl ObjectType {
             ObjectType::Reply => Some(object_sizes.reply),
             ObjectType::VSpace => Some(object_sizes.vspace),
             ObjectType::PageTable => Some(object_sizes.page_table),
+            ObjectType::IOPageTable => match (config.arch, config.iommu) {
+                (Arch::X86_64, true) => Some(object_sizes.io_page_table.unwrap()),
+                _ => panic!("Unexpected architecture or build asking for io_page_table_bits"),
+            },
             ObjectType::HugePage => Some(object_sizes.huge_page),
             ObjectType::LargePage => Some(object_sizes.large_page),
             ObjectType::SmallPage => Some(object_sizes.small_page),

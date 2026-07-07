@@ -22,7 +22,7 @@ use crate::sel4::{
 
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
-use sel4_capdl_initializer_types::FillEntryContentBootInfoId;
+use sel4_capdl_initializer_types::{x86_io_address_space, FillEntryContentBootInfoId};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
@@ -61,12 +61,6 @@ const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
 /// This value is calculated by the kernel as `irq_user_max - irq_user_min` in
 /// `src/arch/x86/object/interrupt.c`
 const X86_IRQ_VECTOR_MAX: i64 = 107;
-
-// In reality the kernel dynamically determines this value. The tool assumes
-// at least 512GiB of IO virtual address space. This handles all values reported
-// to us by the kernel at runtime except for the 1GiB or no-iommu cases.
-// This is currently applied to any iommu mapping independent of the architecture.
-const IOMAP_MAX_VADDR: u64 = (1 << 39) - 1;
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
@@ -746,13 +740,13 @@ impl SysIOMap {
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
         let iovaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "iovaddr")?, node)?;
 
-        if iovaddr > IOMAP_MAX_VADDR {
+        if iovaddr > x86_io_address_space::CAPDL_MAX_IOVA {
             return Err(value_error(
                 xml_sdf,
                 node,
                 format!(
                     "iovaddr ({iovaddr:#x}) must be less than {:#x}",
-                    IOMAP_MAX_VADDR + 1
+                    x86_io_address_space::CAPDL_MAX_IOVA + 1
                 ),
             ));
         }
@@ -2212,7 +2206,13 @@ fn check_io_maps(
 
     for (identifier, maps) in by_device {
         let address_space = identifier.to_string();
-        check_maps(xml_sdf, mrs, maps, &address_space, IOMAP_MAX_VADDR + 1)?;
+        check_maps(
+            xml_sdf,
+            mrs,
+            maps,
+            &address_space,
+            x86_io_address_space::CAPDL_MAX_IOVA + 1,
+        )?;
     }
 
     Ok(())
