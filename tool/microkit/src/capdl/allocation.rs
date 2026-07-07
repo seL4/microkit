@@ -146,9 +146,7 @@ pub fn simulate_capdl_object_alloc_algorithm(
 
             while cur_paddr < target {
                 let max_size_bits = {
-                    let alignment_bits = (cur_paddr - ut.base())
-                        .checked_ilog2()
-                        .unwrap_or(kernel_config.word_size.try_into().unwrap());
+                    let alignment_bits = (cur_paddr - ut.base()).trailing_zeros();
                     let distance_bits = (target - cur_paddr).checked_ilog2().expect("never 0");
                     alignment_bits.min(distance_bits).try_into().unwrap()
                 };
