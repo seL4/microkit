@@ -1317,7 +1317,7 @@ mod system {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "sys_map_range_too_high.system",
-            "Error: map for 'foo' has virtual address range [0xffffffe000..0x10000000000) which exceeds valid address space [0x0..0xfffffff000) @",
+            "Error: map for 'foo' has virtual address range [0xe000000000..0x200e000000000) which exceeds valid address space",
         )
     }
 
