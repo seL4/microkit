@@ -143,6 +143,8 @@ pub fn get_cap_view(
             | Cap::DomainSet(_)
             | Cap::Frame(_)
             | Cap::SchedContext(_)
+            | Cap::IOSpace(_)
+            | Cap::IOPT(_)
             | Cap::Untyped(_) => {
                 /* ^ The caps above can occupy CSpace slots, but Viper
                  * verification currently has no use for them, so we
