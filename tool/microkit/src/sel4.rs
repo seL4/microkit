@@ -425,6 +425,19 @@ impl Config {
             self.address_space_constants.page_table_index_bits
         }
     }
+
+    pub fn io_page_table_index_bits(&self) -> u64 {
+        match (self.arch, self.iommu) {
+            (Arch::X86_64, true) => self
+                .address_space_constants
+                .io_page_table_index_bits
+                .expect(
+                    "Error: An x86 VT-D build should have seL4_IOPageTableIndexBits
+                    defined by seL4, captured in tool/microkit/address_space_constants.h",
+                ),
+            _ => panic!("Error: currently not supported by Microkit."),
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Copy, Eq)]
