@@ -261,9 +261,23 @@ pub struct PlatformConfig {
     pub memory: Vec<PlatformConfigRegion>,
 }
 
+/// Deserialised from a generated 'address_space_constants.json' file in the SDK.
+#[derive(Debug, Deserialize)]
+pub struct AddressSpaceConstants {
+    pub page_table_index_bits: u64,
+    #[serde(default)]
+    /// Only included for aarch64 builds
+    pub vspace_index_bits: Option<u64>,
+    #[serde(default)]
+    // Only included for x86 VT-D builds
+    pub io_page_table_index_bits: Option<u64>,
+    /// seL4_UserVSpaceTop.
+    pub vspace_user_top: u64,
+}
+
 /// Deserialised from a generated 'object_sizes.json' file in the SDK
 /// Maps a kernel object to the size of the object, specified in bits.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ObjectSizes {
     pub tcb: u64,
     pub endpoint: u64,
@@ -303,30 +317,15 @@ pub struct Config {
     pub riscv_pt_levels: Option<RiscvVirtualMemory>,
     pub invocations_labels: serde_json::Value,
     /// Kernel object sizes, used for kernel boot emulation and untyped allocation.
-    pub object_sizes: Option<ObjectSizes>,
+    pub object_sizes: ObjectSizes,
+    /// Kernel address space constants
+    pub address_space_constants: AddressSpaceConstants,
     /// The two remaining fields are only valid on ARM and RISC-V
     pub device_regions: Option<Vec<PlatformConfigRegion>>,
     pub normal_regions: Option<Vec<PlatformConfigRegion>>,
 }
 
 impl Config {
-    /// Refers to 'seL4_UserVSpaceTop'. Is inclusive.
-    // TODO: We should auto-extract this from libsel4 headers.
-    pub fn user_vspace_top(&self) -> u64 {
-        match self.arch {
-            Arch::Aarch64 => match self.hypervisor {
-                true => match self.arm_pa_size_bits.unwrap() {
-                    40 => 0x00ffffffffff,
-                    44 => 0x0fffffffffff,
-                    _ => panic!("Unknown ARM physical address size bits"),
-                },
-                false => 0x7fffffffffff,
-            },
-            Arch::Riscv64 => 0x0000003fffffefff,
-            Arch::X86_64 => 0x7fffffffefff,
-        }
-    }
-
     /// Refers to the 'PPTR_BASE' define in kernel source
     pub fn virtual_base(&self) -> u64 {
         match self.arch {
@@ -350,7 +349,7 @@ impl Config {
     /// IPC Buffer is located at the highest possible virtual memory page
     pub fn pd_ipc_buffer(&self) -> u64 {
         // user_top is inclusive, so we mask off the bits inside the page.
-        self.user_vspace_top() & !(PageSize::Small as u64 - 1)
+        self.address_space_constants.vspace_user_top & !(PageSize::Small as u64 - 1)
     }
 
     /// The stack is located in the third highest possible virtual memory pages,
@@ -378,7 +377,7 @@ impl Config {
     /// Value is exclusive ..max)
     pub fn vm_map_max_vaddr(&self) -> u64 {
         // Add 1, because user_top is inclusive. Note this assumes no overflow.
-        self.user_vspace_top() + 1
+        self.address_space_constants.vspace_user_top + 1
     }
 
     pub fn paddr_to_kernel_vaddr(&self, paddr: u64) -> u64 {
@@ -402,6 +401,27 @@ impl Config {
             Arch::Riscv64 => self.riscv_pt_levels.unwrap().levels(),
             // seL4 only supports 4-level page table on x86-64.
             Arch::X86_64 => 4,
+        }
+    }
+
+    pub fn vspace_root_level(&self) -> usize {
+        if self.arch == Arch::Aarch64 && self.aarch64_vspace_s2_start_l1() {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub fn vspace_level_index_bits(&self, level: usize) -> u64 {
+        assert!(level < self.num_page_table_levels());
+
+        if self.arch == Arch::Aarch64 && level == self.vspace_root_level() {
+            self.address_space_constants.vspace_index_bits.expect(
+                "Error: An Aarch64 build should have seL4_VSpaceIndexBits defined
+                    by seL4, captured in tool/microkit/address_space_constants.h",
+            )
+        } else {
+            self.address_space_constants.page_table_index_bits
         }
     }
 }
@@ -461,8 +481,7 @@ impl ObjectType {
     /// Gets the number of bits to represent the size of a object. The
     /// size depends on architecture as well as kernel configuration.
     pub fn fixed_size_bits(self, config: &Config) -> Option<u64> {
-        assert!(config.object_sizes.is_some());
-        let object_sizes = &config.object_sizes.as_ref().unwrap();
+        let object_sizes = &config.object_sizes;
         match self {
             ObjectType::Tcb => Some(object_sizes.tcb),
             ObjectType::Endpoint => Some(object_sizes.endpoint),

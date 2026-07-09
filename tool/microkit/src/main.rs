@@ -19,10 +19,10 @@ use microkit_tool::elf::ElfFile;
 use microkit_tool::loader::Loader;
 use microkit_tool::report::write_report;
 use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr};
-use microkit_tool::sdk::Sdk;
+use microkit_tool::sdk::{AvailableConfig, Sdk};
 use microkit_tool::sel4::{
-    emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, PlatformConfig,
-    RiscvVirtualMemory,
+    emulate_kernel_boot, emulate_kernel_boot_partial, AddressSpaceConstants, Arch, Config,
+    ObjectSizes, PlatformConfig, RiscvVirtualMemory,
 };
 use microkit_tool::symbols::patch_symbols;
 use microkit_tool::util::{
@@ -93,6 +93,17 @@ fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), Stri
         std::process::exit(1);
     }
     Ok(())
+}
+
+fn parse_json_file<T: serde::de::DeserializeOwned>(
+    file_name: &str,
+    file_description: &'static str,
+    current_config: &AvailableConfig,
+) -> Result<T, String> {
+    let path = current_config.config_dir.join(file_name);
+    bail_if_not_exists(file_description, &path)?;
+    serde_json::from_str(&fs::read_to_string(&path).expect("Error: Unable to read {path}"))
+        .map_err(|err| format!("Error: Unable to parse {file_name}: {err}"))
 }
 
 fn main() -> Result<(), String> {
@@ -197,12 +208,17 @@ fn main() -> Result<(), String> {
         }
     };
 
-    let object_sizes = {
-        let object_sizes_path = current_config.config_dir.join("object_sizes.json");
-        bail_if_not_exists("kernel object sizes file", &object_sizes_path)?;
+    let object_sizes: ObjectSizes = parse_json_file(
+        "object_sizes.json",
+        "kernel object sizes file",
+        current_config,
+    )?;
 
-        serde_json::from_str(&fs::read_to_string(object_sizes_path).unwrap()).unwrap()
-    };
+    let address_space_constants: AddressSpaceConstants = parse_json_file(
+        "address_space_constants.json",
+        "kernel address space constants file",
+        current_config,
+    )?;
 
     let hypervisor = match arch {
         Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
@@ -238,7 +254,7 @@ fn main() -> Result<(), String> {
     let kernel_config = Config {
         arch,
         word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
-        minimum_page_size: 4096,
+        minimum_page_size: 1 << object_sizes.small_page,
         paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
         kernel_frame_size,
         init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
@@ -265,6 +281,7 @@ fn main() -> Result<(), String> {
         device_regions,
         normal_regions,
         object_sizes,
+        address_space_constants,
     };
 
     if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
