@@ -726,32 +726,35 @@ def build_sel4(
 
     # Use the preprocessor to convert the seL4 object size constants to readable JSON
     # for the tool.
-    object_sizes_header = tool_dir / "object_sizes.h"
-    dest = sdk_dir / "board" / board.name / config.name / "object_sizes.json"
-    preprocessor = "clang" if (llvm) else f"{target_triple}-cpp"
-    preprocess_cmd = [
-        preprocessor,
-        "-E",
-        "-P",
-        f"-I{include_dir}",
-        object_sizes_header,
-    ]
-    r = subprocess.run(preprocess_cmd, capture_output=True)
-    if r.returncode != 0:
-        raise Exception(f"Failed creating object_sizes.json: cmd={preprocess_cmd}")
+    sel4_constants = ["object_sizes", "address_space_constants"]
+    for sel4_constant_type in sel4_constants:
+        header_src = tool_dir / f"{sel4_constant_type}.h"
+        json_dst = sdk_dir / "board" / board.name / config.name / f"{sel4_constant_type}.json"
+        preprocessor = "clang" if (llvm) else f"{target_triple}-cpp"
+        preprocess_cmd = [
+            preprocessor,
+            "-E",
+            "-P",
+            f"-I{include_dir}",
+            header_src,
+        ]
+        r = subprocess.run(preprocess_cmd, capture_output=True)
+        if r.returncode != 0:
+            raise Exception(f"Failed creating object_sizes.json: cmd={preprocess_cmd}")
+        sizes = []
+        for l in r.stdout.decode("utf-8").split("\n"):
+            # Preprocessor emits commented lines etc that we want to ignore
+            if ": " in l:
+                assert len(l.split(": ")) == 2
+                obj_name, size = l.split(": ")
+                if "-" in size:
+                    lhs, rhs = size.strip("( )").split("-", 1)
+                    size = str(int(lhs.strip(), 0) - int(rhs.strip(), 0))
+                sizes.append((obj_name, int(size, 0)))
 
-    preprocessor_out = r.stdout.decode("utf-8")
-    object_sizes = []
-    for l in preprocessor_out.split("\n"):
-        # Preprocessor emits commented lines etc that we want to ignore
-        if ": " in l:
-            assert len(l.split(": ")) == 2
-            obj_name, size = l.split(": ")
-            object_sizes.append((obj_name, int(size)))
-
-    with open(dest, "w") as out_file:
-        json.dump(dict(object_sizes), out_file)
-        dest.chmod(0o744)
+        with open(json_dst, "w") as out_file:
+            json.dump(dict(sizes), out_file)
+            json_dst.chmod(0o744)
 
 
 def build_elf_component(
