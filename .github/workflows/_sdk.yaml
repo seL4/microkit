@@ -1,0 +1,113 @@
+# Copyright 2023, UNSW
+# SPDX-License-Identifier: BSD-2-Clause
+
+name: SDK
+
+on:
+  # Allow use as a reusable workflow (only)
+  workflow_call:
+    inputs:
+      xml:
+        description: "The manifest XML of the checked out code"
+        required: true
+        type: string
+
+    outputs:
+      SDK_VERSION:
+        description: "The version of the SDK that has been built"
+        value: ${{ jobs.sdk-build.outputs.SDK_VERSION }}
+
+# To reduce the load we cancel any older runs of this workflow for the current
+# PR. For deployment to the main branch, the workflow will run on each push,
+# and the `run_id` parameter will prevent cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sdk-build:
+    name: Build SDK (macOS, all targets)
+    runs-on: [self-hosted, macos, ARM64]
+    outputs:
+      SDK_VERSION: ${{ steps.version.outputs.SDK_VERSION }}
+    steps:
+      - name: Clean build
+        run: |
+          rm -rf "$GITHUB_WORKSPACE"
+          mkdir -p "$GITHUB_WORKSPACE"
+      - name: Checkout code
+        uses: seL4/ci-actions/repo-checkout@master
+        with:
+          xml: ${{ inputs.xml }}
+          # needed for reasons...
+          manifest_repo: seL4/microkit-manifest
+          manifest_branch: main
+          # We specify 10000 here. We use the history to determine the SDK version,
+          # but if we specify depth as 0, then git repo won't fetch the input SHA
+          # *directly*: hence, since in a PR that SHA is on a different remote,
+          # we can't resolve it. Note that we rely on GitHub's merging of repos
+          # to make fetching a SHA from an seL4/ repo to work for any other repo;
+          # but this only happens when fetching the SHA directly.
+          manifest_depth: 10000
+          manifest: main.xml
+      - name: Populate tags
+        working-directory: ./microkit/
+        run: git fetch --tags
+      - name: Set version
+        id: version
+        working-directory: ./microkit/
+        run: ./ci/sdk_version.sh
+      - name: Get Nix dependencies
+        working-directory: ./microkit/
+        run: nix develop -c bash -c 'echo Hello World'
+      - name: Build SDK
+        working-directory: ./microkit/
+        run: nix develop --ignore-environment -c bash -c "python3 build_sdk.py --sel4=../seL4 --version ${{ env.SDK_VERSION }} --gcc-toolchain-prefix-x86_64 x86_64-elf --gcc-toolchain-prefix-riscv64 riscv64-none-elf --release-packaging"
+      - name: Upload SDK (macos-aarch64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64
+          path: microkit/release/microkit-sdk-${{ env.SDK_VERSION }}-macos-aarch64.tar.gz
+      - name: Upload SDK (macos-x86-64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64
+          path: microkit/release/microkit-sdk-${{ env.SDK_VERSION }}-macos-x86-64.tar.gz
+      - name: Upload SDK (linux-aarch64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64
+          path: microkit/release/microkit-sdk-${{ env.SDK_VERSION }}-linux-aarch64.tar.gz
+      - name: Upload SDK (linux-x86-64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64
+          path: microkit/release/microkit-sdk-${{ env.SDK_VERSION }}-linux-x86-64.tar.gz
+
+  # Not used for HW Run, just to confirm it builds on Linux outside of Nix.
+  sdk-build-linux:
+    name: Build SDK (Linux x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: seL4/ci-actions/repo-checkout@master
+        with:
+          xml: ${{ inputs.xml }}
+          # needed for reasons...
+          manifest_repo: seL4/microkit-manifest
+          manifest_branch: main
+          # See comment in manifest_depth of sdk-build
+          manifest_depth: 10000
+          manifest: main.xml
+      - name: Populate tags
+        working-directory: ./microkit/
+        run: git fetch --tags
+      - name: Set version
+        working-directory: ./microkit/
+        run: ./ci/sdk_version.sh
+      - name: Install SDK dependencies
+        working-directory: ./microkit/
+        run: ./ci/install_ubuntu_deps.sh
+      - name: Build SDK (x86-64)
+        working-directory: ./microkit/
+        run: ./pyenv/bin/python build_sdk.py --sel4=../seL4 --version ${{ env.SDK_VERSION }}-linux-x86-64 --tool-target-triple="x86_64-unknown-linux-musl"

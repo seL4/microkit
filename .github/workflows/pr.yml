@@ -27,3 +27,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run rustfmt
         run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-fmt --check"
+
+  code:
+    name: Freeze Code
+    runs-on: ubuntu-latest
+    outputs:
+      xml: ${{ steps.repo.outputs.xml }}
+    steps:
+      - id: repo
+        uses: seL4/ci-actions/repo-checkout@master
+        with:
+          manifest_repo: seL4/microkit-manifest
+          manifest_branch: main
+          manifest: main.xml
+          # Needed because otherwise github makes this a local-only merge commit
+          sha: ${{ github.event.pull_request.head.sha }}
+
+  sdk-build:
+    needs: code
+    name: Build SDK
+    uses: ./.github/workflows/_sdk.yaml
+    with:
+      xml: ${{ needs.code.outputs.xml }}
