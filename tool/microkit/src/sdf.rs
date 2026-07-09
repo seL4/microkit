@@ -2204,6 +2204,15 @@ fn check_io_maps(
         by_device.entry(iomap.identifier).or_default().push(iomap);
     }
 
+    if iomaps.iter().any(|iomap| {
+        mrs.iter()
+            .any(|mr| mr.page_size == PageSize::Large && mr.name == iomap.mr_name())
+    }) {
+        return Err(
+            "Error: currently seL4 does not have large page support for the IOMMU".to_string(),
+        );
+    }
+
     for (identifier, maps) in by_device {
         let address_space = identifier.to_string();
         check_maps(
@@ -2828,7 +2837,7 @@ pub fn parse(
 
     // Optimise page size of MRs, if the page size is not specified
     for mr in &mut mrs {
-        if mr.page_size_specified_by_user {
+        if mr.page_size_specified_by_user || iomaps.iter().any(|iomap| iomap.mr_name() == mr.name) {
             continue;
         }
 

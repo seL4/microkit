@@ -909,12 +909,16 @@ mod iommu {
         )
     }
 
+    // Currently this test fails with "Error: currently seL4 does not have large page support for the IOMMU"
+    // When seL4 supports large pages for the iommu it should fail with:
+    // Error: map for 'small_region' has io address range [0x1000..0x2000) which overlaps with map for
+    //'large_region' [0x0..0x200000) in PCI device 00:03.0 @ "
     #[test]
     fn test_overlap_mixed_page_sizes() {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "iommu_overlap_mixed_page_sizes.system",
-            "Error: map for 'small_region' has io address range [0x1000..0x2000) which overlaps with map for 'large_region' [0x0..0x200000) in PCI device 00:03.0 @",
+            "Error: currently seL4 does not have large page support for the IOMMU",
         )
     }
 
