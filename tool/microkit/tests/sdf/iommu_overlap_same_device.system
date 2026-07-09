@@ -7,7 +7,7 @@
 <system>
     <memory_region name="region_a" size="0x1000" />
     <memory_region name="region_b" size="0x1000" />
-    <io_address_space name="test_device" peripheral_id="0:3.0">
+    <io_address_space name="test_device" peripheral_id="0:3.0" domain_id="1">
         <iomap mr="region_a" iovaddr="0x0" />
         <iomap mr="region_b" iovaddr="0x0" />
     </io_address_space>

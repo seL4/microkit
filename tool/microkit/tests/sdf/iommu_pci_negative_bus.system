@@ -6,7 +6,7 @@
 -->
 <system>
     <memory_region name="region" size="0x1000" />
-    <io_address_space name="test_device" peripheral_id="-1:0.0">
+    <io_address_space name="test_device" peripheral_id="-1:0.0" domain_id="1">
         <iomap mr="region" iovaddr="0x0" />
     </io_address_space>
     <protection_domain name="test">
