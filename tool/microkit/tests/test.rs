@@ -970,6 +970,15 @@ mod iommu {
             "Error: duplicate device peripheral_id 'PCI device 00:03.0' on element 'io_address_space':",
         )
     }
+
+    #[test]
+    fn test_duplicate_domain_identifier() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "iommu_duplicate_domain_identifier.system",
+            "Error: reusing a domain id is forbidden on element 'io_address_space'",
+        );
+    }
 }
 
 #[cfg(test)]

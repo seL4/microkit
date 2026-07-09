@@ -1101,14 +1101,18 @@ For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' i
 The `io_address_space` element describes an address space used to isolate a given device.
 
 It supports the following attributes:
+
 * `name`: A unique name for the IO address space
 * `peripheral_id`: A unique identifier. This must match the identifier used by the hardware IOMMU or SMMU to identify devices.
+* `domain_id`: A unique domain identifier, synonymous with an ASID. This is not optional due to current
+                constraints with x86 only providing certain information at runtime.
 
 The `io_address_space` element supports the following elements as children:
 
 * `iomap`: This is used to map a *memory_region* into the IO address space.
 
 The `iomap` element supports the following attributes:
+
 * `mr`: Identifies the memory region to map.
 * `iovaddr`: Identifies the io virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), and `w` (write).

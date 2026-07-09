@@ -321,6 +321,7 @@ pub struct SysIOMap {
     pub device: String,
     pub mr: String,
     pub identifier: IommuDeviceIdentifier,
+    pub domain_id: Option<u64>,
     pub iovaddr: u64,
     pub perms: SysIOMapPerms,
     pub text_pos: Option<roxmltree::TextPos>,
@@ -707,6 +708,7 @@ impl SysIOMap {
         node: &roxmltree::Node,
         device: &str,
         identifier: IommuDeviceIdentifier,
+        domain_id: Option<u64>,
     ) -> Result<SysIOMap, String> {
         let attrs = vec!["mr", "iovaddr", "perms"];
 
@@ -747,6 +749,7 @@ impl SysIOMap {
             device: device.to_string(),
             mr,
             identifier,
+            domain_id,
             iovaddr,
             perms,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
@@ -767,6 +770,7 @@ impl IOAddressSpace {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         device_names: &mut HashSet<String>,
+        domain_ids: &mut HashSet<u64>,
         iommu_device_identifiers: &mut HashSet<IommuDeviceIdentifier>,
     ) -> Result<IOAddressSpace, String> {
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
@@ -777,7 +781,7 @@ impl IOAddressSpace {
             ));
         }
 
-        check_attributes(xml_sdf, node, &["name", "peripheral_id"])?;
+        check_attributes(xml_sdf, node, &["name", "peripheral_id", "domain_id"])?;
         let device_name = checked_lookup(xml_sdf, node, "name")?;
         if !device_names.insert(device_name.to_string()) {
             return Err(value_error(
@@ -786,6 +790,27 @@ impl IOAddressSpace {
                 format!("duplicate device name '{device_name}'"),
             ));
         }
+
+        // Currently we enforce unqiue domain ids. To support shared domain ids, we have to ensure
+        // each device has a duplicated copy of the whole page table structure due to how Intel
+        // implements IOMMU caching see section 6.2.1 in the Virtualization Technology (Intel® VT) for Directed I/O
+        // (Intel® VT-d) manual:
+        // http://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/vt-directed-io-spec.pdf
+        let domain_id = match config.arch {
+            Arch::X86_64 => {
+                let domain_id =
+                    sdf_parse_number(checked_lookup(xml_sdf, node, "domain_id")?, node)?;
+                if !domain_ids.insert(domain_id) {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "reusing a domain id is forbidden".into(),
+                    ));
+                }
+                Some(domain_id)
+            }
+            _ => None,
+        };
 
         // In the SDF we use peripheral_id as an architecture agnostic way to describe
         // how a device is identified in a system. For example on x86 the IOMMU identifies
@@ -812,8 +837,14 @@ impl IOAddressSpace {
         for child in node.children().filter(|node| node.is_element()) {
             match child.tag_name().name() {
                 "iomap" => {
-                    let iomap =
-                        SysIOMap::from_xml(config, xml_sdf, &child, device_name, identifier)?;
+                    let iomap = SysIOMap::from_xml(
+                        config,
+                        xml_sdf,
+                        &child,
+                        device_name,
+                        identifier,
+                        domain_id,
+                    )?;
                     iomaps.push(iomap);
                 }
                 _ => {
@@ -2336,6 +2367,7 @@ pub fn parse(
     let mut mrs = vec![];
     let mut iomaps = vec![];
     let mut device_names = HashSet::new();
+    let mut domain_ids = HashSet::new();
     let mut iommu_device_identifiers = HashSet::new();
     let mut channels = vec![];
     let system = doc
@@ -2376,6 +2408,7 @@ pub fn parse(
                         &xml_sdf,
                         &child,
                         &mut device_names,
+                        &mut domain_ids,
                         &mut iommu_device_identifiers,
                     )?
                     .iomaps,
