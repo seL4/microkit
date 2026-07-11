@@ -738,24 +738,19 @@ impl ProtectionDomain {
                     maps.push(map);
                 }
                 "irq" => {
-                    let id = checked_lookup(xml_sdf, &child, "id")?
-                        .parse::<i64>()
-                        .unwrap();
-                    if id > PD_MAX_ID as i64 {
+                    let id = sdf_parse_number(checked_lookup(xml_sdf, &child, "id")?, &child)?;
+                    if id > PD_MAX_ID {
                         return Err(value_error(
                             xml_sdf,
                             &child,
                             format!("id must be < {}", PD_MAX_ID + 1),
                         ));
                     }
-                    if id < 0 {
-                        return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
-                    }
 
                     if let Some(setvar_id) = child.attribute("setvar_id") {
                         let setvar = SysSetVar {
                             symbol: setvar_id.to_string(),
-                            kind: SysSetVarKind::Id { id: id as u64 },
+                            kind: SysSetVarKind::Id { id },
                         };
                         checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                     }
@@ -789,7 +784,7 @@ impl ProtectionDomain {
                             ArmRiscvIrqTrigger::Level
                         };
                         let irq = SysIrq {
-                            id: id as u64,
+                            id,
                             kind: SysIrqKind::Conventional { irq, trigger },
                         };
                         irqs.push(irq);
@@ -884,7 +879,7 @@ impl ProtectionDomain {
                         }
 
                         let irq = SysIrq {
-                            id: id as u64,
+                            id,
                             kind: SysIrqKind::IOAPIC {
                                 ioapic: ioapic as u64,
                                 pin: pin as u64,
@@ -1022,7 +1017,7 @@ impl ProtectionDomain {
                         }
 
                         let irq = SysIrq {
-                            id: id as u64,
+                            id,
                             kind: SysIrqKind::MSI {
                                 pci_bus: pci_bus_maybe.unwrap() as u64,
                                 pci_dev: pci_dev_maybe.unwrap() as u64,
@@ -1054,28 +1049,19 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "setvar_addr", "addr", "size"],
                         )?;
 
-                        let id = checked_lookup(xml_sdf, &child, "id")?
-                            .parse::<i64>()
-                            .unwrap();
-                        if id > PD_MAX_ID as i64 {
+                        let id = sdf_parse_number(checked_lookup(xml_sdf, &child, "id")?, &child)?;
+                        if id > PD_MAX_ID {
                             return Err(value_error(
                                 xml_sdf,
                                 &child,
                                 format!("id must be < {}", PD_MAX_ID + 1),
                             ));
                         }
-                        if id < 0 {
-                            return Err(value_error(
-                                xml_sdf,
-                                &child,
-                                "id must be >= 0".to_string(),
-                            ));
-                        }
 
                         if let Some(setvar_id) = child.attribute("setvar_id") {
                             let setvar = SysSetVar {
                                 symbol: setvar_id.to_string(),
-                                kind: SysSetVarKind::Id { id: id as u64 },
+                                kind: SysSetVarKind::Id { id },
                             };
                             checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                         }
@@ -1103,7 +1089,7 @@ impl ProtectionDomain {
                         }
 
                         ioports.push(IOPort {
-                            id: id as u64,
+                            id,
                             addr,
                             size: size as u64,
                             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
@@ -1655,18 +1641,14 @@ impl ChannelEnd {
 
         check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id"])?;
         let end_pd = checked_lookup(xml_sdf, node, "pd")?;
-        let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<i64>().unwrap();
+        let end_id = sdf_parse_number(checked_lookup(xml_sdf, node, "id")?, node)?;
 
-        if end_id > PD_MAX_ID as i64 {
+        if end_id > PD_MAX_ID {
             return Err(value_error(
                 xml_sdf,
                 node,
                 format!("id must be < {}", PD_MAX_ID + 1),
             ));
-        }
-
-        if end_id < 0 {
-            return Err(value_error(xml_sdf, node, "id must be >= 0".to_string()));
         }
 
         let notify = node
@@ -1693,7 +1675,7 @@ impl ChannelEnd {
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
             Ok(ChannelEnd {
                 pd: pd_idx,
-                id: end_id.try_into().unwrap(),
+                id: end_id,
                 notify,
                 pp,
                 setvar_id,

@@ -452,7 +452,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "irq_id_less_than_0.system",
-            "Error: id must be >= 0 on element 'irq'",
+            "Error: failed to parse integer '-1' on element 'irq'",
         )
     }
 
@@ -875,7 +875,16 @@ mod channel {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_id_less_than_0.system",
-            "Error: id must be >= 0 on element 'end'",
+            "Error: failed to parse integer '-1' on element 'end'",
+        )
+    }
+
+    #[test]
+    fn test_id_not_a_number() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "ch_id_not_a_number.system",
+            "Error: failed to parse integer 'abc' on element 'end'",
         )
     }
 
