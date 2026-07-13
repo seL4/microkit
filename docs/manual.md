@@ -1016,7 +1016,7 @@ On x86-64, a PD with a VCPU cannot have child PDs.
 The `virtual_machine` element has the following attributes:
 
 * `name`: A unique name for the virtual machine
-* `priority`: The priority of the virtual machine (integer 0 to 254).
+* `priority`: (optional) The priority of the virtual machine (integer 0 to 254); defaults to 0.
 * `budget`: (optional) The VM's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The VM's period in microseconds; must not be smaller than the budget; defaults to the budget.
 
