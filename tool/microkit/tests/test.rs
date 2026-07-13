@@ -752,6 +752,30 @@ mod virtual_machine {
     use super::*;
 
     #[test]
+    fn test_vm_valid_aarch64() {
+        check_success(&DEFAULT_AARCH64_KERNEL_CONFIG, "vm_valid.system")
+    }
+
+    #[test]
+    fn test_vm_with_priority_aarch64() {
+        check_success(&DEFAULT_AARCH64_KERNEL_CONFIG, "vm_with_priority.system")
+    }
+
+    #[test]
+    fn test_vm_valid_x86_64() {
+        check_success(&DEFAULT_X86_64_KERNEL_CONFIG, "vm_valid.system")
+    }
+
+    #[test]
+    fn test_vm_with_priority_x86_64() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "vm_with_priority.system",
+            "Error: invalid attribute 'priority' on element 'virtual_machine'",
+        )
+    }
+
+    #[test]
     fn test_vm_not_child() {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
