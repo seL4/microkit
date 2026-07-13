@@ -955,8 +955,8 @@ pub fn build_capdl_spec(
                         &mut spec_container,
                         &format!("{}_{}", virtual_machine.name, vcpu.id),
                         PD_SCHEDCONTEXT_EXTRA_SIZE_BITS as u8,
-                        virtual_machine.sched_params.period,
-                        virtual_machine.sched_params.budget,
+                        virtual_machine.sched_params.as_ref().unwrap().period,
+                        virtual_machine.sched_params.as_ref().unwrap().budget,
                         0x100 + vcpu_idx as u64,
                     );
                     caps_to_bind_to_vm_tcbs.push(capdl_util_make_cte(
@@ -982,8 +982,8 @@ pub fn build_capdl_spec(
                         extra: Box::new(object::TcbExtraInfo {
                             ipc_buffer_addr: Word(0),
                             affinity: Word(vcpu_affinity.0.into()),
-                            prio: virtual_machine.sched_params.priority,
-                            max_prio: virtual_machine.sched_params.priority,
+                            prio: virtual_machine.sched_params.as_ref().unwrap().priority,
+                            max_prio: virtual_machine.sched_params.as_ref().unwrap().priority,
                             // Given the use cases of VMs, for now we always give them FPU access.
                             fpu_disabled: false,
                             resume: false,
