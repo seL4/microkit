@@ -720,8 +720,8 @@ pub fn build_capdl_spec(
             &mut spec_container,
             &pd.name,
             PD_SCHEDCONTEXT_EXTRA_SIZE_BITS as u8,
-            pd.period,
-            pd.budget,
+            pd.sched_params.period,
+            pd.sched_params.budget,
             0x100 + pd_global_idx as u64,
         );
         let pd_sc_cap = capdl_util_make_sc_cap(pd_sc_obj_id);
@@ -955,8 +955,8 @@ pub fn build_capdl_spec(
                         &mut spec_container,
                         &format!("{}_{}", virtual_machine.name, vcpu.id),
                         PD_SCHEDCONTEXT_EXTRA_SIZE_BITS as u8,
-                        virtual_machine.period,
-                        virtual_machine.budget,
+                        virtual_machine.sched_params.period,
+                        virtual_machine.sched_params.budget,
                         0x100 + vcpu_idx as u64,
                     );
                     caps_to_bind_to_vm_tcbs.push(capdl_util_make_cte(
@@ -982,8 +982,8 @@ pub fn build_capdl_spec(
                         extra: Box::new(object::TcbExtraInfo {
                             ipc_buffer_addr: Word(0),
                             affinity: Word(vcpu_affinity.0.into()),
-                            prio: virtual_machine.priority,
-                            max_prio: virtual_machine.priority,
+                            prio: virtual_machine.sched_params.priority,
+                            max_prio: virtual_machine.sched_params.priority,
                             // Given the use cases of VMs, for now we always give them FPU access.
                             fpu_disabled: false,
                             resume: false,
@@ -1071,8 +1071,8 @@ pub fn build_capdl_spec(
             pd_tcb.extra.ipc_buffer_addr = Word(kernel_config.pd_ipc_buffer());
             pd_tcb.extra.sp = Word(kernel_config.pd_stack_top());
             pd_tcb.extra.master_fault_ep = None; // Not used on MCS kernel.
-            pd_tcb.extra.prio = pd.priority;
-            pd_tcb.extra.max_prio = pd.priority;
+            pd_tcb.extra.prio = pd.priority();
+            pd_tcb.extra.max_prio = pd.priority();
             pd_tcb.extra.fpu_disabled = !pd.fpu;
             pd_tcb.extra.resume = true;
 
