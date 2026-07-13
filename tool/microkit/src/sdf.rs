@@ -266,13 +266,18 @@ impl Display for CpuCore {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct SchedulingParams {
+    pub priority: u8,
+    pub budget: u64,
+    pub period: u64,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct ProtectionDomain {
     /// Only populated for child protection domains
     pub id: Option<u64>,
     pub name: String,
-    pub priority: u8,
-    pub budget: u64,
-    pub period: u64,
+    pub sched_params: SchedulingParams,
     pub passive: bool,
     pub stack_size: u64,
     pub smc: bool,
@@ -338,9 +343,7 @@ pub struct VirtualMachine {
     pub vcpus: Vec<VirtualCpu>,
     pub name: String,
     pub maps: Vec<SysMap>,
-    pub priority: u8,
-    pub budget: u64,
-    pub period: u64,
+    pub sched_params: SchedulingParams,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -496,6 +499,10 @@ impl ProtectionDomain {
         }
 
         ioports
+    }
+
+    pub fn priority(&self) -> u8 {
+        self.sched_params.priority
     }
 
     fn from_xml(
@@ -1204,11 +1211,13 @@ impl ProtectionDomain {
         Ok(ProtectionDomain {
             id,
             name,
-            // This downcast is safe as we have checked that this is less than
-            // the maximum PD priority, which fits in a u8.
-            priority: priority as u8,
-            budget,
-            period,
+            sched_params: SchedulingParams {
+                // This downcast is safe as we have checked that this is less than
+                // the maximum PD priority, which fits in a u8.
+                priority: priority as u8,
+                budget,
+                period,
+            },
             passive,
             stack_size,
             smc,
@@ -1352,11 +1361,13 @@ impl VirtualMachine {
             vcpus,
             name,
             maps,
-            // This downcast is safe as we have checked that this is less than
-            // the maximum VM priority, which fits in a u8.
-            priority: priority as u8,
-            budget,
-            period,
+            sched_params: SchedulingParams {
+                // This downcast is safe as we have checked that this is less than
+                // the maximum PD priority, which fits in a u8.
+                priority: priority as u8,
+                budget,
+                period,
+            },
         })
     }
 }
@@ -2211,17 +2222,23 @@ pub fn parse(
 
         let pd_a = &pds[ch.end_a.pd];
         let pd_b = &pds[ch.end_b.pd];
-        if ch.end_a.pp && pd_a.priority >= pd_b.priority {
+        if ch.end_a.pp && pd_a.priority() >= pd_b.priority() {
             return Err(format!(
                 "Error: PPCs must be to protection domains of strictly higher priorities; \
                         channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
-                pd_a.name, pd_a.priority, pd_b.name, pd_b.priority
+                pd_a.name,
+                pd_a.priority(),
+                pd_b.name,
+                pd_b.priority()
             ));
-        } else if ch.end_b.pp && pd_b.priority >= pd_a.priority {
+        } else if ch.end_b.pp && pd_b.priority() >= pd_a.priority() {
             return Err(format!(
                 "Error: PPCs must be to protection domains of strictly higher priorities; \
                         channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
-                pd_b.name, pd_b.priority, pd_a.name, pd_a.priority
+                pd_b.name,
+                pd_b.priority(),
+                pd_a.name,
+                pd_a.priority()
             ));
         }
 

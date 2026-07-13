@@ -207,8 +207,8 @@ pub fn get_sdf_view(system: &SystemDescription, current_pd: usize) -> Option<Sdf
 
         view.channel_ends.push(local.id);
 
-        let local_prio = current.priority;
-        let remote_prio = system.protection_domains[remote.pd].priority;
+        let local_prio = current.priority();
+        let remote_prio = system.protection_domains[remote.pd].priority();
 
         if local.pp && local_prio < remote_prio {
             view.ppcall_targets.push(local.id);
