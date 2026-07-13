@@ -343,7 +343,7 @@ pub struct VirtualMachine {
     pub vcpus: Vec<VirtualCpu>,
     pub name: String,
     pub maps: Vec<SysMap>,
-    pub sched_params: SchedulingParams,
+    pub sched_params: Option<SchedulingParams>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1246,33 +1246,50 @@ impl VirtualMachine {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
     ) -> Result<VirtualMachine, String> {
-        check_attributes(xml_sdf, node, &["name", "budget", "period", "priority"])?;
-
-        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
-        // If we do not have an explicit budget the period is equal to the default budget.
-        let budget = if let Some(xml_budget) = node.attribute("budget") {
-            sdf_parse_number(xml_budget, node)?
+        if config.arch == Arch::Aarch64 {
+            check_attributes(xml_sdf, node, &["name", "budget", "period", "priority"])?;
         } else {
-            BUDGET_DEFAULT
-        };
-        let period = if let Some(xml_period) = node.attribute("period") {
-            sdf_parse_number(xml_period, node)?
-        } else {
-            budget
-        };
-        if budget > period {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                format!("budget ({budget}) must be less than, or equal to, period ({period})"),
-            ));
+            check_attributes(xml_sdf, node, &["name"])?;
         }
 
-        // Default to minimum priority
-        let priority = if let Some(xml_priority) = node.attribute("priority") {
-            sdf_parse_number(xml_priority, node)?
+        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+
+        let sched_params = if config.arch == Arch::Aarch64 {
+            // If we do not have an explicit budget the period is equal to the default budget.
+            let budget = if let Some(xml_budget) = node.attribute("budget") {
+                sdf_parse_number(xml_budget, node)?
+            } else {
+                BUDGET_DEFAULT
+            };
+            let period = if let Some(xml_period) = node.attribute("period") {
+                sdf_parse_number(xml_period, node)?
+            } else {
+                budget
+            };
+            if budget > period {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    format!("budget ({budget}) must be less than, or equal to, period ({period})"),
+                ));
+            }
+
+            // Default to minimum priority
+            let priority = if let Some(xml_priority) = node.attribute("priority") {
+                sdf_parse_number(xml_priority, node)?
+            } else {
+                0
+            };
+
+            Some(SchedulingParams {
+                // This downcast is safe as we have checked that this is less than
+                // the maximum PD priority, which fits in a u8.
+                priority: priority as u8,
+                budget,
+                period,
+            })
         } else {
-            0
+            None
         };
 
         let mut vcpus: Vec<VirtualCpu> = Vec::new();
@@ -1361,13 +1378,7 @@ impl VirtualMachine {
             vcpus,
             name,
             maps,
-            sched_params: SchedulingParams {
-                // This downcast is safe as we have checked that this is less than
-                // the maximum PD priority, which fits in a u8.
-                priority: priority as u8,
-                budget,
-                period,
-            },
+            sched_params,
         })
     }
 }

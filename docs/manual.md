@@ -1013,12 +1013,16 @@ The `protection_domain` element has the same attributes as any other protection 
 
 On x86-64, a PD with a VCPU cannot have child PDs.
 
-The `virtual_machine` element has the following attributes:
+The `virtual_machine` element has the following attribute:
 
 * `name`: A unique name for the virtual machine
+
+On ARM, it supports the following additional attributes:
 * `priority`: (optional) The priority of the virtual machine (integer 0 to 254); defaults to 0.
 * `budget`: (optional) The VM's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The VM's period in microseconds; must not be smaller than the budget; defaults to the budget.
+
+On x86-64, the VM shares its scheduling parameters with the parent PD.
 
 Additionally, it supports the following child elements:
 
