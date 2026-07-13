@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Copyright 2026, UNSW
+    SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="hello" priority="254">
+        <program_image path="hello.elf" />
+        <virtual_machine name="guest">
+            <vcpu id="0" />
+        </virtual_machine>
+    </protection_domain>
+</system>
