@@ -143,7 +143,7 @@ impl AddressSpace {
                 if level > 0 {
                     sel4_config.io_page_table_index_bits()
                 } else {
-                    panic!("IODevice root is not indexed by address bits");
+                    panic!("IOSpace root is not indexed by address bits");
                 }
             }
         }
@@ -329,8 +329,8 @@ impl AddressSpace {
             AddressSpace::IOSpace { .. } => {
                 let iopt_level = level
                     .checked_sub(1)
-                    .expect("Error: cannot create an intermediate IOPT for the root level.");
-                Object::IOPT(object::IOPT {
+                    .expect("Error: cannot create an intermediate IOPageTable for the root level.");
+                Object::IOPageTable(object::IOPageTable {
                     slots: vec![],
                     level: Word(iopt_level as u64),
                 })
@@ -341,7 +341,7 @@ impl AddressSpace {
     fn make_intermediate_cap(&self, object: ObjectId) -> Cap {
         match self {
             AddressSpace::VSpace { .. } => Cap::PageTable(cap::PageTable { object }),
-            AddressSpace::IOSpace { .. } => Cap::IOPT(cap::IOPT { object }),
+            AddressSpace::IOSpace { .. } => Cap::IOPageTable(cap::IOPageTable { object }),
         }
     }
 
@@ -365,9 +365,9 @@ impl AddressSpace {
             AddressSpace::VSpace { .. } => matches!(object, Object::PageTable(_)),
             AddressSpace::IOSpace { .. } => {
                 if cur_level == 0 {
-                    matches!(object, Object::IODevice(_))
+                    matches!(object, Object::IOSpace(_))
                 } else {
-                    matches!(object, Object::IOPT(_))
+                    matches!(object, Object::IOPageTable(_))
                 }
             }
         };
@@ -386,8 +386,8 @@ impl AddressSpace {
     fn address_space_levels(&self, sel4_config: &Config) -> usize {
         match self {
             AddressSpace::VSpace { .. } => sel4_config.num_page_table_levels(),
-            // IOSpace level 0 is the IODevice root. Slot 0 points to the
-            // normal IOPT tree root, and slots 1.. hold spare IOPTs for
+            // IOSpace level 0 is the IOSpace root. Slot 0 points to the
+            // normal IOPageTable tree root, and slots 1.. hold spare IOPTs for
             // runtime prefix levels.
             AddressSpace::IOSpace { .. } => x86_io_address_space::CAPDL_NUM_IOPT_LEVELS + 1,
         }
@@ -413,14 +413,10 @@ pub fn create_iospace(
 
     let root = spec_container.add_root_object(CapDLNamedObject {
         name: format!("{}_{}", get_iopt_level_name(0), device_name).into(),
-        object: Object::IODevice(object::IODevice {
+        object: Object::IOSpace(object::IOSpace {
             slots: vec![],
             domain_id: domain_id.unwrap().into(),
-            pci_device: (
-                Word(pci_device.bus.into()),
-                Word(pci_device.device.into()),
-                Word(pci_device.function.into()),
-            ),
+            pci_device: pci_device.into(),
         }),
     });
 
@@ -430,8 +426,8 @@ pub fn create_iospace(
         device: device_identifier,
     };
 
-    // The IODevice root has two roles: slot 0 is reserved for the root of the
-    // normal 3-level IOPT tree, while slots 1.. hold spare IOPTs that the
+    // The IOSpace root has two roles: slot 0 is reserved for the root of the
+    // normal 3-level IOPageTable tree, while slots 1.. hold spare IOPageTable that the
     // initialiser can use when seL4 reports a wider IOVA space at runtime.
     for spare_idx in 0..x86_io_address_space::SPARE_NUM_LEVELS {
         let slot = x86_io_address_space::IOSPACE_ROOT_IOPT_SLOT + 1 + spare_idx;
@@ -456,7 +452,7 @@ pub fn create_iospace(
                 slot,
                 next_cap,
             )
-            .unwrap_or_else(|err| panic!("Error: create_iospace() failed allocating spare IOPT capabilities with error {err}"));
+            .unwrap_or_else(|err| panic!("Error: create_iospace() failed allocating spare IOPageTable capabilities with error {err}"));
     }
 
     address_space

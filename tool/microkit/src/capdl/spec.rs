@@ -51,7 +51,7 @@ pub fn capdl_obj_physical_size_bits(obj: &Object<FrameFill>, sel4_config: &Confi
             }
         }
         Object::AsidPool(_) => ObjectType::AsidPool.fixed_size_bits(sel4_config).unwrap(),
-        Object::IOPT(_) => ObjectType::IOPageTable
+        Object::IOPageTable(_) => ObjectType::IOPageTable
             .fixed_size_bits(sel4_config)
             .unwrap(),
         Object::SchedContext(sched_context) => sched_context.size_bits as u64,
@@ -78,8 +78,8 @@ pub fn capdl_obj_human_name(obj: &Object<FrameFill>, sel4_config: &Config) -> &'
         }
         Object::PageTable(_) => "PageTable",
         Object::AsidPool(_) => "AsidPool",
-        Object::IODevice(_) => "x86 IODevice",
-        Object::IOPT(_) => "x86 IOPT",
+        Object::IOSpace(_) => "x86 IOSpace",
+        Object::IOPageTable(_) => "x86 IOPageTable",
         Object::ArmIrq(_) => "ARM IRQ",
         Object::IrqMsi(_) => "x86 MSI IRQ",
         Object::IrqIOApic(_) => "x86 IOAPIC IRQ",
