@@ -37,10 +37,7 @@ To build the documentation you also need
 
 On a Debian-like system you can do:
 
-    $ curl https://sh.rustup.rs -sSf | sh
-    $ rustup target add x86_64-unknown-linux-musl
-    $ rustup component add rust-src --toolchain stable-x86_64-unknown-linux-gnu
-    $ sudo apt install build-essential git cmake ninja-build \
+    $ sudo apt install rustup build-essential git cmake ninja-build \
         device-tree-compiler libxml2-utils \
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
@@ -48,6 +45,8 @@ On a Debian-like system you can do:
         qemu-system-arm qemu-system-misc qemu-system-x86 \
         gcc-riscv64-unknown-elf \
         gcc-x86-64-linux-gnu
+    $ rustup target add x86_64-unknown-linux-musl
+    $ rustup component add rust-src --toolchain stable-x86_64-unknown-linux-gnu
     $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
     $ ./pyenv/bin/pip install -r requirements.txt
