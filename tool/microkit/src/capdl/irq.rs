@@ -91,9 +91,9 @@ fn create_irq_obj(
             slots: [].to_vec(),
             extra: Box::new(object::IrqMsiExtraInfo {
                 handle: Word(handle),
-                pci_bus: Word(pci_device.bus as u64),
-                pci_dev: Word(pci_device.device as u64),
-                pci_func: Word(pci_device.function as u64),
+                pci_bus: Word(pci_device.bus.into()),
+                pci_dev: Word(pci_device.device.into()),
+                pci_func: Word(pci_device.function.into()),
             }),
         }),
     };

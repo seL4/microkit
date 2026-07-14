@@ -22,10 +22,12 @@ use crate::sel4::{
 
 use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
-use sel4_capdl_initializer_types::{x86_io_address_space, FillEntryContentBootInfoId};
+use sel4_capdl_initializer_types::{object, x86_io_address_space, FillEntryContentBootInfoId};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
+use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -91,18 +93,35 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
     format!("{}:{}:{}", xml_sdf.filename.display(), pos.row, pos.col)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PciDevice {
-    pub bus: u8,
-    pub device: u8,
-    pub function: u8,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PciDevice(pub object::PCIDevice);
+
+impl Hash for PciDevice {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.bus.hash(state);
+        self.0.device.hash(state);
+        self.0.function.hash(state);
+    }
 }
 
-impl PciDevice {
-    /// Maximum values for PCI bus, device, function numbers. Inclusive.
-    const PCI_BUS_MAX: i64 = (1 << 8) - 1;
-    const PCI_DEV_MAX: i64 = (1 << 5) - 1;
-    const PCI_FUNC_MAX: i64 = (1 << 3) - 1;
+impl Deref for PciDevice {
+    type Target = object::PCIDevice;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<PciDevice> for object::PCIDevice {
+    fn from(device: PciDevice) -> Self {
+        device.0
+    }
+}
+
+impl From<object::PCIDevice> for PciDevice {
+    fn from(device: object::PCIDevice) -> Self {
+        PciDevice(device)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,20 +155,24 @@ impl fmt::Display for PciDeviceParseError {
             PciDeviceParseError::DeviceParse => write!(f, "failed to parse PCI device"),
             PciDeviceParseError::FunctionParse => write!(f, "failed to parse PCI function"),
             PciDeviceParseError::BusOutOfRange => {
-                write!(f, "PCI bus must be within [0..{}]", PciDevice::PCI_BUS_MAX)
+                write!(
+                    f,
+                    "PCI bus must be within [0..{}]",
+                    object::PCIDevice::PCI_BUS_MAX
+                )
             }
             PciDeviceParseError::DeviceOutOfRange => {
                 write!(
                     f,
                     "PCI device must be within [0..{}]",
-                    PciDevice::PCI_DEV_MAX
+                    object::PCIDevice::PCI_DEV_MAX
                 )
             }
             PciDeviceParseError::FunctionOutOfRange => {
                 write!(
                     f,
                     "PCI function must be within [0..{}]",
-                    PciDevice::PCI_FUNC_MAX
+                    object::PCIDevice::PCI_FUNC_MAX
                 )
             }
         }
@@ -166,28 +189,37 @@ impl FromStr for PciDevice {
             .split_once('.')
             .ok_or(PciDeviceParseError::Malformed)?;
 
-        let bus =
-            i64::from_str_radix(bus_str.trim(), 16).map_err(|_| PciDeviceParseError::BusParse)?;
+        let bus = i64::from_str_radix(bus_str.trim(), 16)
+            .map_err(|_| PciDeviceParseError::BusParse)
+            .and_then(|bus| {
+                match (0..=i64::from(object::PCIDevice::PCI_BUS_MAX)).contains(&bus) {
+                    true => Ok(bus as u8),
+                    false => Err(PciDeviceParseError::BusOutOfRange),
+                }
+            })?;
         let device = i64::from_str_radix(device_str.trim(), 16)
-            .map_err(|_| PciDeviceParseError::DeviceParse)?;
+            .map_err(|_| PciDeviceParseError::DeviceParse)
+            .and_then(|device| {
+                match (0..=i64::from(object::PCIDevice::PCI_DEV_MAX)).contains(&device) {
+                    true => Ok(device as u8),
+                    false => Err(PciDeviceParseError::DeviceOutOfRange),
+                }
+            })?;
         let function = i64::from_str_radix(function_str.trim(), 16)
-            .map_err(|_| PciDeviceParseError::FunctionParse)?;
+            .map_err(|_| PciDeviceParseError::FunctionParse)
+            .and_then(|function| {
+                match (0..=i64::from(object::PCIDevice::PCI_FUNC_MAX)).contains(&function) {
+                    true => Ok(function as u8),
+                    false => Err(PciDeviceParseError::FunctionOutOfRange),
+                }
+            })?;
 
-        if !(0..=PciDevice::PCI_BUS_MAX).contains(&bus) {
-            return Err(PciDeviceParseError::BusOutOfRange);
-        }
-        if !(0..=PciDevice::PCI_DEV_MAX).contains(&device) {
-            return Err(PciDeviceParseError::DeviceOutOfRange);
-        }
-        if !(0..=PciDevice::PCI_FUNC_MAX).contains(&function) {
-            return Err(PciDeviceParseError::FunctionOutOfRange);
-        }
-
-        Ok(PciDevice {
-            bus: bus as u8,
-            device: device as u8,
-            function: function as u8,
-        })
+        let result = object::PCIDevice {
+            bus,
+            device,
+            function,
+        };
+        Ok(result.into())
     }
 }
 

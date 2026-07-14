@@ -7,7 +7,7 @@
 <system>
     <memory_region name="edu_mmio_window" size="0x10_0000" page_size="0x1000" phys_addr="0xfe00_0000" />
     <memory_region name="dma_buffer" size="0x1000" page_size="0x1000" />
-    <io_address_space name="QEMU EDU" peripheral_id="0:4.0">
+    <io_address_space name="QEMU EDU" peripheral_id="0:4.0" domain_id="1">
         <iomap mr="dma_buffer" iovaddr="0x10_0000" />
     </io_address_space>
 
