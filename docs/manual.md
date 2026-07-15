@@ -577,6 +577,7 @@ If the protection domain has children it must also implement:
     void microkit_deferred_irq_ack(microkit_channel ch);
     void microkit_pd_restart(microkit_child pd, seL4_Word entry_point);
     void microkit_pd_stop(microkit_child pd);
+    void microkit_pd_resume(microkit_child pd);
     void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
     seL4_Word microkit_mr_get(seL4_Uint8 mr);
     void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_point);
@@ -754,6 +755,10 @@ This will set the program counter of the child protection domain to `entry_point
 ## `void microkit_pd_stop(microkit_child pd)`
 
 Stop the execution of the child protection domain with ID `pd`.
+
+## `void microkit_pd_resume(microkit_child pd)`
+
+Resume the execution of the child protection domain with ID `pd` that is stopped.
 
 ## `microkit_msginfo microkit_msginfo_new(uint64_t label, uint16_t count)`
 
