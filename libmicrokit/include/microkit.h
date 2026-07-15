@@ -158,7 +158,21 @@ static inline void microkit_pd_stop(microkit_child pd)
     seL4_Error err;
     err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
     if (err != seL4_NoError) {
-        microkit_dbg_puts("microkit_pd_stop: error writing TCB registers\n");
+        microkit_dbg_puts("microkit_pd_stop: error stopping TCB '");
+        microkit_dbg_put32(pd);
+        microkit_dbg_puts("'\n");
+        microkit_internal_crash(err);
+    }
+}
+
+static inline void microkit_pd_resume(microkit_child pd)
+{
+    seL4_Error err;
+    err = seL4_TCB_Resume(BASE_TCB_CAP + pd);
+    if (err != seL4_NoError) {
+        microkit_dbg_puts("microkit_pd_resume: error resuming TCB '");
+        microkit_dbg_put32(pd);
+        microkit_dbg_puts("'\n");
         microkit_internal_crash(err);
     }
 }
