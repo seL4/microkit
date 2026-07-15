@@ -310,7 +310,6 @@ pub enum CapMapType {
     Tcb,
     Sc,
     VSpace,
-    CSpace,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1437,7 +1436,6 @@ impl CSpace {
                 "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &child)?,
                 "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &child)?,
                 "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &child)?,
-                "cap_cspace" => CapMap::from_xml(CapMapType::CSpace, xml_sdf, &child)?,
                 child_name => {
                     let location = loc_string(xml_sdf, xml_sdf.doc.text_pos_at(child.range().start));
                     if let Some(type_name) = child_name.strip_prefix("cap_") {

@@ -21,9 +21,8 @@
             <cap_tcb    slot="1" pd="pd_a" />
             <cap_sc     slot="2" pd="pd_a" />
             <cap_vspace slot="3" pd="pd_a" />
-            <cap_cspace slot="4" pd="pd_a" />
             <!-- duplicate slot -->
-            <cap_cspace slot="4" pd="pd_a" />
+            <cap_vspace slot="3" pd="pd_a" />
         </cspace>
     </protection_domain>
 </system>

@@ -1068,7 +1068,6 @@ It supports no attributes, but supports the following elements as children:
 * `cap_sc`: A capability to a protection domain's Scheduling Context (SC).
   If the protection domain is passive, this is a capability to the notification's scheduling context.
 * `cap_vspace`: A capability to a protection domain's VSpace.
-* `cap_cspace`: A capability to a protection domain's CSpace.
 
 All of the elements support the `slot` attribute, which is is an opaque identifier used to address the capability at runtime.
 To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_root_slot_to_cptr) function.

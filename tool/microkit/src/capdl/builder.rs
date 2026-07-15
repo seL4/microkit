@@ -1221,25 +1221,6 @@ pub fn build_capdl_spec(
                 CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
                 CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
                 CapMapType::VSpace => capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace),
-                CapMapType::CSpace => {
-                    let Some(named_object) =
-                        spec_container.get_root_object(pd_src_shadow_cspace.cspace)
-                    else {
-                        unreachable!("internal bug: couldn't find cnode with given obj id.");
-                    };
-                    let Object::CNode(ref cnode) = named_object.object else {
-                        unreachable!(
-                            "internal bug: got a non-CNode object id {} with name '{}'",
-                            usize::from(pd_src_shadow_cspace.cspace),
-                            named_object.name.as_ref().unwrap()
-                        );
-                    };
-
-                    let guard_size =
-                        kernel_config.cap_address_bits as u8 - PD_ROOT_CAP_BITS - cnode.size_bits;
-
-                    capdl_util_make_cnode_cap(pd_src_shadow_cspace.cspace, 0, guard_size)
-                }
             };
 
             // Map this into the destination pd's cspace and the specified slot.
