@@ -742,7 +742,7 @@ pub fn build_capdl_spec(
                 capdl_util_make_endpoint_cap(parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = parent_shadow_cspace.cspace;
+            let parent_cspace_obj_id = parent_shadow_cspace.microkit_cnode;
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 parent_cspace_obj_id,
