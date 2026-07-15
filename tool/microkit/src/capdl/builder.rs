@@ -11,7 +11,7 @@ use std::{
 };
 
 use sel4_capdl_initializer_types::{
-    object, CapTableEntry, Fill, FillEntry, FillEntryContent, FillEntryContentBootInfo,
+    object, Cap, CapTableEntry, Fill, FillEntry, FillEntryContent, FillEntryContentBootInfo,
     NamedObject, Object, ObjectId, Spec, Word,
 };
 
@@ -120,6 +120,29 @@ struct PDShadowCspace {
     sched_context: ObjectId,
     tcb: ObjectId,
     vspace: ObjectId,
+}
+
+impl PDShadowCspace {
+    /// Used for objects that are shared via <cnode> tag in the
+    /// SDF that needs `microkit_cspace_root_slot_to_cptr()`.
+    pub fn insert_cap_into_root_cnode(
+        &self,
+        spec_container: &mut CapDLSpecContainer,
+        idx: u32,
+        cap: Cap,
+    ) {
+        capdl_util_insert_cap_into_cspace(spec_container, self.cspace, idx, cap);
+    }
+
+    /// Used for Microkit objects under typical CSlots PD_BASE_*.
+    pub fn insert_cap_into_microkit_cnode(
+        &self,
+        spec_container: &mut CapDLSpecContainer,
+        idx: u32,
+        cap: Cap,
+    ) {
+        capdl_util_insert_cap_into_cspace(spec_container, self.microkit_cnode, idx, cap);
+    }
 }
 
 pub struct CapDLSpecContainer {
@@ -742,10 +765,8 @@ pub fn build_capdl_spec(
                 capdl_util_make_endpoint_cap(parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
-            let parent_cspace_obj_id = parent_shadow_cspace.microkit_cnode;
-            capdl_util_insert_cap_into_cspace(
+            parent_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
-                parent_cspace_obj_id,
                 (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
             );
@@ -1127,19 +1148,18 @@ pub fn build_capdl_spec(
     // Step 4. Create channels
     // *********************************
     for channel in system.channels.iter() {
-        let pd_a_cspace_id = pd_shadow_cspaces[&channel.end_a.pd].microkit_cnode;
-        let pd_b_cspace_id = pd_shadow_cspaces[&channel.end_b.pd].microkit_cnode;
-        let pd_a_ntfn_id = pd_shadow_cspaces[&channel.end_a.pd].notification;
-        let pd_b_ntfn_id = pd_shadow_cspaces[&channel.end_b.pd].notification;
+        let pd_a_shadow_cspace = &pd_shadow_cspaces[&channel.end_a.pd];
+        let pd_b_shadow_cspace = &pd_shadow_cspaces[&channel.end_b.pd];
+        let pd_a_ntfn_id = pd_a_shadow_cspace.notification;
+        let pd_b_ntfn_id = pd_b_shadow_cspace.notification;
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
             let pd_a_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_a.id;
             let pd_a_ntfn_badge = 1 << channel.end_b.id;
             let pd_a_ntfn_cap = capdl_util_make_ntfn_cap(pd_b_ntfn_id, true, true, pd_a_ntfn_badge);
-            capdl_util_insert_cap_into_cspace(
+            pd_a_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
-                pd_a_cspace_id,
                 pd_a_ntfn_cap_idx as u32,
                 pd_a_ntfn_cap,
             );
@@ -1149,9 +1169,8 @@ pub fn build_capdl_spec(
             let pd_b_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_b.id;
             let pd_b_ntfn_badge = 1 << channel.end_a.id;
             let pd_b_ntfn_cap = capdl_util_make_ntfn_cap(pd_a_ntfn_id, true, true, pd_b_ntfn_badge);
-            capdl_util_insert_cap_into_cspace(
+            pd_b_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
-                pd_b_cspace_id,
                 pd_b_ntfn_cap_idx as u32,
                 pd_b_ntfn_cap,
             );
@@ -1165,9 +1184,8 @@ pub fn build_capdl_spec(
                 .expect("exists as needs_ep() is true");
             let pd_a_ep_cap =
                 capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
-            capdl_util_insert_cap_into_cspace(
+            pd_a_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
-                pd_a_cspace_id,
                 pd_a_ep_cap_idx as u32,
                 pd_a_ep_cap,
             );
@@ -1181,9 +1199,8 @@ pub fn build_capdl_spec(
                 .expect("exists as needs_ep() is true");
             let pd_b_ep_cap =
                 capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
-            capdl_util_insert_cap_into_cspace(
+            pd_b_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
-                pd_b_cspace_id,
                 pd_b_ep_cap_idx as u32,
                 pd_b_ep_cap,
             );
@@ -1195,8 +1212,6 @@ pub fn build_capdl_spec(
     // *********************************
 
     for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
-        let pd_dest_cspace_id = pd_shadow_cspaces[&pd_dest_idx].cspace;
-
         for cap_map in pd.cap_maps.iter() {
             // TODO: Once we add more CapMap options, they might not all have
             // the pd_name. But for now, they do.
@@ -1228,9 +1243,8 @@ pub fn build_capdl_spec(
             };
 
             // Map this into the destination pd's cspace and the specified slot.
-            capdl_util_insert_cap_into_cspace(
+            pd_shadow_cspaces[&pd_dest_idx].insert_cap_into_root_cnode(
                 &mut spec_container,
-                pd_dest_cspace_id,
                 cap_map.slot as u32,
                 cap_map_obj,
             );
