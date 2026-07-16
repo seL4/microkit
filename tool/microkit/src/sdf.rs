@@ -56,6 +56,7 @@ const PD_MAX_PRIORITY: u8 = 254;
 pub const BUDGET_DEFAULT: u64 = 1000;
 
 pub const MONITOR_PD_NAME: &str = "monitor";
+pub const MONITOR_DOMAIN: u8 = 0;
 
 /// Default to a stack size of 8KiB
 pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;
@@ -612,6 +613,7 @@ pub struct ProtectionDomain {
     pub stack_size: u64,
     pub smc: bool,
     pub cpu: CpuCore,
+    pub domain: Option<u8>,
     pub program_image: PathBuf,
     pub program_image_for_symbols: Option<PathBuf>,
     /// Enable FPU for this PD.
@@ -957,6 +959,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
+        domains: &Domains,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name",
@@ -969,6 +972,7 @@ impl ProtectionDomain {
             // but we do the error-checking further down.
             "smc",
             "cpu",
+            "domain",
             "fpu",
         ];
         if is_child {
@@ -1074,6 +1078,28 @@ impl ProtectionDomain {
                 ),
             ));
         }
+
+        let domain = if domains.has_domains() {
+            let domain_s = checked_lookup(xml_sdf, node, "domain")?;
+            Some(*domains.name_to_id_map.get(domain_s).ok_or_else(|| {
+                value_error(
+                    xml_sdf,
+                    node,
+                    format!("domain '{domain_s}' not declared in <domains>:"),
+                )
+            })?)
+        } else {
+            if let Some(name) = node.attribute("domain") {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    format!("Specifying a domain '{name}' without declaring a \
+                             domain schedule is not allowed:"),
+                ));
+            }
+
+            None
+        };
 
         #[allow(clippy::manual_range_contains)]
         if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
@@ -1493,7 +1519,8 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
-                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true)?;
+                    let child_pd =
+                        ProtectionDomain::from_xml(config, xml_sdf, &child, true, domains)?;
 
                     if let Some(setvar_id) = &child_pd.setvar_id {
                         let setvar = SysSetVar {
@@ -1581,6 +1608,7 @@ impl ProtectionDomain {
             stack_size,
             smc,
             cpu,
+            domain,
             program_image: program_image.unwrap(),
             program_image_for_symbols,
             fpu,
@@ -2735,9 +2763,9 @@ pub fn parse(
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                config, &xml_sdf, &child, false, &domains,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(
                 config,

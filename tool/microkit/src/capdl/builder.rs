@@ -25,7 +25,7 @@ use crate::{
     elf::ElfFile,
     sdf::{
         CapMapType, CpuCore, IommuDeviceIdentifier, Map, SystemDescription, BUDGET_DEFAULT,
-        MONITOR_PD_NAME, MONITOR_PRIORITY,
+        MONITOR_DOMAIN, MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -509,6 +509,7 @@ pub fn build_capdl_spec(
         monitor_tcb.extra.prio = MONITOR_PRIORITY;
         monitor_tcb.extra.max_prio = MONITOR_PRIORITY;
         monitor_tcb.extra.resume = true;
+        monitor_tcb.extra.domain = Some(MONITOR_DOMAIN);
 
         monitor_tcb.slots.push(capdl_util_make_cte(
             TcbBoundSlot::IpcBuffer as u32,
@@ -1102,6 +1103,7 @@ pub fn build_capdl_spec(
             pd_tcb.extra.max_prio = pd.priority();
             pd_tcb.extra.fpu_disabled = !pd.fpu;
             pd_tcb.extra.resume = true;
+            pd_tcb.extra.domain = pd.domain;
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);
             // Stylistic purposes only
