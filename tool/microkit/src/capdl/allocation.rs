@@ -106,21 +106,22 @@ pub fn simulate_capdl_object_alloc_algorithm(
         }
     }
 
-    if !phys_addrs_ok
-        && matches!(
+    if !phys_addrs_ok {
+        if matches!(
             error_reporting_level,
             CapDLAllocEmulationErrorLevel::PrintStderr
-        )
-    {
-        eprintln!("Below are the valid ranges of memory to be allocated from:");
-        eprintln!("Valid ranges outside of main memory:");
-        for (_i, ut) in untypeds_by_paddr.iter().filter(|(_i, ut)| ut.is_device) {
-            eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
+        ) {
+            eprintln!("Below are the valid ranges of memory to be allocated from:");
+            eprintln!("Valid ranges outside of main memory:");
+            for (_i, ut) in untypeds_by_paddr.iter().filter(|(_i, ut)| ut.is_device) {
+                eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
+            }
+            eprintln!("Valid ranges within main memory:");
+            for (_i, ut) in untypeds_by_paddr.iter().filter(|(_i, ut)| !ut.is_device) {
+                eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
+            }
         }
-        eprintln!("Valid ranges within main memory:");
-        for (_i, ut) in untypeds_by_paddr.iter().filter(|(_i, ut)| !ut.is_device) {
-            eprintln!("     [0x{:0>12x}..0x{:0>12x})", ut.base(), ut.end());
-        }
+
         return false;
     }
 
