@@ -21,6 +21,7 @@ pub const INITIALISER_GRANULE_SIZE: PageSize = PageSize::Small;
 const PT_SEL4_CAPDL_SPEC: u32 = 0x64c3_4003;
 const PT_SEL4_CAPDL_FRAME_DATA: u32 = 0x64c3_4004;
 
+#[derive(Clone)]
 pub struct CapDLInitialiserSpecMetadata {
     pub spec_size: u64,
 }
@@ -35,6 +36,7 @@ pub enum LogLevel {
     Trace = 5,
 }
 
+#[derive(Clone)]
 pub struct CapDLInitialiser {
     pub elf: ElfFile,
     pub phys_base: Option<u64>,
