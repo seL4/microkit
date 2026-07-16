@@ -53,6 +53,18 @@ DEFAULT_KERNEL_OPTIONS: KERNEL_OPTIONS = {
     # Turning off this feature removes the __thread attribute on
     # __sel4_ipc_buffer and makes it a true global.
     "LibSel4UseThreadLocals": False,
+
+    # The domain scheduler is turned on by default with 16 domains and 100
+    # schedules. This represent the maximums imposed by the static build of
+    # the kernel; we can easily have less domains or schedules.
+    # Both of these are arbitrary values; increasing them has a memory cost
+    # for seL4.
+    # Having the domain scheduler enabled in the kernel has no impact if we
+    # only have one domain schedule (the non-domain kernel build has NumDomains = 1,
+    # and the same code is run).
+    "KernelNumDomains": 16,
+    # This is the current default value used by seL4.
+    "KernelNumDomainSchedules": 100,
 }
 
 DEFAULT_KERNEL_OPTIONS_AARCH64: KERNEL_OPTIONS = {
@@ -523,6 +535,8 @@ def elaborate_all_board_configs(board: BoardInfo) -> list[ConfigInfo]:
             config.name = f"smp-{config.name}"
             config.kernel_options |= {
                 "KernelMaxNumNodes": str(board.smp_cores),
+                # SMP configurations of seL4 do not support the domain scheduler
+                "KernelNumDomains": 1,
             }
             elaborated_configs.append(config)
 
