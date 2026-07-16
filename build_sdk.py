@@ -39,7 +39,7 @@ TRIPLE_RISCV = "riscv64-unknown-elf"
 TRIPLE_X86_64 = "x86_64-linux-gnu"
 
 KERNEL_CONFIG_TYPE = Union[bool, str]
-KERNEL_OPTIONS = Dict[str, Union[bool, str]]
+KERNEL_OPTIONS = Dict[str, Union[bool, str, int, Path]]
 
 DEFAULT_X86_NUM_CPUS = 16
 
@@ -115,8 +115,8 @@ class KernelArch(IntEnum):
         else:
             raise Exception(f"Unsupported arch {self}")
 
-    def as_kernel_arch_config(self) -> tuple[str, str]:
-        return ("KernelSel4Arch", self.to_str())
+    def as_kernel_arch_config(self) -> dict[str, str]:
+        return {"KernelSel4Arch": self.to_str()}
 
 
 KERNEL_OPTIONS_ARCH = Dict[KernelArch, KERNEL_OPTIONS]
@@ -607,7 +607,7 @@ def build_sel4(
     board: BoardInfo,
     config: ConfigInfo,
     llvm: bool
-):
+) -> None:
     """Build seL4"""
     build_dir = build_dir / board.name / config.name / "sel4"
     build_dir.mkdir(exist_ok=True, parents=True)
@@ -620,22 +620,24 @@ def build_sel4(
 
     print(f"Building sel4: {sel4_dir=} {sdk_dir=} {build_dir=} {board=} {config=}")
 
-    config_args = [
-        *board.kernel_options.items(),
-        *config.kernel_options.items(),
-        board.arch.as_kernel_arch_config(),
-    ]
+    config_args = {
+        **config.kernel_options,
+        **board.arch.as_kernel_arch_config(),
+    }
     if config.kernel_options_arch is not None:
         if board.arch in config.kernel_options_arch:
-            config_args += config.kernel_options_arch[board.arch].items()
+            config_args |= config.kernel_options_arch[board.arch]
+
+    config_args |= board.kernel_options
+
     config_strs = []
-    for arg, val in sorted(config_args):
+    for arg, val in config_args.items():
         if isinstance(val, bool):
             str_val = "ON" if val else "OFF"
         elif isinstance(val, KernelPath):
             str_val = f"{sel4_dir.absolute()}/{val.path}"
         elif isinstance(val, Path):
-            str_val = Path(__file__).parent / val
+            str_val = (Path(__file__).parent / val).as_posix()
         else:
             str_val = str(val)
         s = f"-D{arg}={str_val}"
