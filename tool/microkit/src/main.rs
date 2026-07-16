@@ -279,6 +279,10 @@ fn main() -> Result<(), String> {
         } else {
             1
         },
+        num_domains: json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")?
+            .try_into()
+            .unwrap(),
+        num_domain_schedules: json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?,
         fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
         arm_pa_size_bits,
         arm_smc,

@@ -308,6 +308,8 @@ pub struct Config {
     pub hypervisor: bool,
     pub benchmark: bool,
     pub num_cores: u8,
+    pub num_domains: u8,
+    pub num_domain_schedules: u64,
     pub fpu: bool,
     /// ARM-specific, number of physical address bits
     pub arm_pa_size_bits: Option<usize>,
