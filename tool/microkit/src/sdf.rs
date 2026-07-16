@@ -2437,7 +2437,7 @@ pub fn parse(
     let mut mrs = vec![];
     let mut iomaps = vec![];
     let mut device_names = HashSet::new();
-    let mut domain_ids = HashSet::new();
+    let mut iommu_domain_ids = HashSet::new();
     let mut iommu_device_identifiers = HashSet::new();
     let mut channels = vec![];
     let system = doc
@@ -2478,7 +2478,7 @@ pub fn parse(
                         &xml_sdf,
                         &child,
                         &mut device_names,
-                        &mut domain_ids,
+                        &mut iommu_domain_ids,
                         &mut iommu_device_identifiers,
                     )?
                     .iomaps,
