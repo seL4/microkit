@@ -1278,7 +1278,16 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 7. Sort the root objects
+    // Step 7. Emit a domain schedule
+    // *********************************
+    if system.domains.has_domains() {
+        spec_container.spec.domain_schedule = Some(system.domains.schedule.clone());
+        spec_container.spec.domain_set_start = system.domains.schedule_set_start.map(Word);
+        spec_container.spec.domain_idx_shift = system.domains.schedule_index_shift.map(Word);
+    }
+
+    // *********************************
+    // Step 8. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.
@@ -1289,13 +1298,13 @@ pub fn build_capdl_spec(
     // 3. Record all of the root objects new index.
     // 4. Recurse through every cap, for any cap bearing the original object ID, write the new object ID.
 
-    // Step 6-1
+    // Step 8-1
     let mut obj_name_to_old_id: HashMap<String, ObjectId> = HashMap::new();
     for (id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_name_to_old_id.insert(obj.name.as_ref().unwrap().clone(), id.into());
     }
 
-    // Step 6-2
+    // Step 8-2
     spec_container.spec.objects.sort_by(|a, b| {
         // Objects with paddrs always come first.
         if a.object.paddr().is_none() && b.object.paddr().is_some() {
@@ -1334,7 +1343,7 @@ pub fn build_capdl_spec(
         }
     });
 
-    // Step 6-3
+    // Step 8-3
     let mut obj_old_id_to_new_id: HashMap<ObjectId, ObjectId> = HashMap::new();
     for (new_id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_old_id_to_new_id.insert(
@@ -1343,7 +1352,7 @@ pub fn build_capdl_spec(
         );
     }
 
-    // Step 6-4
+    // Step 8-4
     for obj in spec_container.spec.objects.iter_mut() {
         match obj.object.slots_mut() {
             Some(caps) => {
