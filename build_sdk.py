@@ -519,6 +519,7 @@ SUPPORTED_CONFIGS = (
 
 EXAMPLES = {
     "hello": Path("example/hello"),
+    "domains": Path("example/domains"),
     "ethernet": Path("example/ethernet"),
     "passive_server": Path("example/passive_server"),
     "hierarchy": Path("example/hierarchy"),
