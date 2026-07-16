@@ -410,7 +410,7 @@ fn main() -> Result<(), String> {
     // The monitor is just a special PD
     system_elfs.push(monitor_elf);
 
-    let mut capdl_initialiser = CapDLInitialiser::new(capdl_initialiser_elf);
+    let capdl_initialiser_orig = CapDLInitialiser::new(capdl_initialiser_elf);
 
     // Now build the capDL spec and final image. We may need to do this in >1 iterations on ARM and RISC-V
     // if there are Memory Regions without a paddr but subject to setvar region_paddr.
@@ -418,6 +418,7 @@ fn main() -> Result<(), String> {
     let mut spec_need_refinement = true;
     let mut system_built = false;
     while spec_need_refinement && iteration < MAX_BUILD_ITERATION {
+        let mut capdl_initialiser = capdl_initialiser_orig.clone();
         spec_need_refinement = false;
 
         // Patch all the required symbols in the Monitor and PDs according to the Microkit's requirements
