@@ -62,6 +62,7 @@ DEFAULT_KERNEL_OPTIONS: KERNEL_OPTIONS = {
     # Having the domain scheduler enabled in the kernel has no impact if we
     # only have one domain schedule (the non-domain kernel build has NumDomains = 1,
     # and the same code is run).
+    # NOTE: If updating make sure to update the manual too.
     "KernelNumDomains": 16,
     # This is the current default value used by seL4.
     "KernelNumDomainSchedules": 100,

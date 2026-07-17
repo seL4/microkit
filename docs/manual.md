@@ -110,6 +110,7 @@ This document attempts to clearly describe all of these terms, however as the co
 * [fault](#fault)
 * [ioport](#ioport)
 * [IO address space](#io_address_space)
+* [domain scheduling](#domains)
 
 ## System {#system}
 
@@ -380,6 +381,40 @@ I/O ports are x86 mechanisms to access certain physical devices (e.g. PC serial 
 IO Address Spaces provide a way to isolate device memory accesses within a fixed virtual address space. The isolation provided by the address space is enforced by the underlying hardware IOMMU or SMMU.
 
 IO Address Spaces allow *memory regions* to be mapped to a provided base IO virtual address. These IO virtual addresses will be translated by the hardware IOMMU or SMMU to the underlying physical memory that backs the memory region.
+
+## Domain Scheduling {#domains}
+
+seL4, and by extension, Microkit, supports a domain scheduler.
+Domains are used to isolate independent subsystems (sets of protection domains)
+and limit information flow between them.
+
+seL4 switches between the domains according to a cyclical schedule where each
+domain runs for a static duration. Protection domains belong to exactly one
+domain each, and only will run when that domain is active.
+
+The default system fault handler (aka the monitor) lives in domain 0.
+
+Below we describe the behaviour of the domain scheduler and its relevance to
+the Microkit system with reference to the [SDF syntax for Domains](#sdf-domains).
+
+The list of `<schedule_entry>` within the `<domain_schedule>` element defines
+the domain schedule. The kernel steps through each schedule entry, starting
+from the `start_index`, until reaching an `<schedule_end_marker>`. Upon reaching
+the "end marker", it restarts at `start_index` once again. This allows one to
+use the domain schedule to setup multiple schedules that can be atomically
+switched between, though at this time Microkit does not expose this feature.
+
+The scheduler duration at the seL4 kernel level is specified in terms of
+platform-specific timer ticks. When specifying a duration in microseconds,
+the capDL initialiser must convert these to timer ticks. It guarantees that
+either it will be the nearest tick value, or that it will fail to boot. If you
+want platform-specific guarantees of certain tick values, you can still specify
+ticks.
+
+There is always an implicit `<schedule_end_marker>` at the end of the schedule.
+
+For more details on the domain schedule, please see [RFC-20: Runtime domain
+schedules](https://sel4.github.io/rfcs/implemented/0200-domain-schedules.html).
 
 # SDK {#sdk}
 
@@ -939,6 +974,7 @@ Within the `system` root element the following child elements are supported:
 * `protection_domain`
 * `memory_region`
 * `channel`
+* `domains`
 
 ## `protection_domain`
 
@@ -956,6 +992,8 @@ It supports the following attributes:
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
 * `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 * `fpu`: (optional) whether this PD can access the FPU. Defaults to true.
+* `domain`: (conditionally required) the name of the domain that this PD belongs to.
+            If a domain schedule is specified, this is mandatory, else it is disallowed.
 
 Additionally, it supports the following child elements:
 
@@ -1117,6 +1155,53 @@ The `iomap` element supports the following attributes:
 * `iovaddr`: Identifies the io virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), and `w` (write).
            Defaults to read-write.
+
+## `domains` {#sdf-domains}
+
+The `domains` element describes the (security) domains and their schedule within
+a Microkit system. seL4 only supports the domain scheduler on non-SMP (unicore)
+configurations. There is a fixed upper limit on the number of domains and the
+number of schedule entries, determined by the kernel configurations `KernelNumDomains`
+and `KernelNumDomainSchedules`. In the default SDK build, we support 16 domains and
+100 schedule entries.
+
+<!-- If updating make sure to update build_sdk.py -->
+
+The SDK includes a 'Domains' example which contains a basic example and commented
+example of a valid SDF containing a domain schedule.
+
+It supports no attributes, but supports the following elements as children:
+
+* `domain`: (one or more) Provides a human-readable name for a domain ID.
+* `domain_schedule`: (exactly one) Contains the list of scheduler entries.
+
+The `domain` element has no children, but supports the following attributes:
+
+* `name`: A unique name for the domain.
+* `id`: (optional) The domain ID.
+
+The `domain_schedule` element specifies the domain schedule.
+Please see the [Domains](#domains) reference for details on these.
+It has the following attributes:
+
+* `start_index` (optional, defaults to 0) defines the 'start index' of the schedule.
+
+* `index_shift` (optional, defaults to 0) the offset of the Microkit domain schedule
+                within the kernel's domain schedule array. This is useful for
+                situations (not yet permitted by Microkit) where domain schedules
+                are changed or switched at run time.
+
+It supports two types of child element, the `<schedule_entry>` and the
+`<schedule_end_marker>`.
+
+The `<schedule_entry>` requires the following attributes:
+
+* `domain`: The name of the domain to be scheduled.
+* `duration`: The duration for which the domain should be active.
+              This contains a value and a unit, i.e. `1000 us`.
+              The unit can either be 'us' or 'ticks'.
+
+The `<schedule_end_marker>` has no attributes or children.
 
 ### Page sizes by architecture
 
