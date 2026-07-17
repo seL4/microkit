@@ -1093,8 +1093,10 @@ impl ProtectionDomain {
                 return Err(value_error(
                     xml_sdf,
                     node,
-                    format!("Specifying a domain '{name}' without declaring a \
-                             domain schedule is not allowed:"),
+                    format!(
+                        "Specifying a domain '{name}' without declaring a \
+                             domain schedule is not allowed:"
+                    ),
                 ));
             }
 
@@ -2171,6 +2173,13 @@ impl Domains {
     ) -> Result<Self, String> {
         check_attributes(xml_sdf, node, &[])?;
 
+        if config.num_cores != 1 {
+            return Err(
+                "Error: The domain scheduler is not supported in multicore builds of seL4"
+                    .to_string(),
+            );
+        }
+
         let mut name_to_id_map = HashMap::<String, Option<u8>>::new();
         let mut id_to_name_map = HashMap::<u8, String>::new();
         let mut domain_schedule_element = None;
@@ -2353,12 +2362,40 @@ impl Domains {
             }
         }
 
-        if schedule.len() >= config.num_domain_schedules as usize {
+        if schedule.len() >= config.num_domain_schedules.try_into().unwrap() {
             return Err(format!(
                 "More than configured KernelNumDomainSchedules {} \
                 number of <schedule_entry> elements found",
                 config.num_domain_schedules
             ));
+        }
+
+        if schedule_start_index >= schedule.len().try_into().unwrap() {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "schedule_start_index '{schedule_start_index}' is \
+                     greater than the length of the schedule '{}'",
+                    schedule.len()
+                ),
+            ));
+        }
+
+        if let Some(shift) = schedule_index_shift {
+            if shift + u64::try_from(schedule.len()).unwrap() >= config.num_domain_schedules {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    format!(
+                        "schedule_index_shift '{schedule_start_index}' on top of \
+                         the schedule length '{}' would exceed than the configured \
+                         KernelNumDomainSchedules {}",
+                        schedule.len(),
+                        config.num_domain_schedules
+                    ),
+                ));
+            }
         }
 
         Ok(Domains {

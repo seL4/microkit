@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <domains>
+        <domain name="domain_1" />
+
+        <domain_schedule index_shift="zzzz">
+            <schedule_entry domain="domain_1" duration="1000 us" />
+        </domain_schedule>
+    </domains>
+
+    <protection_domain name="test1" domain="domain_1">
+        <program_image path="test" />
+    </protection_domain>
+</system>

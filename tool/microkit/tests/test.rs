@@ -59,6 +59,11 @@ const DEFAULT_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     },
 };
 
+const SMP_AARCH64_KERNEL_CONFIG: sel4::Config = sel4::Config {
+    num_cores: 4,
+    ..DEFAULT_AARCH64_KERNEL_CONFIG
+};
+
 const DEFAULT_X86_64_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::X86_64,
     word_size: 64,
@@ -1223,6 +1228,104 @@ mod channel {
         check_error(&DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_ppcall_priority.system",
             "Error: PPCs must be to protection domains of strictly higher priorities; channel with PPC exists from pd test1 (priority: 2) to pd test2 (priority: 1)",
+        )
+    }
+}
+
+#[cfg(test)]
+mod domains {
+    use super::*;
+
+    #[test]
+    fn test_domain_smp() {
+        check_error(
+            &SMP_AARCH64_KERNEL_CONFIG,
+            "domain_smp.system",
+            "Error: The domain scheduler is not supported in multicore builds of seL4",
+        )
+    }
+
+    #[test]
+    fn test_domain_too_many_domains() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_exceed_max_domains.system",
+            "Error: Number of domains exceeds 16 on element 'domains': domain_exceed_max_domains.system:8:5",
+        )
+    }
+
+    #[test]
+    fn test_domain_assign_pd_to_invalid_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_assign_pd_to_invalid_domain.system",
+            "Error: domain 'domain_2' not declared in <domains>: on element 'protection_domain': domain_assign_pd_to_invalid_domain.system:16:5",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_timeslice() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_timeslice.system",
+            "Error: The duration '1000 kilometres' must be in either 'ticks' or 'us' on element 'schedule_entry': domain_invalid_timeslice.system:12:13"
+        )
+    }
+
+    #[test]
+    fn test_domain_no_schedule() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_schedule.system",
+            "Error: Specifying a domain 'domain_1' without declaring a domain schedule is not allowed: on element 'protection_domain': domain_no_schedule.system:8:5",
+        )
+    }
+
+    #[test]
+    fn test_domain_pd_no_domain() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_no_pd_domain.system",
+            "Error: Missing required attribute 'domain' on element 'protection_domain': domain_no_pd_domain.system:15:5",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_start_index.system",
+            "Error: failed to parse integer 'zzzz' on element 'domain_schedule': invalid digit found in string",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_start_index() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_start_index.system",
+            "Error: schedule_start_index '1' is greater than the length of the schedule '1' \
+             on element 'domain_schedule': domain_out_of_bounds_start_index.system:11:9",
+        )
+    }
+
+    #[test]
+    fn test_domain_invalid_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_invalid_shift.system",
+            "Error: failed to parse integer 'zzzz' on element 'domain_schedule': invalid digit found in string",
+        )
+    }
+
+    #[test]
+    fn test_domain_out_of_bounds_shift() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "domain_out_of_bounds_shift.system",
+            "Error: schedule_index_shift '0' on top of the schedule length '1' would \
+             exceed than the configured KernelNumDomainSchedules 100 \
+             on element 'domain_schedule': domain_out_of_bounds_shift.system:11:9",
         )
     }
 }
