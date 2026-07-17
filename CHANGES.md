@@ -1,5 +1,136 @@
 # Revision History for Microkit
 
+## Release 2.3.0
+
+This release contains quite a few new features:
+
+  * x86_64 IOMMU support (this entails a breaking change)
+  * seL4_BootInfo support, for reading runtime parameters on x86_64
+  * Various improvements to x86_64 virtual machines, such as being able to
+    stop/start their execution.
+  * Support for 'Cap Sharing' to give PDs access to specific TCBs or SCs,
+    useful for userspace schedulers.
+  * Support for the seL4 Domain Scheduler.
+
+There are also a variety of bug fixes, especially for x86_64 systems, and
+support for two new boards.
+
+### Breaking changes
+
+* x86_64 systems are now built with the IOMMU turned on by default, as we have
+  added new syntax to allow for the IOMMU to be configured (see below).
+  However, previously the IOMMU was disabled in seL4, so systems which did DMA
+  on x86_64 will now *stop working* without specifying the IOMMU setup.
+
+* x86_64 IOAPIC IRQs had an inverted polarity; `polarity="low"` became high
+  and `polarity="high"` became low.
+
+* vCPUs now default to the same core as the VMM, instead of core 0. If you
+  were relying on this behaviour, you should explicitly specify core 0.
+
+* PCI 'bus:dev:func' syntax is no longer supported, use the correct 'bus:dev.func'
+  syntax instead. This was an implementation bug which was more permissive
+  than it was supposed to be.
+
+* Virtual Machines on x86_64:
+
+  * No longer support budget/period/priority. This did not work previously,
+    as they share a TCB/SC with the VMM.
+
+  * The VMM on x86_64 cannot have children, nor receive PPCs.
+    This was previously allowed but had several complex restrictions (such as
+    not receiving messages after a `vmenter`) so have been disallowed.
+
+* If you were not using the `libmicrokit` linker script (e.g. rust-seL4 users),
+  the `__sel4_ipc_buffer_obj` is no longer declared in the linker script, and
+  is instead allocated by the tool at a fixed virtual address above the stack
+  which is now reserved. If you were assuming a specific virtual address for the
+  IPC buffer, this would be broken.
+
+### Feature changes
+
+* Update to 16.0.0 release of seL4.
+
+* Support an 'fpu' attribute on protection domains, following [RFC-18](
+  https://sel4.github.io/rfcs/implemented/0180-fpu-switching.html), which allows
+  for FPU access to be disabled on a per-PD basis.
+
+* The debug-only (unverified) HardwareDebugAPI has been enabled and is available
+  on most x86_64 and AArch64 platforms.
+
+* A new 'cap sharing' feature. The SDF now supports a `<cspace>` element and
+  support for placing caps to TCBs, SchedContexts, and VSpaces of other PDs
+  into the CSpace of the current PD. This can be useful for user space schedulers
+  that are not the fault-handlers (i.e. use parent-child hierarchy).
+
+* It is now possible to turn x86 vCPUs (VMs) on or off.
+  Use the new `microkit_vcpu_x86_on` and `microkit_vcpu_x86_off` APIs
+
+* AArch64 EL1 (non-hypervisor) platforms are now supported.
+
+* There is a new (experimental) `--viper-output` argument to the tool, which
+  is part of some new (experimental) verification work of Microkit PDs using
+  the [Viper tools from ETH Zürich](http://viper.ethz.ch).
+
+* Microkit PDs are now a 2-level CSpace. This should not have any impact on
+  users.
+
+* It is now possible to create memory regions that are prefilled with bootinfo
+  from the capDL initialiser. This includes the VBE, MBMAP, ACPI RSDP, Framebuffer,
+  and TSC frequency types exported by seL4.
+
+* New function `microkit_pd_resume()` which resumes a stopped child PD. Previously,
+  only stop and start (which does resume but requires a program counter) existed.
+
+* New support for configuring the IOMMU on x86_64 systems with the
+  `<io_address_space>` element. See the `x86_64_iommu_dma_test` example packaged
+  in the SDK for more details, as well as the manual section on IOMMU.
+  Only 4KiB pages are supporting for the IOMMU due to kernel limitations.
+
+* Support for the seL4 domain schedule now that the [RFC-20 Runtime Schedules](
+  https://sel4.github.io/rfcs/implemented/0200-domain-schedules.html) has been
+  added to seL4. This is useful for systems which want isolated subsystems
+  with limited information flow between them.
+
+### Bug fixes
+
+* TQMA8XQP1GB loader address has been fixed as it was collided with reserved
+  regions in memory.
+* IOAPIC IRQ polarity was inverted.
+* The loader now only maps in the loader memory, UART, and kernel regions, as
+  otherwise (instruction) speculative accesses to device memory can occur.
+  Please see [PR 464 for more details](https://github.com/seL4/microkit/pull/464).
+* A `microkit_deferred_notify()` or `microkit_deferred_irq_ack()` would be
+  lost if you sent a reply from a `protected()` call, or from a `fault()` handler.
+  Now we perform `seL4_Send` on the Notification or IRQHandler capability
+  before replying to the PPC or Fault.
+* A bug with [high-address regions allocated the wrong memory](
+  https://github.com/seL4/rust-sel4/issues/319) in the capDL initialiser was
+  fixed.
+* A bug with certain systems that caused the Microkit tool to panic with the
+  below message has been fixed.
+
+  ```
+  thread 'main' (414114) panicked at tool/microkit/src/capdl/allocation.rs:225:17:
+  assertion `left == right` failed
+  ```
+
+### Board support
+
+* 'stm32mp2' for the STM32MP2 evaluation board.
+* 'qemu_virt_aarch64_el1' for QEMU/KVM on Linux AArch64 hosts (which don't support
+   nested virtualisation).
+
+### Notes for developers
+
+* There is a new `--override-kernel` option to the tool that allows one to
+  use an SDK build of Microkit but with a different seL4 kernel ELF.
+* We now have basic CI that runs Microkit images on real hardware.
+* We now recommend the use of the [Google repo-manifest 'microkit-manifest'](
+  https://github.com/seL4/microkit-manifest) which tracks the supported version
+  of seL4 to be used for testing the Microkit. It also records the latest build
+  of the main branch which passed CI.
+
 ## Release 2.2.0
 
 This release contains various bug fixes, minor features, and new board support.
