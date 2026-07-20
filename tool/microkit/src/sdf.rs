@@ -28,7 +28,6 @@ use sel4_capdl_initializer_types::{
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -99,14 +98,6 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PciDevice(pub object::PCIDevice);
-
-impl Hash for PciDevice {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.bus.hash(state);
-        self.0.device.hash(state);
-        self.0.function.hash(state);
-    }
-}
 
 impl Deref for PciDevice {
     type Target = object::PCIDevice;
@@ -229,7 +220,7 @@ impl FromStr for PciDevice {
 
 // This can be extended in future to support devices on an SMMU enabled Arm device
 // or IOMMU enabled RISC-V device.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IommuDeviceIdentifier {
     X86Pci(PciDevice),
 }
@@ -340,7 +331,7 @@ impl SysIOMapPerms {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SysIOMap {
-    pub device: String,
+    pub name: String,
     pub mr: String,
     pub identifier: IommuDeviceIdentifier,
     pub domain_id: Option<u64>,
@@ -766,7 +757,7 @@ impl SysIOMap {
         _config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-        device: &str,
+        name: &str,
         identifier: IommuDeviceIdentifier,
         domain_id: Option<u64>,
     ) -> Result<SysIOMap, String> {
@@ -806,7 +797,7 @@ impl SysIOMap {
         };
 
         Ok(SysIOMap {
-            device: device.to_string(),
+            name: name.to_string(),
             mr,
             identifier,
             domain_id,
@@ -829,9 +820,9 @@ impl IOAddressSpace {
         config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-        device_names: &mut HashSet<String>,
+        names: &mut HashSet<String>,
         domain_ids: &mut HashSet<u64>,
-        iommu_device_identifiers: &mut HashSet<IommuDeviceIdentifier>,
+        iommu_device_identifiers: &mut Vec<IommuDeviceIdentifier>,
     ) -> Result<IOAddressSpace, String> {
         let pos = xml_sdf.doc.text_pos_at(node.range().start);
         if !config.iommu {
@@ -842,12 +833,12 @@ impl IOAddressSpace {
         }
 
         check_attributes(xml_sdf, node, &["name", "peripheral_id", "domain_id"])?;
-        let device_name = checked_lookup(xml_sdf, node, "name")?;
-        if !device_names.insert(device_name.to_string()) {
+        let name = checked_lookup(xml_sdf, node, "name")?;
+        if !names.insert(name.to_string()) {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("duplicate device name '{device_name}'"),
+                format!("duplicate name '{name}'"),
             ));
         }
 
@@ -884,27 +875,22 @@ impl IOAddressSpace {
                     format!("failed to parse device peripheral_id '{identifier_str}': {err}"),
                 )
             })?;
-        if !iommu_device_identifiers.insert(identifier) {
+        if iommu_device_identifiers.contains(&identifier) {
             return Err(value_error(
                 xml_sdf,
                 node,
                 format!("duplicate device peripheral_id '{identifier}'"),
             ));
         }
+        iommu_device_identifiers.push(identifier);
 
         let mut iomaps = Vec::new();
 
         for child in node.children().filter(|node| node.is_element()) {
             match child.tag_name().name() {
                 "iomap" => {
-                    let iomap = SysIOMap::from_xml(
-                        config,
-                        xml_sdf,
-                        &child,
-                        device_name,
-                        identifier,
-                        domain_id,
-                    )?;
+                    let iomap =
+                        SysIOMap::from_xml(config, xml_sdf, &child, name, identifier, domain_id)?;
                     iomaps.push(iomap);
                 }
                 _ => {
@@ -2568,10 +2554,13 @@ fn check_io_maps(
     mrs: &[SysMemoryRegion],
     iomaps: &[SysIOMap],
 ) -> Result<(), String> {
-    let mut by_device: HashMap<IommuDeviceIdentifier, Vec<&SysIOMap>> = HashMap::new();
+    let mut by_device: HashMap<&str, Vec<&SysIOMap>> = HashMap::new();
 
     for iomap in iomaps {
-        by_device.entry(iomap.identifier).or_default().push(iomap);
+        by_device
+            .entry(iomap.name.as_str())
+            .or_default()
+            .push(iomap);
     }
 
     if iomaps.iter().any(|iomap| {
@@ -2583,8 +2572,9 @@ fn check_io_maps(
         );
     }
 
-    for (identifier, maps) in by_device {
-        let address_space = identifier.to_string();
+    for maps in by_device.into_values() {
+        let last = maps.iter().last().unwrap();
+        let address_space = last.identifier.to_string();
         check_maps(
             xml_sdf,
             mrs,
@@ -2774,9 +2764,9 @@ pub fn parse(
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut iomaps = vec![];
-    let mut device_names = HashSet::new();
+    let mut io_address_space_names = HashSet::new();
     let mut iommu_domain_ids = HashSet::new();
-    let mut iommu_device_identifiers = HashSet::new();
+    let mut iommu_device_identifiers = Vec::new();
     let mut channels = vec![];
     let mut domains = Domains::default();
     let system = doc
@@ -2816,7 +2806,7 @@ pub fn parse(
                         config,
                         &xml_sdf,
                         &child,
-                        &mut device_names,
+                        &mut io_address_space_names,
                         &mut iommu_domain_ids,
                         &mut iommu_device_identifiers,
                     )?
