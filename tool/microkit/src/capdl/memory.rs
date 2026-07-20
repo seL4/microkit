@@ -405,14 +405,14 @@ impl AddressSpace {
 pub fn create_iospace(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
-    device_name: &str,
+    name: &str,
     device_identifier: IommuDeviceIdentifier,
     domain_id: Option<u64>,
 ) -> AddressSpace {
     let IommuDeviceIdentifier::X86Pci(pci_device) = device_identifier;
 
     let root = spec_container.add_root_object(CapDLNamedObject {
-        name: format!("{}_{}", get_iopt_level_name(0), device_name).into(),
+        name: format!("{}_{}", get_iopt_level_name(0), name).into(),
         object: Object::IOSpace(object::IOSpace {
             slots: vec![],
             domain_id: domain_id.unwrap().into(),
@@ -421,7 +421,7 @@ pub fn create_iospace(
     });
 
     let address_space = AddressSpace::IOSpace {
-        name: device_name.to_string(),
+        name: name.to_string(),
         root,
         device: device_identifier,
     };

@@ -24,8 +24,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CapMapType, CpuCore, IommuDeviceIdentifier, Map, SystemDescription, BUDGET_DEFAULT,
-        MONITOR_DOMAIN, MONITOR_PD_NAME, MONITOR_PRIORITY,
+        CapMapType, CpuCore, Map, SystemDescription, BUDGET_DEFAULT, MONITOR_DOMAIN,
+        MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -1216,46 +1216,19 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Handle extra cap mappings
+    // Step 5. Create IOMMU Address Spaces
     // *********************************
-
-    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
-        for cap_map in pd.cap_maps.iter() {
-            // TODO: Once we add more CapMap options, they might not all have
-            // the pd_name. But for now, they do.
-            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];
-
-            let cap_map_obj = match cap_map.cap_type {
-                CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
-                CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
-                CapMapType::VSpace => capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace),
-            };
-
-            // Map this into the destination pd's cspace and the specified slot.
-            pd_shadow_cspaces[&pd_dest_idx].insert_cap_into_root_cnode(
-                &mut spec_container,
-                cap_map.slot as u32,
-                cap_map_obj,
-            );
-        }
-    }
-
-    // *********************************
-    // Step 6. Create IOMMU Address Spaces
-    // *********************************
-    let mut iospace_by_device: HashMap<IommuDeviceIdentifier, AddressSpace> = HashMap::new();
+    let mut iospace_by_device: HashMap<&str, AddressSpace> = HashMap::new();
     for iomap in system.iomaps.iter() {
-        let address_space = iospace_by_device
-            .entry(iomap.identifier)
-            .or_insert_with(|| {
-                create_iospace(
-                    &mut spec_container,
-                    kernel_config,
-                    &iomap.device,
-                    iomap.identifier,
-                    iomap.domain_id,
-                )
-            });
+        let address_space = iospace_by_device.entry(&iomap.name).or_insert_with(|| {
+            create_iospace(
+                &mut spec_container,
+                kernel_config,
+                &iomap.name,
+                iomap.identifier,
+                iomap.domain_id,
+            )
+        });
         let page_size_bytes = mr_name_to_frames
             .get(&iomap.mr)
             .ok_or(format!(
@@ -1277,6 +1250,30 @@ pub fn build_capdl_spec(
             address_space,
             &mr_name_to_frames[&iomap.mr],
         )?;
+    }
+
+    // *********************************
+    // Step 6. Handle extra cap mappings
+    // *********************************
+    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
+        for cap_map in pd.cap_maps.iter() {
+            // TODO: Once we add more CapMap options, they might not all have
+            // the pd_name. But for now, they do.
+            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];
+
+            let cap_map_obj = match cap_map.cap_type {
+                CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
+                CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
+                CapMapType::VSpace => capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace),
+            };
+
+            // Map this into the destination pd's cspace and the specified slot.
+            pd_shadow_cspaces[&pd_dest_idx].insert_cap_into_root_cnode(
+                &mut spec_container,
+                cap_map.slot as u32,
+                cap_map_obj,
+            );
+        }
     }
 
     // *********************************
