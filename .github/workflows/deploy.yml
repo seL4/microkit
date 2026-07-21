@@ -12,6 +12,8 @@ on:
     branches: [main]
     paths-ignore:
       - '**.md'
+      - 'platforms.yml'
+      - '.linkcheck-ignore.yml'
     tags:
       # Run on version tags, for releases.
       - '*.*.*'
