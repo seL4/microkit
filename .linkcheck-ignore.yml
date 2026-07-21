@@ -1,3 +1,4 @@
 urls:
   - "https://developer.arm.com/downloads/*"
   - "https://cdrdv2.intel.com/*"
+  - "https://cdrdv2-public.intel.com/*"

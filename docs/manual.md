@@ -1729,6 +1729,21 @@ qemu-system-x86_64: Cannot load x86-64 image, give a 32bit one.
 To obtain a bootable ISO image, a Multiboot 2-compliant bootloader must be used. Please refer to your
 bootloader's documentations.
 
+### Required CPU features
+
+The `x86_64_generic` platform's kernel configuration requires these features from your CPU:
+
+| Name                       | cpuinfo feature flag |
+|----------------------------|----------------------|
+| Page Table Attribute (PAT) | pat                  |
+| XSAVE                      | xsave                |
+| x87 state                  | fpu                  |
+| SSE state                  | sse                  |
+| Huge Page                  | pdpe1gb              |
+| fsgsbase                   | fsgsbase             |
+
+To check if your CPU supports a specific feature, boot into Linux and run a command like `grep pdpe1gb /proc/cpuinfo`.
+
 ## x86-64 generic (with VT-x) {#x86_64_generic_vtx}
 
 This board supports x86-64 platforms with generic microarchitecture and virtualisation.
@@ -1749,6 +1764,45 @@ vt-x: not supported
 ```
 Consider using the non VT-x configuration: [x86-64 generic](#x86_64_generic), or switch to a x86 emulator that
 emulates Intel VT-x, such as [Bochs](https://bochs.sourceforge.io/).
+
+### Required CPU features
+
+The `x86_64_generic_vtx` kernel configuration requires these features from your CPU in addition to
+`x86_64_generic`'s requirements:
+
+| Name                             | cpuinfo feature flag |
+|----------------------------------|----------------------|
+| Virtual Machine Extensions (VMX) | vmx                  |
+
+In addition to the CPU feature flags above, the kernel also requires these Intel VT-x features from your CPU:
+
+| Name                             | Intel SDM section reference |
+|----------------------------------|-----------------------------|
+| Enable VMX outside SMX operation | Table 7-1, Vol. 2D pg. 7-1  |
+| External-interrupt exiting       | A.3.1, Vol. 3D pg. A-3      |
+| NMI Exiting                      | A.3.1, Vol. 3D pg. A-3      |
+| Virtual NMIs                     | A.3.1, Vol. 3D pg. A-3      |
+| Use I/O bitmaps                  | A.3.2, Vol. 3D pg. A-3      |
+| Use MSR bitmaps                  | A.3.2, Vol. 3D pg. A-3      |
+| Activate secondary controls      | A.3.2, Vol. 3D pg. A-3      |
+| Enable Extended Page Table (EPT) | A.3.3, Vol. 3D pg. A-4      |
+| Save debug controls              | A.4.1, Vol. 3D pg. A-5      |
+| Host address-space size          | A.4.1, Vol. 3D pg. A-5      |
+| Save guest IA32_PAT on exit      | A.4.1, Vol. 3D pg. A-5      |
+| Load host IA32_PAT on exit       | A.4.1, Vol. 3D pg. A-5      |
+| Save guest IA32_EFER on exit     | A.4.1, Vol. 3D pg. A-5      |
+| Load host IA32_EFER on exit      | A.4.1, Vol. 3D pg. A-5      |
+| IA-32e mode guest                | A.5, Vol. 3D pg. A-5        |
+| Write-back (WB) for EPT map      | A.10, Vol. 3D pg. A-8       |
+| 2-Mbyte page map for EPT         | A.10, Vol. 3D pg. A-8       |
+
+These VT-x features are not exposed via Linux's `/proc/cpuinfo` and can only be checked by reading specific MSRs
+from the CPU. Please see "Appendix A VMX CAPABILITY REPORTING FACILITY" in the
+[Intel SDM June 2026](https://cdrdv2-public.intel.com/922475/325462-092-sdm-vol-1-2abcd-3abcd-4.pdf) for more details.
+If your CPU does not support all of these features then the kernel will not boot.
+
+Note that if the "Enable VMX outside SMX operation" bit is not set then the kernel expects that the Lock bit
+(bit 0) of IA32_FEATURE_CONTROL to be unset.
 
 ## ZCU102 {#zcu102}
 
