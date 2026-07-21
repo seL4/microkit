@@ -14,6 +14,9 @@
 # This list is ordered based on the order in what the platforms were added
 # in.
 platforms:
+  - name: stm32mp2
+    cmake_plat: stm32mp2
+    since: 2.3.0
   - name: kria_k26
     cmake_plat: zcu102
     since: 2.2.0
@@ -94,6 +97,3 @@ platforms:
   - name: zcu102
     cmake_plat: zcu102
     since: 1.3.0
-  - name: stm32mp2
-    cmake_plat: stm32mp257f-ev1
-    since: dev
