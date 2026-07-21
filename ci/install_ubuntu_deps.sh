@@ -34,4 +34,4 @@ sudo apt-get install -qq \
 
 python3.12 -m venv pyenv
 ./pyenv/bin/pip install --upgrade pip setuptools wheel
-./pyenv/bin/pip install -r requirements.txt
+./pyenv/bin/pip install --upgrade sel4-deps

@@ -49,7 +49,7 @@ On a Debian-like system you can do:
     $ rustup component add rust-src --toolchain stable-x86_64-unknown-linux-gnu
     $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
-    $ ./pyenv/bin/pip install -r requirements.txt
+    $ ./pyenv/bin/pip install --upgrade sel4-deps
 
 If you do not have Python 3.12 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa

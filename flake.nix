@@ -38,10 +38,8 @@
         );
 
         python = pkgs.python312;
+        # sel4-deps
         pythonPackages = python.withPackages (ps: [
-          ps.mypy
-          ps.black
-          ps.flake8
           ps.ply
           ps.jinja2
           ps.pyaml
