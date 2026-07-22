@@ -14,6 +14,9 @@
 # This list is ordered based on the order in what the platforms were added
 # in.
 platforms:
+  - name: rpi5b_2gb
+    cmake_plat: bcm2712
+    since: dev
   - name: stm32mp2
     cmake_plat: stm32mp2
     since: 2.3.0
