@@ -516,7 +516,8 @@ The format of the system description is described in a subsequent chapter.
 
 Usage:
 
-    microkit [-h] [OPTIONS] --board BOARD --config CONFIG [--search-path SEARCH_PATH ...] system
+    microkit [-h] [OPTIONS] --board BOARD --config CONFIG \
+        [--search-path SEARCH_PATH ...] system
 
 See `microkit --help` for a full list of options.
 
