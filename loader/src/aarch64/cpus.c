@@ -74,10 +74,6 @@ static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #define SMP_USE_SPIN_TABLE
 static const size_t cpus_release_addr[4] = {0xd8, 0xe0, 0xe8, 0xf0};
 #elif defined(CONFIG_PLAT_BCM2712)
-/* Unlike BCM2711, BCM2712 boots through ARM Trusted Firmware (TF-A BL31) and
- * supports PSCI CPU_ON. However, because its Cortex-A76 cores use DynamIQ (DSU),
- * MPIDR target CPU IDs are shifted to Affinity level 1 (0x100 step) rather
- * than Affinity level 0 like older single-cluster Cortex-A53/A72 boards. */
 static const size_t psci_target_cpus[4] = {0x000, 0x100, 0x200, 0x300};
 #else
 
