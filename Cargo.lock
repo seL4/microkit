@@ -135,7 +135,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "initialiser"
-version = "2.3.0"
+version = "2.3.0-dev"
 dependencies = [
  "sel4-capdl-initializer",
 ]
@@ -194,7 +194,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "microkit-tool"
-version = "2.3.0"
+version = "2.3.0-dev"
 dependencies = [
  "rkyv",
  "roxmltree",

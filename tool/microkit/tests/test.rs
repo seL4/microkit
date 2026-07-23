@@ -972,7 +972,7 @@ mod iommu {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "iommu_duplicate_device.system",
-            "Error: duplicate device name 'test_device' on element 'io_address_space':",
+            "Error: duplicate name 'test_device' on element 'io_address_space':",
         )
     }
 
