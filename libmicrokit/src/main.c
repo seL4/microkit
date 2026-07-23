@@ -38,6 +38,7 @@ seL4_Word microkit_irqs;
 seL4_Word microkit_notifications;
 seL4_Word microkit_pps;
 seL4_Word microkit_ioports;
+seL4_Word microkit_root_cnode_size_bits;
 
 #define BIT(n) (1ULL << (n))
 #define MASK(n) (BIT(n) - 1ULL)

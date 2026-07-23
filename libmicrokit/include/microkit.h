@@ -33,10 +33,6 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define BASE_IOPORT_CAP 394
 #define BASE_USER_CAPS 458
 
-/* This should be kept in sync with `PD_ROOT_CAP_BITS` in capdl/builder.rs */
-#define PD_ROOT_CAP_BITS 6
-#define PD_ROOT_CAP_SIZE (1ULL << PD_ROOT_CAP_BITS)
-
 #define MICROKIT_MAX_USER_CAPS 128
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_MAX_CHANNEL_ID (MICROKIT_MAX_CHANNELS - 1)
@@ -70,6 +66,7 @@ extern seL4_Word microkit_irqs;
 extern seL4_Word microkit_notifications;
 extern seL4_Word microkit_pps;
 extern seL4_Word microkit_ioports;
+extern seL4_Word microkit_root_cnode_size_bits;
 
 /*
  * Output a single character on the debug console.
@@ -607,14 +604,14 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
  * Convert the "slot" identifier from the system file for the extra user caps
  * <cspace> element into the seL4_CPtr at runtime.
  *
- * If the slot exceeds the valid range of inputs (0 <= slot < MICROKIT_MAX_USER_CAPS),
+ * If the slot is not in the valid range of inputs (0 < slot < microkit_root_cnode_size_bits),
  * it returns the value `seL4_CapNull`.
  **/
 static inline seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)
 {
-    if (slot == 0 || slot >= PD_ROOT_CAP_SIZE) {
+    if (slot == 0 || slot >= (1ULL << microkit_root_cnode_size_bits)) {
         return seL4_CapNull;
     }
 
-    return slot << (seL4_WordBits - PD_ROOT_CAP_BITS);
+    return slot << (seL4_WordBits - microkit_root_cnode_size_bits);
 }

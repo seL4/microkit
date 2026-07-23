@@ -959,7 +959,8 @@ Stop the PD from switching to guest execution mode when a Microkit entrypoint re
 Converts the slot identifier of the `<cspace>`'s capability element into an
 `seL4_CPtr` value to be used in `libsel4` calls by the PD.
 
-If the slot exceeds the valid range of inputs (`0 <= slot < MICROKIT_MAX_USER_CAPS`), it returns the value `seL4_CapNull`.
+If the slot is not in the valid range of inputs (`0 < slot < microkit_root_cnode_size_bits`), it returns the value `seL4_CapNull`.
+The value of `microkit_root_cnode_size_bits` is determined based on the largest slot specified in the `<cspace>`.
 
 # System Description File {#sysdesc}
 

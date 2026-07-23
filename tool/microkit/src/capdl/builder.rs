@@ -93,9 +93,6 @@ const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 
-/* This should be kept in sync with `PD_ROOT_CAP_BITS` in libmicrokit/include/microkit.h */
-const PD_ROOT_CAP_SIZE: u32 = 64;
-const PD_ROOT_CAP_BITS: u8 = PD_ROOT_CAP_SIZE.ilog2() as u8;
 pub const PD_CAP_SIZE: u32 = 512;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
@@ -1065,14 +1062,20 @@ pub fn build_capdl_spec(
             PD_CAP_BITS,
             caps_to_insert_to_pd_cspace,
         );
+
+        let root_cnode_size_bits = match &pd.cspace {
+            Some(cspace) => cspace.size_bits,
+            None => 1,
+        } as u8;
+
         let pd_guard_size =
-            kernel_config.cap_address_bits - PD_CAP_BITS as u64 - PD_ROOT_CAP_BITS as u64;
+            kernel_config.cap_address_bits - PD_CAP_BITS as u64 - root_cnode_size_bits as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
 
         let pd_root_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &(pd.name.clone() + "_root"),
-            PD_ROOT_CAP_BITS,
+            root_cnode_size_bits,
             Vec::new(),
         );
         // leave the guard size root cnode as 0
@@ -1256,7 +1259,8 @@ pub fn build_capdl_spec(
     // Step 6. Handle extra cap mappings
     // *********************************
     for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
-        for cap_map in pd.cap_maps.iter() {
+        let Some(cspace) = &pd.cspace else { continue };
+        for cap_map in cspace.cap_maps.iter() {
             // TODO: Once we add more CapMap options, they might not all have
             // the pd_name. But for now, they do.
             let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];

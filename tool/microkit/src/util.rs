@@ -73,6 +73,16 @@ pub fn ranges_overlap<T: PartialOrd>(left: &Range<T>, right: &Range<T>) -> bool 
     !(left.end <= right.start || right.end <= left.start)
 }
 
+/// Returns the number of bits required to repr the input
+pub fn calculate_size_bits<T: Into<u64>>(size: T) -> u8 {
+    let size: u64 = size.into();
+    if size <= 1 {
+        0
+    } else {
+        (size - 1).ilog2() as u8 + 1
+    }
+}
+
 /// Product a 'human readable' string for the size.
 ///
 /// 'strict' means that it must be simply represented.
