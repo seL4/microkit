@@ -30,6 +30,7 @@ use std::fmt;
 use std::fs;
 use std::num::NonZero;
 use std::ops::Deref;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -72,7 +73,7 @@ const X86_IRQ_VECTOR_MAX: i64 = 107;
 /// functionality that the Rust standard library provides.
 /// This also removes any underscores that may be present in the number
 /// Always returns a base 10 integer.
-fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
+fn sdf_parse_number(s: &str, node: &dyn SdfNode) -> Result<u64, String> {
     let mut to_parse = s.to_string();
     to_parse.retain(|c| c != '_');
 
@@ -86,14 +87,84 @@ fn sdf_parse_number(s: &str, node: &roxmltree::Node) -> Result<u64, String> {
         Err(err) => Err(format!(
             "Error: failed to parse integer '{}' on element '{}': {}",
             s,
-            node.tag_name().name(),
+            node.tag_name(),
             err
         )),
     }
 }
 
-fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String {
+fn loc_string(xml_sdf: &XmlSystemDescription, pos: SdfLocation) -> String {
     format!("{}:{}:{}", xml_sdf.filename.display(), pos.row, pos.col)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SdfLocation {
+    pub row: u32,
+    pub col: u32,
+}
+
+pub struct SdfAttribute<'a> {
+    pub name: &'a str,
+    pub value: &'a str,
+    pub location: SdfLocation,
+}
+
+impl<'a, 'input> From<roxmltree::Attribute<'a, 'input>> for SdfAttribute<'a> {
+    fn from(attr: roxmltree::Attribute<'a, 'input>) -> Self {
+        Self {
+            name: attr.name(),
+            value: attr.value(),
+            location: SdfLocation { row: 0, col: 0 }, // todo
+        }
+    }
+}
+
+/// FIXME: More documentation
+/// This (as of 2.3.0-dev) is an experimental interface for use of Microkit as
+/// as a library. Please avoid modifying this without justified changes as it
+/// will affect external users.
+pub trait SdfNode<'a> {
+    fn tag_name(&self) -> &str;
+    fn attribute(&self, name: &str) -> Option<&str>;
+    fn attributes(&self) -> Vec<SdfAttribute<'_>>;
+    fn range(&self) -> Range<SdfLocation>;
+    fn children(&self) -> Box<dyn Iterator<Item = Box<dyn SdfNode<'a> + 'a>> + 'a>;
+}
+
+impl<'a> SdfNode<'a> for roxmltree::Node<'a, '_> {
+    fn attributes(&self) -> Vec<SdfAttribute<'_>> {
+        self.attributes().map(|attr| attr.into()).collect()
+    }
+
+    fn tag_name(&self) -> &str {
+        self.tag_name().name()
+    }
+
+    fn attribute(&self, name: &str) -> Option<&str> {
+        self.attribute(name)
+    }
+
+    fn range(&self) -> Range<SdfLocation> {
+        let start = self.document().text_pos_at(self.range().start);
+        let start = SdfLocation {
+            row: start.row,
+            col: start.col,
+        };
+        let end = self.document().text_pos_at(self.range().end);
+        let end = SdfLocation {
+            row: end.row,
+            col: end.col,
+        };
+        Range { start, end }
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = Box<dyn SdfNode<'a> + 'a>> + 'a> {
+        Box::new(
+            self.children()
+                .filter(|c| c.is_element())
+                .map(|c| Box::new(c) as Box<dyn SdfNode>),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,7 +368,7 @@ pub struct SysMap {
     pub cached: bool,
     /// Location in the parsed SDF file. Because this struct is
     /// used in a non-XML context, we make the position optional.
-    pub text_pos: Option<roxmltree::TextPos>,
+    pub text_pos: Option<SdfLocation>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -337,13 +408,13 @@ pub struct SysIOMap {
     pub domain_id: Option<u64>,
     pub iovaddr: u64,
     pub perms: SysIOMapPerms,
-    pub text_pos: Option<roxmltree::TextPos>,
+    pub text_pos: Option<SdfLocation>,
 }
 
 pub trait Map {
     fn mr_name(&self) -> &str;
     fn addr(&self) -> u64;
-    fn text_pos(&self) -> Option<roxmltree::TextPos>;
+    fn text_pos(&self) -> Option<SdfLocation>;
     fn element(&self) -> &'static str;
     fn addr_name(&self) -> &'static str;
     fn range_name(&self) -> &'static str;
@@ -362,7 +433,7 @@ impl Map for SysMap {
         self.vaddr
     }
 
-    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+    fn text_pos(&self) -> Option<SdfLocation> {
         self.text_pos
     }
 
@@ -404,7 +475,7 @@ impl Map for SysIOMap {
         self.iovaddr
     }
 
-    fn text_pos(&self) -> Option<roxmltree::TextPos> {
+    fn text_pos(&self) -> Option<SdfLocation> {
         self.text_pos
     }
 
@@ -462,7 +533,7 @@ pub struct SysMemoryRegion {
     pub page_size: PageSize,
     pub page_count: u64,
     pub phys_addr: SysMemoryRegionPaddr,
-    pub text_pos: Option<roxmltree::TextPos>,
+    pub text_pos: Option<SdfLocation>,
     /// For error reporting is useful to know whether the MR was created
     /// due to the user's SDF or created by the tool for setting up the
     /// stack, ELF, etc.
@@ -541,7 +612,7 @@ pub struct IOPort {
     pub id: u64,
     pub addr: u64,
     pub size: u64,
-    pub text_pos: roxmltree::TextPos,
+    pub text_pos: SdfLocation,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -625,7 +696,7 @@ pub struct ProtectionDomain {
     /// Value of the setvar_id attribute, if a parent protection domain exists
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
-    text_pos: Option<roxmltree::TextPos>,
+    text_pos: Option<SdfLocation>,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
@@ -652,7 +723,7 @@ pub struct CapMap {
     // but here it is given as the index into the CNode.
     pub slot: u64,
     /// Location in the parsed SDF file
-    text_pos: roxmltree::TextPos,
+    text_pos: SdfLocation,
 }
 
 #[derive(Debug)]
@@ -678,7 +749,7 @@ pub struct VirtualCpu {
 impl SysMap {
     fn from_xml(
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         allow_setvar: bool,
         max_vaddr: u64,
     ) -> Result<SysMap, String> {
@@ -747,7 +818,7 @@ impl SysMap {
             vaddr,
             perms,
             cached,
-            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            text_pos: Some(node.range().start),
         })
     }
 }
@@ -756,7 +827,7 @@ impl SysIOMap {
     fn from_xml(
         _config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         name: &str,
         identifier: IommuDeviceIdentifier,
         domain_id: Option<u64>,
@@ -803,7 +874,7 @@ impl SysIOMap {
             domain_id,
             iovaddr,
             perms,
-            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            text_pos: Some(node.range().start),
         })
     }
 }
@@ -819,13 +890,13 @@ impl IOAddressSpace {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         names: &mut HashSet<String>,
         domain_ids: &mut HashSet<u64>,
         iommu_device_identifiers: &mut Vec<IommuDeviceIdentifier>,
     ) -> Result<IOAddressSpace, String> {
-        let pos = xml_sdf.doc.text_pos_at(node.range().start);
         if !config.iommu {
+            let pos = node.range().start;
             return Err(format!(
                 "Error: io address space requires seL4 to be built with IOMMU support: {}",
                 loc_string(xml_sdf, pos)
@@ -886,18 +957,18 @@ impl IOAddressSpace {
 
         let mut iomaps = Vec::new();
 
-        for child in node.children().filter(|node| node.is_element()) {
-            match child.tag_name().name() {
+        for child in node.children() {
+            match child.tag_name() {
                 "iomap" => {
                     let iomap =
-                        SysIOMap::from_xml(config, xml_sdf, &child, name, identifier, domain_id)?;
+                        SysIOMap::from_xml(config, xml_sdf, &*child, name, identifier, domain_id)?;
                     iomaps.push(iomap);
                 }
                 _ => {
-                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    let pos = child.range().start;
                     return Err(format!(
                         "Error: invalid XML element '{}': {}",
-                        child.tag_name().name(),
+                        child.tag_name(),
                         loc_string(xml_sdf, pos)
                     ));
                 }
@@ -943,7 +1014,7 @@ impl ProtectionDomain {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         is_child: bool,
         domains: &Domains,
     ) -> Result<ProtectionDomain, String> {
@@ -1154,13 +1225,9 @@ impl ProtectionDomain {
         };
 
         for child in node.children() {
-            if !child.is_element() {
-                continue;
-            }
-
-            match child.tag_name().name() {
+            match child.tag_name() {
                 "program_image" => {
-                    check_attributes(xml_sdf, &child, &["path", "path_for_symbols"])?;
+                    check_attributes(xml_sdf, &*child, &["path", "path_for_symbols"])?;
                     if program_image.is_some() {
                         return Err(value_error(
                             xml_sdf,
@@ -1169,7 +1236,7 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    let program_image_path = checked_lookup(xml_sdf, &child, "path")?;
+                    let program_image_path = checked_lookup(xml_sdf, &*child, "path")?;
                     program_image = Some(Path::new(program_image_path).to_path_buf());
 
                     program_image_for_symbols =
@@ -1177,14 +1244,14 @@ impl ProtectionDomain {
                 }
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
-                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
+                    let map = SysMap::from_xml(xml_sdf, &*child, true, map_max_vaddr)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         let setvar = SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             kind: SysSetVarKind::Vaddr { address: map.vaddr },
                         };
-                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
                     if let Some(setvar_size) = child.attribute("setvar_size") {
@@ -1192,7 +1259,7 @@ impl ProtectionDomain {
                             symbol: setvar_size.to_string(),
                             kind: SysSetVarKind::Size { mr: map.mr.clone() },
                         };
-                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
                     if let Some(setvar_prefill_size) = child.attribute("setvar_prefill_size") {
@@ -1200,24 +1267,24 @@ impl ProtectionDomain {
                             symbol: setvar_prefill_size.to_string(),
                             kind: SysSetVarKind::PrefillSize { mr: map.mr.clone() },
                         };
-                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
                     maps.push(map);
                 }
                 "irq" => {
-                    let id = checked_lookup(xml_sdf, &child, "id")?
+                    let id = checked_lookup(xml_sdf, &*child, "id")?
                         .parse::<i64>()
                         .unwrap();
                     if id > PD_MAX_ID as i64 {
                         return Err(value_error(
                             xml_sdf,
-                            &child,
+                            &*child,
                             format!("id must be < {}", PD_MAX_ID + 1),
                         ));
                     }
                     if id < 0 {
-                        return Err(value_error(xml_sdf, &child, "id must be >= 0".to_string()));
+                        return Err(value_error(xml_sdf, &*child, "id must be >= 0".to_string()));
                     }
 
                     if let Some(setvar_id) = child.attribute("setvar_id") {
@@ -1225,20 +1292,20 @@ impl ProtectionDomain {
                             symbol: setvar_id.to_string(),
                             kind: SysSetVarKind::Id { id: id as u64 },
                         };
-                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
                     if let Some(irq_str) = child.attribute("irq") {
                         if config.arch == Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "ARM and RISC-V IRQs are not supported on x86".to_string(),
                             ));
                         }
 
                         // ARM and RISC-V interrupts must have an "irq" attribute.
-                        check_attributes(xml_sdf, &child, &["irq", "id", "setvar_id", "trigger"])?;
+                        check_attributes(xml_sdf, &*child, &["irq", "id", "setvar_id", "trigger"])?;
                         let irq = irq_str.parse::<u64>().unwrap();
                         let trigger = if let Some(trigger_str) = child.attribute("trigger") {
                             match trigger_str {
@@ -1247,7 +1314,7 @@ impl ProtectionDomain {
                                 _ => {
                                     return Err(value_error(
                                         xml_sdf,
-                                        &child,
+                                        &*child,
                                         "trigger must be either 'level' or 'edge'".to_string(),
                                     ))
                                 }
@@ -1265,7 +1332,7 @@ impl ProtectionDomain {
                         if config.arch != Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "x86 I/O APIC IRQ isn't supported on ARM and RISC-V".to_string(),
                             ));
                         }
@@ -1273,7 +1340,7 @@ impl ProtectionDomain {
                         // IOAPIC interrupts (X86_64) must have a "pin" attribute.
                         check_attributes(
                             xml_sdf,
-                            &child,
+                            &*child,
                             &[
                                 "id",
                                 "setvar_id",
@@ -1294,7 +1361,7 @@ impl ProtectionDomain {
                         if ioapic < 0 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "ioapic must be >= 0".to_string(),
                             ));
                         }
@@ -1303,7 +1370,7 @@ impl ProtectionDomain {
                         if pin < 0 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "pin must be >= 0".to_string(),
                             ));
                         }
@@ -1315,7 +1382,7 @@ impl ProtectionDomain {
                                 _ => {
                                     return Err(value_error(
                                         xml_sdf,
-                                        &child,
+                                        &*child,
                                         "trigger must be either 'level' or 'edge'".to_string(),
                                     ))
                                 }
@@ -1331,7 +1398,7 @@ impl ProtectionDomain {
                                 _ => {
                                     return Err(value_error(
                                         xml_sdf,
-                                        &child,
+                                        &*child,
                                         "polarity must be either 'low' or 'high'".to_string(),
                                     ))
                                 }
@@ -1340,13 +1407,13 @@ impl ProtectionDomain {
                             // Default to normal polarity
                             X86IoapicIrqPolarity::HighTriggered
                         };
-                        let vector = checked_lookup(xml_sdf, &child, "vector")?
+                        let vector = checked_lookup(xml_sdf, &*child, "vector")?
                             .parse::<i64>()
                             .unwrap();
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
@@ -1366,7 +1433,7 @@ impl ProtectionDomain {
                         if config.arch != Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "x86 MSI IRQ isn't supported on ARM and RISC-V".to_string(),
                             ));
                         }
@@ -1374,31 +1441,31 @@ impl ProtectionDomain {
                         // MSI interrupts (X86_64) have a "pcidev" attribute.
                         check_attributes(
                             xml_sdf,
-                            &child,
+                            &*child,
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
 
                         let pci_device = PciDevice::from_str(pcidev_str)
-                            .map_err(|err| value_error(xml_sdf, &child, err.to_string()))?;
+                            .map_err(|err| value_error(xml_sdf, &*child, err.to_string()))?;
 
-                        let handle = checked_lookup(xml_sdf, &child, "handle")?
+                        let handle = checked_lookup(xml_sdf, &*child, "handle")?
                             .parse::<i64>()
                             .unwrap();
                         if handle < 0 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "handle must be >= 0".to_string(),
                             ));
                         }
 
-                        let vector = checked_lookup(xml_sdf, &child, "vector")?
+                        let vector = checked_lookup(xml_sdf, &*child, "vector")?
                             .parse::<i64>()
                             .unwrap();
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 format!("vector must be within [0..{X86_IRQ_VECTOR_MAX}]"),
                             ));
                         }
@@ -1417,11 +1484,11 @@ impl ProtectionDomain {
                         // Trigger an error.
                         match config.arch {
                             Arch::Aarch64 | Arch::Riscv64 => {
-                                checked_lookup(xml_sdf, &child, "irq")?
+                                checked_lookup(xml_sdf, &*child, "irq")?
                             }
                             Arch::X86_64 => {
-                                checked_lookup(xml_sdf, &child, "pin")?;
-                                checked_lookup(xml_sdf, &child, "pcidev")?
+                                checked_lookup(xml_sdf, &*child, "pin")?;
+                                checked_lookup(xml_sdf, &*child, "pcidev")?
                             }
                         };
                     }
@@ -1430,24 +1497,24 @@ impl ProtectionDomain {
                     if let Arch::X86_64 = config.arch {
                         check_attributes(
                             xml_sdf,
-                            &child,
+                            &*child,
                             &["id", "setvar_id", "setvar_addr", "addr", "size"],
                         )?;
 
-                        let id = checked_lookup(xml_sdf, &child, "id")?
+                        let id = checked_lookup(xml_sdf, &*child, "id")?
                             .parse::<i64>()
                             .unwrap();
                         if id > PD_MAX_ID as i64 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 format!("id must be < {}", PD_MAX_ID + 1),
                             ));
                         }
                         if id < 0 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "id must be >= 0".to_string(),
                             ));
                         }
@@ -1457,27 +1524,27 @@ impl ProtectionDomain {
                                 symbol: setvar_id.to_string(),
                                 kind: SysSetVarKind::Id { id: id as u64 },
                             };
-                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
 
                         let addr =
-                            sdf_parse_number(checked_lookup(xml_sdf, &child, "addr")?, &child)?;
+                            sdf_parse_number(checked_lookup(xml_sdf, &*child, "addr")?, &*child)?;
 
                         if let Some(setvar_addr) = child.attribute("setvar_addr") {
                             let setvar = SysSetVar {
                                 symbol: setvar_addr.to_string(),
                                 kind: SysSetVarKind::X86IoPortAddr { address: addr },
                             };
-                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
 
-                        let size = checked_lookup(xml_sdf, &child, "size")?
+                        let size = checked_lookup(xml_sdf, &*child, "size")?
                             .parse::<i64>()
                             .unwrap();
                         if size <= 0 {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 "size must be > 0".to_string(),
                             ));
                         }
@@ -1486,7 +1553,7 @@ impl ProtectionDomain {
                             id: id as u64,
                             addr,
                             size: size as u64,
-                            text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+                            text_pos: node.range().start,
                         })
                     } else {
                         return Err(value_error(
@@ -1497,27 +1564,27 @@ impl ProtectionDomain {
                     }
                 }
                 "setvar" => {
-                    check_attributes(xml_sdf, &child, &["symbol", "region_paddr"])?;
-                    let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
-                    let region = checked_lookup(xml_sdf, &child, "region_paddr")?.to_string();
+                    check_attributes(xml_sdf, &*child, &["symbol", "region_paddr"])?;
+                    let symbol = checked_lookup(xml_sdf, &*child, "symbol")?.to_string();
+                    let region = checked_lookup(xml_sdf, &*child, "region_paddr")?.to_string();
                     let setvar = SysSetVar {
                         symbol,
                         kind: SysSetVarKind::Paddr { region },
                     };
-                    checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                    checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                 }
                 "protection_domain" => {
                     let child_pd =
-                        ProtectionDomain::from_xml(config, xml_sdf, &child, true, domains)?;
+                        ProtectionDomain::from_xml(config, xml_sdf, &*child, true, domains)?;
 
-                    if let Some(setvar_id) = &child_pd.setvar_id {
+                    if let Some(setvar_id) = child_pd.setvar_id.clone() {
                         let setvar = SysSetVar {
                             symbol: setvar_id.to_string(),
                             kind: SysSetVarKind::Id {
                                 id: child_pd.id.unwrap(),
                             },
                         };
-                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
                     child_pds.push(child_pd);
@@ -1538,7 +1605,7 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    let vm = VirtualMachine::from_xml(config, xml_sdf, &child)?;
+                    let vm = VirtualMachine::from_xml(config, xml_sdf, &*child)?;
 
                     for vcpu in &vm.vcpus {
                         if let Some(setvar_id) = &vcpu.setvar_id {
@@ -1546,7 +1613,7 @@ impl ProtectionDomain {
                                 symbol: setvar_id.to_string(),
                                 kind: SysSetVarKind::Id { id: vcpu.id },
                             };
-                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
+                            checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
                     }
 
@@ -1561,13 +1628,13 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    cspace = Some(CSpace::from_xml(xml_sdf, &child)?);
+                    cspace = Some(CSpace::from_xml(xml_sdf, &*child)?);
                 }
                 _ => {
-                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    let pos = child.range().start;
                     return Err(format!(
                         "Invalid XML element '{}': {}",
-                        child.tag_name().name(),
+                        child.tag_name(),
                         loc_string(xml_sdf, pos)
                     ));
                 }
@@ -1610,7 +1677,7 @@ impl ProtectionDomain {
             has_children,
             parent: None,
             setvar_id,
-            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            text_pos: Some(node.range().start),
         })
     }
 }
@@ -1619,7 +1686,7 @@ impl VirtualMachine {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
     ) -> Result<VirtualMachine, String> {
         if config.arch == Arch::Aarch64 {
             check_attributes(xml_sdf, node, &["name", "budget", "period", "priority"])?;
@@ -1670,28 +1737,24 @@ impl VirtualMachine {
         let mut vcpus: Vec<VirtualCpu> = Vec::new();
         let mut maps = Vec::new();
         for child in node.children() {
-            if !child.is_element() {
-                continue;
-            }
-
-            let child_name = child.tag_name().name();
+            let child_name = child.tag_name();
             match child_name {
                 "vcpu" => {
-                    check_attributes(xml_sdf, &child, &["id", "setvar_id", "cpu"])?;
-                    let id = checked_lookup(xml_sdf, &child, "id")?
+                    check_attributes(xml_sdf, &*child, &["id", "setvar_id", "cpu"])?;
+                    let id = checked_lookup(xml_sdf, &*child, "id")?
                         .parse::<u64>()
                         .unwrap();
                     if id > VCPU_MAX_ID {
                         return Err(value_error(
                             xml_sdf,
-                            &child,
+                            &*child,
                             format!("id must be < {}", VCPU_MAX_ID + 1),
                         ));
                     }
 
                     for vcpu in &vcpus {
                         if vcpu.id == id {
-                            let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                            let pos = child.range().start;
                             return Err(format!(
                                 "Error: duplicate vcpu id {} in virtual machine '{}' @ {}",
                                 id,
@@ -1711,7 +1774,7 @@ impl VirtualMachine {
                         if cpu_value >= config.num_cores {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 format!(
                                     "cpu core must be less than {}, got {}",
                                     config.num_cores, cpu_value
@@ -1729,11 +1792,11 @@ impl VirtualMachine {
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
                     // setvar_vaddr on SysMap
-                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr())?;
+                    let map = SysMap::from_xml(xml_sdf, &*child, false, config.vm_map_max_vaddr())?;
                     maps.push(map);
                 }
                 _ => {
-                    let pos = xml_sdf.doc.text_pos_at(node.range().start);
+                    let pos = node.range().start;
                     return Err(format!(
                         "Error: invalid XML element '{}': {}",
                         child_name,
@@ -1762,7 +1825,7 @@ impl CapMap {
     fn from_xml(
         cap_type: CapMapType,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
     ) -> Result<CapMap, String> {
         // At the moment the four cap maps we support all have the 'pd' element,
         // so we can include it here. When that stops being the case we will
@@ -1796,24 +1859,24 @@ impl CapMap {
             // FIXME: Hack, filled out later.
             pd: None,
             slot,
-            text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+            text_pos: node.range().start,
         })
     }
 }
 
 impl CSpace {
-    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<Self, String> {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &dyn SdfNode) -> Result<Self, String> {
         check_attributes(xml_sdf, node, &[])?;
 
         let mut cap_maps = vec![];
 
-        for child in node.children().filter(|c| c.is_element()) {
-            cap_maps.push(match child.tag_name().name() {
-                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &child)?,
-                "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &child)?,
-                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &child)?,
+        for child in node.children() {
+            cap_maps.push(match child.tag_name() {
+                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &*child)?,
+                "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &*child)?,
+                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &*child)?,
                 child_name => {
-                    let location = loc_string(xml_sdf, xml_sdf.doc.text_pos_at(child.range().start));
+                    let location = loc_string(xml_sdf, child.range().start);
                     if let Some(type_name) = child_name.strip_prefix("cap_") {
                         return Err(format!("Cap type: '{type_name}' is not supported at '{location}'"));
                     } else {
@@ -1830,7 +1893,7 @@ impl CSpace {
 impl SysMemoryRegion {
     fn determine_size(
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         prefill_bytes_maybe: &Option<Vec<u8>>,
         prefill_bootinfo_maybe: Option<FillEntryContentBootInfoId>,
         page_size: u64,
@@ -1890,7 +1953,7 @@ impl SysMemoryRegion {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         search_paths: &Vec<PathBuf>,
     ) -> Result<SysMemoryRegion, String> {
         check_attributes(
@@ -2025,7 +2088,7 @@ impl SysMemoryRegion {
             page_size_specified_by_user,
             page_count,
             phys_addr,
-            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            text_pos: Some(node.range().start),
             kind: mr_kind,
             prefill_bytes: prefill_bytes_maybe,
             prefill_bootinfo: prefill_bootinfo_maybe,
@@ -2036,12 +2099,12 @@ impl SysMemoryRegion {
 impl ChannelEnd {
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
-        node: &'a roxmltree::Node,
+        node: &'a dyn SdfNode,
         pds: &[ProtectionDomain],
     ) -> Result<ChannelEnd, String> {
-        let node_name = node.tag_name().name();
+        let node_name = node.tag_name();
         if node_name != "end" {
-            let pos = xml_sdf.doc.text_pos_at(node.range().start);
+            let pos = node.range().start;
             return Err(format!(
                 "Error: invalid XML element '{}': {}",
                 node_name,
@@ -2110,15 +2173,14 @@ impl Channel {
     /// the channel.
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
-        node: &'a roxmltree::Node,
+        node: &'a dyn SdfNode,
         pds: &[ProtectionDomain],
     ) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 
         let [ref end_a, ref end_b] = node
             .children()
-            .filter(|child| child.is_element())
-            .map(|node| ChannelEnd::from_xml(xml_sdf, &node, pds))
+            .map(|node| ChannelEnd::from_xml(xml_sdf, &*node, pds))
             .collect::<Result<Vec<_>, _>>()?[..]
         else {
             return Err(value_error(
@@ -2155,7 +2217,7 @@ impl Domains {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
     ) -> Result<Self, String> {
         check_attributes(xml_sdf, node, &[])?;
 
@@ -2170,15 +2232,15 @@ impl Domains {
         let mut id_to_name_map = HashMap::<u8, String>::new();
         let mut domain_schedule_element = None;
 
-        for child in node.children().filter(|child| child.is_element()) {
-            match child.tag_name().name() {
+        for child in node.children() {
+            match child.tag_name() {
                 "domain" => {
-                    let (dom_name, dom_id) = Self::domain_from_xml(config, xml_sdf, &child)?;
+                    let (dom_name, dom_id) = Self::domain_from_xml(config, xml_sdf, &*child)?;
 
                     if let Some(existing_dom) = name_to_id_map.insert(dom_name.clone(), dom_id) {
                         return Err(value_error(
                             xml_sdf,
-                            &child,
+                            &*child,
                             format!(
                                 "Each <domain>'s name element must be unique \
                                  found existing domain '{dom_name}' with id '{existing_dom:?}'"
@@ -2191,7 +2253,7 @@ impl Domains {
                         {
                             return Err(value_error(
                                 xml_sdf,
-                                &child,
+                                &*child,
                                 format!(
                                     "Each <domain>'s id element must be unique \
                                      found existing domain '{existing_dom}' with id '{dom_id}'"
@@ -2204,7 +2266,7 @@ impl Domains {
                     if domain_schedule_element.is_some() {
                         return Err(value_error(
                             xml_sdf,
-                            &child,
+                            &*child,
                             "The <domain_schedule> element can only appear once".to_string(),
                         ));
                     }
@@ -2212,10 +2274,10 @@ impl Domains {
                     domain_schedule_element = Some(child);
                 }
                 _ => {
-                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    let pos = child.range().start;
                     return Err(format!(
                         "Error: invalid XML element as child of <domains> '{}': {}",
-                        child.tag_name().name(),
+                        child.tag_name(),
                         loc_string(xml_sdf, pos)
                     ));
                 }
@@ -2261,13 +2323,13 @@ impl Domains {
             })
             .collect::<Result<_, _>>()?;
 
-        Self::domain_schedule_from_xml(config, xml_sdf, &domain_schedule_element, name_to_id_map)
+        Self::domain_schedule_from_xml(config, xml_sdf, &*domain_schedule_element, name_to_id_map)
     }
 
     fn domain_from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
     ) -> Result<(String, Option<u8>), String> {
         check_attributes(xml_sdf, node, &["name", "id"])?;
 
@@ -2301,7 +2363,7 @@ impl Domains {
     fn domain_schedule_from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         name_to_id_map: HashMap<String, u8>,
     ) -> Result<Domains, String> {
         check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
@@ -2321,17 +2383,17 @@ impl Domains {
 
         let mut schedule = vec![];
 
-        for child in node.children().filter(|c| c.is_element()) {
-            match child.tag_name().name() {
+        for child in node.children() {
+            match child.tag_name() {
                 "schedule_entry" => {
                     schedule.push(Self::schedule_entry_from_xml(
                         xml_sdf,
-                        &child,
+                        &*child,
                         &name_to_id_map,
                     )?);
                 }
                 "schedule_end_marker" => {
-                    check_attributes(xml_sdf, &child, &[])?;
+                    check_attributes(xml_sdf, &*child, &[])?;
 
                     schedule.push(DomainSchedEntry {
                         domain: 0,
@@ -2339,7 +2401,7 @@ impl Domains {
                     });
                 }
                 name => {
-                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    let pos = child.range().start;
                     return Err(format!(
                         "Error: invalid XML element as child of <domain_schedule> '{name}': {}",
                         loc_string(xml_sdf, pos)
@@ -2394,7 +2456,7 @@ impl Domains {
 
     fn schedule_entry_from_xml(
         xml_sdf: &XmlSystemDescription,
-        node: &roxmltree::Node,
+        node: &dyn SdfNode,
         name_to_id_map: &HashMap<String, u8>,
     ) -> Result<DomainSchedEntry, String> {
         check_attributes(xml_sdf, node, &["domain", "duration"])?;
@@ -2461,10 +2523,7 @@ pub struct SystemDescription {
     pub domains: Domains,
 }
 
-fn location_suffix_format(
-    xml_sdf: &XmlSystemDescription,
-    text_pos: Option<roxmltree::TextPos>,
-) -> String {
+fn location_suffix_format(xml_sdf: &XmlSystemDescription, text_pos: Option<SdfLocation>) -> String {
     text_pos
         .map(|pos| format!("@ {}", loc_string(xml_sdf, pos)))
         .unwrap_or_default()
@@ -2589,15 +2648,15 @@ fn check_io_maps(
 
 fn check_attributes(
     xml_sdf: &XmlSystemDescription,
-    node: &roxmltree::Node,
+    node: &dyn SdfNode,
     attributes: &[&'static str],
 ) -> Result<(), String> {
     for attribute in node.attributes() {
-        if !attributes.contains(&attribute.name()) {
+        if !attributes.contains(&attribute.name) {
             return Err(value_error(
                 xml_sdf,
                 node,
-                format!("invalid attribute '{}'", attribute.name()),
+                format!("invalid attribute '{}'", attribute.name),
             ));
         }
     }
@@ -2607,17 +2666,17 @@ fn check_attributes(
 
 fn checked_lookup<'a>(
     xml_sdf: &XmlSystemDescription,
-    node: &'a roxmltree::Node,
+    node: &'a dyn SdfNode,
     attribute: &'static str,
 ) -> Result<&'a str, String> {
     if let Some(value) = node.attribute(attribute) {
         Ok(value)
     } else {
-        let pos = xml_sdf.doc.text_pos_at(node.range().start);
+        let pos = node.range().start;
         Err(format!(
             "Error: Missing required attribute '{}' on element '{}': {}:{}:{}",
             attribute,
-            node.tag_name().name(),
+            node.tag_name(),
             xml_sdf.filename.display(),
             pos.row,
             pos.col
@@ -2625,12 +2684,12 @@ fn checked_lookup<'a>(
     }
 }
 
-fn value_error(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, err: String) -> String {
-    let pos = xml_sdf.doc.text_pos_at(node.range().start);
+fn value_error(xml_sdf: &XmlSystemDescription, node: &dyn SdfNode, err: String) -> String {
+    let pos = node.range().start;
     format!(
         "Error: {} on element '{}': {}:{}:{}",
         err,
-        node.tag_name().name(),
+        node.tag_name(),
         xml_sdf.filename.display(),
         pos.row,
         pos.col
@@ -2640,6 +2699,10 @@ fn value_error(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, err: Stri
 fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<(), String> {
     let name = node.tag_name().name();
     let pos = xml_sdf.doc.text_pos_at(node.range().start);
+    let pos = SdfLocation {
+        row: pos.row,
+        col: pos.col,
+    };
 
     if let Some(text) = node.text() {
         // If the text is just whitespace then it is okay
@@ -2778,26 +2841,24 @@ pub fn parse(
     // Ensure there is no non-whitespace/comment text
     check_no_text(&xml_sdf, &system)?;
 
+    let system: &dyn SdfNode = &system;
+
     // Channels cannot be parsed immediately as they refer to a particular protection domain
     // via an index in the list of PDs. This means that we have to parse all PDs first and
     // then parse the channels.
     let mut channel_nodes = Vec::new();
 
     for child in system.children() {
-        if !child.is_element() {
-            continue;
-        }
-
-        let child_name = child.tag_name().name();
+        let child_name = child.tag_name();
         match child_name {
             "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
-                config, &xml_sdf, &child, false, &domains,
+                config, &xml_sdf, &*child, false, &domains,
             )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(
                 config,
                 &xml_sdf,
-                &child,
+                &*child,
                 search_paths,
             )?),
             "io_address_space" => {
@@ -2805,7 +2866,7 @@ pub fn parse(
                     IOAddressSpace::from_xml(
                         config,
                         &xml_sdf,
-                        &child,
+                        &*child,
                         &mut io_address_space_names,
                         &mut iommu_domain_ids,
                         &mut iommu_device_identifiers,
@@ -2814,7 +2875,7 @@ pub fn parse(
                 );
             }
             "virtual_machine" => {
-                let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                let pos = child.range().start;
                 return Err(format!(
                     "Error: virtual machine must be a child of a protection domain: {}",
                     loc_string(&xml_sdf, pos)
@@ -2824,15 +2885,15 @@ pub fn parse(
                 if domains.has_domains() {
                     return Err(value_error(
                         &xml_sdf,
-                        &child,
+                        &*child,
                         "domains must only be specified once".to_string(),
                     ));
                 }
 
-                domains = Domains::from_xml(config, &xml_sdf, &child)?;
+                domains = Domains::from_xml(config, &xml_sdf, &*child)?;
             }
             _ => {
-                let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                let pos = child.range().start;
                 return Err(format!(
                     "Error: invalid XML element '{}': {}",
                     child_name,
@@ -2845,14 +2906,14 @@ pub fn parse(
     let mut pds = pd_flatten(&xml_sdf, root_pds)?;
 
     for node in channel_nodes {
-        let ch = Channel::from_xml(&xml_sdf, &node, &pds)?;
+        let ch = Channel::from_xml(&xml_sdf, &*node, &pds)?;
 
         if let Some(setvar_id) = &ch.end_a.setvar_id {
             let setvar = SysSetVar {
                 symbol: setvar_id.to_string(),
                 kind: SysSetVarKind::Id { id: ch.end_a.id },
             };
-            checked_add_setvar(&mut pds[ch.end_a.pd].setvars, setvar, &xml_sdf, &node)?;
+            checked_add_setvar(&mut pds[ch.end_a.pd].setvars, setvar, &xml_sdf, &*node)?;
         }
 
         if let Some(setvar_id) = &ch.end_b.setvar_id {
@@ -2860,7 +2921,7 @@ pub fn parse(
                 symbol: setvar_id.to_string(),
                 kind: SysSetVarKind::Id { id: ch.end_b.id },
             };
-            checked_add_setvar(&mut pds[ch.end_b.pd].setvars, setvar, &xml_sdf, &node)?;
+            checked_add_setvar(&mut pds[ch.end_b.pd].setvars, setvar, &xml_sdf, &*node)?;
         }
 
         channels.push(ch);
@@ -3312,7 +3373,7 @@ fn checked_add_setvar(
     setvars: &mut Vec<SysSetVar>,
     setvar: SysSetVar,
     xml_sdf: &XmlSystemDescription<'_>,
-    node: &roxmltree::Node<'_, '_>,
+    node: &dyn SdfNode<'_>,
 ) -> Result<(), String> {
     // Check that the symbol does not already exist
     for other_setvar in setvars.iter() {
