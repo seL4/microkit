@@ -20,7 +20,7 @@ use crate::sel4::{
     Arch, ArmRiscvIrqTrigger, Config, PageSize, X86IoapicIrqPolarity, X86IoapicIrqTrigger,
 };
 
-use crate::util::{get_full_path, ranges_overlap, round_up, str_to_bool};
+use crate::util::{calculate_size_bits, get_full_path, ranges_overlap, round_up, str_to_bool};
 use crate::MAX_PDS;
 use sel4_capdl_initializer_types::{
     object, x86_io_address_space, DomainSchedDuration, DomainSchedEntry, FillEntryContentBootInfoId,
@@ -44,10 +44,6 @@ use std::str::FromStr;
 /// IDs start at zero.
 const PD_MAX_ID: u64 = 61;
 const VCPU_MAX_ID: u64 = PD_MAX_ID;
-
-/// This is the maximum slot allowed for cap maps. This can change if you wish,
-/// but also update the MICROKIT_MAX_USER_CAPS define in `microkit.h`.
-const CAP_MAP_MAX_SLOT: u64 = 128;
 
 pub const MONITOR_PRIORITY: u8 = 255;
 const PD_MAX_PRIORITY: u8 = 254;
@@ -613,7 +609,7 @@ pub struct ProtectionDomain {
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
-    pub cap_maps: Vec<CapMap>,
+    pub cspace: Option<CSpace>,
     pub virtual_machine: Option<VirtualMachine>,
     /// Only used when parsing child PDs. All elements will be removed
     /// once we flatten each PD and its children into one list.
@@ -655,9 +651,10 @@ pub struct CapMap {
     text_pos: roxmltree::TextPos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CSpace {
-    cap_maps: Vec<CapMap>,
+    pub cap_maps: Vec<CapMap>,
+    pub size_bits: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1604,7 +1601,7 @@ impl ProtectionDomain {
             irqs,
             ioports,
             setvars,
-            cap_maps: cspace.map(|cspace| cspace.cap_maps).unwrap_or_default(),
+            cspace,
             child_pds,
             virtual_machine,
             has_children,
@@ -1781,15 +1778,6 @@ impl CapMap {
             ));
         }
 
-        // TODO: Rework this so that we don't have a fixed upper limit.
-        if slot >= CAP_MAP_MAX_SLOT {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                format!("There are only {CAP_MAP_MAX_SLOT} destination cspace slots available."),
-            ));
-        }
-
         Ok(CapMap {
             cap_type,
             pd_name,
@@ -1823,7 +1811,17 @@ impl CSpace {
             })
         }
 
-        Ok(CSpace { cap_maps })
+        // Default to 1, the minimum allowed by the kernel.
+        let size_bits = cap_maps
+            .iter()
+            .map(|cap_map| calculate_size_bits(cap_map.slot + 1))
+            .max()
+            .unwrap_or(1) as u64;
+
+        Ok(CSpace {
+            cap_maps,
+            size_bits,
+        })
     }
 }
 
@@ -2873,8 +2871,8 @@ pub fn parse(
         .enumerate()
         .map(|(idx, pd)| (pd.name.clone(), idx))
         .collect();
-    for pd in pds.iter_mut() {
-        for cap_map in pd.cap_maps.iter_mut() {
+    for cspace in pds.iter_mut().filter_map(|pd| pd.cspace.as_mut()) {
+        for cap_map in cspace.cap_maps.iter_mut() {
             let Some(&pd) = pd_names_to_id.get(&cap_map.pd_name) else {
                 return Err(format!(
                     "Error: unknown PD name '{}': {}",
@@ -3128,9 +3126,10 @@ pub fn parse(
     // Ensure that there are no overlapping extra cap maps in the user caps region
     // and we are not mapping in the same cap from the same source more than once
     for pd in &pds {
+        let Some(cspace) = &pd.cspace else { continue };
         let mut user_cap_slots = HashMap::<u64, Vec<_>>::new();
 
-        for cap_map in &pd.cap_maps {
+        for cap_map in &cspace.cap_maps {
             user_cap_slots
                 .entry(cap_map.slot)
                 .and_modify(|v| v.push(cap_map))
