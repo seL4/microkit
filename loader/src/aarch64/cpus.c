@@ -73,6 +73,8 @@ static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 /* BCM2711 does not use PSCI for CPU bring-up. */
 #define SMP_USE_SPIN_TABLE
 static const size_t cpus_release_addr[4] = {0xd8, 0xe0, 0xe8, 0xf0};
+#elif defined(CONFIG_PLAT_BCM2712)
+static const size_t psci_target_cpus[4] = {0x000, 0x100, 0x200, 0x300};
 #else
 
 _Static_assert(!is_set(CONFIG_ENABLE_SMP_SUPPORT),

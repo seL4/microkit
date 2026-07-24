@@ -1266,6 +1266,7 @@ The currently supported platforms are:
 * rpi4b_2gb
 * rpi4b_4gb
 * rpi4b_8gb
+* rpi5b_2gb
 * serengeti
 * star64
 * stm32mp2
@@ -1526,6 +1527,26 @@ seL4, the Microkit board names differ for each model:
 
 For initial board setup, please see the instructions on the
 [seL4 website](https://docs.sel4.systems/Hardware/Rpi4.html).
+
+When getting into the U-Boot console you want to load the Microkit binary image to
+address 0x10000000 and then run `go 0x10000000`.
+
+For example, if you were to load the image via the MMC you would run the following
+U-Boot commands:
+
+     => fatload mmc 0 0x10000000 <SYSTEM IMAGE>
+     => go 0x10000000
+
+## Raspberry Pi 5B {#rpi5b_2gb}
+
+Support is available for the Raspberry Pi 5 Model B. As of now, the build defaults
+to the 2GB model. This default is set to ensure memory safety across all the memory
+variants of the Pi 5 by limiting the possibility of kernel corruption. If you need
+access to 4GB, 8GB, or 16GB of RAM you will need to supply a custom Device Tree overlay
+via `KernelCustomDTSOverlay` that matches your hardware's memory layout.
+
+For initial board setup, please see the instructions on the
+[seL4 website](https://docs.sel4.systems/Hardware/Rpi5.html).
 
 When getting into the U-Boot console you want to load the Microkit binary image to
 address 0x10000000 and then run `go 0x10000000`.
