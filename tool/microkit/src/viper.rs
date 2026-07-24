@@ -6,7 +6,6 @@
 use sel4_capdl_initializer_types::{Cap, Object};
 
 use crate::capdl::CapDLSpecContainer;
-use crate::sdf::SysMapPerms;
 use crate::sdf::SystemDescription;
 
 fn export_define_set(name: &'static str, vector: &[u64], target: &mut String) {
@@ -312,7 +311,7 @@ pub fn get_mem_view(system: &SystemDescription, current_pd: usize) -> Option<Mem
             let mem: Mem = Mem { name, start, end };
             view.read.push(mem.clone());
 
-            let writeable = (mmap.perms & SysMapPerms::Write as u8) != 0;
+            let writeable = mmap.perms.write();
             if writeable {
                 view.readwrite.push(mem);
             }
