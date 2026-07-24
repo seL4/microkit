@@ -952,18 +952,27 @@ def github_actions_board_matrix(
 def main() -> None:
     parser = ArgumentParser()
     parser.add_argument("--sel4", type=Path, required=True)
-    parser.add_argument("--tool-target-triple", default=get_tool_target_triple(), help="Compile the Microkit tool for this target triple")
-    parser.add_argument("--llvm", action="store_true", help="Cross-compile seL4 and Microkit's run-time targets with LLVM")
-    parser.add_argument("--boards", metavar="BOARDS", help="Comma-separated list of boards to support. When absent, all boards are supported.")
-    parser.add_argument("--configs", metavar="CONFIGS", help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
+    parser.add_argument("--tool-target-triple", default=get_tool_target_triple(),
+                        help="Compile the Microkit tool for this target triple")
+    parser.add_argument("--llvm", action="store_true",
+                        help="Cross-compile seL4 and Microkit's run-time targets with LLVM")
+    parser.add_argument("--boards", metavar="BOARDS",
+                        help="Comma-separated list of boards to support. When absent, all boards are supported.")
+    parser.add_argument("--configs", metavar="CONFIGS",
+                        help="Comma-separated list of configurations to support. When absent, all configurations are supported.")
     parser.add_argument("--skip-tool", action="store_true", help="Tool will not be built")
-    parser.add_argument("--skip-run-time", action="store_true", help="Run-time targets will not be built")
+    parser.add_argument("--skip-run-time", action="store_true",
+                        help="Run-time targets will not be built")
     parser.add_argument("--skip-sel4", action="store_true", help="seL4 will not be built")
-    parser.add_argument("--skip-initialiser", action="store_true", help="Initialiser will not be built")
+    parser.add_argument("--skip-initialiser", action="store_true",
+                        help="Initialiser will not be built")
     parser.add_argument("--skip-docs", action="store_true", help="Docs will not be built")
-    parser.add_argument("--skip-tar", action="store_true", help="SDK and source tarballs will not be built")
-    parser.add_argument("--release-packaging", action="store_true", help="All SDKs for distribution will be produced")
-    parser.add_argument("--matrix", type=Path, help="Print out elaborated configs to a matrix for GitHub actions")
+    parser.add_argument("--skip-tar", action="store_true",
+                        help="SDK and source tarballs will not be built")
+    parser.add_argument("--release-packaging", action="store_true",
+                        help="All SDKs for distribution will be produced")
+    parser.add_argument("--matrix", type=Path,
+                        help="Print out elaborated configs to a matrix for GitHub actions")
     # Read from the version file as unless someone has specified
     # a version, that is the source of truth
     with open("VERSION", "r") as f:
@@ -971,7 +980,8 @@ def main() -> None:
     parser.add_argument("--version", default=default_version, help="SDK version")
     for arch in KernelArch:
         arch_str = arch.name.lower()
-        parser.add_argument(f"--gcc-toolchain-prefix-{arch_str}", default=arch.target_triple(), help=f"GCC toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
+        parser.add_argument(f"--gcc-toolchain-prefix-{arch_str}", default=arch.target_triple(
+        ), help=f"GCC toolchain prefix when compiling for {arch_str}, e.g {arch_str}-none-elf")
 
     args = parser.parse_args()
 
@@ -989,8 +999,10 @@ def main() -> None:
         selected_board_names = frozenset(args.boards.split(","))
         for board_name in selected_board_names:
             if board_name not in supported_board_names:
-                raise Exception(f"Trying to build a board: {board_name} that does not exist in supported list.")
-        selected_boards = [board for board in SUPPORTED_BOARDS if board.name in selected_board_names]
+                raise Exception(
+                    f"Trying to build a board: {board_name} that does not exist in supported list.")
+        selected_boards = [
+            board for board in SUPPORTED_BOARDS if board.name in selected_board_names]
     else:
         selected_boards = SUPPORTED_BOARDS
 
@@ -1008,7 +1020,8 @@ def main() -> None:
                     .format(", ".join(invalid_config_names), board.name, ", ".join(elaborated_config_names))
                 )
 
-            elaborated_configs = [config for config in elaborated_configs if config.name in selected_config_names]
+            elaborated_configs = [
+                config for config in elaborated_configs if config.name in selected_config_names]
 
         build_goals.append((board, elaborated_configs))
 
@@ -1079,7 +1092,8 @@ def main() -> None:
                 loader_defines = []
                 if not board.arch.is_x86():
                     loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
-                    build_elf_component("loader", sdk_dir, build_dir, board, config, args.llvm, loader_defines)
+                    build_elf_component("loader", sdk_dir, build_dir, board,
+                                        config, args.llvm, loader_defines)
 
                 build_elf_component("monitor", sdk_dir, build_dir, board, config, args.llvm, [])
                 build_lib_component("libmicrokit", sdk_dir, build_dir, board, config, args.llvm)
