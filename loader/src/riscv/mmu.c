@@ -8,15 +8,9 @@
 #include <stdint.h>
 
 #include "../arch.h"
-#include "../cutil.h"
 
-/* Paging structures for kernel mapping */
-uint64_t boot_lvl1_pt[1 << 9] ALIGN(1 << 12);
-uint64_t boot_lvl2_pt[1 << 9] ALIGN(1 << 12);
-uint64_t boot_lvl3_pt[1 << 9] ALIGN(1 << 12);
-/* Paging structures for identity mapping */
-uint64_t boot_lvl2_pt_loader[1 << 9] ALIGN(1 << 12);
-
+/* Pointers to the top-level paging structures */
+uintptr_t riscv64_boot_lvl1_pt;
 
 /*
  * This is the encoding for the MODE field of the satp register when
@@ -36,7 +30,7 @@ int arch_mmu_enable(int logical_cpu)
     asm volatile(
         "csrw satp, %0\n"
         :
-        : "r"(VM_MODE | (uintptr_t)boot_lvl1_pt >> RISCV_PGSHIFT)
+        : "r"(VM_MODE | riscv64_boot_lvl1_pt >> RISCV_PGSHIFT)
         :
     );
     asm volatile("fence.i" ::: "memory");
