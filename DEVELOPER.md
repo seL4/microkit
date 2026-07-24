@@ -78,7 +78,7 @@ On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
     $ brew install x86_64-elf-gcc pandoc cmake dtc ninja libxml2 python@3.12 coreutils texlive qemu
     $ python3.12 -m venv pyenv
     $ ./pyenv/bin/pip install --upgrade pip setuptools wheel
-    $ ./pyenv/bin/pip install -r requirements.txt
+    $ ./pyenv/bin/pip install --upgrade sel4-deps
 
 The ARM toolchain is available from:
 
