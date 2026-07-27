@@ -23,26 +23,87 @@ use crate::util::get_full_path;
 use crate::util::round_up;
 use crate::{Config, PageSize};
 
-#[repr(u8)]
-pub enum SysMapPerms {
-    Read = 1,
-    Write = 2,
-    Execute = 4,
+// We do not include attributes (execute/cached) here since seL4 does not treat them like vm_rights.
+// Note on seL4 you can't mint a write only frame. However you can request a write only mapping,
+// for the IOMMU on x86.
+// https://github.com/seL4/seL4/blob/5126e718bb68636267e28234c711ac8022b79fe2/src/arch/x86/kernel/vspace.c#L673-L692
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum FrameRights {
+    Read,
+    Write,
+    ReadWrite,
+    None,
+}
+
+impl FrameRights {
+    fn from_bools(read: bool, write: bool) -> Self {
+        match (read, write) {
+            (true, false) => Self::Read,
+            (false, true) => Self::Write,
+            (true, true) => Self::ReadWrite,
+            (false, false) => Self::None,
+        }
+    }
+
+    pub fn read(self) -> bool {
+        matches!(self, Self::Read | Self::ReadWrite)
+    }
+
+    pub fn write(self) -> bool {
+        matches!(self, Self::Write | Self::ReadWrite)
+    }
+}
+
+pub trait MapPerms {
+    fn read(self) -> bool;
+    fn write(self) -> bool;
+    fn execute(self) -> bool;
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct SysMapPerms {
+    rights: FrameRights,
+    execute: bool,
+}
+
+impl MapPerms for SysMapPerms {
+    fn read(self) -> bool {
+        self.rights.read()
+    }
+
+    fn write(self) -> bool {
+        self.rights.write()
+    }
+
+    fn execute(self) -> bool {
+        self.execute
+    }
+}
+
+pub enum SysMapPermsParseError {
+    InvalidChar,
+    WriteOnly,
 }
 
 impl SysMapPerms {
-    fn from_str(s: &str) -> Result<u8, ()> {
-        let mut perms = 0;
+    fn from_str(s: &str) -> Result<Self, SysMapPermsParseError> {
+        let mut read = false;
+        let mut write = false;
+        let mut execute = false;
         for c in s.chars() {
             match c {
-                'r' => perms |= SysMapPerms::Read as u8,
-                'w' => perms |= SysMapPerms::Write as u8,
-                'x' => perms |= SysMapPerms::Execute as u8,
-                _ => return Err(()),
+                'r' => read = true,
+                'w' => write = true,
+                'x' => execute = true,
+                _ => return Err(SysMapPermsParseError::InvalidChar),
             }
         }
+        let rights = match FrameRights::from_bools(read, write) {
+            FrameRights::Write => return Err(SysMapPermsParseError::WriteOnly),
+            frame_rights => frame_rights,
+        };
 
-        Ok(perms)
+        Ok(Self { rights, execute })
     }
 }
 
@@ -50,7 +111,7 @@ impl SysMapPerms {
 pub struct SysMap {
     pub mr: String,
     pub vaddr: u64,
-    pub perms: u8,
+    pub perms: SysMapPerms,
     pub cached: bool,
     /// Location in the parsed SDF file. Because this struct is
     /// used in a non-XML context, we make the position optional.
@@ -58,19 +119,33 @@ pub struct SysMap {
 }
 
 pub trait Map {
+    type Perms: MapPerms;
+
     fn mr_name(&self) -> &str;
     fn addr(&self) -> u64;
     fn text_pos(&self) -> Option<SdfLocation>;
     fn element(&self) -> &'static str;
     fn addr_name(&self) -> &'static str;
     fn range_name(&self) -> &'static str;
-    fn read(&self) -> bool;
-    fn write(&self) -> bool;
-    fn execute(&self) -> bool;
     fn cached(&self) -> bool;
+    fn perms(&self) -> Self::Perms;
+
+    fn read(&self) -> bool {
+        self.perms().read()
+    }
+
+    fn write(&self) -> bool {
+        self.perms().write()
+    }
+
+    fn execute(&self) -> bool {
+        self.perms().execute()
+    }
 }
 
 impl Map for SysMap {
+    type Perms = SysMapPerms;
+
     fn mr_name(&self) -> &str {
         &self.mr
     }
@@ -95,16 +170,8 @@ impl Map for SysMap {
         "virtual address range"
     }
 
-    fn read(&self) -> bool {
-        self.perms & SysMapPerms::Read as u8 != 0
-    }
-
-    fn write(&self) -> bool {
-        self.perms & SysMapPerms::Write as u8 != 0
-    }
-
-    fn execute(&self) -> bool {
-        self.perms & SysMapPerms::Execute as u8 != 0
+    fn perms(&self) -> Self::Perms {
+        self.perms
     }
 
     fn cached(&self) -> bool {
@@ -113,6 +180,7 @@ impl Map for SysMap {
 }
 
 impl Map for SysIOMap {
+    type Perms = SysIOMapPerms;
     fn mr_name(&self) -> &str {
         &self.mr
     }
@@ -137,16 +205,8 @@ impl Map for SysIOMap {
         "io address range"
     }
 
-    fn read(&self) -> bool {
-        matches!(self.perms, SysIOMapPerms::Read | SysIOMapPerms::ReadWrite)
-    }
-
-    fn write(&self) -> bool {
-        matches!(self.perms, SysIOMapPerms::Write | SysIOMapPerms::ReadWrite)
-    }
-
-    fn execute(&self) -> bool {
-        false
+    fn perms(&self) -> Self::Perms {
+        self.perms
     }
 
     fn cached(&self) -> bool {
@@ -216,14 +276,24 @@ impl SysMemoryRegion {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum SysIOMapPerms {
-    Read,
-    Write,
-    ReadWrite,
+pub struct SysIOMapPerms(FrameRights);
+
+impl MapPerms for SysIOMapPerms {
+    fn read(self) -> bool {
+        self.0.read()
+    }
+
+    fn write(self) -> bool {
+        self.0.write()
+    }
+
+    fn execute(self) -> bool {
+        false
+    }
 }
 
 impl SysIOMapPerms {
-    fn from_str(s: &str) -> Result<Self, ()> {
+    fn from_str(s: &str) -> Result<Self, String> {
         let mut read = false;
         let mut write = false;
 
@@ -231,16 +301,14 @@ impl SysIOMapPerms {
             match c {
                 'r' => read = true,
                 'w' => write = true,
-                _ => return Err(()),
+                _ => return Err(format!("Invalid character in string {s}")),
             }
         }
-
-        match (read, write) {
-            (true, true) => Ok(SysIOMapPerms::ReadWrite),
-            (true, false) => Ok(SysIOMapPerms::Read),
-            (false, true) => Ok(SysIOMapPerms::Write),
-            (false, false) => Err(()),
-        }
+        let frame_rights = match FrameRights::from_bools(read, write) {
+            FrameRights::None => return Err("Invalid frame right for IOMap".into()),
+            frame_rights => frame_rights,
+        };
+        Ok(SysIOMapPerms(frame_rights))
     }
 }
 
@@ -284,7 +352,15 @@ impl SysMap {
         let perms = if let Some(xml_perms) = node.attribute("perms") {
             match SysMapPerms::from_str(xml_perms) {
                 Ok(parsed_perms) => parsed_perms,
-                Err(()) => {
+                // On all architectures, the kernel does not allow write-only mappings
+                Err(SysMapPermsParseError::WriteOnly) => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "perms must not be 'w', write-only mappings are not allowed".to_string(),
+                    ));
+                }
+                Err(_) => {
                     return Err(value_error(
                         xml_sdf,
                         node,
@@ -294,17 +370,11 @@ impl SysMap {
             }
         } else {
             // Default to read-write
-            SysMapPerms::Read as u8 | SysMapPerms::Write as u8
+            SysMapPerms {
+                rights: FrameRights::ReadWrite,
+                execute: false,
+            }
         };
-
-        // On all architectures, the kernel does not allow write-only mappings
-        if perms == SysMapPerms::Write as u8 {
-            return Err(value_error(
-                xml_sdf,
-                node,
-                "perms must not be 'w', write-only mappings are not allowed".to_string(),
-            ));
-        }
 
         let cached = sdf_parse_attribute(xml_sdf, node, "cached")?
             // Default to cached
@@ -350,7 +420,7 @@ impl SysIOMap {
         let perms = if let Some(xml_perms) = node.attribute("perms") {
             match SysIOMapPerms::from_str(xml_perms) {
                 Ok(parsed_perms) => parsed_perms,
-                Err(()) => {
+                Err(_) => {
                     return Err(value_error(
                         xml_sdf,
                         node,
@@ -361,7 +431,7 @@ impl SysIOMap {
             }
         } else {
             // Default to read-write
-            SysIOMapPerms::ReadWrite
+            SysIOMapPerms(FrameRights::ReadWrite)
         };
 
         Ok(SysIOMap {

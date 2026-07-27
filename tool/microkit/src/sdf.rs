@@ -50,7 +50,7 @@ pub(crate) use consts::*;
 pub(crate) use cspace::CapMapType;
 pub(crate) use iommu::IommuDeviceIdentifier;
 pub(crate) use irq::{SysIrq, SysIrqKind};
-pub(crate) use memory_region::{Map, SysMapPerms};
+pub(crate) use memory_region::Map;
 pub(crate) use pd_vm::{CpuCore, SysSetVarKind};
 
 // Public re-exports
