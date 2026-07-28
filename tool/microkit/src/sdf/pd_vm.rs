@@ -78,7 +78,7 @@ pub struct ProtectionDomain {
     pub smc: bool,
     pub cpu: CpuCore,
     pub domain: Option<u8>,
-    pub program_image: PathBuf,
+    pub program_image: Option<PathBuf>,
     pub program_image_for_symbols: Option<PathBuf>,
     /// Enable FPU for this PD.
     pub fpu: bool,
@@ -138,6 +138,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &dyn SdfNode,
         is_child: bool,
+        is_template: bool,
         domains: &Domains,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
@@ -203,6 +204,13 @@ impl ProtectionDomain {
         } else {
             false
         };
+        if passive && is_template {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                "passive must be 'false'".to_string(),
+            ));
+        }
 
         let stack_size = if let Some(xml_stack_size) = node.attribute("stack_size") {
             sdf_parse_number(xml_stack_size, node)?
@@ -349,6 +357,13 @@ impl ProtectionDomain {
         for child in node.children() {
             match child.tag_name() {
                 "program_image" => {
+                    if is_template {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "template PD cannot have any program image".to_string(),
+                        ));
+                    }
                     check_attributes(xml_sdf, &*child, &["path", "path_for_symbols"])?;
                     if program_image.is_some() {
                         return Err(value_error(
@@ -696,8 +711,31 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                 }
                 "protection_domain" => {
+                    if is_template {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "template PD cannot have child PDs".to_string(),
+                        ));
+                    }
                     let child_pd =
-                        ProtectionDomain::from_xml(config, xml_sdf, &*child, true, domains)?;
+                        ProtectionDomain::from_xml(config, xml_sdf, &*child, true, false, domains)?;
+
+                    if let Some(setvar_id) = child_pd.setvar_id.clone() {
+                        let setvar = SysSetVar {
+                            symbol: setvar_id.to_string(),
+                            kind: SysSetVarKind::Id {
+                                id: child_pd.id.unwrap(),
+                            },
+                        };
+                        checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
+                    }
+
+                    child_pds.push(child_pd);
+                }
+                "template" => {
+                    let child_pd =
+                        ProtectionDomain::from_xml(config, xml_sdf, &*child, true, true, domains)?;
 
                     if let Some(setvar_id) = child_pd.setvar_id.clone() {
                         let setvar = SysSetVar {
@@ -717,6 +755,13 @@ impl ProtectionDomain {
                             xml_sdf,
                             node,
                             "seL4 has not been built as a hypervisor, virtual machines are disabled".to_string()
+                        ));
+                    }
+                    if is_template {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "template PD cannot control virtual machine".to_string(),
                         ));
                     }
                     if virtual_machine.is_some() {
@@ -763,7 +808,7 @@ impl ProtectionDomain {
             }
         }
 
-        if program_image.is_none() {
+        if program_image.is_none() && !is_template {
             return Err(format!(
                 "Error: missing 'program_image' element on protection_domain: '{name}'"
             ));
@@ -786,7 +831,7 @@ impl ProtectionDomain {
             smc,
             cpu,
             domain,
-            program_image: program_image.unwrap(),
+            program_image,
             program_image_for_symbols,
             fpu,
             maps,

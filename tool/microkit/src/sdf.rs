@@ -183,7 +183,7 @@ pub fn parse(
         let child_name = child.tag_name();
         match child_name {
             "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
-                config, &xml_sdf, &*child, false, &domains,
+                config, &xml_sdf, &*child, false, false, &domains,
             )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(

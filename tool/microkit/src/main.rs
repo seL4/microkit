@@ -375,7 +375,11 @@ fn main() -> Result<(), String> {
     let mut system_elfs = Vec::with_capacity(system.protection_domains.len());
     // Get the elf files for each pd:
     for pd in &system.protection_domains {
-        match get_full_path(&pd.program_image, &args.search_paths) {
+        let Some(program_image) = &pd.program_image else {
+            system_elfs.push(ElfFile::default());
+            continue;
+        };
+        match get_full_path(program_image, &args.search_paths) {
             Some(path) => {
                 let path_for_symbols = pd
                     .program_image_for_symbols
@@ -405,7 +409,7 @@ fn main() -> Result<(), String> {
             None => {
                 return Err(format!(
                     "unable to find program image: '{}'",
-                    pd.program_image.display()
+                    program_image.display()
                 ))
             }
         }

@@ -188,6 +188,15 @@ Runnable PDs of the same priority are scheduled in a round-robin manner.
 
 **Passive** determines whether the PD is passive. A passive PD will have its scheduling context revoked after initialisation and then bound instead to the PD's notification object. This means the PD will be scheduled on receiving a notification, whereby it will run on the notification's scheduling context. When the PD receives a *protected procedure* by another PD or a *fault* caused by a child PD, the passive PD will run on the scheduling context of the callee.
 
+### Template
+
+A PD can be a *template*, which means it will be created without a program image. A template-pd is similar to other normal PDs, the primary differences between a template-pd and a normal PD are:
+- a template PD must be a child of a PD
+- a template PD should not have children, VMs, or program images declared at sdf
+- a template PD should always be initialized 'active', although its parent can have access to its scheduling context and is able to unbind the scheduling context from its thread dynamically
+
+The feature of template PD allows the users to load applications (e.g., an elf) into a PD dynamically.
+
 ## Virtual Machines {#vm}
 
 A *virtual machine* (VM) is a runtime abstraction for running guest operating systems in Microkit. It is similar

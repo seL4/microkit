@@ -215,6 +215,12 @@ pub struct ElfFile {
     symbols: HashMap<String, (ElfSymbol64, bool)>,
 }
 
+impl Default for ElfFile {
+    fn default() -> Self {
+        Self::new(PathBuf::new(), 0, 0, 0)
+    }
+}
+
 impl ElfFile {
     pub fn new(path: PathBuf, word_size: usize, entry: u64, machine: u16) -> Self {
         ElfFile {

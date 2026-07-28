@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="shared" size="0x20000" />
+
+    <protection_domain name="loader" priority="25">
+        <program_image path="loader.elf" />
+        <map mr="shared" vaddr="0xC00000" perms="rw" cached="true" />
+        <template name="loadee" id="0" priority="20">
+            <map mr="shared" vaddr="0x280000" perms="rwx" cached="true"/>
+        </template>
+    </protection_domain>
+
+</system>

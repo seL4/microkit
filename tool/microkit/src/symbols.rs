@@ -91,6 +91,9 @@ pub fn patch_symbols(
     }
 
     for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
+        let Some(program_image) = &pd.program_image else {
+            continue;
+        };
         let elf_obj = &mut pd_elf_files[pd_global_idx];
 
         let name = pd.name.as_bytes();
@@ -167,7 +170,7 @@ pub fn patch_symbols(
                         "could not patch symbol '{}' in program image for PD '{}' ({}): {}",
                         setvar.symbol,
                         pd.name,
-                        pd.program_image.display(),
+                        program_image.display(),
                         err
                     ))
                 }
