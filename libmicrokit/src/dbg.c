@@ -65,6 +65,37 @@ void microkit_dbg_put64(seL4_Uint64 x)
     microkit_dbg_puts(&tmp[i]);
 }
 
+static char hexchar(unsigned int v)
+{
+    return v < 10 ? '0' + v : ('a' - 10) + v;
+}
+
+void microkit_dbg_puthex32(seL4_Uint32 val)
+{
+    char buffer[8 + 3];
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    buffer[8 + 3 - 1] = 0;
+    for (unsigned i = 8 + 1; i > 1; i--) {
+        buffer[i] = hexchar(val & 0xf);
+        val >>= 4;
+    }
+    microkit_dbg_puts(buffer);
+}
+
+void microkit_dbg_puthex64(seL4_Uint64 val)
+{
+    char buffer[16 + 3];
+    buffer[0] = '0';
+    buffer[1] = 'x';
+    buffer[16 + 3 - 1] = 0;
+    for (unsigned i = 16 + 1; i > 1; i--) {
+        buffer[i] = hexchar(val & 0xf);
+        val >>= 4;
+    }
+    microkit_dbg_puts(buffer);
+}
+
 /*
  * We have to provide an implementation for libsel4 debug asserts, make it
  * weak so users can override with their own libc etc.
