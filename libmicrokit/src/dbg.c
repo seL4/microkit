@@ -52,6 +52,19 @@ void microkit_dbg_put32(seL4_Uint32 x)
     microkit_dbg_puts(&tmp[i]);
 }
 
+void microkit_dbg_put64(seL4_Uint64 x)
+{
+    char tmp[21];
+    unsigned i = 20;
+    tmp[20] = 0;
+    do {
+        seL4_Uint8 c = x % 10;
+        tmp[--i] = '0' + c;
+        x /= 10;
+    } while (x);
+    microkit_dbg_puts(&tmp[i]);
+}
+
 /*
  * We have to provide an implementation for libsel4 debug asserts, make it
  * weak so users can override with their own libc etc.

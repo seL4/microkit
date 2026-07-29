@@ -91,6 +91,11 @@ void microkit_dbg_put8(seL4_Uint8 x);
  */
 void microkit_dbg_put32(seL4_Uint32 x);
 
+/*
+ * Output the decimal representation of an 64-bit integer to the debug console.
+ */
+void microkit_dbg_put64(seL4_Uint64 x);
+
 static inline void microkit_internal_crash(seL4_Error err)
 {
     /*
