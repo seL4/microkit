@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub mod argparse;
+pub mod build;
 pub mod capdl;
 pub mod crc32;
 pub mod elf;
