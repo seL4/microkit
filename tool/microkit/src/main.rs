@@ -8,32 +8,32 @@
 #![allow(clippy::assertions_on_constants)]
 
 use microkit_tool::argparse;
-use microkit_tool::argparse::{Args, ArgsError, RequestedImageType};
-use microkit_tool::capdl::allocation::{
-    simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel,
+use microkit_tool::argparse::ArgsError;
+use microkit_tool::sdf::parse;
+use std::{
+    collections::HashMap,
+    fs::{self, metadata},
+    path::Path,
 };
-use microkit_tool::capdl::build_capdl_spec;
-use microkit_tool::capdl::initialiser::CapDLInitialiser;
-use microkit_tool::capdl::packaging::pack_spec_into_initial_task;
-use microkit_tool::elf::ElfFile;
-use microkit_tool::loader::Loader;
-use microkit_tool::report::write_report;
-use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr};
-use microkit_tool::sdk::{AvailableConfig, Sdk};
-use microkit_tool::sel4::{
-    emulate_kernel_boot, emulate_kernel_boot_partial, AddressSpaceConstants, Arch, Config,
-    ObjectSizes, PlatformConfig, RiscvVirtualMemory,
+
+use microkit_tool::{
+    argparse::Args,
+    capdl::{
+        allocation::{simulate_capdl_object_alloc_algorithm, CapDLAllocEmulationErrorLevel},
+        build_capdl_spec,
+        initialiser::CapDLInitialiser,
+        packaging::pack_spec_into_initial_task,
+    },
+    elf::ElfFile,
+    loader::Loader,
+    report::write_report,
+    sdf::{SysMemoryRegion, SysMemoryRegionPaddr},
+    sdk::Sdk,
+    sel4::{emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, ImageOutputType},
+    symbols::patch_symbols,
+    util::{bail_if_not_exists, get_full_path, human_size_strict, round_down, round_up},
+    viper, DisjointMemoryRegion, MemoryRegion,
 };
-use microkit_tool::symbols::patch_symbols;
-use microkit_tool::util::{
-    get_full_path, human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down,
-    round_up,
-};
-use microkit_tool::viper;
-use microkit_tool::{DisjointMemoryRegion, MemoryRegion};
-use std::collections::HashMap;
-use std::fs::{self, metadata};
-use std::path::Path;
 
 const MAX_BUILD_ITERATION: usize = 3;
 
@@ -44,67 +44,6 @@ const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 // The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
 // also copy the 32-bit version that was prepared by build_sdk.py for convenience.
 const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
-
-enum ImageOutputType {
-    Binary,
-    Elf,
-    Uimage,
-}
-
-impl ImageOutputType {
-    fn default_from_arch_and_board(arch: &Arch, board_name: &str) -> Self {
-        match board_name {
-            "ariane" | "cheshire" | "serengeti" => ImageOutputType::Elf,
-            _ => match arch {
-                Arch::Aarch64 => ImageOutputType::Binary,
-                Arch::Riscv64 => ImageOutputType::Uimage,
-                Arch::X86_64 => ImageOutputType::Elf,
-            },
-        }
-    }
-
-    /// Resolve the optional user-specified image type with what is the default for the
-    /// platform.
-    /// Not all image types are supported for all platforms, so we check here.
-    fn resolve(requested: &RequestedImageType, arch: &Arch, board_name: &str) -> Option<Self> {
-        match requested {
-            RequestedImageType::Binary => match arch {
-                Arch::Aarch64 | Arch::Riscv64 => Some(Self::Binary),
-                Arch::X86_64 => None,
-            },
-            RequestedImageType::Elf => Some(Self::Elf),
-            RequestedImageType::Uimage => match arch {
-                Arch::Riscv64 => Some(Self::Uimage),
-                Arch::X86_64 | Arch::Aarch64 => None,
-            },
-            RequestedImageType::Unspecified => {
-                Some(Self::default_from_arch_and_board(arch, board_name))
-            }
-        }
-    }
-}
-
-fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), String> {
-    if !path.exists() {
-        eprintln!(
-            "microkit: error: {description} '{}' does not exist",
-            path.display()
-        );
-        std::process::exit(1);
-    }
-    Ok(())
-}
-
-fn parse_json_file<T: serde::de::DeserializeOwned>(
-    file_name: &str,
-    file_description: &'static str,
-    current_config: &AvailableConfig,
-) -> Result<T, String> {
-    let path = current_config.config_dir.join(file_name);
-    bail_if_not_exists(file_description, &path)?;
-    serde_json::from_str(&fs::read_to_string(&path).expect("Error: Unable to read {path}"))
-        .map_err(|err| format!("Error: Unable to parse {file_name}: {err}"))
-}
 
 fn main() -> Result<(), String> {
     let sdk = match Sdk::discover() {
@@ -134,178 +73,15 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     };
+
     args.search_paths.push(sdk.cwd.clone());
 
-    // NB safe unwrap: argparse would already have bailed if the config did not
-    // exist.
-    let current_config = sdk.select(&args.board, &args.config).unwrap();
-
-    // the real work begins here
-    let elf_path = current_config.config_dir.join("elf");
-    let loader_elf_path = elf_path.join("loader.elf");
-    let kernel_elf_path = match args.override_kernel {
-        Some(ref path) => path,
-        None => &elf_path.join("sel4.elf"),
-    };
-    let monitor_elf_path = elf_path.join("monitor.elf");
-    let capdl_init_elf_path = elf_path.join("initialiser.elf");
-    let kernel_config_path = current_config
-        .config_dir
-        .join("include/kernel/gen_config.json");
-    let invocations_all_path = current_config.config_dir.join("invocations_all.json");
-    bail_if_not_exists("board ELF directory", &elf_path)?;
-    bail_if_not_exists("kernel ELF", kernel_elf_path)?;
-    bail_if_not_exists("monitor ELF", &monitor_elf_path)?;
-    bail_if_not_exists("CapDL initialiser ELF", &capdl_init_elf_path)?;
-    bail_if_not_exists("kernel configuration file", &kernel_config_path)?;
-    bail_if_not_exists("invocations JSON file", &invocations_all_path)?;
+    let kernel_config = Config::build_kernel_config(&args, &sdk).unwrap();
 
     let system_path = &args.sdf_path;
     bail_if_not_exists("system description file", system_path)?;
 
     let xml: String = fs::read_to_string(system_path).unwrap();
-
-    let kernel_config_json: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
-
-    let invocations_labels: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
-
-    let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
-        "aarch64" => Arch::Aarch64,
-        "riscv64" => Arch::Riscv64,
-        "x86_64" => Arch::X86_64,
-        _ => panic!("Unsupported kernel config architecture"),
-    };
-
-    let image_output_type = match ImageOutputType::resolve(
-        &args.requested_image_type,
-        &arch,
-        args.board.as_str(),
-    ) {
-        Some(image) => image,
-        None => {
-            eprintln!(
-                    "microkit: error: building the output image as '{0}' is unsupported for target architecture '{arch}'",
-                    args.requested_image_type
-                );
-            std::process::exit(1);
-        }
-    };
-
-    let (device_regions, normal_regions) = match arch {
-        Arch::X86_64 => (None, None),
-        _ => {
-            let platform_gen_path = current_config.config_dir.join("platform_gen.json");
-            bail_if_not_exists("kernel platform configuration file", &platform_gen_path)?;
-            let kernel_platform_config: PlatformConfig =
-                serde_json::from_str(&fs::read_to_string(platform_gen_path).unwrap()).unwrap();
-
-            (
-                Some(kernel_platform_config.devices),
-                Some(kernel_platform_config.memory),
-            )
-        }
-    };
-
-    let object_sizes: ObjectSizes = parse_json_file(
-        "object_sizes.json",
-        "kernel object sizes file",
-        current_config,
-    )?;
-
-    let address_space_constants: AddressSpaceConstants = parse_json_file(
-        "address_space_constants.json",
-        "kernel address space constants file",
-        current_config,
-    )?;
-
-    let hypervisor = match arch {
-        Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
-        Arch::X86_64 => json_str_as_bool(&kernel_config_json, "VTX")?,
-        // Hypervisor mode is not available on RISC-V
-        _ => false,
-    };
-
-    let iommu = match arch {
-        Arch::X86_64 => json_str_as_bool(&kernel_config_json, "IOMMU")?,
-        _ => false,
-    };
-
-    let arm_pa_size_bits = match arch {
-        Arch::Aarch64 => {
-            if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
-                Some(40)
-            } else if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_44")? {
-                Some(44)
-            } else {
-                panic!("Expected ARM platform to have 40 or 44 physical address bits")
-            }
-        }
-        Arch::X86_64 | Arch::Riscv64 => None,
-    };
-
-    let arm_smc = match arch {
-        Arch::Aarch64 => Some(json_str_as_bool(&kernel_config_json, "ALLOW_SMC_CALLS")?),
-        _ => None,
-    };
-
-    let kernel_frame_size = match arch {
-        Arch::Aarch64 => 1 << 12,
-        Arch::Riscv64 => 1 << 21,
-        Arch::X86_64 => 1 << 12,
-    };
-
-    let kernel_config = Config {
-        arch,
-        word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
-        minimum_page_size: 1 << object_sizes.small_page,
-        paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
-        kernel_frame_size,
-        init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
-        cap_address_bits: 64,
-        fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
-        max_num_bootinfo_untypeds: json_str_as_u64(
-            &kernel_config_json,
-            "MAX_NUM_BOOTINFO_UNTYPED_CAPS",
-        )?,
-        hypervisor,
-        iommu,
-        benchmark: args.config == "benchmark",
-        num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
-            json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?
-                .try_into()
-                .expect("number of cores fits in u8")
-        } else {
-            1
-        },
-        num_domains: json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")?
-            .try_into()
-            .unwrap(),
-        num_domain_schedules: json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?,
-        fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
-        arm_pa_size_bits,
-        arm_smc,
-        riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
-        invocations_labels,
-        device_regions,
-        normal_regions,
-        object_sizes,
-        address_space_constants,
-    };
-
-    if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
-        eprintln!(
-            "Error: loader ELF '{}' does not exist",
-            loader_elf_path.display()
-        );
-        std::process::exit(1);
-    }
-
-    assert!(
-        kernel_config.word_size == 64,
-        "Microkit tool has various assumptions about the word size being 64-bits."
-    );
 
     let mut system = match parse(
         system_path.as_path(),
@@ -316,6 +92,44 @@ fn main() -> Result<(), String> {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
+
+    let current_config = sdk.select(&args.board, &args.config).unwrap();
+    let elf_path = current_config.config_dir.join("elf");
+    let loader_elf_path = elf_path.join("loader.elf");
+    let kernel_elf_path = match args.override_kernel {
+        Some(ref path) => path,
+        None => &elf_path.join("sel4.elf"),
+    };
+    let monitor_elf_path = elf_path.join("monitor.elf");
+    let capdl_init_elf_path = elf_path.join("initialiser.elf");
+
+    bail_if_not_exists("board ELF directory", &elf_path)?;
+    bail_if_not_exists("kernel ELF", kernel_elf_path)?;
+    bail_if_not_exists("monitor ELF", &monitor_elf_path)?;
+    bail_if_not_exists("CapDL initialiser ELF", &capdl_init_elf_path)?;
+
+    if kernel_config.arch != Arch::X86_64 && !loader_elf_path.exists() {
+        eprintln!(
+            "Error: loader ELF '{}' does not exist",
+            loader_elf_path.display()
+        );
+        std::process::exit(1);
+    }
+
+    let image_output_type = match ImageOutputType::resolve(
+        &args.requested_image_type,
+        &kernel_config.arch,
+        args.board.as_str(),
+    ) {
+        Some(image) => image,
+        None => {
+            eprintln!(
+                    "microkit: error: building the output image as '{0}' is unsupported for target architecture '{1}'",
+                    args.requested_image_type, kernel_config.arch
+                );
             std::process::exit(1);
         }
     };
@@ -718,14 +532,14 @@ fn main() -> Result<(), String> {
                 }
             };
 
-            if let Some(capdl_json) = args.capdl_json_path {
+            if let Some(capdl_json) = &args.capdl_json_path {
                 let serialised = serde_json::to_string_pretty(&spec_container.spec).unwrap();
                 fs::write(capdl_json, &serialised).unwrap();
             };
 
-            if let Some(viper_output_dir) = args.viper_output_dir {
+            if let Some(viper_output_dir) = &args.viper_output_dir {
                 // NB returns Ok if the directory already exists, that's fine
-                fs::create_dir_all(&viper_output_dir).unwrap_or_else(|source| {
+                fs::create_dir_all(viper_output_dir).unwrap_or_else(|source| {
                     eprintln!(
                         "ERROR: cannot write Viper output directory {}: {source}",
                         &viper_output_dir.display()
@@ -764,6 +578,5 @@ fn main() -> Result<(), String> {
         // Only reachable when there are setvar region_paddr that we keep selecting the wrong address.
         panic!("ERROR: fatal, failed to build system in {iteration} iterations");
     }
-
     Ok(())
 }

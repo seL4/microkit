@@ -3,11 +3,17 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-use std::{cmp::max, fmt::Display};
+use std::{cmp::max, fmt::Display, fs};
 
 use serde::Deserialize;
 
-use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
+use crate::{
+    argparse::{Args, RequestedImageType},
+    elf::ElfFile,
+    sdk::{AvailableConfig, Sdk},
+    util::{self, bail_if_not_exists, json_str, json_str_as_bool, json_str_as_u64},
+    DisjointMemoryRegion, MemoryRegion, UntypedObject,
+};
 
 pub struct KernelPartialBootInfo {
     device_memory: DisjointMemoryRegion,
@@ -23,6 +29,56 @@ pub struct BootInfo {
     pub page_cap_count: u64,
     pub untyped_objects: Vec<UntypedObject>,
     pub first_available_cap: u64,
+}
+
+pub enum ImageOutputType {
+    Binary,
+    Elf,
+    Uimage,
+}
+
+impl ImageOutputType {
+    fn default_from_arch_and_board(arch: &Arch, board_name: &str) -> Self {
+        match board_name {
+            "ariane" | "cheshire" | "serengeti" => ImageOutputType::Elf,
+            _ => match arch {
+                Arch::Aarch64 => ImageOutputType::Binary,
+                Arch::Riscv64 => ImageOutputType::Uimage,
+                Arch::X86_64 => ImageOutputType::Elf,
+            },
+        }
+    }
+
+    /// Resolve the optional user-specified image type with what is the default for the
+    /// platform.
+    /// Not all image types are supported for all platforms, so we check here.
+    pub fn resolve(requested: &RequestedImageType, arch: &Arch, board_name: &str) -> Option<Self> {
+        match requested {
+            RequestedImageType::Binary => match arch {
+                Arch::Aarch64 | Arch::Riscv64 => Some(Self::Binary),
+                Arch::X86_64 => None,
+            },
+            RequestedImageType::Elf => Some(Self::Elf),
+            RequestedImageType::Uimage => match arch {
+                Arch::Riscv64 => Some(Self::Uimage),
+                Arch::X86_64 | Arch::Aarch64 => None,
+            },
+            RequestedImageType::Unspecified => {
+                Some(Self::default_from_arch_and_board(arch, board_name))
+            }
+        }
+    }
+}
+
+fn parse_json_file<T: serde::de::DeserializeOwned>(
+    file_name: &str,
+    file_description: &'static str,
+    current_config: &AvailableConfig,
+) -> Result<T, String> {
+    let path = current_config.config_dir.join(file_name);
+    bail_if_not_exists(file_description, &path)?;
+    serde_json::from_str(&fs::read_to_string(&path).expect("Error: Unable to read {path}"))
+        .map_err(|err| format!("Error: Unable to parse {file_name}: {err}"))
 }
 
 fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
@@ -330,6 +386,155 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn build_kernel_config(args: &Args, sdk: &Sdk) -> Result<Config, String> {
+        // NB safe unwrap: argparse would already have bailed if the config did not
+        // exist.
+        let current_config = sdk.select(&args.board, &args.config).unwrap();
+
+        // the real work begins here
+        let kernel_config_path = current_config
+            .config_dir
+            .join("include/kernel/gen_config.json");
+        let invocations_all_path = current_config.config_dir.join("invocations_all.json");
+        if !kernel_config_path.exists() {
+            return Err(format!(
+                "microkit: error: kernel configuration file '{}' does not exist",
+                kernel_config_path.display()
+            ));
+        }
+        if !invocations_all_path.exists() {
+            return Err(format!(
+                "microkit: error: invocations JSON file '{}' does not exist",
+                invocations_all_path.display()
+            ));
+        }
+
+        let kernel_config_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
+        let invocations_labels: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
+
+        let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
+            "aarch64" => Arch::Aarch64,
+            "riscv64" => Arch::Riscv64,
+            "x86_64" => Arch::X86_64,
+            _ => panic!("Unsupported kernel config architecture"),
+        };
+
+        let (device_regions, normal_regions) = match arch {
+            Arch::X86_64 => (None, None),
+            _ => {
+                let platform_gen_path = current_config.config_dir.join("platform_gen.json");
+                if !platform_gen_path.exists() {
+                    return Err(format!(
+                        "microkit: error: kernel platform configuration file '{}' does not exist",
+                        platform_gen_path.display()
+                    ));
+                }
+                let kernel_platform_config: PlatformConfig =
+                    serde_json::from_str(&fs::read_to_string(platform_gen_path).unwrap()).unwrap();
+
+                (
+                    Some(kernel_platform_config.devices),
+                    Some(kernel_platform_config.memory),
+                )
+            }
+        };
+
+        let object_sizes: ObjectSizes = parse_json_file(
+            "object_sizes.json",
+            "kernel object sizes file",
+            current_config,
+        )?;
+
+        let address_space_constants: AddressSpaceConstants = parse_json_file(
+            "address_space_constants.json",
+            "kernel address space constants file",
+            current_config,
+        )?;
+
+        let hypervisor = match arch {
+            Arch::Aarch64 => json_str_as_bool(&kernel_config_json, "ARM_HYPERVISOR_SUPPORT")?,
+            Arch::X86_64 => json_str_as_bool(&kernel_config_json, "VTX")?,
+            // Hypervisor mode is not available on RISC-V
+            _ => false,
+        };
+
+        let iommu = match arch {
+            Arch::X86_64 => json_str_as_bool(&kernel_config_json, "IOMMU")?,
+            _ => false,
+        };
+
+        let arm_pa_size_bits = match arch {
+            Arch::Aarch64 => {
+                if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_40")? {
+                    Some(40)
+                } else if json_str_as_bool(&kernel_config_json, "ARM_PA_SIZE_BITS_44")? {
+                    Some(44)
+                } else {
+                    panic!("Expected ARM platform to have 40 or 44 physical address bits")
+                }
+            }
+            Arch::X86_64 | Arch::Riscv64 => None,
+        };
+
+        let arm_smc = match arch {
+            Arch::Aarch64 => Some(json_str_as_bool(&kernel_config_json, "ALLOW_SMC_CALLS")?),
+            _ => None,
+        };
+
+        let kernel_frame_size = match arch {
+            Arch::Aarch64 => 1 << 12,
+            Arch::Riscv64 => 1 << 21,
+            Arch::X86_64 => 1 << 12,
+        };
+
+        let kernel_config = Config {
+            arch,
+            word_size: json_str_as_u64(&kernel_config_json, "WORD_SIZE")?,
+            minimum_page_size: 1 << object_sizes.small_page,
+            paddr_user_device_top: json_str_as_u64(&kernel_config_json, "PADDR_USER_DEVICE_TOP")?,
+            kernel_frame_size,
+            init_cnode_bits: json_str_as_u64(&kernel_config_json, "ROOT_CNODE_SIZE_BITS")?,
+            cap_address_bits: 64,
+            fan_out_limit: json_str_as_u64(&kernel_config_json, "RETYPE_FAN_OUT_LIMIT")?,
+            max_num_bootinfo_untypeds: json_str_as_u64(
+                &kernel_config_json,
+                "MAX_NUM_BOOTINFO_UNTYPED_CAPS",
+            )?,
+            hypervisor,
+            iommu,
+            benchmark: args.config == "benchmark",
+            num_cores: if json_str_as_bool(&kernel_config_json, "ENABLE_SMP_SUPPORT")? {
+                json_str_as_u64(&kernel_config_json, "MAX_NUM_NODES")?
+                    .try_into()
+                    .expect("number of cores fits in u8")
+            } else {
+                1
+            },
+            num_domains: json_str_as_u64(&kernel_config_json, "NUM_DOMAINS")?
+                .try_into()
+                .unwrap(),
+            num_domain_schedules: json_str_as_u64(&kernel_config_json, "NUM_DOMAIN_SCHEDULES")?,
+            fpu: json_str_as_bool(&kernel_config_json, "HAVE_FPU")?,
+            arm_pa_size_bits,
+            arm_smc,
+            riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
+            invocations_labels,
+            device_regions,
+            normal_regions,
+            object_sizes,
+            address_space_constants,
+        };
+
+        assert!(
+            kernel_config.word_size == 64,
+            "Microkit tool has various assumptions about the word size being 64-bits."
+        );
+        Ok(kernel_config)
+    }
+
     /// Refers to the 'PPTR_BASE' define in kernel source
     pub fn virtual_base(&self) -> u64 {
         match self.arch {

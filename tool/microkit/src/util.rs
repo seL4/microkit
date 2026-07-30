@@ -214,6 +214,17 @@ pub fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf
     None
 }
 
+pub fn bail_if_not_exists(description: &'static str, path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        eprintln!(
+            "microkit: error: {description} '{}' does not exist",
+            path.display()
+        );
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
