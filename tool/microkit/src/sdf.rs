@@ -61,6 +61,7 @@ pub struct SdfLocation {
     pub col: u32,
 }
 
+#[derive(Clone, Copy)]
 pub struct SdfAttribute<'a> {
     pub name: &'a str,
     pub value: &'a str,
@@ -138,7 +139,7 @@ pub struct SystemDescription {
     pub domains: Domains,
 }
 
-pub fn parse(
+pub fn parse_xml(
     filename: &Path,
     xml: &str,
     config: &Config,
@@ -151,14 +152,6 @@ pub fn parse(
 
     let xml_sdf = SystemDescriptionFile { filename };
 
-    let mut root_pds = vec![];
-    let mut mrs = vec![];
-    let mut iomaps = vec![];
-    let mut io_address_space_names = HashSet::new();
-    let mut iommu_domain_ids = HashSet::new();
-    let mut iommu_device_identifiers = Vec::new();
-    let mut channels = vec![];
-    let mut domains = Domains::default();
     let system = doc
         .root()
         .children()
@@ -169,6 +162,25 @@ pub fn parse(
     check_no_text(&xml_sdf, &system)?;
 
     let system: &dyn SdfNode = &system;
+
+    parse(filename, system, config, search_paths)
+}
+
+pub fn parse(
+    filename: &Path,
+    system: &dyn SdfNode,
+    config: &Config,
+    search_paths: &Vec<PathBuf>,
+) -> Result<SystemDescription, String> {
+    let xml_sdf = SystemDescriptionFile { filename };
+    let mut root_pds = vec![];
+    let mut mrs = vec![];
+    let mut iomaps = vec![];
+    let mut io_address_space_names = HashSet::new();
+    let mut iommu_domain_ids = HashSet::new();
+    let mut iommu_device_identifiers = Vec::new();
+    let mut channels = vec![];
+    let mut domains = Domains::default();
 
     // Channels cannot be parsed immediately as they refer to a particular protection domain
     // via an index in the list of PDs. This means that we have to parse all PDs first and

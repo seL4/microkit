@@ -107,7 +107,7 @@ fn check_success(kernel_config: &sel4::Config, test_name: &str) {
     path.push("tests/sdf/");
     path.push(test_name);
     let sdf = std::fs::read_to_string(path).unwrap();
-    let parse = sdf::parse(
+    let parse = sdf::parse_xml(
         Path::new(test_name),
         &sdf,
         kernel_config,
@@ -131,7 +131,7 @@ fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str
     sdf_path.push("tests/sdf/");
     sdf_path.push(test_name);
     let sdf = std::fs::read_to_string(sdf_path).unwrap();
-    let parse_err = sdf::parse(
+    let parse_err = sdf::parse_xml(
         Path::new(test_name),
         &sdf,
         kernel_config,

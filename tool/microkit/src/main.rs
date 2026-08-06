@@ -10,7 +10,7 @@
 use microkit_tool::argparse;
 use microkit_tool::argparse::{Args, ArgsError};
 use microkit_tool::build::build_system;
-use microkit_tool::sdf::parse;
+use microkit_tool::sdf::parse_xml;
 use microkit_tool::sdk::Sdk;
 use microkit_tool::sel4::Config;
 use microkit_tool::util::bail_if_not_exists;
@@ -54,7 +54,7 @@ fn main() -> Result<(), String> {
 
     let xml: String = fs::read_to_string(system_path).unwrap();
 
-    let mut system = match parse(
+    let mut system = match parse_xml(
         system_path.as_path(),
         &xml,
         &kernel_config,
