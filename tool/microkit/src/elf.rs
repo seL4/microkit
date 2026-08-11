@@ -6,7 +6,7 @@
 
 use crate::sel4::PageSize;
 use crate::util::{bytes_to_struct, round_down, struct_to_bytes};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{self, metadata, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -212,7 +212,7 @@ pub struct ElfFile {
     pub machine: u16,
     pub segments: Vec<ElfSegment>,
     pub program_headers: Vec<ProgramHeader>,
-    symbols: HashMap<String, (ElfSymbol64, bool)>,
+    symbols: BTreeMap<String, (ElfSymbol64, bool)>,
 }
 
 impl ElfFile {
@@ -224,7 +224,7 @@ impl ElfFile {
             machine,
             segments: vec![],
             program_headers: vec![],
-            symbols: HashMap::new(),
+            symbols: BTreeMap::new(),
         }
     }
 
@@ -373,7 +373,7 @@ impl ElfFileReader {
         Ok(segments)
     }
 
-    fn symbols(&self) -> Result<HashMap<String, (ElfSymbol64, bool)>, String> {
+    fn symbols(&self) -> Result<BTreeMap<String, (ElfSymbol64, bool)>, String> {
         let hdr = &self.hdr;
 
         // Read all the section headers
@@ -406,7 +406,7 @@ impl ElfFileReader {
         let symtab_str = &self.bytes[symtab_str_start..symtab_str_end];
 
         // Read all the symbols
-        let mut symbols: HashMap<String, (ElfSymbol64, bool)> = HashMap::new();
+        let mut symbols: BTreeMap<String, (ElfSymbol64, bool)> = BTreeMap::new();
         let mut offset = 0;
         let symbol_size = std::mem::size_of::<ElfSymbol64>();
         while offset < symtab.len() {
@@ -649,7 +649,7 @@ impl ElfFile {
             + (shnum as u64) * (shentsize as u64);
 
         // First thing to do is work out where to place all the data segments
-        let mut seg_idx_to_data_off: HashMap<usize, u64> = Default::default();
+        let mut seg_idx_to_data_off: BTreeMap<usize, u64> = Default::default();
         for (i, seg) in self.loadable_segments().iter().enumerate() {
             seg_idx_to_data_off.insert(i, data_off_watermark);
             data_off_watermark += seg.file_size();

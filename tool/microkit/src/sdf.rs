@@ -28,7 +28,7 @@ mod pci;
 mod pd_vm;
 mod util;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -133,7 +133,7 @@ pub(crate) struct SystemDescriptionFile<'a> {
 
 #[derive(Debug)]
 pub struct SystemDescription {
-    pub protection_domains: HashMap<Rc<str>, ProtectionDomain>,
+    pub protection_domains: BTreeMap<Rc<str>, ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub iomaps: Vec<SysIOMap>,
     pub channels: Vec<Channel>,
@@ -177,8 +177,8 @@ pub fn parse(
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut iomaps = vec![];
-    let mut io_address_space_names = HashSet::new();
-    let mut iommu_domain_ids = HashSet::new();
+    let mut io_address_space_names = BTreeSet::new();
+    let mut iommu_domain_ids = BTreeSet::new();
     let mut iommu_device_identifiers = Vec::new();
     let mut channels = vec![];
     let mut domains = Domains::default();
@@ -274,7 +274,7 @@ pub fn parse(
         }
     }
 
-    let mut pds: HashMap<Rc<str>, _> = pds.into_iter().map(|pd| (pd.name.clone(), pd)).collect();
+    let mut pds: BTreeMap<Rc<str>, _> = pds.into_iter().map(|pd| (pd.name.clone(), pd)).collect();
 
     for node in channel_nodes {
         let ch = Channel::from_xml(&xml_sdf, &*node, &pds)?;
@@ -374,7 +374,7 @@ pub fn parse(
 
     // Ensure no duplicate channel identifiers.
     // This means checking that no interrupt IDs clash with any channel IDs
-    let mut ch_ids = HashMap::with_capacity(pds.len());
+    let mut ch_ids = BTreeMap::new();
     for pd in pds.values() {
         let mut pd_ch_ids = vec![];
 
@@ -537,7 +537,7 @@ pub fn parse(
     // Ensure that there are no overlapping extra cap maps in the user caps region
     // and we are not mapping in the same cap from the same source more than once
     for pd in pds.values() {
-        let mut user_cap_slots = HashMap::<u64, Vec<_>>::new();
+        let mut user_cap_slots = BTreeMap::<u64, Vec<_>>::new();
 
         for cap_map in &pd.cap_maps {
             user_cap_slots
@@ -669,7 +669,7 @@ pub fn parse(
     }
 
     // If any MRs are subject of a setvar region_paddr, update its phys_addr field to indicate tool allocated.
-    let mut mr_names_with_setvar_paddr = HashSet::new();
+    let mut mr_names_with_setvar_paddr = BTreeSet::new();
     for pd in pds.values() {
         for setvar in pd.setvars.iter() {
             if let SysSetVarKind::Paddr { region } = &setvar.kind {

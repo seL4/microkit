@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -676,7 +676,7 @@ pub fn check_io_maps(
     mrs: &[SysMemoryRegion],
     iomaps: &[SysIOMap],
 ) -> Result<(), String> {
-    let mut by_device: HashMap<&str, Vec<&SysIOMap>> = HashMap::new();
+    let mut by_device: BTreeMap<&str, Vec<&SysIOMap>> = BTreeMap::new();
 
     for iomap in iomaps {
         by_device

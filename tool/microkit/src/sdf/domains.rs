@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::collections::{hash_map, HashMap};
+use std::collections::{btree_map, BTreeMap};
 use std::num::NonZero;
 
 use sel4_capdl_initializer_types::{DomainSchedDuration, DomainSchedEntry};
@@ -16,7 +16,7 @@ use crate::Config;
 
 #[derive(Debug, Default)]
 pub struct Domains {
-    pub name_to_id_map: HashMap<String, u8>,
+    pub name_to_id_map: BTreeMap<String, u8>,
     pub schedule_set_start: Option<u64>,
     pub schedule_index_shift: Option<u64>,
     pub schedule: Vec<DomainSchedEntry>,
@@ -37,8 +37,8 @@ impl Domains {
             );
         }
 
-        let mut name_to_id_map = HashMap::<String, Option<u8>>::new();
-        let mut id_to_name_map = HashMap::<u8, String>::new();
+        let mut name_to_id_map = BTreeMap::<String, Option<u8>>::new();
+        let mut id_to_name_map = BTreeMap::<u8, String>::new();
         let mut domain_schedule_element = None;
 
         for child in node.children() {
@@ -112,7 +112,7 @@ impl Domains {
 
                     let mut dom = None;
                     for i in 0..=config.num_domains {
-                        if let hash_map::Entry::Vacant(e) = id_to_name_map.entry(i) {
+                        if let btree_map::Entry::Vacant(e) = id_to_name_map.entry(i) {
                             e.insert(name.clone());
                             dom = Some(i);
                             break;
@@ -173,7 +173,7 @@ impl Domains {
         config: &Config,
         xml_sdf: &SystemDescriptionFile,
         node: &dyn SdfNode,
-        name_to_id_map: HashMap<String, u8>,
+        name_to_id_map: BTreeMap<String, u8>,
     ) -> Result<Domains, String> {
         check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
 
@@ -266,7 +266,7 @@ impl Domains {
     fn schedule_entry_from_xml(
         xml_sdf: &SystemDescriptionFile,
         node: &dyn SdfNode,
-        name_to_id_map: &HashMap<String, u8>,
+        name_to_id_map: &BTreeMap<String, u8>,
     ) -> Result<DomainSchedEntry, String> {
         check_attributes(xml_sdf, node, &["domain", "duration"])?;
 

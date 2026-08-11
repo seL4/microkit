@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use super::consts::*;
@@ -33,7 +33,7 @@ impl ChannelEnd {
     fn from_xml<'a>(
         xml_sdf: &'a SystemDescriptionFile,
         node: &'a dyn SdfNode,
-        pds: &HashMap<Rc<str>, ProtectionDomain>,
+        pds: &BTreeMap<Rc<str>, ProtectionDomain>,
     ) -> Result<ChannelEnd, String> {
         let node_name = node.tag_name();
         if node_name != "end" {
@@ -107,7 +107,7 @@ impl Channel {
     pub(super) fn from_xml<'a>(
         xml_sdf: &'a SystemDescriptionFile,
         node: &'a dyn SdfNode,
-        pds: &HashMap<Rc<str>, ProtectionDomain>,
+        pds: &BTreeMap<Rc<str>, ProtectionDomain>,
     ) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 

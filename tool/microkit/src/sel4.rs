@@ -681,7 +681,7 @@ impl RiscvVirtualMemory {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ObjectType {
     Untyped,
     Tcb,

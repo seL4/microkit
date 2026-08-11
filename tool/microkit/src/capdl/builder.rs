@@ -7,7 +7,7 @@ use core::ops::Range;
 
 use std::{
     cmp::{min, Ordering},
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     rc::Rc,
 };
 
@@ -533,7 +533,7 @@ pub fn build_capdl_spec(
     // *********************************
     // Step 2. Create the memory regions' spec. Result is a hashmap keyed on MR name, value is (parsed XML obj, Vec of frame object IDs)
     // *********************************
-    let mut mr_name_to_frames: HashMap<&String, Vec<ObjectId>> = HashMap::new();
+    let mut mr_name_to_frames: BTreeMap<&String, Vec<ObjectId>> = BTreeMap::new();
     for mr in system.memory_regions.iter() {
         let mut frame_ids = Vec::new();
         let frame_size_bits = mr.page_size.fixed_size_bits(kernel_config);
@@ -619,7 +619,7 @@ pub fn build_capdl_spec(
 
     // This object keeps track of object IDs for various 'important' / nameable kernel objects for
     // each PD so that we can make various references to them at later steps.
-    let mut pd_shadow_cspaces: HashMap<Rc<str>, PDShadowCspace> = HashMap::new();
+    let mut pd_shadow_cspaces: BTreeMap<Rc<str>, PDShadowCspace> = BTreeMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -1218,7 +1218,7 @@ pub fn build_capdl_spec(
     // *********************************
     // Step 5. Create IOMMU Address Spaces
     // *********************************
-    let mut iospace_by_device: HashMap<&str, AddressSpace> = HashMap::new();
+    let mut iospace_by_device: BTreeMap<&str, AddressSpace> = BTreeMap::new();
     for iomap in system.iomaps.iter() {
         let address_space = iospace_by_device.entry(&iomap.name).or_insert_with(|| {
             create_iospace(
@@ -1298,7 +1298,7 @@ pub fn build_capdl_spec(
     // 4. Recurse through every cap, for any cap bearing the original object ID, write the new object ID.
 
     // Step 8-1
-    let mut obj_name_to_old_id: HashMap<String, ObjectId> = HashMap::new();
+    let mut obj_name_to_old_id: BTreeMap<String, ObjectId> = BTreeMap::new();
     for (id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_name_to_old_id.insert(obj.name.as_ref().unwrap().clone(), id.into());
     }

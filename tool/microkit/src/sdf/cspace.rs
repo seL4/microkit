@@ -10,7 +10,7 @@ use super::consts::*;
 use super::util::{check_attributes, checked_lookup, loc_string, sdf_parse_number, value_error};
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum CapMapType {
     Tcb,
     Sc,

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::{cmp::min, collections::HashMap, rc::Rc};
+use std::{cmp::min, collections::BTreeMap, rc::Rc};
 
 use crate::{
     elf::ElfFile,
@@ -85,7 +85,7 @@ pub fn patch_symbols(
     // *********************************
     // Step 2. Write ELF symbols for each PD
     // *********************************
-    let mut mr_name_to_desc: HashMap<&String, &SysMemoryRegion> = HashMap::new();
+    let mut mr_name_to_desc: BTreeMap<&String, &SysMemoryRegion> = BTreeMap::new();
     for mr in system.memory_regions.iter() {
         mr_name_to_desc.insert(&mr.name, mr);
     }

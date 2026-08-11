@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::str::FromStr;
 
@@ -75,8 +75,8 @@ impl IOAddressSpace {
         config: &Config,
         xml_sdf: &SystemDescriptionFile,
         node: &dyn SdfNode,
-        names: &mut HashSet<String>,
-        domain_ids: &mut HashSet<u64>,
+        names: &mut BTreeSet<String>,
+        domain_ids: &mut BTreeSet<u64>,
         iommu_device_identifiers: &mut Vec<IommuDeviceIdentifier>,
     ) -> Result<IOAddressSpace, String> {
         if !config.iommu {
