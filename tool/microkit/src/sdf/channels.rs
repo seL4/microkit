@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use super::consts::*;
 use super::pd_vm::ProtectionDomain;
 use super::util::{check_attributes, checked_lookup, loc_string, value_error};
@@ -13,7 +16,7 @@ use crate::util::str_to_bool;
 
 #[derive(Debug, Clone)]
 pub struct ChannelEnd {
-    pub pd: usize,
+    pub pd: Rc<str>,
     pub id: u64,
     pub notify: bool,
     pub pp: bool,
@@ -30,7 +33,7 @@ impl ChannelEnd {
     fn from_xml<'a>(
         xml_sdf: &'a SystemDescriptionFile,
         node: &'a dyn SdfNode,
-        pds: &[ProtectionDomain],
+        pds: &HashMap<Rc<str>, ProtectionDomain>,
     ) -> Result<ChannelEnd, String> {
         let node_name = node.tag_name();
         if node_name != "end" {
@@ -78,10 +81,10 @@ impl ChannelEnd {
                 value_error(xml_sdf, node, "pp must be 'true' or 'false'".to_string())
             })?;
 
-        if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
+        if let Some(pd) = pds.get(end_pd) {
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
             Ok(ChannelEnd {
-                pd: pd_idx,
+                pd: pd.name.clone(),
                 id: end_id.try_into().unwrap(),
                 notify,
                 pp,
@@ -104,7 +107,7 @@ impl Channel {
     pub(super) fn from_xml<'a>(
         xml_sdf: &'a SystemDescriptionFile,
         node: &'a dyn SdfNode,
-        pds: &[ProtectionDomain],
+        pds: &HashMap<Rc<str>, ProtectionDomain>,
     ) -> Result<Channel, String> {
         check_attributes(xml_sdf, node, &[])?;
 

@@ -8,6 +8,7 @@ use core::ops::Range;
 use std::{
     cmp::{min, Ordering},
     collections::HashMap,
+    rc::Rc,
 };
 
 use sel4_capdl_initializer_types::{
@@ -606,7 +607,7 @@ pub fn build_capdl_spec(
     // On ARM, check if we need to create the SMC object
     let arm_smc_obj_id = if kernel_config.arch == Arch::Aarch64
         && kernel_config.arm_smc.unwrap_or(false)
-        && system.protection_domains.iter().any(|pd| pd.smc)
+        && system.protection_domains.values().any(|pd| pd.smc)
     {
         Some(spec_container.add_root_object(NamedObject {
             name: "arm_smc".to_owned().into(),
@@ -618,7 +619,7 @@ pub fn build_capdl_spec(
 
     // This object keeps track of object IDs for various 'important' / nameable kernel objects for
     // each PD so that we can make various references to them at later steps.
-    let mut pd_shadow_cspaces: HashMap<usize, PDShadowCspace> = HashMap::new();
+    let mut pd_shadow_cspaces: HashMap<Rc<str>, PDShadowCspace> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -627,7 +628,7 @@ pub fn build_capdl_spec(
     // Keep tabs on each PD's stack bottom so we can write it out to the monitor for stack overflow detection.
     let mut pd_stack_bottoms: Vec<u64> = Vec::new();
 
-    for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
+    for (pd_global_idx, pd) in system.protection_domains.values().enumerate() {
         let elf_obj = &elfs[pd_global_idx];
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
@@ -761,10 +762,9 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if let Some(pd_parent_id) = pd.parent {
-            assert!(pd_global_idx > pd_parent_id);
+        let pd_fault_ep_cap = if let Some(pd_parent) = &pd.parent {
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_shadow_cspace = &pd_shadow_cspaces[&pd_parent_id];
+            let parent_shadow_cspace = &pd_shadow_cspaces[pd_parent];
             let parent_ep_obj_id = parent_shadow_cspace
                 .endpoint
                 .expect("parent should have EP due to needs_ep()");
@@ -812,7 +812,7 @@ pub fn build_capdl_spec(
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
-        if pd.needs_ep(pd_global_idx, &system.channels) {
+        if pd.needs_ep(&system.channels) {
             pd_ep_obj_id = Some(capdl_util_make_endpoint_obj(
                 &mut spec_container,
                 &pd.name,
@@ -1071,7 +1071,7 @@ pub fn build_capdl_spec(
 
         let pd_root_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
-            &(pd.name.clone() + "_root"),
+            &format!("{}_root", pd.name),
             PD_ROOT_CAP_BITS,
             Vec::new(),
         );
@@ -1139,7 +1139,7 @@ pub fn build_capdl_spec(
         }
 
         pd_shadow_cspaces.insert(
-            pd_global_idx,
+            pd.name.clone(),
             PDShadowCspace {
                 cspace: pd_root_cnode_obj_id,
                 microkit_cnode: pd_cnode_obj_id,
@@ -1255,11 +1255,11 @@ pub fn build_capdl_spec(
     // *********************************
     // Step 6. Handle extra cap mappings
     // *********************************
-    for (pd_dest_idx, pd) in system.protection_domains.iter().enumerate() {
+    for pd in system.protection_domains.values() {
         for cap_map in pd.cap_maps.iter() {
             // TODO: Once we add more CapMap options, they might not all have
             // the pd_name. But for now, they do.
-            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd.unwrap()];
+            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd];
 
             let cap_map_obj = match cap_map.cap_type {
                 CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
@@ -1268,7 +1268,7 @@ pub fn build_capdl_spec(
             };
 
             // Map this into the destination pd's cspace and the specified slot.
-            pd_shadow_cspaces[&pd_dest_idx].insert_cap_into_root_cnode(
+            pd_shadow_cspaces[&pd.name].insert_cap_into_root_cnode(
                 &mut spec_container,
                 cap_map.slot as u32,
                 cap_map_obj,

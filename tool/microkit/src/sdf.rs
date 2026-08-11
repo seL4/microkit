@@ -31,6 +31,7 @@ mod util;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::sel4::{Arch, Config};
 use crate::util::ranges_overlap;
@@ -132,7 +133,7 @@ pub(crate) struct SystemDescriptionFile<'a> {
 
 #[derive(Debug)]
 pub struct SystemDescription {
-    pub protection_domains: Vec<ProtectionDomain>,
+    pub protection_domains: HashMap<Rc<str>, ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub iomaps: Vec<SysIOMap>,
     pub channels: Vec<Channel>,
@@ -242,50 +243,7 @@ pub fn parse(
         }
     }
 
-    let mut pds = pd_flatten(&xml_sdf, root_pds)?;
-
-    for node in channel_nodes {
-        let ch = Channel::from_xml(&xml_sdf, &*node, &pds)?;
-
-        if let Some(setvar_id) = &ch.end_a.setvar_id {
-            let setvar = SysSetVar {
-                symbol: setvar_id.to_string(),
-                kind: SysSetVarKind::Id { id: ch.end_a.id },
-            };
-            checked_add_setvar(&mut pds[ch.end_a.pd].setvars, setvar, &xml_sdf, &*node)?;
-        }
-
-        if let Some(setvar_id) = &ch.end_b.setvar_id {
-            let setvar = SysSetVar {
-                symbol: setvar_id.to_string(),
-                kind: SysSetVarKind::Id { id: ch.end_b.id },
-            };
-            checked_add_setvar(&mut pds[ch.end_b.pd].setvars, setvar, &xml_sdf, &*node)?;
-        }
-
-        channels.push(ch);
-    }
-
-    // FIXME: Now we post-fill the PD ids in the capmap elements, which is
-    //        ugly, and we should rework this to be less so.
-    let pd_names_to_id: HashMap<_, _> = pds
-        .iter()
-        .enumerate()
-        .map(|(idx, pd)| (pd.name.clone(), idx))
-        .collect();
-    for pd in pds.iter_mut() {
-        for cap_map in pd.cap_maps.iter_mut() {
-            let Some(&pd) = pd_names_to_id.get(&cap_map.pd_name) else {
-                return Err(format!(
-                    "Error: unknown PD name '{}': {}",
-                    cap_map.pd_name,
-                    loc_string(&xml_sdf, cap_map.text_pos)
-                ));
-            };
-
-            cap_map.pd = Some(pd);
-        }
-    }
+    let pds = pd_flatten(&xml_sdf, root_pds)?;
 
     // Now that we have parsed everything in the system description we can validate any
     // global properties (e.g no duplicate PD names etc).
@@ -302,17 +260,63 @@ pub fn parse(
         ));
     }
 
-    for pd in &pds {
+    for pd in pds.iter() {
         if pds.iter().filter(|x| pd.name == x.name).count() > 1 {
             return Err(format!(
                 "Error: duplicate protection domain name '{}'.",
                 pd.name
             ));
         }
-        if pd.name == MONITOR_PD_NAME {
+        if &*pd.name == MONITOR_PD_NAME {
             return Err(
                 "Error: the PD name 'monitor' is reserved for the Microkit Monitor.".to_string(),
             );
+        }
+    }
+
+    let mut pds: HashMap<Rc<str>, _> = pds.into_iter().map(|pd| (pd.name.clone(), pd)).collect();
+
+    for node in channel_nodes {
+        let ch = Channel::from_xml(&xml_sdf, &*node, &pds)?;
+
+        if let Some(setvar_id) = &ch.end_a.setvar_id {
+            let setvar = SysSetVar {
+                symbol: setvar_id.to_string(),
+                kind: SysSetVarKind::Id { id: ch.end_a.id },
+            };
+            checked_add_setvar(
+                &mut pds.get_mut(&ch.end_a.pd).unwrap().setvars,
+                setvar,
+                &xml_sdf,
+                &*node,
+            )?;
+        }
+
+        if let Some(setvar_id) = &ch.end_b.setvar_id {
+            let setvar = SysSetVar {
+                symbol: setvar_id.to_string(),
+                kind: SysSetVarKind::Id { id: ch.end_b.id },
+            };
+            checked_add_setvar(
+                &mut pds.get_mut(&ch.end_b.pd).unwrap().setvars,
+                setvar,
+                &xml_sdf,
+                &*node,
+            )?;
+        }
+
+        channels.push(ch);
+    }
+
+    for pd in pds.values() {
+        for cap_map in pd.cap_maps.iter() {
+            if !pds.contains_key(&cap_map.pd) {
+                return Err(format!(
+                    "Error: unknown PD name '{}': {}",
+                    cap_map.pd,
+                    loc_string(&xml_sdf, cap_map.text_pos)
+                ));
+            };
         }
     }
 
@@ -325,10 +329,10 @@ pub fn parse(
         }
     }
 
-    let mut vms: Vec<&String> = vec![];
-    for pd in &pds {
+    let mut vms: Vec<&str> = vec![];
+    for pd in pds.values() {
         if let Some(vm) = &pd.virtual_machine {
-            if vms.contains(&&vm.name) {
+            if vms.contains(&vm.name.as_ref()) {
                 return Err(format!(
                     "Error: duplicate virtual machine name '{}'.",
                     vm.name
@@ -352,7 +356,7 @@ pub fn parse(
 
     // Ensure no duplicate IRQs
     let mut all_irqs = Vec::new();
-    for pd in &pds {
+    for pd in pds.values() {
         for sysirq in &pd.irqs {
             if all_irqs.contains(&sysirq.irq_num()) {
                 return Err(format!(
@@ -370,10 +374,12 @@ pub fn parse(
 
     // Ensure no duplicate channel identifiers.
     // This means checking that no interrupt IDs clash with any channel IDs
-    let mut ch_ids = vec![vec![]; pds.len()];
-    for (pd_idx, pd) in pds.iter().enumerate() {
+    let mut ch_ids = HashMap::with_capacity(pds.len());
+    for pd in pds.values() {
+        let mut pd_ch_ids = vec![];
+
         for sysirq in &pd.irqs {
-            if ch_ids[pd_idx].contains(&sysirq.id) {
+            if pd_ch_ids.contains(&sysirq.id) {
                 return Err(format!(
                     "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                     sysirq.id,
@@ -383,13 +389,16 @@ pub fn parse(
                     pd.text_pos.unwrap().col
                 ));
             }
-            ch_ids[pd_idx].push(sysirq.id);
+
+            pd_ch_ids.push(sysirq.id);
         }
+
+        ch_ids.insert(&pd.name, pd_ch_ids);
     }
 
     for ch in &channels {
-        if ch_ids[ch.end_a.pd].contains(&ch.end_a.id) {
-            let pd = &pds[ch.end_a.pd];
+        if ch_ids[&ch.end_a.pd].contains(&ch.end_a.id) {
+            let pd = &pds[&ch.end_a.pd];
             return Err(format!(
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                 ch.end_a.id,
@@ -400,8 +409,8 @@ pub fn parse(
             ));
         }
 
-        if ch_ids[ch.end_b.pd].contains(&ch.end_b.id) {
-            let pd = &pds[ch.end_b.pd];
+        if ch_ids[&ch.end_b.pd].contains(&ch.end_b.id) {
+            let pd = &pds[&ch.end_b.pd];
             return Err(format!(
                 "Error: duplicate channel id: {} in protection domain: '{}' @ {}:{}:{}",
                 ch.end_b.id,
@@ -412,8 +421,8 @@ pub fn parse(
             ));
         }
 
-        let pd_a = &pds[ch.end_a.pd];
-        let pd_b = &pds[ch.end_b.pd];
+        let pd_a = &pds[&ch.end_a.pd];
+        let pd_b = &pds[&ch.end_b.pd];
         if ch.end_a.pp && pd_a.priority() >= pd_b.priority() {
             return Err(format!(
                 "Error: PPCs must be to protection domains of strictly higher priorities; \
@@ -449,12 +458,12 @@ pub fn parse(
             ));
         }
 
-        ch_ids[ch.end_a.pd].push(ch.end_a.id);
-        ch_ids[ch.end_b.pd].push(ch.end_b.id);
+        ch_ids.get_mut(&ch.end_a.pd).unwrap().push(ch.end_a.id);
+        ch_ids.get_mut(&ch.end_b.pd).unwrap().push(ch.end_b.id);
     }
 
     // Ensure no duplicate I/O Ports
-    for pd in &pds {
+    for pd in pds.values() {
         let mut seen_ioport_ids: Vec<u64> = Vec::new();
         for ioport in &pd.ioports {
             if seen_ioport_ids.contains(&ioport.id) {
@@ -474,7 +483,7 @@ pub fn parse(
 
     // Ensure I/O Ports' size are valid and they don't overlap.
     let mut seen_ioports: Vec<(&str, &IOPort)> = Vec::new();
-    for pd in &pds {
+    for pd in pds.values() {
         for this_ioport in &pd.ioports {
             for (seen_pd_name, seen_ioport) in &seen_ioports {
                 let left_range = this_ioport.addr..this_ioport.addr + this_ioport.size;
@@ -504,7 +513,7 @@ pub fn parse(
     }
 
     // Ensure that all maps are correct
-    for pd in &pds {
+    for pd in pds.values() {
         check_maps(
             &xml_sdf,
             &mrs,
@@ -527,7 +536,7 @@ pub fn parse(
 
     // Ensure that there are no overlapping extra cap maps in the user caps region
     // and we are not mapping in the same cap from the same source more than once
-    for pd in &pds {
+    for pd in pds.values() {
         let mut user_cap_slots = HashMap::<u64, Vec<_>>::new();
 
         for cap_map in &pd.cap_maps {
@@ -544,7 +553,7 @@ pub fn parse(
                     lines.push_str(&format!(
                         "\n  type {:?} from '{}' at '{}'",
                         mapping.cap_type,
-                        mapping.pd_name,
+                        mapping.pd,
                         loc_string(&xml_sdf, mapping.text_pos)
                     ));
                 }
@@ -587,7 +596,7 @@ pub fn parse(
 
     // Check that all MRs are used
     let mut all_maps = vec![];
-    for pd in &pds {
+    for pd in pds.values() {
         all_maps.extend(&pd.maps);
         if let Some(vm) = &pd.virtual_machine {
             all_maps.extend(&vm.maps);
@@ -661,7 +670,7 @@ pub fn parse(
 
     // If any MRs are subject of a setvar region_paddr, update its phys_addr field to indicate tool allocated.
     let mut mr_names_with_setvar_paddr = HashSet::new();
-    for pd in pds.iter() {
+    for pd in pds.values() {
         for setvar in pd.setvars.iter() {
             if let SysSetVarKind::Paddr { region } = &setvar.kind {
                 mr_names_with_setvar_paddr.insert(region);

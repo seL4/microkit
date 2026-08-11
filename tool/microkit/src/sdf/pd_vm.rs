@@ -6,6 +6,7 @@
 
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::str::FromStr;
 
 use super::channels::Channel;
@@ -71,7 +72,7 @@ pub struct SysSetVar {
 pub struct ProtectionDomain {
     /// Only populated for child protection domains
     pub id: Option<u64>,
-    pub name: String,
+    pub name: Rc<str>,
     pub sched_params: SchedulingParams,
     pub passive: bool,
     pub stack_size: u64,
@@ -94,7 +95,7 @@ pub struct ProtectionDomain {
     pub has_children: bool,
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
-    pub parent: Option<usize>,
+    pub parent: Option<Rc<str>>,
     /// Value of the setvar_id attribute, if a parent protection domain exists
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
@@ -102,12 +103,12 @@ pub struct ProtectionDomain {
 }
 
 impl ProtectionDomain {
-    pub fn needs_ep(&self, self_id: usize, channels: &[Channel]) -> bool {
+    pub fn needs_ep(&self, channels: &[Channel]) -> bool {
         self.has_children
             || self.virtual_machine.is_some()
             || channels.iter().any(|channel| {
-                (channel.end_a.pp && channel.end_b.pd == self_id)
-                    || (channel.end_b.pp && channel.end_a.pd == self_id)
+                (channel.end_a.pp && channel.end_b.pd == self.name)
+                    || (channel.end_b.pp && channel.end_a.pd == self.name)
             })
     }
 
@@ -160,7 +161,7 @@ impl ProtectionDomain {
         }
         check_attributes(xml_sdf, node, &attrs)?;
 
-        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+        let name = Rc::from(checked_lookup(xml_sdf, node, "name")?);
 
         let (id, setvar_id) = if is_child {
             let id = sdf_parse_number(checked_lookup(xml_sdf, node, "id")?, node)?;
@@ -819,7 +820,7 @@ pub fn pd_flatten(
         // These are all root PDs, so should not have parents.
         assert!(pd.parent.is_none());
         // We provide the index of the PD in the entire PD list
-        all_pds.extend(pd_tree_to_list(xml_sdf, pd, all_pds.len())?);
+        all_pds.extend(pd_tree_to_list(xml_sdf, pd)?);
     }
 
     Ok(all_pds)
@@ -832,7 +833,6 @@ pub fn pd_flatten(
 fn pd_tree_to_list(
     xml_sdf: &SystemDescriptionFile,
     mut pd: ProtectionDomain,
-    idx: usize,
 ) -> Result<Vec<ProtectionDomain>, String> {
     let mut child_ids = vec![];
     for child_pd in &pd.child_pds {
@@ -862,16 +862,8 @@ fn pd_tree_to_list(
     for mut child_pd in child_pds {
         // The parent PD's index is set for each child. We then pass the index relative to the *total*
         // list to any nested children so their parent index can be set to the position of this child.
-        child_pd.parent = Some(idx);
-        new_child_pds.extend(pd_tree_to_list(
-            xml_sdf,
-            child_pd,
-            // We need to pass the position of this current child PD in the global list.
-            // `idx` is this child's parent index in the global list, so we need to add
-            // the position of this child to `idx` which will be the number of extra child
-            // PDs we've just processed, plus one for the actual entry of this child.
-            idx + new_child_pds.len() + 1,
-        )?);
+        child_pd.parent = Some(pd.name.clone());
+        new_child_pds.extend(pd_tree_to_list(xml_sdf, child_pd)?);
     }
 
     let mut all = vec![pd];
@@ -883,7 +875,7 @@ fn pd_tree_to_list(
 #[derive(Debug, PartialEq, Eq)]
 pub struct VirtualMachine {
     pub vcpus: Vec<VirtualCpu>,
-    pub name: String,
+    pub name: Rc<str>,
     pub maps: Vec<SysMap>,
     pub sched_params: Option<SchedulingParams>,
 }
@@ -907,7 +899,7 @@ impl VirtualMachine {
             check_attributes(xml_sdf, node, &["name"])?;
         }
 
-        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+        let name = Rc::from(checked_lookup(xml_sdf, node, "name")?);
 
         let sched_params = if config.arch == Arch::Aarch64 {
             // If we do not have an explicit budget the period is equal to the default budget.

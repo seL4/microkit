@@ -137,7 +137,7 @@ pub fn build_system(
     // a list like this.
     let mut system_elfs = Vec::with_capacity(system.protection_domains.len());
     // Get the elf files for each pd:
-    for pd in &system.protection_domains {
+    for pd in system.protection_domains.values() {
         match get_full_path(&pd.program_image, &args.search_paths) {
             Some(path) => {
                 let path_for_symbols = pd

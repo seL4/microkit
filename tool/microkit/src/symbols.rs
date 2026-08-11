@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::{cmp::min, collections::HashMap};
+use std::{cmp::min, collections::HashMap, rc::Rc};
 
 use crate::{
     elf::ElfFile,
@@ -26,9 +26,9 @@ pub fn patch_symbols(
     // *********************************
     let monitor_elf = pd_elf_files.last_mut().unwrap();
 
-    let pd_names: Vec<String> = system
+    let pd_names: Vec<Rc<str>> = system
         .protection_domains
-        .iter()
+        .values()
         .map(|pd| pd.name.clone())
         .collect();
     monitor_elf
@@ -44,9 +44,9 @@ pub fn patch_symbols(
         )
         .unwrap();
 
-    let vm_names: Vec<String> = system
+    let vm_names: Vec<Rc<str>> = system
         .protection_domains
-        .iter()
+        .values()
         .filter(|pd| pd.virtual_machine.is_some())
         .flat_map(|pd_with_vm| {
             let vm = pd_with_vm.virtual_machine.as_ref().unwrap();
@@ -71,7 +71,7 @@ pub fn patch_symbols(
         .unwrap();
 
     let mut pd_stack_bottoms: Vec<u64> = Vec::new();
-    for pd in system.protection_domains.iter() {
+    for pd in system.protection_domains.values() {
         let cur_stack_vaddr = kernel_config.pd_stack_bottom(pd.stack_size);
         pd_stack_bottoms.push(cur_stack_vaddr);
     }
@@ -90,7 +90,7 @@ pub fn patch_symbols(
         mr_name_to_desc.insert(&mr.name, mr);
     }
 
-    for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
+    for (pd_global_idx, pd) in system.protection_domains.values().enumerate() {
         let elf_obj = &mut pd_elf_files[pd_global_idx];
 
         let name = pd.name.as_bytes();
@@ -105,7 +105,7 @@ pub fn patch_symbols(
         let mut notification_bits: u64 = 0;
         let mut pp_bits: u64 = 0;
         for channel in system.channels.iter() {
-            if channel.end_a.pd == pd_global_idx {
+            if channel.end_a.pd == pd.name {
                 if channel.end_a.notify {
                     notification_bits |= 1 << channel.end_a.id;
                 }
@@ -113,7 +113,7 @@ pub fn patch_symbols(
                     pp_bits |= 1 << channel.end_a.id;
                 }
             }
-            if channel.end_b.pd == pd_global_idx {
+            if channel.end_b.pd == pd.name {
                 if channel.end_b.notify {
                     notification_bits |= 1 << channel.end_b.id;
                 }

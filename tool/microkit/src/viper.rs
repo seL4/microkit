@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 
+use std::rc::Rc;
+
 use sel4_capdl_initializer_types::{Cap, Object};
 
 use crate::capdl::CapDLSpecContainer;
@@ -84,7 +86,7 @@ impl CapView {
 pub fn get_cap_view(
     capdl_spec: &CapDLSpecContainer,
     system: &SystemDescription,
-    current_pd: usize,
+    current_pd: &str,
 ) -> Option<CapView> {
     let pd = system.protection_domains.get(current_pd)?;
     let cnode_name = format!("cnode_{}", pd.name);
@@ -186,7 +188,7 @@ impl SdfView {
     }
 }
 
-pub fn get_sdf_view(system: &SystemDescription, current_pd: usize) -> Option<SdfView> {
+pub fn get_sdf_view(system: &SystemDescription, current_pd: &str) -> Option<SdfView> {
     let current = system.protection_domains.get(current_pd)?;
 
     let mut view = SdfView {
@@ -199,9 +201,9 @@ pub fn get_sdf_view(system: &SystemDescription, current_pd: usize) -> Option<Sdf
     }
 
     for ch in &system.channels {
-        let (local, remote) = if ch.end_a.pd == current_pd {
+        let (local, remote) = if &*ch.end_a.pd == current_pd {
             (&ch.end_a, &ch.end_b)
-        } else if ch.end_b.pd == current_pd {
+        } else if &*ch.end_b.pd == current_pd {
             (&ch.end_b, &ch.end_a)
         } else {
             continue;
@@ -210,7 +212,7 @@ pub fn get_sdf_view(system: &SystemDescription, current_pd: usize) -> Option<Sdf
         view.channel_ends.push(local.id);
 
         let local_prio = current.priority();
-        let remote_prio = system.protection_domains[remote.pd].priority();
+        let remote_prio = system.protection_domains[&remote.pd].priority();
 
         if local.pp && local_prio < remote_prio {
             view.ppcall_targets.push(local.id);
@@ -229,8 +231,8 @@ pub fn get_sdf_view(system: &SystemDescription, current_pd: usize) -> Option<Sdf
         }
     }
 
-    for pd in &system.protection_domains {
-        if pd.parent == Some(current_pd) {
+    for pd in system.protection_domains.values() {
+        if pd.parent == Some(Rc::from(current_pd)) {
             if let Some(id) = pd.id {
                 view.children.push(id)
             }
@@ -291,7 +293,7 @@ impl MemView {
     }
 }
 
-pub fn get_mem_view(system: &SystemDescription, current_pd: usize) -> Option<MemView> {
+pub fn get_mem_view(system: &SystemDescription, current_pd: &str) -> Option<MemView> {
     let current = system.protection_domains.get(current_pd)?;
 
     let mut view = MemView {
@@ -344,15 +346,14 @@ pub fn get_combined_views(
 ) -> Vec<CombinedView> {
     system
         .protection_domains
-        .iter()
-        .enumerate()
-        .filter_map(|(current_pd, pd)| {
-            let sdf = get_sdf_view(system, current_pd)?;
-            let cap = get_cap_view(capdl_spec, system, current_pd)?;
-            let mem = get_mem_view(system, current_pd)?;
+        .values()
+        .filter_map(|pd| {
+            let sdf = get_sdf_view(system, &pd.name)?;
+            let cap = get_cap_view(capdl_spec, system, &pd.name)?;
+            let mem = get_mem_view(system, &pd.name)?;
 
             Some(CombinedView {
-                pd_name: pd.name.clone(),
+                pd_name: pd.name.to_string(),
                 sdf,
                 cap,
                 mem,

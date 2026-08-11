@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::rc::Rc;
+
 use super::consts::*;
 use super::util::{check_attributes, checked_lookup, loc_string, sdf_parse_number, value_error};
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
@@ -18,15 +20,7 @@ pub enum CapMapType {
 #[derive(Debug, PartialEq, Eq)]
 pub struct CapMap {
     pub cap_type: CapMapType,
-    // FIXME: This is quite a hack. Basically, we need to be able to reference
-    // arbitrary PDs, but to gather the index, we need to know all the PDs.
-    // However, at the time of parsing the cap maps, we are in the process
-    // of parsing all the PDs. In lieu of something better (in my - @midnightveil's
-    // opinion, making everything think in terms of PD names, and something
-    // that was necessary to do for the multikernel changes); the pd idx will
-    // be filled out later during SDF parse process.
-    pub pd_name: String,
-    pub pd: Option<usize>,
+    pub pd: Rc<str>,
     // The destination "slot" in the CSpace: note that this is "opaque" and
     // can be shifted depending on the location in the CSpace to work as the CPtr,
     // but here it is given as the index into the CNode.
@@ -51,7 +45,7 @@ impl CapMap {
         // have to rework this a bit.
         check_attributes(xml_sdf, node, &["slot", "pd"])?;
 
-        let pd_name = checked_lookup(xml_sdf, node, "pd")?.to_string();
+        let pd = Rc::from(checked_lookup(xml_sdf, node, "pd")?);
 
         let slot = sdf_parse_number(checked_lookup(xml_sdf, node, "slot")?, node)?;
 
@@ -74,9 +68,7 @@ impl CapMap {
 
         Ok(CapMap {
             cap_type,
-            pd_name,
-            // FIXME: Hack, filled out later.
-            pd: None,
+            pd,
             slot,
             text_pos: node.range().start,
         })
