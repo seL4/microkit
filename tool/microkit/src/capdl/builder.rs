@@ -533,7 +533,7 @@ pub fn build_capdl_spec(
     // *********************************
     // Step 2. Create the memory regions' spec. Result is a hashmap keyed on MR name, value is (parsed XML obj, Vec of frame object IDs)
     // *********************************
-    let mut mr_name_to_frames: BTreeMap<&String, Vec<ObjectId>> = BTreeMap::new();
+    let mut mr_name_to_frames: BTreeMap<&str, Vec<ObjectId>> = BTreeMap::new();
     for mr in system.memory_regions.iter() {
         let mut frame_ids = Vec::new();
         let frame_size_bits = mr.page_size.fixed_size_bits(kernel_config);
@@ -659,7 +659,7 @@ pub fn build_capdl_spec(
 
         // Step 3-2: Map in all Memory Regions
         for map in pd.maps.iter() {
-            let frames = &mr_name_to_frames[&map.mr];
+            let frames = &mr_name_to_frames[map.mr.as_str()];
             // MRs have frames of equal size so just use the first frame's page size.
             let page_size_bytes =
                 1 << capdl_util_get_frame_size_bits(&spec_container, *frames.first().unwrap());
@@ -883,7 +883,7 @@ pub fn build_capdl_spec(
             let vm_vspace_obj_id = vm_address_space.root();
             let vm_vspace_cap = capdl_util_make_page_table_cap(vm_vspace_obj_id);
             for map in virtual_machine.maps.iter() {
-                let frames = &mr_name_to_frames[&map.mr];
+                let frames = &mr_name_to_frames[map.mr.as_str()];
                 let page_size_bytes =
                     1 << capdl_util_get_frame_size_bits(&spec_container, *frames.first().unwrap());
                 map_memory_region(
@@ -1230,7 +1230,7 @@ pub fn build_capdl_spec(
             )
         });
         let page_size_bytes = mr_name_to_frames
-            .get(&iomap.mr)
+            .get(iomap.mr.as_str())
             .ok_or(format!(
                 "Error: Memory region {} referenced by iomap not found.",
                 iomap.mr
@@ -1248,7 +1248,7 @@ pub fn build_capdl_spec(
             iomap,
             page_size_bytes,
             address_space,
-            &mr_name_to_frames[&iomap.mr],
+            &mr_name_to_frames[iomap.mr.as_str()],
         )?;
     }
 

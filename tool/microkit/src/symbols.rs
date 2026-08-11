@@ -85,7 +85,7 @@ pub fn patch_symbols(
     // *********************************
     // Step 2. Write ELF symbols for each PD
     // *********************************
-    let mut mr_name_to_desc: BTreeMap<&String, &SysMemoryRegion> = BTreeMap::new();
+    let mut mr_name_to_desc: BTreeMap<&str, &SysMemoryRegion> = BTreeMap::new();
     for mr in system.memory_regions.iter() {
         mr_name_to_desc.insert(&mr.name, mr);
     }
@@ -135,7 +135,7 @@ pub fn patch_symbols(
             .write_symbol("microkit_ioports", &pd.ioport_bits().to_le_bytes())
             .unwrap();
 
-        let mut symbols_to_write: Vec<(&String, u64)> = Vec::new();
+        let mut symbols_to_write: Vec<(&str, u64)> = Vec::new();
         for setvar in pd.setvars.iter() {
             // Check that the symbol exists in the ELF
             match elf_obj.find_symbol(&setvar.symbol) {
@@ -149,16 +149,19 @@ pub fn patch_symbols(
                         ));
                     }
                     let data = match &setvar.kind {
-                        sdf::SysSetVarKind::Size { mr } => mr_name_to_desc[mr].size,
+                        sdf::SysSetVarKind::Size { mr } => mr_name_to_desc[mr.as_str()].size,
                         sdf::SysSetVarKind::Vaddr { address } => *address,
                         sdf::SysSetVarKind::Paddr { region } => {
-                            mr_name_to_desc[region].paddr().unwrap_or_default()
+                            mr_name_to_desc[region.as_str()].paddr().unwrap_or_default()
                         }
                         sdf::SysSetVarKind::Id { id } => *id,
                         sdf::SysSetVarKind::X86IoPortAddr { address } => *address,
-                        sdf::SysSetVarKind::PrefillSize { mr } => {
-                            mr_name_to_desc[mr].prefill_bytes.as_ref().unwrap().len() as u64
-                        }
+                        sdf::SysSetVarKind::PrefillSize { mr } => mr_name_to_desc[mr.as_str()]
+                            .prefill_bytes
+                            .as_ref()
+                            .unwrap()
+                            .len()
+                            as u64,
                     };
                     symbols_to_write.push((&setvar.symbol, data));
                 }

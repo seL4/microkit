@@ -275,10 +275,7 @@ pub fn capdl_util_insert_cap_into_cspace(
     }
 }
 
-pub fn capdl_util_make_vcpu_obj(
-    spec_container: &mut CapDLSpecContainer,
-    name: &String,
-) -> ObjectId {
+pub fn capdl_util_make_vcpu_obj(spec_container: &mut CapDLSpecContainer, name: &str) -> ObjectId {
     let vcpu_inner_obj = Object::VCpu;
     let vcpu_obj = CapDLNamedObject {
         name: format!("vcpu_{name}").into(),

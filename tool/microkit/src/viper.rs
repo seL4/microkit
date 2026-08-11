@@ -251,7 +251,7 @@ pub struct Mem {
 
 impl Mem {
     pub fn export(&self, target: &mut String) {
-        let name: &String = &self.name;
+        let name: &str = &self.name;
         let start: u64 = self.start;
         let end: u64 = self.end;
         target.push_str(&format!(
