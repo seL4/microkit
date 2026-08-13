@@ -11,9 +11,13 @@ use super::{SdfLocation, SdfNode, SysSetVar, SystemDescriptionFile};
 
 /// This is a helper trait so that we can have a generic attribute parsing
 /// function that auto-infers the type.
+/// This is like FromStr trait but it allows for our own custom implementations
+/// of from_str on integers and others.
 pub(super) trait ParseableAttribute: Sized {
+    type Err: Display;
+
     fn type_name() -> &'static str;
-    fn parse(s: &str) -> Result<Self, impl Display>;
+    fn parse(s: &str) -> Result<Self, Self::Err>;
 }
 
 /// Parse an 'attribute' of an `SdfNode` as a type T.
@@ -58,22 +62,26 @@ pub fn sdf_parse_required_attribute<T: ParseableAttribute>(
 }
 
 impl<N: IsNum> ParseableAttribute for N {
+    type Err = ParseIntError;
+
     fn type_name() -> &'static str {
         "integer"
     }
 
-    fn parse(s: &str) -> Result<Self, impl Display> {
+    fn parse(s: &str) -> Result<Self, Self::Err> {
         parse_number(s)
     }
 }
 
 impl ParseableAttribute for bool {
+    type Err = &'static str;
+
     fn type_name() -> &'static str {
         "boolean"
     }
 
-    fn parse(s: &str) -> Result<Self, impl Display> {
-        parse_bool(s).map_err(|_ | "must be 'true' or 'false'")
+    fn parse(s: &str) -> Result<Self, Self::Err> {
+        parse_bool(s).map_err(|_| "must be 'true' or 'false'")
     }
 }
 

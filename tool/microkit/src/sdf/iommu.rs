@@ -6,12 +6,12 @@
 
 use std::collections::BTreeSet;
 use std::fmt;
-use std::str::FromStr;
 
 use super::memory_region::SysIOMap;
 use super::pci::{PciDevice, PciDeviceParseError};
 use super::util::{
     check_attributes, checked_lookup, loc_string, sdf_parse_required_attribute, value_error,
+    ParseableAttribute,
 };
 use super::{SdfNode, SystemDescriptionFile};
 
@@ -43,7 +43,7 @@ impl IommuDeviceIdentifier {
         s: &str,
     ) -> Result<Self, IommuDeviceIdentifierParseError> {
         match config.arch {
-            Arch::X86_64 => PciDevice::from_str(s)
+            Arch::X86_64 => PciDevice::parse(s)
                 .map(IommuDeviceIdentifier::X86Pci)
                 .map_err(IommuDeviceIdentifierParseError::Pci),
             Arch::Aarch64 | Arch::Riscv64 => Err(IommuDeviceIdentifierParseError::UnsupportedArch(

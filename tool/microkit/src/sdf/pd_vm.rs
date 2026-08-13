@@ -7,7 +7,6 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::str::FromStr;
 
 use super::channels::Channel;
 use super::consts::*;
@@ -15,7 +14,6 @@ use super::cspace::{CSpace, CapMap};
 use super::domains::Domains;
 use super::irq::{SysIrq, SysIrqKind};
 use super::memory_region::SysMap;
-use super::pci::PciDevice;
 use super::util::{
     check_attributes, checked_add_setvar, checked_lookup, loc_string, sdf_parse_attribute,
     sdf_parse_required_attribute, value_error,
@@ -491,7 +489,9 @@ impl ProtectionDomain {
                             },
                         };
                         irqs.push(irq);
-                    } else if let Some(pcidev_str) = child.attribute("pcidev") {
+                    } else if let Some(pci_device) =
+                        sdf_parse_attribute(xml_sdf, &*child, "pcidev")?
+                    {
                         if config.arch != Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -506,9 +506,6 @@ impl ProtectionDomain {
                             &*child,
                             &["id", "setvar_id", "pcidev", "handle", "vector"],
                         )?;
-
-                        let pci_device = PciDevice::from_str(pcidev_str)
-                            .map_err(|err| value_error(xml_sdf, &*child, err.to_string()))?;
 
                         let handle: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "handle")?;
                         if handle < 0 {

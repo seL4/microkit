@@ -576,7 +576,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_bus_less_than_0.system",
-            "Error: PCI bus must be within [0..255] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="-1:0.0"` as pci device on element <irq>: PCI bus must be within [0..255]:"#,
         )
     }
 
@@ -585,7 +585,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_dev_less_than_0.system",
-            "Error: PCI device must be within [0..31] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="0:-1.0"` as pci device on element <irq>: PCI device must be within [0..31]"#,
         )
     }
 
@@ -594,7 +594,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_func_less_than_0.system",
-            "Error: PCI function must be within [0..7] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="0:0.-1"` as pci device on element <irq>: PCI function must be within [0..7]:"#,
         )
     }
 
@@ -603,7 +603,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_bus_greater_than_255.system",
-            "Error: PCI bus must be within [0..255] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="256:0.0"` as pci device on element <irq>: PCI bus must be within [0..255]"#,
         )
     }
 
@@ -612,7 +612,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_dev_greater_than_31.system",
-            "Error: PCI device must be within [0..31] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="0:32.0"` as pci device on element <irq>: PCI device must be within [0..31]:"#,
         )
     }
 
@@ -621,7 +621,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_func_greater_than_7.system",
-            "Error: PCI function must be within [0..7] on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="0:0.8"` as pci device on element <irq>: PCI function must be within [0..7]:"#,
         )
     }
 
@@ -657,7 +657,7 @@ mod protection_domain {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_invalid.system",
-            "Error: expected PCI address in bus:device.function form on element 'irq'",
+            r#"Error: failed to parse attribute `pcidev="0:0:0"` as pci device on element <irq>: expected PCI address in bus:device.function form:"#,
         )
     }
 

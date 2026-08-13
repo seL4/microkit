@@ -6,9 +6,10 @@
 
 use std::fmt;
 use std::ops::Deref;
-use std::str::FromStr;
 
 use sel4_capdl_initializer_types::object;
+
+use super::util::ParseableAttribute;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PciDevice(pub object::PCIDevice);
@@ -88,10 +89,14 @@ impl fmt::Display for PciDeviceParseError {
     }
 }
 
-impl FromStr for PciDevice {
+impl ParseableAttribute for PciDevice {
     type Err = PciDeviceParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn type_name() -> &'static str {
+        "pci device"
+    }
+
+    fn parse(s: &str) -> Result<Self, Self::Err> {
         let (bus_str, device_function_str) =
             s.split_once(':').ok_or(PciDeviceParseError::Malformed)?;
         let (device_str, function_str) = device_function_str
