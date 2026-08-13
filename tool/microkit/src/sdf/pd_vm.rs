@@ -901,6 +901,14 @@ impl VirtualMachine {
             // Default to minimum priority
             let priority: u8 = sdf_attribute_as_number(xml_sdf, node, "priority")?.unwrap_or(0);
 
+            if priority > PD_MAX_PRIORITY {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    format!("priority must be between 0 and {PD_MAX_PRIORITY}"),
+                ));
+            }
+
             Some(SchedulingParams {
                 priority,
                 budget,

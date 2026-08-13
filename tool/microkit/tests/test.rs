@@ -765,6 +765,15 @@ mod protection_domain {
             "Error: cpu core must be less than 1, got 10 on element 'protection_domain':",
         )
     }
+
+    #[test]
+    fn test_invalid_priority() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_invalid_priority.system",
+            "Error: priority must be between 0 and 254 on element 'protection_domain':",
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1007,6 +1016,15 @@ mod virtual_machine {
     #[test]
     fn test_vm_with_priority_aarch64() {
         check_success(&DEFAULT_AARCH64_KERNEL_CONFIG, "vm_with_priority.system")
+    }
+
+    #[test]
+    fn test_vm_with_priority_invalid_aarch64() {
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "vm_with_priority_invalid.system",
+            "Error: priority must be between 0 and 254 on element 'virtual_machine':",
+        )
     }
 
     #[test]
