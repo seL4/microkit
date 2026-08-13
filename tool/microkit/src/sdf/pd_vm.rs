@@ -340,9 +340,8 @@ impl ProtectionDomain {
                     maps.push(map);
                 }
                 "irq" => {
-                    let id = checked_lookup(xml_sdf, &*child, "id")?
-                        .parse::<i64>()
-                        .unwrap();
+                    let id: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+
                     if id > PD_MAX_ID as i64 {
                         return Err(value_error(
                             xml_sdf,
@@ -362,7 +361,7 @@ impl ProtectionDomain {
                         checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
-                    if let Some(irq_str) = child.attribute("irq") {
+                    if let Some(irq) = sdf_attribute_as_number(xml_sdf, &*child, "irq")? {
                         if config.arch == Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -373,7 +372,7 @@ impl ProtectionDomain {
 
                         // ARM and RISC-V interrupts must have an "irq" attribute.
                         check_attributes(xml_sdf, &*child, &["irq", "id", "setvar_id", "trigger"])?;
-                        let irq = irq_str.parse::<u64>().unwrap();
+
                         let trigger = if let Some(trigger_str) = child.attribute("trigger") {
                             match trigger_str {
                                 "level" => ArmRiscvIrqTrigger::Level,
@@ -395,7 +394,9 @@ impl ProtectionDomain {
                             kind: SysIrqKind::Conventional { irq, trigger },
                         };
                         irqs.push(irq);
-                    } else if let Some(pin_str) = child.attribute("pin") {
+                    } else if let Some(pin) =
+                        sdf_attribute_as_number::<i64>(xml_sdf, &*child, "pin")?
+                    {
                         if config.arch != Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -419,12 +420,10 @@ impl ProtectionDomain {
                             ],
                         )?;
 
-                        let ioapic = if let Some(ioapic_str) = child.attribute("ioapic") {
-                            ioapic_str.parse::<i64>().unwrap()
-                        } else {
-                            // Default to the first unit.
-                            0
-                        };
+                        // Default to the first unit.
+                        let ioapic: i64 =
+                            sdf_attribute_as_number(xml_sdf, &*child, "ioapic")?.unwrap_or(0);
+
                         if ioapic < 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -433,7 +432,6 @@ impl ProtectionDomain {
                             ));
                         }
 
-                        let pin = pin_str.parse::<i64>().unwrap();
                         if pin < 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -474,9 +472,10 @@ impl ProtectionDomain {
                             // Default to normal polarity
                             X86IoapicIrqPolarity::HighTriggered
                         };
-                        let vector = checked_lookup(xml_sdf, &*child, "vector")?
-                            .parse::<i64>()
-                            .unwrap();
+
+                        let vector: i64 =
+                            sdf_required_attribute_as_number(xml_sdf, &*child, "vector")?;
+
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
@@ -515,9 +514,8 @@ impl ProtectionDomain {
                         let pci_device = PciDevice::from_str(pcidev_str)
                             .map_err(|err| value_error(xml_sdf, &*child, err.to_string()))?;
 
-                        let handle = checked_lookup(xml_sdf, &*child, "handle")?
-                            .parse::<i64>()
-                            .unwrap();
+                        let handle: i64 =
+                            sdf_required_attribute_as_number(xml_sdf, &*child, "handle")?;
                         if handle < 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -526,9 +524,9 @@ impl ProtectionDomain {
                             ));
                         }
 
-                        let vector = checked_lookup(xml_sdf, &*child, "vector")?
-                            .parse::<i64>()
-                            .unwrap();
+                        let vector: i64 =
+                            sdf_required_attribute_as_number(xml_sdf, &*child, "vector")?;
+
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
                                 xml_sdf,
@@ -568,9 +566,8 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "setvar_addr", "addr", "size"],
                         )?;
 
-                        let id = checked_lookup(xml_sdf, &*child, "id")?
-                            .parse::<i64>()
-                            .unwrap();
+                        let id: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+
                         if id > PD_MAX_ID as i64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -604,9 +601,7 @@ impl ProtectionDomain {
                             checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
 
-                        let size = checked_lookup(xml_sdf, &*child, "size")?
-                            .parse::<i64>()
-                            .unwrap();
+                        let size: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "size")?;
                         if size <= 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -885,9 +880,8 @@ impl VirtualMachine {
             match child_name {
                 "vcpu" => {
                     check_attributes(xml_sdf, &*child, &["id", "setvar_id", "cpu"])?;
-                    let id = checked_lookup(xml_sdf, &*child, "id")?
-                        .parse::<u64>()
-                        .unwrap();
+                    let id = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+
                     if id > VCPU_MAX_ID {
                         return Err(value_error(
                             xml_sdf,

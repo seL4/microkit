@@ -10,7 +10,8 @@ use std::rc::Rc;
 use super::consts::*;
 use super::pd_vm::ProtectionDomain;
 use super::util::{
-    check_attributes, checked_lookup, loc_string, sdf_attribute_as_bool, value_error,
+    check_attributes, checked_lookup, loc_string, sdf_attribute_as_bool,
+    sdf_required_attribute_as_number, value_error,
 };
 use super::{SdfNode, SystemDescriptionFile};
 
@@ -47,7 +48,7 @@ impl ChannelEnd {
 
         check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id"])?;
         let end_pd = checked_lookup(xml_sdf, node, "pd")?;
-        let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<i64>().unwrap();
+        let end_id: i64 = sdf_required_attribute_as_number(xml_sdf, node, "id")?;
 
         if end_id > PD_MAX_ID as i64 {
             return Err(value_error(
