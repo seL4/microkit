@@ -14,8 +14,8 @@ use sel4_capdl_initializer_types::FillEntryContentBootInfoId;
 use super::iommu::IommuDeviceIdentifier;
 use super::util::location_suffix_format;
 use super::util::{
-    check_attributes, checked_lookup, sdf_attribute_as_bool, sdf_attribute_as_number,
-    sdf_required_attribute_as_number, value_error,
+    check_attributes, checked_lookup, sdf_parse_attribute, sdf_parse_required_attribute,
+    value_error,
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
@@ -271,7 +271,7 @@ impl SysMap {
         check_attributes(xml_sdf, node, &attrs)?;
 
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
-        let vaddr: u64 = sdf_required_attribute_as_number(xml_sdf, node, "vaddr")?;
+        let vaddr: u64 = sdf_parse_required_attribute(xml_sdf, node, "vaddr")?;
 
         if vaddr >= max_vaddr {
             return Err(value_error(
@@ -306,7 +306,7 @@ impl SysMap {
             ));
         }
 
-        let cached = sdf_attribute_as_bool(xml_sdf, node, "cached")?
+        let cached = sdf_parse_attribute(xml_sdf, node, "cached")?
             // Default to cached
             .unwrap_or(true);
 
@@ -334,7 +334,7 @@ impl SysIOMap {
         check_attributes(xml_sdf, node, &attrs)?;
 
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
-        let iovaddr = sdf_required_attribute_as_number(xml_sdf, node, "iovaddr")?;
+        let iovaddr = sdf_parse_required_attribute(xml_sdf, node, "iovaddr")?;
 
         if iovaddr > x86_io_address_space::CAPDL_MAX_IOVA {
             return Err(value_error(
@@ -384,7 +384,7 @@ impl SysMemoryRegion {
         prefill_bootinfo_maybe: Option<FillEntryContentBootInfoId>,
         page_size: u64,
     ) -> Result<u64, String> {
-        match sdf_attribute_as_number::<u64>(xml_sdf, node, "size")? {
+        match sdf_parse_attribute::<u64>(xml_sdf, node, "size")? {
             Some(size_parsed) => {
                 if !size_parsed.is_multiple_of(page_size) {
                     return Err(value_error(
@@ -455,13 +455,12 @@ impl SysMemoryRegion {
         let name = checked_lookup(xml_sdf, node, "name")?;
 
         let mut page_size_specified_by_user = false;
-        let page_size =
-            if let Some(page_size) = sdf_attribute_as_number(xml_sdf, node, "page_size")? {
-                page_size_specified_by_user = true;
-                page_size
-            } else {
-                config.page_sizes()[0]
-            };
+        let page_size = if let Some(page_size) = sdf_parse_attribute(xml_sdf, node, "page_size")? {
+            page_size_specified_by_user = true;
+            page_size
+        } else {
+            config.page_sizes()[0]
+        };
 
         let page_size_valid = config.page_sizes().contains(&page_size);
         if !page_size_valid {
@@ -546,7 +545,7 @@ impl SysMemoryRegion {
             page_size,
         )?;
 
-        let phys_addr = sdf_attribute_as_number(xml_sdf, node, "phys_addr")?
+        let phys_addr = sdf_parse_attribute(xml_sdf, node, "phys_addr")?
             .map(SysMemoryRegionPaddr::Specified)
             // At this point it is unsure whether this MR is a subject of a setvar region_paddr.
             .unwrap_or(SysMemoryRegionPaddr::Unspecified);

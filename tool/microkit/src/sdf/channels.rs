@@ -10,8 +10,8 @@ use std::rc::Rc;
 use super::consts::*;
 use super::pd_vm::ProtectionDomain;
 use super::util::{
-    check_attributes, checked_lookup, loc_string, sdf_attribute_as_bool,
-    sdf_required_attribute_as_number, value_error,
+    check_attributes, checked_lookup, loc_string, sdf_parse_attribute,
+    sdf_parse_required_attribute, value_error,
 };
 use super::{SdfNode, SystemDescriptionFile};
 
@@ -48,7 +48,7 @@ impl ChannelEnd {
 
         check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id"])?;
         let end_pd = checked_lookup(xml_sdf, node, "pd")?;
-        let end_id: i64 = sdf_required_attribute_as_number(xml_sdf, node, "id")?;
+        let end_id: i64 = sdf_parse_required_attribute(xml_sdf, node, "id")?;
 
         if end_id > PD_MAX_ID as i64 {
             return Err(value_error(
@@ -62,8 +62,8 @@ impl ChannelEnd {
             return Err(value_error(xml_sdf, node, "id must be >= 0".to_string()));
         }
 
-        let notify = sdf_attribute_as_bool(xml_sdf, node, "notify")?.unwrap_or(true);
-        let pp = sdf_attribute_as_bool(xml_sdf, node, "pp")?.unwrap_or(false);
+        let notify = sdf_parse_attribute(xml_sdf, node, "notify")?.unwrap_or(true);
+        let pp = sdf_parse_attribute(xml_sdf, node, "pp")?.unwrap_or(false);
 
         if let Some(pd) = pds.get(end_pd) {
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);

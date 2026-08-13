@@ -17,8 +17,8 @@ use super::irq::{SysIrq, SysIrqKind};
 use super::memory_region::SysMap;
 use super::pci::PciDevice;
 use super::util::{
-    check_attributes, checked_add_setvar, checked_lookup, loc_string, sdf_attribute_as_bool,
-    sdf_attribute_as_number, sdf_required_attribute_as_number, value_error,
+    check_attributes, checked_add_setvar, checked_lookup, loc_string, sdf_parse_attribute,
+    sdf_parse_required_attribute, value_error,
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
@@ -164,7 +164,7 @@ impl ProtectionDomain {
         let name = Rc::from(checked_lookup(xml_sdf, node, "name")?);
 
         let (id, setvar_id) = if is_child {
-            let id = sdf_required_attribute_as_number(xml_sdf, node, "id")?;
+            let id = sdf_parse_required_attribute(xml_sdf, node, "id")?;
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
             (Some(id), setvar_id)
         } else {
@@ -172,9 +172,8 @@ impl ProtectionDomain {
         };
 
         // If we do not have an explicit budget the period is equal to the default budget.
-        let budget: u64 =
-            sdf_attribute_as_number(xml_sdf, node, "budget")?.unwrap_or(BUDGET_DEFAULT);
-        let period: u64 = sdf_attribute_as_number(xml_sdf, node, "period")?.unwrap_or(budget);
+        let budget: u64 = sdf_parse_attribute(xml_sdf, node, "budget")?.unwrap_or(BUDGET_DEFAULT);
+        let period: u64 = sdf_parse_attribute(xml_sdf, node, "period")?.unwrap_or(budget);
 
         if budget > period {
             return Err(value_error(
@@ -184,12 +183,12 @@ impl ProtectionDomain {
             ));
         }
 
-        let passive = sdf_attribute_as_bool(xml_sdf, node, "passive")?.unwrap_or(false);
+        let passive = sdf_parse_attribute(xml_sdf, node, "passive")?.unwrap_or(false);
 
         let stack_size: u64 =
-            sdf_attribute_as_number(xml_sdf, node, "stack_size")?.unwrap_or(PD_DEFAULT_STACK_SIZE);
+            sdf_parse_attribute(xml_sdf, node, "stack_size")?.unwrap_or(PD_DEFAULT_STACK_SIZE);
 
-        let smc = sdf_attribute_as_bool(xml_sdf, node, "smc")?.unwrap_or(false);
+        let smc = sdf_parse_attribute(xml_sdf, node, "smc")?.unwrap_or(false);
 
         if smc {
             match config.arm_smc {
@@ -207,7 +206,7 @@ impl ProtectionDomain {
             }
         }
 
-        let cpu = CpuCore(sdf_attribute_as_number(xml_sdf, node, "cpu")?.unwrap_or(0u8));
+        let cpu = CpuCore(sdf_parse_attribute(xml_sdf, node, "cpu")?.unwrap_or(0u8));
 
         if cpu.0 >= config.num_cores {
             return Err(value_error(
@@ -278,7 +277,7 @@ impl ProtectionDomain {
         let mut cspace = None;
 
         // Defaults to minimum priority
-        let priority: u64 = sdf_attribute_as_number(xml_sdf, node, "priority")?.unwrap_or(0);
+        let priority: u64 = sdf_parse_attribute(xml_sdf, node, "priority")?.unwrap_or(0);
 
         if priority > PD_MAX_PRIORITY as u64 {
             return Err(value_error(
@@ -289,7 +288,7 @@ impl ProtectionDomain {
         }
 
         // FPU is enabled by default
-        let fpu = sdf_attribute_as_bool(xml_sdf, node, "fpu")?.unwrap_or(true);
+        let fpu = sdf_parse_attribute(xml_sdf, node, "fpu")?.unwrap_or(true);
 
         for child in node.children() {
             match child.tag_name() {
@@ -340,7 +339,7 @@ impl ProtectionDomain {
                     maps.push(map);
                 }
                 "irq" => {
-                    let id: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+                    let id: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "id")?;
 
                     if id > PD_MAX_ID as i64 {
                         return Err(value_error(
@@ -361,7 +360,7 @@ impl ProtectionDomain {
                         checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                     }
 
-                    if let Some(irq) = sdf_attribute_as_number(xml_sdf, &*child, "irq")? {
+                    if let Some(irq) = sdf_parse_attribute(xml_sdf, &*child, "irq")? {
                         if config.arch == Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -394,9 +393,7 @@ impl ProtectionDomain {
                             kind: SysIrqKind::Conventional { irq, trigger },
                         };
                         irqs.push(irq);
-                    } else if let Some(pin) =
-                        sdf_attribute_as_number::<i64>(xml_sdf, &*child, "pin")?
-                    {
+                    } else if let Some(pin) = sdf_parse_attribute::<i64>(xml_sdf, &*child, "pin")? {
                         if config.arch != Arch::X86_64 {
                             return Err(value_error(
                                 xml_sdf,
@@ -422,7 +419,7 @@ impl ProtectionDomain {
 
                         // Default to the first unit.
                         let ioapic: i64 =
-                            sdf_attribute_as_number(xml_sdf, &*child, "ioapic")?.unwrap_or(0);
+                            sdf_parse_attribute(xml_sdf, &*child, "ioapic")?.unwrap_or(0);
 
                         if ioapic < 0 {
                             return Err(value_error(
@@ -473,8 +470,7 @@ impl ProtectionDomain {
                             X86IoapicIrqPolarity::HighTriggered
                         };
 
-                        let vector: i64 =
-                            sdf_required_attribute_as_number(xml_sdf, &*child, "vector")?;
+                        let vector: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "vector")?;
 
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
@@ -514,8 +510,7 @@ impl ProtectionDomain {
                         let pci_device = PciDevice::from_str(pcidev_str)
                             .map_err(|err| value_error(xml_sdf, &*child, err.to_string()))?;
 
-                        let handle: i64 =
-                            sdf_required_attribute_as_number(xml_sdf, &*child, "handle")?;
+                        let handle: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "handle")?;
                         if handle < 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -524,8 +519,7 @@ impl ProtectionDomain {
                             ));
                         }
 
-                        let vector: i64 =
-                            sdf_required_attribute_as_number(xml_sdf, &*child, "vector")?;
+                        let vector: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "vector")?;
 
                         if !(0..=X86_IRQ_VECTOR_MAX).contains(&vector) {
                             return Err(value_error(
@@ -566,7 +560,7 @@ impl ProtectionDomain {
                             &["id", "setvar_id", "setvar_addr", "addr", "size"],
                         )?;
 
-                        let id: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+                        let id: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "id")?;
 
                         if id > PD_MAX_ID as i64 {
                             return Err(value_error(
@@ -591,7 +585,7 @@ impl ProtectionDomain {
                             checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
 
-                        let addr: u64 = sdf_required_attribute_as_number(xml_sdf, &*child, "addr")?;
+                        let addr: u64 = sdf_parse_required_attribute(xml_sdf, &*child, "addr")?;
 
                         if let Some(setvar_addr) = child.attribute("setvar_addr") {
                             let setvar = SysSetVar {
@@ -601,7 +595,7 @@ impl ProtectionDomain {
                             checked_add_setvar(&mut setvars, setvar, xml_sdf, &*child)?;
                         }
 
-                        let size: i64 = sdf_required_attribute_as_number(xml_sdf, &*child, "size")?;
+                        let size: i64 = sdf_parse_required_attribute(xml_sdf, &*child, "size")?;
                         if size <= 0 {
                             return Err(value_error(
                                 xml_sdf,
@@ -842,8 +836,8 @@ impl VirtualMachine {
         let sched_params = if config.arch == Arch::Aarch64 {
             // If we do not have an explicit budget the period is equal to the default budget.
             let budget: u64 =
-                sdf_attribute_as_number(xml_sdf, node, "budget")?.unwrap_or(BUDGET_DEFAULT);
-            let period: u64 = sdf_attribute_as_number(xml_sdf, node, "period")?.unwrap_or(budget);
+                sdf_parse_attribute(xml_sdf, node, "budget")?.unwrap_or(BUDGET_DEFAULT);
+            let period: u64 = sdf_parse_attribute(xml_sdf, node, "period")?.unwrap_or(budget);
 
             if budget > period {
                 return Err(value_error(
@@ -854,7 +848,7 @@ impl VirtualMachine {
             }
 
             // Default to minimum priority
-            let priority: u8 = sdf_attribute_as_number(xml_sdf, node, "priority")?.unwrap_or(0);
+            let priority: u8 = sdf_parse_attribute(xml_sdf, node, "priority")?.unwrap_or(0);
 
             if priority > PD_MAX_PRIORITY {
                 return Err(value_error(
@@ -880,7 +874,7 @@ impl VirtualMachine {
             match child_name {
                 "vcpu" => {
                     check_attributes(xml_sdf, &*child, &["id", "setvar_id", "cpu"])?;
-                    let id = sdf_required_attribute_as_number(xml_sdf, &*child, "id")?;
+                    let id = sdf_parse_required_attribute(xml_sdf, &*child, "id")?;
 
                     if id > VCPU_MAX_ID {
                         return Err(value_error(
@@ -904,23 +898,22 @@ impl VirtualMachine {
 
                     let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
 
-                    let cpu =
-                        if let Some(cpu_value) = sdf_attribute_as_number(xml_sdf, node, "cpu")? {
-                            if cpu_value >= config.num_cores {
-                                return Err(value_error(
-                                    xml_sdf,
-                                    &*child,
-                                    format!(
-                                        "cpu core must be less than {}, got {}",
-                                        config.num_cores, cpu_value
-                                    ),
-                                ));
-                            }
+                    let cpu = if let Some(cpu_value) = sdf_parse_attribute(xml_sdf, node, "cpu")? {
+                        if cpu_value >= config.num_cores {
+                            return Err(value_error(
+                                xml_sdf,
+                                &*child,
+                                format!(
+                                    "cpu core must be less than {}, got {}",
+                                    config.num_cores, cpu_value
+                                ),
+                            ));
+                        }
 
-                            Some(CpuCore(cpu_value))
-                        } else {
-                            None
-                        };
+                        Some(CpuCore(cpu_value))
+                    } else {
+                        None
+                    };
 
                     vcpus.push(VirtualCpu { id, setvar_id, cpu });
                 }

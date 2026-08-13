@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use super::consts::*;
 use super::util::{
-    check_attributes, checked_lookup, loc_string, sdf_required_attribute_as_number, value_error,
+    check_attributes, checked_lookup, loc_string, sdf_parse_required_attribute, value_error,
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
@@ -49,7 +49,7 @@ impl CapMap {
 
         let pd = Rc::from(checked_lookup(xml_sdf, node, "pd")?);
 
-        let slot: u64 = sdf_required_attribute_as_number(xml_sdf, node, "slot")?;
+        let slot: u64 = sdf_parse_required_attribute(xml_sdf, node, "slot")?;
 
         if slot == 0 {
             return Err(value_error(

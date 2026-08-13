@@ -10,8 +10,7 @@ use std::num::NonZero;
 use sel4_capdl_initializer_types::{DomainSchedDuration, DomainSchedEntry};
 
 use super::util::{
-    check_attributes, checked_lookup, loc_string, parse_number, sdf_attribute_as_number,
-    value_error,
+    check_attributes, checked_lookup, loc_string, parse_number, sdf_parse_attribute, value_error,
 };
 use super::{SdfNode, SystemDescriptionFile};
 
@@ -147,7 +146,7 @@ impl Domains {
 
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
 
-        let domain_id = sdf_attribute_as_number(xml_sdf, node, "id")?
+        let domain_id = sdf_parse_attribute(xml_sdf, node, "id")?
             .map(|n: u8| {
                 if n >= config.num_domains {
                     Err(value_error(
@@ -176,13 +175,12 @@ impl Domains {
     ) -> Result<Domains, String> {
         check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
 
-        let schedule_start_index: u64 = sdf_attribute_as_number(xml_sdf, node, "start_index")?
+        let schedule_start_index: u64 = sdf_parse_attribute(xml_sdf, node, "start_index")?
             // The domain schedule is only started when the start index is Some(...)
             // so even when not specified we default to a start index of zero.
             .unwrap_or(0);
 
-        let schedule_index_shift: Option<u64> =
-            sdf_attribute_as_number(xml_sdf, node, "index_shift")?;
+        let schedule_index_shift: Option<u64> = sdf_parse_attribute(xml_sdf, node, "index_shift")?;
 
         let mut schedule = vec![];
 

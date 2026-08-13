@@ -148,7 +148,7 @@ fn check_error(kernel_config: &sel4::Config, test_name: &str, expected_err: &str
 
 fn check_missing(kernel_config: &sel4::Config, test_name: &str, attr: &str, element: &str) {
     let expected_error =
-        format!("Error: Missing required attribute '{attr}' on element '{element}'");
+        format!("Error: missing required attribute '{attr}' on element '{element}'");
     check_error(kernel_config, test_name, expected_error.as_str());
 }
 
@@ -158,7 +158,11 @@ mod memory_region {
 
     #[test]
     fn test_malformed_size() {
-        check_error(&DEFAULT_AARCH64_KERNEL_CONFIG, "mr_malformed_size.system", "Error: failed to parse integer '0x200_000sd' on element 'memory_region': invalid digit found in string")
+        check_error(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "mr_malformed_size.system",
+            r#"Error: failed to parse attribute `size="0x200_000sd"` as integer on element <memory_region>: invalid digit found in string:"#,
+        )
     }
 
     #[test]
@@ -1219,7 +1223,7 @@ mod channel {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_end_invalid_pp.system",
-            "Error: 'pp' must be 'true' or 'false', got 'no' on element 'end': ",
+            r#"Error: failed to parse attribute `pp="no"` as boolean on element <end>: must be 'true' or 'false': "#,
         )
     }
 
@@ -1228,7 +1232,7 @@ mod channel {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_end_invalid_notify.system",
-            "Error: 'notify' must be 'true' or 'false', got 'no' on element 'end': ",
+            r#"Error: failed to parse attribute `notify="no"` as boolean on element <end>: must be 'true' or 'false': "#,
         )
     }
 
@@ -1304,7 +1308,7 @@ mod domains {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "domain_no_pd_domain.system",
-            "Error: Missing required attribute 'domain' on element 'protection_domain': domain_no_pd_domain.system:15:5",
+            "Error: missing required attribute 'domain' on element 'protection_domain': domain_no_pd_domain.system:15:5",
         )
     }
 
@@ -1313,7 +1317,7 @@ mod domains {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "domain_invalid_start_index.system",
-            "Error: failed to parse integer 'zzzz' on element 'domain_schedule': invalid digit found in string",
+            r#"Error: failed to parse attribute `start_index="zzzz"` as integer on element <domain_schedule>: invalid digit found in string:"#,
         )
     }
 
@@ -1332,7 +1336,7 @@ mod domains {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "domain_invalid_shift.system",
-            "Error: failed to parse integer 'zzzz' on element 'domain_schedule': invalid digit found in string",
+            r#"Error: failed to parse attribute `index_shift="zzzz"` as integer on element <domain_schedule>: invalid digit found in string:"#,
         )
     }
 
@@ -1474,7 +1478,7 @@ mod system {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "wrong_fpu_flag_value.system",
-            "Error: 'fpu' must be 'true' or 'false', got 'foo' on element 'protection_domain': ",
+            r#"Error: failed to parse attribute `fpu="foo"` as boolean on element <protection_domain>: must be 'true' or 'false':"#,
         )
     }
 

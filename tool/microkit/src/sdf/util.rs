@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::fmt::Display;
 use std::num::ParseIntError;
 
 use super::{SdfLocation, SdfNode, SysSetVar, SystemDescriptionFile};
 
-/// Parse an 'attribute' of an `SdfNode` as a number of type T.
+/// This is a helper trait so that we can have a generic attribute parsing
+/// function that auto-infers the type.
+pub(super) trait ParseableAttribute: Sized {
+    fn type_name() -> &'static str;
+    fn parse(s: &str) -> Result<Self, impl Display>;
+}
+
+/// Parse an 'attribute' of an `SdfNode` as a type T.
 /// If the attribute does not exist, `Ok(None)`
-pub fn sdf_attribute_as_number<T: IsNum>(
+pub fn sdf_parse_attribute<T: ParseableAttribute>(
     sdf: &SystemDescriptionFile,
     node: &dyn SdfNode,
     attribute: &str,
@@ -19,10 +27,12 @@ pub fn sdf_attribute_as_number<T: IsNum>(
         return Ok(None);
     };
 
-    parse_number(value_str).map(|v| Some(v)).map_err(|err| {
+    T::parse(value_str).map(|v| Some(v)).map_err(|err| {
         format!(
-            "Error: failed to parse integer '{}' on element '{}': {}: {}",
+            "Error: failed to parse attribute `{}=\"{}\"` as {} on element <{}>: {}: {}",
+            attribute,
             value_str,
+            T::type_name(),
             node.tag_name(),
             err,
             loc_string(sdf, node.range().start),
@@ -30,16 +40,16 @@ pub fn sdf_attribute_as_number<T: IsNum>(
     })
 }
 
-/// Parse an 'attribute' of an `SdfNode` as a number of type T.
+/// Parse an 'attribute' of an `SdfNode` as a type T.
 /// If the attribute does not exist, return a neatly formatted error.
-pub fn sdf_required_attribute_as_number<T: IsNum>(
+pub fn sdf_parse_required_attribute<T: ParseableAttribute>(
     sdf: &SystemDescriptionFile,
     node: &dyn SdfNode,
     attribute: &str,
 ) -> Result<T, String> {
-    sdf_attribute_as_number(sdf, node, attribute)?.ok_or_else(|| {
+    sdf_parse_attribute(sdf, node, attribute)?.ok_or_else(|| {
         format!(
-            "Error: Missing required attribute '{}' on element '{}': {}",
+            "Error: missing required attribute '{}' on element '{}': {}",
             attribute,
             node.tag_name(),
             loc_string(sdf, node.range().start),
@@ -47,44 +57,24 @@ pub fn sdf_required_attribute_as_number<T: IsNum>(
     })
 }
 
-/// Parse an 'attribute' of an `SdfNode` as a boolean.
-/// If the attribute does not exist, return an Optional value.
-pub fn sdf_attribute_as_bool(
-    sdf: &SystemDescriptionFile,
-    node: &dyn SdfNode,
-    attribute: &str,
-) -> Result<Option<bool>, String> {
-    let Some(value_str) = node.attribute(attribute) else {
-        return Ok(None);
-    };
+impl<N: IsNum> ParseableAttribute for N {
+    fn type_name() -> &'static str {
+        "integer"
+    }
 
-    parse_bool(value_str).map(Some).map_err(|_| {
-        format!(
-            "Error: '{}' must be 'true' or 'false', got '{}' on element '{}': {}",
-            attribute,
-            value_str,
-            node.tag_name(),
-            loc_string(sdf, node.range().start),
-        )
-    })
+    fn parse(s: &str) -> Result<Self, impl Display> {
+        parse_number(s)
+    }
 }
 
-/// Parse an 'attribute' of an `SdfNode` as a boolean.
-/// If the attribute does not exist, return a neatly formatted error.
-#[expect(unused)]
-pub fn sdf_required_attribute_as_bool(
-    sdf: &SystemDescriptionFile,
-    node: &dyn SdfNode,
-    attribute: &str,
-) -> Result<bool, String> {
-    sdf_attribute_as_bool(sdf, node, attribute)?.ok_or_else(|| {
-        format!(
-            "Error: Missing required attribute '{}' on element '{}': {}",
-            attribute,
-            node.tag_name(),
-            loc_string(sdf, node.range().start),
-        )
-    })
+impl ParseableAttribute for bool {
+    fn type_name() -> &'static str {
+        "boolean"
+    }
+
+    fn parse(s: &str) -> Result<Self, impl Display> {
+        parse_bool(s).map_err(|_ | "must be 'true' or 'false'")
+    }
 }
 
 /// This is annoying. Essentially, we can't do a generic over any number type
@@ -228,7 +218,7 @@ pub fn checked_lookup<'a>(
     } else {
         let pos = node.range().start;
         Err(format!(
-            "Error: Missing required attribute '{}' on element '{}': {}:{}:{}",
+            "Error: missing required attribute '{}' on element '{}': {}:{}:{}",
             attribute,
             node.tag_name(),
             xml_sdf.filename.display(),
