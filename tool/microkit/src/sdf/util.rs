@@ -95,17 +95,19 @@ pub(super) trait IsNum: Sized {
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError>;
 }
 
-impl IsNum for u64 {
-    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
-        Self::from_str_radix(src, radix)
-    }
+macro_rules! impl_is_num {
+    ($t:ty) => {
+        impl IsNum for $t {
+            fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+                Self::from_str_radix(src, radix)
+            }
+        }
+    };
 }
 
-impl IsNum for u8 {
-    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
-        Self::from_str_radix(src, radix)
-    }
-}
+impl_is_num!(u64);
+impl_is_num!(u8);
+impl_is_num!(i64);
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
