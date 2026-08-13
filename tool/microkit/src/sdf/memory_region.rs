@@ -14,14 +14,13 @@ use sel4_capdl_initializer_types::FillEntryContentBootInfoId;
 use super::iommu::IommuDeviceIdentifier;
 use super::util::location_suffix_format;
 use super::util::{
-    check_attributes, checked_lookup, sdf_attribute_as_number, sdf_required_attribute_as_number,
-    value_error,
+    check_attributes, checked_lookup, sdf_attribute_as_bool, sdf_attribute_as_number,
+    sdf_required_attribute_as_number, value_error,
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
 use crate::util::get_full_path;
 use crate::util::round_up;
-use crate::util::str_to_bool;
 use crate::{Config, PageSize};
 
 #[repr(u8)]
@@ -307,21 +306,9 @@ impl SysMap {
             ));
         }
 
-        let cached = if let Some(xml_cached) = node.attribute("cached") {
-            match str_to_bool(xml_cached) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "cached must be 'true' or 'false'".to_string(),
-                    ))
-                }
-            }
-        } else {
+        let cached = sdf_attribute_as_bool(xml_sdf, node, "cached")?
             // Default to cached
-            true
-        };
+            .unwrap_or(true);
 
         Ok(SysMap {
             mr,

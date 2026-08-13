@@ -1219,7 +1219,7 @@ mod channel {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_end_invalid_pp.system",
-            "Error: pp must be 'true' or 'false' on element 'end': ",
+            "Error: 'pp' must be 'true' or 'false', got 'no' on element 'end': ",
         )
     }
 
@@ -1228,7 +1228,7 @@ mod channel {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "ch_end_invalid_notify.system",
-            "Error: notify must be 'true' or 'false' on element 'end': ",
+            "Error: 'notify' must be 'true' or 'false', got 'no' on element 'end': ",
         )
     }
 
@@ -1474,7 +1474,7 @@ mod system {
         check_error(
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "wrong_fpu_flag_value.system",
-            "Error: fpu must be 'true' or 'false'",
+            "Error: 'fpu' must be 'true' or 'false', got 'foo' on element 'protection_domain': ",
         )
     }
 

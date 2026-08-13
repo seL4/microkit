@@ -47,6 +47,46 @@ pub fn sdf_required_attribute_as_number<T: IsNum>(
     })
 }
 
+/// Parse an 'attribute' of an `SdfNode` as a boolean.
+/// If the attribute does not exist, return an Optional value.
+pub fn sdf_attribute_as_bool(
+    sdf: &SystemDescriptionFile,
+    node: &dyn SdfNode,
+    attribute: &str,
+) -> Result<Option<bool>, String> {
+    let Some(value_str) = node.attribute(attribute) else {
+        return Ok(None);
+    };
+
+    parse_bool(value_str).map(Some).map_err(|_| {
+        format!(
+            "Error: '{}' must be 'true' or 'false', got '{}' on element '{}': {}",
+            attribute,
+            value_str,
+            node.tag_name(),
+            loc_string(sdf, node.range().start),
+        )
+    })
+}
+
+/// Parse an 'attribute' of an `SdfNode` as a boolean.
+/// If the attribute does not exist, return a neatly formatted error.
+#[expect(unused)]
+pub fn sdf_required_attribute_as_bool(
+    sdf: &SystemDescriptionFile,
+    node: &dyn SdfNode,
+    attribute: &str,
+) -> Result<bool, String> {
+    sdf_attribute_as_bool(sdf, node, attribute)?.ok_or_else(|| {
+        format!(
+            "Error: Missing required attribute '{}' on element '{}': {}",
+            attribute,
+            node.tag_name(),
+            loc_string(sdf, node.range().start),
+        )
+    })
+}
+
 /// This is annoying. Essentially, we can't do a generic over any number type
 /// in rust, so we need to implement this marker trait which has the functions
 /// we need. This is similar to the rust-num crate, but specialised for what
@@ -82,6 +122,15 @@ pub fn parse_number<T: IsNum>(s: &str) -> Result<T, ParseIntError> {
     };
 
     T::from_str_radix(final_str, base)
+}
+
+// Parse a string as a boolean with the values "true" or "false"
+pub fn parse_bool(s: &str) -> Result<bool, ()> {
+    match s {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(()),
+    }
 }
 
 pub fn loc_string(xml_sdf: &SystemDescriptionFile, pos: SdfLocation) -> String {

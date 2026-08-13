@@ -9,10 +9,10 @@ use std::rc::Rc;
 
 use super::consts::*;
 use super::pd_vm::ProtectionDomain;
-use super::util::{check_attributes, checked_lookup, loc_string, value_error};
+use super::util::{
+    check_attributes, checked_lookup, loc_string, sdf_attribute_as_bool, value_error,
+};
 use super::{SdfNode, SystemDescriptionFile};
-
-use crate::util::str_to_bool;
 
 #[derive(Debug, Clone)]
 pub struct ChannelEnd {
@@ -61,25 +61,8 @@ impl ChannelEnd {
             return Err(value_error(xml_sdf, node, "id must be >= 0".to_string()));
         }
 
-        let notify = node
-            .attribute("notify")
-            .map(str_to_bool)
-            .unwrap_or(Some(true))
-            .ok_or_else(|| {
-                value_error(
-                    xml_sdf,
-                    node,
-                    "notify must be 'true' or 'false'".to_string(),
-                )
-            })?;
-
-        let pp = node
-            .attribute("pp")
-            .map(str_to_bool)
-            .unwrap_or(Some(false))
-            .ok_or_else(|| {
-                value_error(xml_sdf, node, "pp must be 'true' or 'false'".to_string())
-            })?;
+        let notify = sdf_attribute_as_bool(xml_sdf, node, "notify")?.unwrap_or(true);
+        let pp = sdf_attribute_as_bool(xml_sdf, node, "pp")?.unwrap_or(false);
 
         if let Some(pd) = pds.get(end_pd) {
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);

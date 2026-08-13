@@ -17,13 +17,12 @@ use super::irq::{SysIrq, SysIrqKind};
 use super::memory_region::SysMap;
 use super::pci::PciDevice;
 use super::util::{
-    check_attributes, checked_add_setvar, checked_lookup, loc_string, sdf_attribute_as_number,
-    sdf_required_attribute_as_number, value_error,
+    check_attributes, checked_add_setvar, checked_lookup, loc_string, sdf_attribute_as_bool,
+    sdf_attribute_as_number, sdf_required_attribute_as_number, value_error,
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
 use crate::sel4::{Arch, ArmRiscvIrqTrigger, X86IoapicIrqPolarity, X86IoapicIrqTrigger};
-use crate::util::str_to_bool;
 use crate::Config;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -185,38 +184,12 @@ impl ProtectionDomain {
             ));
         }
 
-        let passive = if let Some(xml_passive) = node.attribute("passive") {
-            match str_to_bool(xml_passive) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "passive must be 'true' or 'false'".to_string(),
-                    ))
-                }
-            }
-        } else {
-            false
-        };
+        let passive = sdf_attribute_as_bool(xml_sdf, node, "passive")?.unwrap_or(false);
 
         let stack_size: u64 =
             sdf_attribute_as_number(xml_sdf, node, "stack_size")?.unwrap_or(PD_DEFAULT_STACK_SIZE);
 
-        let smc = if let Some(xml_smc) = node.attribute("smc") {
-            match str_to_bool(xml_smc) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "smc must be 'true' or 'false'".to_string(),
-                    ))
-                }
-            }
-        } else {
-            false
-        };
+        let smc = sdf_attribute_as_bool(xml_sdf, node, "smc")?.unwrap_or(false);
 
         if smc {
             match config.arm_smc {
@@ -316,20 +289,7 @@ impl ProtectionDomain {
         }
 
         // FPU is enabled by default
-        let fpu = if let Some(xml_fpu) = node.attribute("fpu") {
-            match str_to_bool(xml_fpu) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "fpu must be 'true' or 'false'".to_string(),
-                    ))
-                }
-            }
-        } else {
-            true
-        };
+        let fpu = sdf_attribute_as_bool(xml_sdf, node, "fpu")?.unwrap_or(true);
 
         for child in node.children() {
             match child.tag_name() {
