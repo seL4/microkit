@@ -10,7 +10,9 @@ use std::str::FromStr;
 
 use super::memory_region::SysIOMap;
 use super::pci::{PciDevice, PciDeviceParseError};
-use super::util::{check_attributes, checked_lookup, loc_string, sdf_parse_number, value_error};
+use super::util::{
+    check_attributes, checked_lookup, loc_string, sdf_required_attribute_as_number, value_error,
+};
 use super::{SdfNode, SystemDescriptionFile};
 
 use crate::{sel4::Arch, Config};
@@ -104,8 +106,8 @@ impl IOAddressSpace {
         // http://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/vt-directed-io-spec.pdf
         let domain_id = match config.arch {
             Arch::X86_64 => {
-                let domain_id =
-                    sdf_parse_number(checked_lookup(xml_sdf, node, "domain_id")?, node)?;
+                let domain_id = sdf_required_attribute_as_number(xml_sdf, node, "domain_id")?;
+
                 if !domain_ids.insert(domain_id) {
                     return Err(value_error(
                         xml_sdf,

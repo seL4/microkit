@@ -4,14 +4,75 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::num::ParseIntError;
+
 use super::{SdfLocation, SdfNode, SysSetVar, SystemDescriptionFile};
+
+/// Parse an 'attribute' of an `SdfNode` as a number of type T.
+/// If the attribute does not exist, `Ok(None)`
+pub fn sdf_attribute_as_number<T: IsNum>(
+    sdf: &SystemDescriptionFile,
+    node: &dyn SdfNode,
+    attribute: &str,
+) -> Result<Option<T>, String> {
+    let Some(value_str) = node.attribute(attribute) else {
+        return Ok(None);
+    };
+
+    parse_number(value_str).map(|v| Some(v)).map_err(|err| {
+        format!(
+            "Error: failed to parse integer '{}' on element '{}': {}: {}",
+            value_str,
+            node.tag_name(),
+            err,
+            loc_string(sdf, node.range().start),
+        )
+    })
+}
+
+/// Parse an 'attribute' of an `SdfNode` as a number of type T.
+/// If the attribute does not exist, return a neatly formatted error.
+pub fn sdf_required_attribute_as_number<T: IsNum>(
+    sdf: &SystemDescriptionFile,
+    node: &dyn SdfNode,
+    attribute: &str,
+) -> Result<T, String> {
+    sdf_attribute_as_number(sdf, node, attribute)?.ok_or_else(|| {
+        format!(
+            "Error: Missing required attribute '{}' on element '{}': {}",
+            attribute,
+            node.tag_name(),
+            loc_string(sdf, node.range().start),
+        )
+    })
+}
+
+/// This is annoying. Essentially, we can't do a generic over any number type
+/// in rust, so we need to implement this marker trait which has the functions
+/// we need. This is similar to the rust-num crate, but specialised for what
+/// we need it for.
+pub(super) trait IsNum: Sized {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError>;
+}
+
+impl IsNum for u64 {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        Self::from_str_radix(src, radix)
+    }
+}
+
+impl IsNum for u8 {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        Self::from_str_radix(src, radix)
+    }
+}
 
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
 /// This also removes any underscores that may be present in the number
 /// Always returns a base 10 integer.
-pub fn sdf_parse_number(s: &str, node: &dyn SdfNode) -> Result<u64, String> {
+pub fn parse_number<T: IsNum>(s: &str) -> Result<T, ParseIntError> {
     let mut to_parse = s.to_string();
     to_parse.retain(|c| c != '_');
 
@@ -20,15 +81,7 @@ pub fn sdf_parse_number(s: &str, node: &dyn SdfNode) -> Result<u64, String> {
         None => (to_parse.as_str(), 10),
     };
 
-    match u64::from_str_radix(final_str, base) {
-        Ok(value) => Ok(value),
-        Err(err) => Err(format!(
-            "Error: failed to parse integer '{}' on element '{}': {}",
-            s,
-            node.tag_name(),
-            err
-        )),
-    }
+    T::from_str_radix(final_str, base)
 }
 
 pub fn loc_string(xml_sdf: &SystemDescriptionFile, pos: SdfLocation) -> String {

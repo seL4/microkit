@@ -9,7 +9,10 @@ use std::num::NonZero;
 
 use sel4_capdl_initializer_types::{DomainSchedDuration, DomainSchedEntry};
 
-use super::util::{check_attributes, checked_lookup, loc_string, sdf_parse_number, value_error};
+use super::util::{
+    check_attributes, checked_lookup, loc_string, parse_number, sdf_attribute_as_number,
+    value_error,
+};
 use super::{SdfNode, SystemDescriptionFile};
 
 use crate::Config;
@@ -144,12 +147,9 @@ impl Domains {
 
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
 
-        let domain_id = node
-            .attribute("id")
-            .map(|s| sdf_parse_number(s, node))
-            .transpose()?
-            .map(|n| {
-                if n >= config.num_domains.into() {
+        let domain_id = sdf_attribute_as_number(xml_sdf, node, "id")?
+            .map(|n: u8| {
+                if n >= config.num_domains {
                     Err(value_error(
                         xml_sdf,
                         node,
@@ -160,8 +160,7 @@ impl Domains {
                         ),
                     ))
                 } else {
-                    Ok(n.try_into()
-                        .expect("num_domains is u8 so by if above this is OK"))
+                    Ok(n)
                 }
             })
             .transpose()?;
@@ -177,18 +176,13 @@ impl Domains {
     ) -> Result<Domains, String> {
         check_attributes(xml_sdf, node, &["index_shift", "start_index"])?;
 
-        let schedule_start_index = node
-            .attribute("start_index")
-            .map(|s| sdf_parse_number(s, node))
-            .transpose()?
+        let schedule_start_index: u64 = sdf_attribute_as_number(xml_sdf, node, "start_index")?
             // The domain schedule is only started when the start index is Some(...)
             // so even when not specified we default to a start index of zero.
             .unwrap_or(0);
 
-        let schedule_index_shift = node
-            .attribute("index_shift")
-            .map(|s| sdf_parse_number(s, node))
-            .transpose()?;
+        let schedule_index_shift: Option<u64> =
+            sdf_attribute_as_number(xml_sdf, node, "index_shift")?;
 
         let mut schedule = vec![];
 
@@ -291,7 +285,15 @@ impl Domains {
             )
         })?;
 
-        let duration_int = sdf_parse_number(duration_raw, node)?;
+        let duration_int = parse_number(duration_raw).map_err(|err| {
+            format!(
+                "Error: failed to parse integer '{}' on element '{}': {}: {}",
+                duration_raw,
+                node.tag_name(),
+                err,
+                loc_string(xml_sdf, node.range().start),
+            )
+        })?;
         let duration = NonZero::new(duration_int).ok_or_else(|| {
             value_error(
                 xml_sdf,
