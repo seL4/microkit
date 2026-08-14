@@ -1513,6 +1513,9 @@ QEMU will start the system image using its packaged version of OpenSBI.
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
 
+<a id="rpi4b_2gb"></a>
+<a id="rpi4b_4gb"></a>
+<a id="rpi4b_8gb"></a>
 ## Raspberry Pi 4B {#rpi4b_1gb}
 
 Support is available for the Raspberry Pi 4 Model B. There are multiple models of the
