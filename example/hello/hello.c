@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <microkit.h>
 
+char xxxxxxxxxxx[100000000] = { 1 };
+
 void init(void)
 {
     microkit_dbg_puts("hello, world\n");

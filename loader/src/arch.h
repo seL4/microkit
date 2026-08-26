@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <stdint.h>
+#include <stdbool.h>
+
 /**
   * The layout and naming scheme of the functions in these files has meaning:
   *
@@ -35,3 +38,17 @@ void arch_init(void);
 void arch_set_exception_handler(void);
 int arch_mmu_enable(int logical_cpu);
 void arch_jump_to_kernel(int logical_cpu);
+
+union MmuRegionArchAttrs {
+    bool is_ram;
+    uint64_t raw;
+};
+
+struct MmuRegion {
+    uintptr_t start;
+    uintptr_t top;
+    union MmuRegionArchAttrs arch_attrs;
+};
+
+#define PAGE_TABLE_SIZE 4096
+#define MAX_NUM_PAGE_TABLES 64

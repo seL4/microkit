@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "smc.h"
+#include "../arch.h"
 #include "../cpus.h"
 #include "../cutil.h"
 #include "../loader.h"
@@ -100,6 +101,14 @@ void arm_secondary_cpu_entry(int logical_cpu, uint64_t mpidr_el1)
     LDR_PRINT("INFO", logical_cpu, "secondary CPU entry with MPIDR_EL1 ");
     puthex64(mpidr_el1);
     puts("\n");
+
+    int r = arch_mmu_enable(logical_cpu);
+    if (r != 0) {
+        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
+        puthex32(r);
+        puts("\n");
+        for (;;) {}
+    }
 
     if (logical_cpu == 0) {
         LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not have logical id 0!!!\n");

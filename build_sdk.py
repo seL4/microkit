@@ -796,6 +796,26 @@ def build_sel4(
             json_dst.chmod(0o744)
 
 
+def test_loader(build_dir: Path) -> None:
+    build_dir = build_dir / "loader"
+    build_dir.mkdir(exist_ok=True, parents=True)
+
+    make_args = f"BUILD_DIR={build_dir.absolute()} RUST_ONLY=True"
+
+    r = system(
+        f"make -C loader tests {make_args}"
+    )
+    if r != 0:
+        raise Exception(f"Tests failed: loader")
+
+    # We don't pass CLIPPYARGS, so this is warning-only
+    r = system(
+        f"make -C loader clippy {make_args}"
+    )
+    if r != 0:
+        raise Exception(f"Clippy failed: loader")
+
+
 def build_elf_component(
     component_name: str,
     sdk_dir: Path,
@@ -1094,6 +1114,8 @@ def main() -> None:
 
     if not args.skip_run_time:
         build_dir = Path("build")
+        test_loader(build_dir)
+
         for (board, configs) in build_goals:
             for config in configs:
                 if not args.skip_sel4:
