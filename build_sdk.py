@@ -393,9 +393,9 @@ SUPPORTED_BOARDS = (
         arch=KernelArch.AARCH64,
         gcc_cpu="cortex-a53",
         loader_link_address=0x30000000,
-        # ROCKPRO64 has 4 Cortex-A53 cores and 2 Cortex-A72 cores,
-        # we always run on the Cortex-A53s.
-        smp_cores=4,
+        # ROCKPRO64 has 4 Cortex-A53 cores and 2 Cortex-A72 cores in two clusters.
+        # The non-SMP configuration runs on the first A53 core.
+        smp_cores=6,
         kernel_options={
             "KernelPlatform": "rockpro64",
         },
