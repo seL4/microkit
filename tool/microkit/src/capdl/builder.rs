@@ -13,7 +13,7 @@ use std::{
 
 use sel4_capdl_initializer_types::{
     object, Cap, CapTableEntry, Fill, FillEntry, FillEntryContent, FillEntryContentBootInfo,
-    NamedObject, Object, ObjectId, Spec, Word,
+    NamedObject, Object, ObjectId, Rights, Spec, Word,
 };
 
 use crate::{
@@ -104,6 +104,59 @@ const PD_SCHEDCONTEXT_EXTRA_SIZE_BITS: u64 = PD_SCHEDCONTEXT_EXTRA_SIZE.ilog2() 
 
 pub const SLOT_BITS: u64 = 5;
 pub const SLOT_SIZE: u64 = 1 << SLOT_BITS;
+
+/// Sending on a endpoint only needs the 'write'/'capCanSend' right, as we don't
+/// allow capability transfer. We set grant_reply to allow the assignment to
+/// the reply capability held by the server.
+pub(in crate::capdl) const RIGHTS_EP_CALL: Rights = Rights {
+    write: true,
+    read: false,
+    grant: false,
+    grant_reply: true,
+};
+
+/// For an endpoint we receive on, we only need the 'read'/'capCanReceive' right
+pub(in crate::capdl) const RIGHTS_EP_RECEIVE: Rights = Rights {
+    read: true,
+    write: false,
+    grant: false,
+    grant_reply: false,
+};
+
+/// Minimal rights for a fault handler cap bound to a TCB.
+/// The kernel models this equivalently to a 'seL4_Call' on the fault endpoint
+pub(in crate::capdl) const RIGHTS_FAULT_HANDLER_EP: Rights = RIGHTS_EP_CALL;
+
+/// Minimal rights for signalling a notification, used for `microkit_notify()` caps
+pub(in crate::capdl) const RIGHTS_NTFN_SIGNAL: Rights = Rights {
+    read: false,
+    write: true,
+    // Irrelevant for notifications, seL4 manual v13.0.0 pg11
+    grant: false,
+    grant_reply: false,
+};
+
+/// Minimal rights for the notification attached to an IRQHandler; kernel treats
+/// an IRQ as a signal on an notification.
+pub(in crate::capdl) const RIGHTS_IRQ_HANDLER_NTFN: Rights = RIGHTS_NTFN_SIGNAL;
+
+/// Minimal rights for receiving on notifications, used for PD 'INPUT_CAP'
+pub(in crate::capdl) const RIGHTS_NTFN_RECEIVE: Rights = Rights {
+    read: true,
+    write: false,
+    // Irrelevant for notifications, seL4 manual v13.0.0 pg11
+    grant: false,
+    grant_reply: false,
+};
+
+/// Minimal rights for caps involved in a SchedContext_Bind: seL4 ignores the
+/// rights in this case.
+pub(in crate::capdl) const RIGHTS_SC_BIND: Rights = Rights {
+    read: false,
+    write: false,
+    grant: false,
+    grant_reply: false,
+};
 
 pub type FrameFill = Fill<FillContent>;
 pub type CapDLNamedObject = NamedObject<FrameFill>;
@@ -418,7 +471,7 @@ pub fn build_capdl_spec(
     // Create monitor fault endpoint object + cap
     let mon_fault_ep_obj_id =
         capdl_util_make_endpoint_obj(&mut spec_container, MONITOR_PD_NAME, true);
-    let mon_fault_ep_cap = capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, 0);
+    let mon_fault_ep_cap = capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, RIGHTS_EP_RECEIVE, 0);
 
     // Create monitor reply object object + cap
     let mon_reply_obj_id = capdl_util_make_reply_obj(&mut spec_container, MONITOR_PD_NAME);
@@ -762,14 +815,12 @@ pub fn build_capdl_spec(
         ));
 
         // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let pd_fault_ep_cap = if let Some(pd_parent) = &pd.parent {
+        let (pd_fault_ep_badge, pd_fault_ep_obj_id) = if let Some(pd_parent) = &pd.parent {
             let badge: u64 = FAULT_BADGE | pd.id.unwrap();
             let parent_shadow_cspace = &pd_shadow_cspaces[pd_parent];
             let parent_ep_obj_id = parent_shadow_cspace
                 .endpoint
                 .expect("parent should have EP due to needs_ep()");
-            let fault_ep_cap =
-                capdl_util_make_endpoint_cap(parent_ep_obj_id, true, true, true, badge);
 
             // Allow the parent PD to access the child's TCB:
             parent_shadow_cspace.insert_cap_into_microkit_cnode(
@@ -778,12 +829,17 @@ pub fn build_capdl_spec(
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
             );
 
-            fault_ep_cap
+            (badge, parent_ep_obj_id)
         } else {
             // badge = pd_global_idx + 1 because seL4 considers badge = 0 as no badge.
             let badge: u64 = pd_global_idx as u64 + 1;
-            capdl_util_make_endpoint_cap(mon_fault_ep_obj_id, true, true, true, badge)
+            (badge, mon_fault_ep_obj_id)
         };
+        let pd_fault_ep_cap = capdl_util_make_endpoint_cap(
+            pd_fault_ep_obj_id,
+            RIGHTS_FAULT_HANDLER_EP,
+            pd_fault_ep_badge,
+        );
         caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
             PD_FAULT_EP_CAP_IDX as u32,
             pd_fault_ep_cap.clone(),
@@ -797,9 +853,7 @@ pub fn build_capdl_spec(
         if pd.passive {
             let pd_monitor_ep_cap = capdl_util_make_endpoint_cap(
                 mon_fault_ep_obj_id,
-                true,
-                true,
-                true,
+                RIGHTS_EP_CALL,
                 pd_global_idx as u64 + 1,
             );
             caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
@@ -810,7 +864,7 @@ pub fn build_capdl_spec(
 
         // Step 3-7 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
-        let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0);
+        let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, RIGHTS_NTFN_RECEIVE, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
         if pd.needs_ep(&system.channels) {
             pd_ep_obj_id = Some(capdl_util_make_endpoint_obj(
@@ -819,7 +873,7 @@ pub fn build_capdl_spec(
                 false,
             ));
             let pd_ep_cap =
-                capdl_util_make_endpoint_cap(pd_ep_obj_id.unwrap(), true, true, true, 0);
+                capdl_util_make_endpoint_cap(pd_ep_obj_id.unwrap(), RIGHTS_EP_RECEIVE, 0);
             caps_to_insert_to_pd_cspace
                 .push(capdl_util_make_cte(PD_INPUT_CAP_IDX as u32, pd_ep_cap));
         } else {
@@ -968,9 +1022,7 @@ pub fn build_capdl_spec(
                     // Create fault endpoint cap to the parent PD.
                     let vm_vcpu_fault_ep_cap = capdl_util_make_endpoint_cap(
                         pd_ep_obj_id.unwrap(),
-                        true,
-                        true,
-                        true,
+                        RIGHTS_FAULT_HANDLER_EP,
                         FAULT_BADGE | vcpu.id,
                     );
                     caps_to_bind_to_vm_tcbs.push(capdl_util_make_cte(
@@ -1134,7 +1186,7 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 mon_cnode_obj_id,
                 (MON_BASE_NOTIFICATION_CAP as usize + pd_global_idx) as u32,
-                capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 0),
+                capdl_util_make_ntfn_cap(pd_ntfn_obj_id, RIGHTS_SC_BIND, 0),
             );
         }
 
@@ -1165,7 +1217,8 @@ pub fn build_capdl_spec(
         if channel.end_a.notify {
             let pd_a_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_a.id;
             let pd_a_ntfn_badge = 1 << channel.end_b.id;
-            let pd_a_ntfn_cap = capdl_util_make_ntfn_cap(pd_b_ntfn_id, true, true, pd_a_ntfn_badge);
+            let pd_a_ntfn_cap =
+                capdl_util_make_ntfn_cap(pd_b_ntfn_id, RIGHTS_NTFN_SIGNAL, pd_a_ntfn_badge);
             pd_a_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
                 pd_a_ntfn_cap_idx as u32,
@@ -1176,7 +1229,8 @@ pub fn build_capdl_spec(
         if channel.end_b.notify {
             let pd_b_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_b.id;
             let pd_b_ntfn_badge = 1 << channel.end_a.id;
-            let pd_b_ntfn_cap = capdl_util_make_ntfn_cap(pd_a_ntfn_id, true, true, pd_b_ntfn_badge);
+            let pd_b_ntfn_cap =
+                capdl_util_make_ntfn_cap(pd_a_ntfn_id, RIGHTS_NTFN_SIGNAL, pd_b_ntfn_badge);
             pd_b_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
                 pd_b_ntfn_cap_idx as u32,
@@ -1191,7 +1245,7 @@ pub fn build_capdl_spec(
                 .endpoint
                 .expect("exists as needs_ep() is true");
             let pd_a_ep_cap =
-                capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
+                capdl_util_make_endpoint_cap(pd_b_ep_id, RIGHTS_EP_CALL, pd_a_ep_badge);
             pd_a_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
                 pd_a_ep_cap_idx as u32,
@@ -1206,7 +1260,7 @@ pub fn build_capdl_spec(
                 .endpoint
                 .expect("exists as needs_ep() is true");
             let pd_b_ep_cap =
-                capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
+                capdl_util_make_endpoint_cap(pd_a_ep_id, RIGHTS_EP_CALL, pd_b_ep_badge);
             pd_b_shadow_cspace.insert_cap_into_microkit_cnode(
                 &mut spec_container,
                 pd_b_ep_cap_idx as u32,
