@@ -47,7 +47,7 @@ use util::*;
 
 // Internal re-exports
 pub(crate) use consts::*;
-pub(crate) use cspace::CapMapType;
+pub(crate) use cspace::{CapMapRefData, CapMapRefDataPdKind};
 pub(crate) use iommu::IommuDeviceIdentifier;
 pub(crate) use irq::{SysIrq, SysIrqKind};
 pub(crate) use memory_region::Map;
@@ -310,10 +310,14 @@ pub fn parse(
 
     for pd in pds.values() {
         for cap_map in pd.cap_maps.iter() {
-            if !pds.contains_key(&cap_map.pd) {
+            let CapMapRefData::Pd { pd, .. } = &cap_map.ref_data else {
+                continue;
+            };
+
+            if !pds.contains_key(pd) {
                 return Err(format!(
                     "Error: unknown PD name '{}': {}",
-                    cap_map.pd,
+                    pd,
                     loc_string(&xml_sdf, cap_map.text_pos)
                 ));
             };
@@ -549,12 +553,10 @@ pub fn parse(
         for (slot, cap_maps) in user_cap_slots.iter() {
             if cap_maps.len() > 1 {
                 let mut lines = String::new();
-                for mapping in cap_maps {
+                for &mapping in cap_maps {
                     lines.push_str(&format!(
-                        "\n  type {:?} from '{}' at '{}'",
-                        mapping.cap_type,
-                        mapping.pd,
-                        loc_string(&xml_sdf, mapping.text_pos)
+                        "\n  {}",
+                        mapping.format_for_slot_collision(&xml_sdf)
                     ));
                 }
                 return Err(format!(

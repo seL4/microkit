@@ -1488,8 +1488,8 @@ mod system {
             &DEFAULT_AARCH64_KERNEL_CONFIG,
             "pd_cap_mappings_overlapping.system",
             r#"Error: overlapping user caps in slot 3 of protection domain 'pd_b':
-  type VSpace from 'pd_a' at 'pd_cap_mappings_overlapping.system:23:13'
-  type VSpace from 'pd_a' at 'pd_cap_mappings_overlapping.system:25:13'"#,
+  pd 'pd_a's VSpace at 'pd_cap_mappings_overlapping.system:23:13'
+  pd 'pd_a's VSpace at 'pd_cap_mappings_overlapping.system:25:13'"#,
         )
     }
 
@@ -1518,5 +1518,22 @@ mod system {
             "pd_cap_mappings_invalid_pd_ref.system",
             "Error: unknown PD name 'invalid': pd_cap_mappings_invalid_pd_ref.system:12:13",
         )
+    }
+
+    #[test]
+    fn test_cap_mappings_smc_on_x86() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "pd_cap_mappings_smc_on_x86.system",
+            "Error: cap_smc is only supported on AArch64 on element 'cap_smc': pd_cap_mappings_smc_on_x86.system:12:13",
+        );
+    }
+
+    #[test]
+    fn test_cap_mappings_smc_function_id_0() {
+        check_success(
+            &DEFAULT_AARCH64_KERNEL_CONFIG,
+            "pd_cap_mappings_smc_function_id_0.system",
+        );
     }
 }

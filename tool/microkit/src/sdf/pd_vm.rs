@@ -74,7 +74,6 @@ pub struct ProtectionDomain {
     pub sched_params: SchedulingParams,
     pub passive: bool,
     pub stack_size: u64,
-    pub smc: bool,
     pub cpu: CpuCore,
     pub domain: Option<u8>,
     pub program_image: PathBuf,
@@ -185,24 +184,6 @@ impl ProtectionDomain {
 
         let stack_size: u64 =
             sdf_parse_attribute(xml_sdf, node, "stack_size")?.unwrap_or(PD_DEFAULT_STACK_SIZE);
-
-        let smc = sdf_parse_attribute(xml_sdf, node, "smc")?.unwrap_or(false);
-
-        if smc {
-            match config.arm_smc {
-                Some(smc_allowed) => {
-                    if !smc_allowed {
-                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled in the kernel for this platform".to_string()));
-                    }
-                }
-                None => {
-                    return Err(
-                        "ARM SMC forwarding support is not available for this architecture"
-                            .to_string(),
-                    )
-                }
-            }
-        }
 
         let cpu = CpuCore(sdf_parse_attribute(xml_sdf, node, "cpu")?.unwrap_or(0u8));
 
@@ -680,7 +661,7 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    cspace = Some(CSpace::from_xml(xml_sdf, &*child)?);
+                    cspace = Some(CSpace::from_xml(config, xml_sdf, &*child)?);
                 }
                 _ => {
                     let pos = child.range().start;
@@ -713,7 +694,6 @@ impl ProtectionDomain {
             },
             passive,
             stack_size,
-            smc,
             cpu,
             domain,
             program_image: program_image.unwrap(),

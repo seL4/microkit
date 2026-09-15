@@ -45,6 +45,7 @@ LIBS := -lmicrokit -Tmicrokit.ld
 
 IMAGE_FILE = $(BUILD_DIR)/loader.img
 REPORT_FILE = $(BUILD_DIR)/report.txt
+SPEC = $(BUILD_DIR)/capdl_spec.json
 
 all: $(IMAGE_FILE)
 
@@ -55,4 +56,4 @@ $(BUILD_DIR)/arm_smc.elf: $(addprefix $(BUILD_DIR)/, $(ARM_SMC_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) arm_smc.system
-	$(MICROKIT_TOOL) arm_smc.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+	$(MICROKIT_TOOL) arm_smc.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE) --capdl-json $(SPEC)

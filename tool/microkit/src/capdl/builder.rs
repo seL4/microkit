@@ -8,6 +8,7 @@ use core::ops::Range;
 use std::{
     cmp::{min, Ordering},
     collections::{BTreeMap, HashMap},
+    num::NonZeroU64,
     rc::Rc,
 };
 
@@ -25,8 +26,8 @@ use crate::{
     },
     elf::ElfFile,
     sdf::{
-        CapMapType, CpuCore, Map, SystemDescription, BUDGET_DEFAULT, MONITOR_DOMAIN,
-        MONITOR_PD_NAME, MONITOR_PRIORITY,
+        CapMapRefData, CapMapRefDataPdKind, CpuCore, Map, SystemDescription, BUDGET_DEFAULT,
+        MONITOR_DOMAIN, MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
     util::{ranges_overlap, round_down, round_up},
@@ -84,7 +85,6 @@ const PD_REPLY_CAP_IDX: u64 = 4;
 const PD_MONITOR_EP_CAP_IDX: u64 = 5;
 // Valid only in benchmark configuration.
 const PD_TCB_CAP_IDX: u64 = 6;
-const PD_ARM_SMC_CAP_IDX: u64 = 7;
 
 const PD_BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const PD_BASE_OUTPUT_ENDPOINT_CAP: u64 = PD_BASE_OUTPUT_NOTIFICATION_CAP + 64;
@@ -604,18 +604,16 @@ pub fn build_capdl_spec(
     // *********************************
     // Step 3. Create the PDs' spec
     // *********************************
-    // On ARM, check if we need to create the SMC object
-    let arm_smc_obj_id = if kernel_config.arch == Arch::Aarch64
-        && kernel_config.arm_smc.unwrap_or(false)
-        && system.protection_domains.values().any(|pd| pd.smc)
-    {
-        Some(spec_container.add_root_object(NamedObject {
-            name: "arm_smc".to_owned().into(),
-            object: Object::ArmSmc,
-        }))
-    } else {
-        None
-    };
+    // On ARM (only), get the SMC root cap object ID.
+    let arm_smc_obj_id =
+        if kernel_config.arch == Arch::Aarch64 && kernel_config.arm_smc.unwrap_or(false) {
+            Some(spec_container.add_root_object(NamedObject {
+                name: "arm_smc".to_owned().into(),
+                object: Object::ArmSmc,
+            }))
+        } else {
+            None
+        };
 
     // This object keeps track of object IDs for various 'important' / nameable kernel objects for
     // each PD so that we can make various references to them at later steps.
@@ -1050,14 +1048,6 @@ pub fn build_capdl_spec(
             }
         }
 
-        // Step 3-12 Create ARM SMC cap if requested.
-        if pd.smc {
-            caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
-                PD_ARM_SMC_CAP_IDX as u32,
-                capdl_util_make_arm_smc_cap(arm_smc_obj_id.unwrap()),
-            ));
-        }
-
         // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
@@ -1257,14 +1247,25 @@ pub fn build_capdl_spec(
     // *********************************
     for pd in system.protection_domains.values() {
         for cap_map in pd.cap_maps.iter() {
-            // TODO: Once we add more CapMap options, they might not all have
-            // the pd_name. But for now, they do.
-            let pd_src_shadow_cspace = &pd_shadow_cspaces[&cap_map.pd];
-
-            let cap_map_obj = match cap_map.cap_type {
-                CapMapType::Tcb => capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb),
-                CapMapType::Sc => capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context),
-                CapMapType::VSpace => capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace),
+            let cap_map_obj = match &cap_map.ref_data {
+                CapMapRefData::Pd { pd, kind, .. } => {
+                    let pd_src_shadow_cspace = &pd_shadow_cspaces[pd];
+                    match kind {
+                        CapMapRefDataPdKind::Tcb => {
+                            capdl_util_make_tcb_cap(pd_src_shadow_cspace.tcb)
+                        }
+                        CapMapRefDataPdKind::Sc => {
+                            capdl_util_make_sc_cap(pd_src_shadow_cspace.sched_context)
+                        }
+                        CapMapRefDataPdKind::VSpace => {
+                            capdl_util_make_page_table_cap(pd_src_shadow_cspace.vspace)
+                        }
+                    }
+                }
+                CapMapRefData::ArmSmcFunction { function_id } => capdl_util_make_arm_smc_cap(
+                    arm_smc_obj_id.unwrap(),
+                    function_id.map(NonZeroU64::get).unwrap_or(0).into(),
+                ),
             };
 
             // Map this into the destination pd's cspace and the specified slot.

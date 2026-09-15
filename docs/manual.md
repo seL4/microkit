@@ -638,7 +638,6 @@ If the protection domain has children it must also implement:
     void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq);
     seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
     void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
-    void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
     void microkit_x86_ioport_write_8(microkit_ioport ioport_id,
                                      seL4_Word port_addr, seL4_Word data);
     void microkit_x86_ioport_write_16(microkit_ioport ioport_id,
@@ -866,17 +865,6 @@ Write to a register for a given virtual CPU with ID `vcpu`. The `reg` argument i
 register that is written to. The `value` argument is what the register will be set to.
 The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source code.
 
-## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
-
-The API takes in arguments for a Secure Monitor Call which will be performed by seL4. Any
-response values will be placed into the `response` structure.
-
-The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
-
-Note that this API is only available when the PD making the call has been configured to
-have SMC enabled in the SDF. Note that when the kernel makes the actual SMC, it cannot
-pre-empt the Secure Monitor and therefore any kernel WCET properties are no longer guaranteed.
-
 ## `void microkit_x86_ioport_write_(8|16|32)(microkit_ioport ioport_id, seL4_Word port_addr, seL4_Word data)`
 
 Write an 8, 16, or 32 bits value at port address `port_addr` to I/O Port with ID `ioport_id`.
@@ -991,7 +979,6 @@ It supports the following attributes:
 * `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
   Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 8KiB.
 * `cpu`: (optional) set the physical CPU core this PD will run on. Defaults to zero.
-* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform.. Defaults to false.
 * `fpu`: (optional) whether this PD can access the FPU. Defaults to true.
 * `domain`: (conditionally required) the name of the domain that this PD belongs to.
             If a domain schedule is specified, this is mandatory, else it is disallowed.
@@ -1126,14 +1113,22 @@ It supports no attributes, but supports the following elements as children:
 * `cap_sc`: A capability to a protection domain's Scheduling Context (SC).
   If the protection domain is passive, this is a capability to the notification's scheduling context.
 * `cap_vspace`: A capability to a protection domain's VSpace.
+* `cap_smc`: (only on ARM) A badged capability for performing specific SMC calls.
 
 All of the elements support the `slot` attribute, which is is an opaque identifier used to address the capability at runtime.
 To convert the `slot` to an `seL4_CPtr`, use the [`seL4_CPtr microkit_cspace_root_slot_to_cptr(seL4_Word slot)`](#libmicrokit_cspace_root_slot_to_cptr) function.
 
 See the 'cap_sharing' example packaged in your SDK or [on GitHub](https://github.com/seL4/microkit/tree/main/example/cap_sharing).
 
-All capability elements (currently) all support the `pd` attribute, the name of the protection domain that the capability is from.
+The 'tcb', 'sc' and 'vspace' elements support `pd` attribute, the name of the protection domain that the capability is from.
 For instance, `<cap_tcb slot="1" pd="alpha">` will place the TCB of PD 'alpha' in the CSpace of the current PD.
+
+The `cap_smc` elements supports the `function_id` attribute. This is an allowlisted function ID permitted
+for an invocation on the SMC capability. If you want to support multiple SMC function invocations, create
+multiple `cap_smc` for each function ID. For example; to permit calls to the `PSCI_VERSION` (0x84000000)
+function, add `<cap_smc slot="1" function_id="0x84000000" />`. If you do not care about isolation,
+or are experimenting, specifying a `function_id="0"` grants an unbadged SMC capability that allows
+any SMC function invocations.
 
 ## `io_address_space`
 

@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2025, UNSW.
+ Copyright 2026, UNSW
 
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <protection_domain name="arm_smc" priority="1">
-        <program_image path="arm_smc.elf" />
+    <protection_domain name="pd_b">
+        <program_image path="test" />
 
         <cspace>
-            <!-- An (ARM) SMC capability that permits SMC calls to 0x84000000 (PSCI_VERSION) -->
             <cap_smc slot="1" function_id="0x84000000" />
         </cspace>
     </protection_domain>

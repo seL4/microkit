@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
+use std::num::NonZeroU64;
 use std::rc::Rc;
 
 use super::consts::*;
@@ -12,17 +13,48 @@ use super::util::{
 };
 use super::{SdfLocation, SdfNode, SystemDescriptionFile};
 
+use crate::{sel4::Arch, Config};
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum CapMapType {
     Tcb,
     Sc,
     VSpace,
+    ArmSmc,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CapMapRefDataPdKind {
+    Tcb,
+    Sc,
+    VSpace,
+}
+
+impl From<CapMapType> for CapMapRefDataPdKind {
+    fn from(value: CapMapType) -> Self {
+        match value {
+            CapMapType::Tcb => CapMapRefDataPdKind::Tcb,
+            CapMapType::Sc => CapMapRefDataPdKind::Sc,
+            CapMapType::VSpace => CapMapRefDataPdKind::VSpace,
+            CapMapType::ArmSmc => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CapMapRefData {
+    Pd {
+        pd: Rc<str>,
+        kind: CapMapRefDataPdKind,
+    },
+    ArmSmcFunction {
+        function_id: Option<NonZeroU64>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CapMap {
-    pub cap_type: CapMapType,
-    pub pd: Rc<str>,
+    pub ref_data: CapMapRefData,
     // The destination "slot" in the CSpace: note that this is "opaque" and
     // can be shifted depending on the location in the CSpace to work as the CPtr,
     // but here it is given as the index into the CNode.
@@ -39,15 +71,38 @@ pub struct CSpace {
 impl CapMap {
     fn from_xml(
         cap_type: CapMapType,
+        config: &Config,
         xml_sdf: &SystemDescriptionFile,
         node: &dyn SdfNode,
     ) -> Result<CapMap, String> {
-        // At the moment the four cap maps we support all have the 'pd' element,
-        // so we can include it here. When that stops being the case we will
-        // have to rework this a bit.
-        check_attributes(xml_sdf, node, &["slot", "pd"])?;
+        let ref_data = match cap_type {
+            CapMapType::Tcb | CapMapType::Sc | CapMapType::VSpace => {
+                check_attributes(xml_sdf, node, &["slot", "pd"])?;
 
-        let pd = Rc::from(checked_lookup(xml_sdf, node, "pd")?);
+                let pd = Rc::from(checked_lookup(xml_sdf, node, "pd")?);
+
+                CapMapRefData::Pd {
+                    pd,
+                    kind: cap_type.into(),
+                }
+            }
+            CapMapType::ArmSmc => {
+                check_attributes(xml_sdf, node, &["slot", "function_id"])?;
+
+                if config.arch != Arch::Aarch64 {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "cap_smc is only supported on AArch64".to_string(),
+                    ));
+                }
+
+                let function_id: u64 = sdf_parse_required_attribute(xml_sdf, node, "function_id")?;
+                let function_id = NonZeroU64::new(function_id);
+
+                CapMapRefData::ArmSmcFunction { function_id }
+            }
+        };
 
         let slot: u64 = sdf_parse_required_attribute(xml_sdf, node, "slot")?;
 
@@ -69,16 +124,33 @@ impl CapMap {
         }
 
         Ok(CapMap {
-            cap_type,
-            pd,
+            ref_data,
             slot,
             text_pos: node.range().start,
         })
+    }
+
+    pub(crate) fn format_for_slot_collision(&self, xml_sdf: &SystemDescriptionFile) -> String {
+        let loc = loc_string(xml_sdf, self.text_pos);
+
+        match &self.ref_data {
+            CapMapRefData::Pd { pd, kind, .. } => {
+                format!("pd '{pd}'s {kind:?} at '{loc}'")
+            }
+            CapMapRefData::ArmSmcFunction { function_id } => {
+                format!(
+                    "smc cap for function '{} at '{}'",
+                    function_id.map(NonZeroU64::get).unwrap_or(0),
+                    loc
+                )
+            }
+        }
     }
 }
 
 impl CSpace {
     pub(super) fn from_xml(
+        config: &Config,
         xml_sdf: &SystemDescriptionFile,
         node: &dyn SdfNode,
     ) -> Result<Self, String> {
@@ -88,9 +160,10 @@ impl CSpace {
 
         for child in node.children() {
             cap_maps.push(match child.tag_name() {
-                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, xml_sdf, &*child)?,
-                "cap_sc" => CapMap::from_xml(CapMapType::Sc, xml_sdf, &*child)?,
-                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, xml_sdf, &*child)?,
+                "cap_tcb" => CapMap::from_xml(CapMapType::Tcb, config, xml_sdf, &*child)?,
+                "cap_sc" => CapMap::from_xml(CapMapType::Sc, config, xml_sdf, &*child)?,
+                "cap_vspace" => CapMap::from_xml(CapMapType::VSpace, config, xml_sdf, &*child)?,
+                "cap_smc" => CapMap::from_xml(CapMapType::ArmSmc, config, xml_sdf, &*child)?,
                 child_name => {
                     let location = loc_string(xml_sdf, child.range().start);
                     if let Some(type_name) = child_name.strip_prefix("cap_") {

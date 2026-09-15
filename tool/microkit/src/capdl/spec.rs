@@ -98,6 +98,7 @@ pub fn capdl_cap_badge(cap: &Cap) -> Option<Word> {
     match cap {
         Cap::Endpoint(endpoint) => Some(endpoint.badge),
         Cap::Notification(notification) => Some(notification.badge),
+        Cap::ArmSmc(smc) => Some(smc.badge),
         _ => None,
     }
 }
