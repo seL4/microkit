@@ -126,22 +126,11 @@ pub fn capdl_util_make_endpoint_obj(
     spec_container.add_root_object(fault_ep_obj)
 }
 
-pub fn capdl_util_make_endpoint_cap(
-    ep_obj_id: ObjectId,
-    read: bool,
-    write: bool,
-    grant: bool,
-    badge: u64,
-) -> Cap {
+pub fn capdl_util_make_endpoint_cap(ep_obj_id: ObjectId, rights: Rights, badge: u64) -> Cap {
     Cap::Endpoint(cap::Endpoint {
         object: ep_obj_id,
         badge: Word(badge),
-        rights: Rights {
-            read,
-            write,
-            grant,
-            grant_reply: false,
-        },
+        rights,
     })
 }
 
@@ -156,17 +145,11 @@ pub fn capdl_util_make_ntfn_obj(
     spec_container.add_root_object(ntfn_obj)
 }
 
-pub fn capdl_util_make_ntfn_cap(ntfn_obj_id: ObjectId, read: bool, write: bool, badge: u64) -> Cap {
+pub fn capdl_util_make_ntfn_cap(ntfn_obj_id: ObjectId, rights: Rights, badge: u64) -> Cap {
     Cap::Notification(cap::Notification {
         object: ntfn_obj_id,
         badge: Word(badge),
-        rights: Rights {
-            read,
-            write,
-            // Irrelevant for notifications, seL4 manual v13.0.0 pg11
-            grant: false,
-            grant_reply: false,
-        },
+        rights,
     })
 }
 

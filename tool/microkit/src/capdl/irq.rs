@@ -9,7 +9,7 @@ use sel4_capdl_initializer_types::{cap, object, Cap, IrqEntry, Object, ObjectId,
 use crate::{
     capdl::{
         util::{capdl_util_make_cte, capdl_util_make_ntfn_cap},
-        CapDLNamedObject, CapDLSpecContainer,
+        CapDLNamedObject, CapDLSpecContainer, RIGHTS_IRQ_HANDLER_NTFN,
     },
     sdf::{CpuCore, SysIrq, SysIrqKind},
     sel4::{Arch, Config},
@@ -36,7 +36,8 @@ pub fn create_irq_handler_cap(
     });
 
     // Bind IRQ into the PD's notification with the correct badge
-    let pd_irq_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, true, true, 1 << irq_desc.id);
+    let pd_irq_ntfn_cap =
+        capdl_util_make_ntfn_cap(pd_ntfn_obj_id, RIGHTS_IRQ_HANDLER_NTFN, 1 << irq_desc.id);
     bind_irq_to_ntfn(spec_container, irq_obj_id, pd_irq_ntfn_cap);
 
     // Create a IRQ handler cap
