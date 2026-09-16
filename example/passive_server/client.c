@@ -14,6 +14,8 @@ void init(void)
 
     /* message the server */
     (void) microkit_ppcall(SERVER_CH, microkit_msginfo_new(1, 1));
+
+    microkit_dbg_puts("CLIENT|INFO: server replied to our message\n");
 }
 
 void notified(microkit_channel ch)

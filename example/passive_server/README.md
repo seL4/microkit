@@ -24,3 +24,14 @@ make BUILD_DIR=build MICROKIT_BOARD=<board> MICROKIT_CONFIG=<debug/release/bench
 ## Running
 
 See instructions for your board in the manual.
+
+You should see the following output:
+
+```
+MON|INFO: Microkit Monitor started!
+SERVER|INFO: init function running
+MON|INFO: PD 'server' is now passive!
+CLIENT|INFO: init function running
+SERVER|INFO: running on clients scheduling context
+CLIENT|INFO: server replied to our message
+```
