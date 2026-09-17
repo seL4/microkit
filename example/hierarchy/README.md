@@ -21,3 +21,43 @@ make BUILD_DIR=build MICROKIT_BOARD=<board> MICROKIT_CONFIG=<debug/release/bench
 ## Running
 
 See instructions for your board in the manual.
+
+You should see the following output:
+
+```
+INFO  [sel4_capdl_initializer::initialize] Starting CapDL initializer
+INFO  [sel4_capdl_initializer::initialize] Starting threads
+MON|INFO: Microkit Monitor started!
+restarter: starting
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: restarted
+crasher, starting
+restarter: received fault message for child pd: 1
+restarter: too many restarts - PD stopped
+hello, world
+```
