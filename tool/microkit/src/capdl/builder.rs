@@ -814,42 +814,7 @@ pub fn build_capdl_spec(
             pd_sc_cap,
         ));
 
-        // Step 3-5 Create fault Endpoint cap to parent/monitor
-        let (pd_fault_ep_badge, pd_fault_ep_obj_id) = if let Some(pd_parent) = &pd.parent {
-            let badge: u64 = FAULT_BADGE | pd.id.unwrap();
-            let parent_shadow_cspace = &pd_shadow_cspaces[pd_parent];
-            let parent_ep_obj_id = parent_shadow_cspace
-                .endpoint
-                .expect("parent should have EP due to needs_ep()");
-
-            // Allow the parent PD to access the child's TCB:
-            parent_shadow_cspace.insert_cap_into_microkit_cnode(
-                &mut spec_container,
-                (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
-                capdl_util_make_tcb_cap(pd_tcb_obj_id),
-            );
-
-            (badge, parent_ep_obj_id)
-        } else {
-            // badge = pd_global_idx + 1 because seL4 considers badge = 0 as no badge.
-            let badge: u64 = pd_global_idx as u64 + 1;
-            (badge, mon_fault_ep_obj_id)
-        };
-        let pd_fault_ep_cap = capdl_util_make_endpoint_cap(
-            pd_fault_ep_obj_id,
-            RIGHTS_FAULT_HANDLER_EP,
-            pd_fault_ep_badge,
-        );
-        caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
-            PD_FAULT_EP_CAP_IDX as u32,
-            pd_fault_ep_cap.clone(),
-        ));
-        caps_to_bind_to_tcb.push(capdl_util_make_cte(
-            TcbBoundSlot::FaultEp as u32,
-            pd_fault_ep_cap.clone(),
-        ));
-
-        // Step 3-6 Create cap to Monitor's endpoint for passive PDs.
+        // Step 3-5 Create cap to Monitor's endpoint for passive PDs.
         if pd.passive {
             let pd_monitor_ep_cap = capdl_util_make_endpoint_cap(
                 mon_fault_ep_obj_id,
@@ -862,7 +827,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-7 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
+        // Step 3-6 Create endpoint object for the PD if it has children or can receive PPCs, else it will be a notification
         let pd_ntfn_obj_id = capdl_util_make_ntfn_obj(&mut spec_container, &pd.name);
         let pd_ntfn_cap = capdl_util_make_ntfn_cap(pd_ntfn_obj_id, RIGHTS_NTFN_RECEIVE, 0);
         let mut pd_ep_obj_id: Option<ObjectId> = None;
@@ -888,13 +853,13 @@ pub fn build_capdl_spec(
             pd_ntfn_cap,
         ));
 
-        // Step 3-8 Create Reply obj + cap and insert into CSpace
+        // Step 3-7 Create Reply obj + cap and insert into CSpace
         let pd_reply_obj_id = capdl_util_make_reply_obj(&mut spec_container, &pd.name);
         let pd_reply_cap = capdl_util_make_reply_cap(pd_reply_obj_id);
         caps_to_insert_to_pd_cspace
             .push(capdl_util_make_cte(PD_REPLY_CAP_IDX as u32, pd_reply_cap));
 
-        // Step 3-9 Create spec and caps to IRQs
+        // Step 3-8 Create spec and caps to IRQs
         for irq in pd.irqs.iter() {
             // Create a IRQ handler cap and insert into the requested CSpace's slot.
             let irq_handle_cap = create_irq_handler_cap(
@@ -910,7 +875,7 @@ pub fn build_capdl_spec(
                 .push(capdl_util_make_cte(irq_cap_idx as u32, irq_handle_cap));
         }
 
-        // Step 3-10 Create I/O port objects on x86 platform.
+        // Step 3-9 Create I/O port objects on x86 platform.
         for ioport in pd.ioports.iter() {
             let ioport_obj_id =
                 capdl_util_make_ioport_obj(&mut spec_container, &pd.name, ioport.addr, ioport.size);
@@ -921,7 +886,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-11 Create VM Spec.
+        // Step 3-10 Create VM Spec.
         if let Some(virtual_machine) = &pd.virtual_machine {
             // A VM really is just a collection of special threads, it has its own TCBs, Scheduling Contexts, etc...
             // The difference is that it have a vCPU for each TCB to store the virtual CPUs' states.
@@ -1102,7 +1067,7 @@ pub fn build_capdl_spec(
             }
         }
 
-        // Step 3-12 Create ARM SMC cap if requested.
+        // Step 3-11 Create ARM SMC cap if requested.
         if pd.smc {
             caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
                 PD_ARM_SMC_CAP_IDX as u32,
@@ -1110,7 +1075,7 @@ pub fn build_capdl_spec(
             ));
         }
 
-        // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
+        // Step 3-12 Create CSpace and add all caps that the PD code and libmicrokit need to access.
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &pd.name,
@@ -1142,7 +1107,7 @@ pub fn build_capdl_spec(
             pd_root_cnode_cap,
         ));
 
-        // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
+        // Step 3-13 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
             .get_root_object_mut(pd_tcb_obj_id)
             .unwrap()
@@ -1158,13 +1123,11 @@ pub fn build_capdl_spec(
             pd_tcb.extra.domain = pd.domain;
 
             pd_tcb.slots.extend(caps_to_bind_to_tcb);
-            // Stylistic purposes only
-            pd_tcb.slots.sort_by_key(|cte| usize::from(cte.slot));
         } else {
             unreachable!("internal bug: build_capdl_spec() got a non TCB object ID when trying to set TCB parameters for the monitor.");
         }
 
-        // Step 3-15 bind this PD's TCB to the monitor, this accomplish two purposes:
+        // Step 3-14 bind this PD's TCB to the monitor, this accomplish two purposes:
         // 1. Allow PDs' TCBs to be named to their proper name in SDF in debug config.
         // 2. Allow passive PDs.
         capdl_util_insert_cap_into_cspace(
@@ -1205,7 +1168,63 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 4. Create channels
+    // Step 4. Postprocessing steps for PDs
+    // *********************************
+    for (pd_global_idx, pd) in system.protection_domains.values().enumerate() {
+        let pd_shadow_cspace = &pd_shadow_cspaces[&pd.name];
+
+        // Step 4-1 Create fault Endpoint cap to parent/monitor
+        // We don't do this in the loop above because `system.protection_domains` is not in topological order.
+        let (pd_fault_ep_badge, pd_fault_ep_obj_id) = if let Some(pd_parent) = &pd.parent {
+            let badge: u64 = FAULT_BADGE | pd.id.unwrap();
+            let parent_shadow_cspace = &pd_shadow_cspaces[pd_parent];
+            let parent_ep_obj_id = parent_shadow_cspace
+                .endpoint
+                .expect("parent should have EP due to needs_ep()");
+
+            // Allow the parent PD to access the child's TCB:
+            parent_shadow_cspace.insert_cap_into_microkit_cnode(
+                &mut spec_container,
+                (PD_BASE_PD_TCB_CAP + pd.id.unwrap()) as u32,
+                capdl_util_make_tcb_cap(pd_shadow_cspace.tcb),
+            );
+
+            (badge, parent_ep_obj_id)
+        } else {
+            // badge = pd_global_idx + 1 because seL4 considers badge = 0 as no badge.
+            let badge: u64 = pd_global_idx as u64 + 1;
+            (badge, mon_fault_ep_obj_id)
+        };
+        let pd_fault_ep_cap = capdl_util_make_endpoint_cap(
+            pd_fault_ep_obj_id,
+            RIGHTS_FAULT_HANDLER_EP,
+            pd_fault_ep_badge,
+        );
+
+        pd_shadow_cspace.insert_cap_into_microkit_cnode(
+            &mut spec_container,
+            PD_FAULT_EP_CAP_IDX as u32,
+            pd_fault_ep_cap.clone(),
+        );
+
+        if let Object::Tcb(pd_tcb) = &mut spec_container
+            .get_root_object_mut(pd_shadow_cspace.tcb)
+            .unwrap()
+            .object
+        {
+            pd_tcb.slots.push(capdl_util_make_cte(
+                TcbBoundSlot::FaultEp as u32,
+                pd_fault_ep_cap,
+            ));
+            // Stylistic purposes only
+            pd_tcb.slots.sort_by_key(|cte| usize::from(cte.slot));
+        } else {
+            unreachable!("internal bug: build_capdl_spec() got a non TCB object ID when trying to bind the fault Endpoint.");
+        }
+    }
+
+    // *********************************
+    // Step 5. Create channels
     // *********************************
     for channel in system.channels.iter() {
         let pd_a_shadow_cspace = &pd_shadow_cspaces[&channel.end_a.pd];
@@ -1270,7 +1289,7 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 5. Create IOMMU Address Spaces
+    // Step 6. Create IOMMU Address Spaces
     // *********************************
     let mut iospace_by_device: BTreeMap<&str, AddressSpace> = BTreeMap::new();
     for iomap in system.iomaps.iter() {
@@ -1307,7 +1326,7 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 6. Handle extra cap mappings
+    // Step 7. Handle extra cap mappings
     // *********************************
     for pd in system.protection_domains.values() {
         for cap_map in pd.cap_maps.iter() {
@@ -1331,7 +1350,7 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 7. Emit a domain schedule
+    // Step 8. Emit a domain schedule
     // *********************************
     if system.domains.has_domains() {
         spec_container.spec.domain_schedule = Some(system.domains.schedule.clone());
@@ -1340,7 +1359,7 @@ pub fn build_capdl_spec(
     }
 
     // *********************************
-    // Step 8. Sort the root objects
+    // Step 9. Sort the root objects
     // *********************************
     // The CapDL initialiser expects objects with paddr to come first, then sorted by size so that the
     // allocation algorithm at run-time can run more efficiently.
@@ -1351,13 +1370,13 @@ pub fn build_capdl_spec(
     // 3. Record all of the root objects new index.
     // 4. Recurse through every cap, for any cap bearing the original object ID, write the new object ID.
 
-    // Step 8-1
+    // Step 9-1
     let mut obj_name_to_old_id: BTreeMap<String, ObjectId> = BTreeMap::new();
     for (id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_name_to_old_id.insert(obj.name.as_ref().unwrap().clone(), id.into());
     }
 
-    // Step 8-2
+    // Step 9-2
     spec_container.spec.objects.sort_by(|a, b| {
         // Objects with paddrs always come first.
         if a.object.paddr().is_none() && b.object.paddr().is_some() {
@@ -1396,7 +1415,7 @@ pub fn build_capdl_spec(
         }
     });
 
-    // Step 8-3
+    // Step 9-3
     let mut obj_old_id_to_new_id: HashMap<ObjectId, ObjectId> = HashMap::new();
     for (new_id, obj) in spec_container.spec.objects.iter().enumerate() {
         obj_old_id_to_new_id.insert(
@@ -1405,7 +1424,7 @@ pub fn build_capdl_spec(
         );
     }
 
-    // Step 8-4
+    // Step 9-4
     for obj in spec_container.spec.objects.iter_mut() {
         match obj.object.slots_mut() {
             Some(caps) => {
