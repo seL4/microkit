@@ -1,5 +1,39 @@
 # Revision History for Microkit
 
+## Release 2.3.1
+
+This release contains a security fix, various bug fixes, and new board support.
+
+### Security
+
+* Endpoint and Notification capabilities now only get the rights they need.
+  Previously the tool gave all rights, which let a let a PD do more than
+  intended. For example, a client PD with a PPC to a server PD can receive
+  on the server's Endpoint and consume all the messages meant for the server.
+
+### Bug fixes
+
+* When using the domain scheduler, a VM's VCPUs are now placed in the same
+  domain as the VMM PD. Previously VM performance was badly degraded.
+* The tool now checks that VM priority in the SDF are valid.
+* The second CPU cluster on the RockPro64 is now enabled in SMP
+  configurations.
+* The tool now reports an error for duplicate MSI or I/O APIC interrupt
+  sources. The kernel does not detect this, so it previously went
+  unnoticed.
+
+### Board support
+
+* Raspberry Pi 5B
+
+### Known issue
+
+* Currently, on x86-64, VMs will not work if you create more than 1 VM per
+  system or use the SMP configuration of `x86_64_generic_vtx`. This is due
+  to a bug in seL4, which was fixed in
+  [PR 1732](https://github.com/seL4/seL4/pull/1732). The fix will be brought
+  to Microkit on the next seL4 and Microkit release.
+
 ## Release 2.3.0
 
 This release contains quite a few new features:
