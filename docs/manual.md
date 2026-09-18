@@ -722,10 +722,11 @@ kind of fault, please see the 'Faults' section of the
 
 ### x86 VCPU fault
 Please see the 'VMX BASIC EXIT REASONS' section of the
-[Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4]
-(https://cdrdv2.intel.com/v1/dl/getContent/671200) for a list of possible VM Exit reasons.
+[Intel® 64 and IA-32 Architectures Software Developer’s Manual Combined Volumes: 1, 2A, 2B, 2C, 2D, 3A, 3B, 3C, 3D, and 4](
+https://cdrdv2.intel.com/v1/dl/getContent/671200) for a list of possible VM Exit reasons.
 
 These message registers contain data relating to the VM Exit:
+
 - `SEL4_VMENTER_CALL_EIP_MR`: Instruction Pointer,
 - `SEL4_VMENTER_CALL_CONTROL_PPC_MR`: Primary Processor Based VM Execution Controls,
 - `SEL4_VMENTER_CALL_INTERRUPT_INFO_MR`: VM Entry Interruption-Information,
@@ -741,6 +742,7 @@ Some of these message registers may not contain valid data depending on the VM E
 please consult the Intel SDM for more details.
 
 These message registers contain the guest general purpose registers at the time of VM Exit:
+
 - `SEL4_VMENTER_FAULT_EAX`
 - `SEL4_VMENTER_FAULT_EBX`
 - `SEL4_VMENTER_FAULT_ECX`
@@ -1076,6 +1078,7 @@ The `virtual_machine` element has the following attribute:
 * `name`: A unique name for the virtual machine
 
 On ARM, it supports the following additional attributes:
+
 * `priority`: (optional) The priority of the virtual machine (integer 0 to 254); defaults to 0.
 * `budget`: (optional) The VM's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The VM's period in microseconds; must not be smaller than the budget; defaults to the budget.
