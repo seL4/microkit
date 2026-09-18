@@ -372,6 +372,39 @@ pub fn parse(
         }
     }
 
+    if config.arch == Arch::X86_64 {
+        let mut all_ioapic_irqs = BTreeSet::new();
+        let mut all_msis = BTreeSet::new();
+        for pd in pds.values() {
+            for sysirq in &pd.irqs {
+                if let SysIrqKind::IOAPIC { ioapic, pin, .. } = sysirq.kind {
+                    if all_ioapic_irqs.contains(&(ioapic, pin)) {
+                        return Err(format!(
+                            "Error: duplicate I/O APIC IRQ chip {}, pin {} in protection domain: '{}' @ {}",
+                            ioapic,
+                            pin,
+                            pd.name,
+                            loc_string(&xml_sdf, pd.text_pos.unwrap()),
+                        ));
+                    }
+                    all_ioapic_irqs.insert((ioapic, pin));
+                }
+
+                if let SysIrqKind::MSI { pci_device, .. } = sysirq.kind {
+                    if all_msis.contains(&pci_device) {
+                        return Err(format!(
+                            "Error: duplicate MSI {} in protection domain: '{}' @ {}",
+                            pci_device,
+                            pd.name,
+                            loc_string(&xml_sdf, pd.text_pos.unwrap())
+                        ));
+                    }
+                    all_msis.insert(pci_device);
+                }
+            }
+        }
+    }
+
     // Ensure no duplicate channel identifiers.
     // This means checking that no interrupt IDs clash with any channel IDs
     let mut ch_ids = BTreeMap::new();

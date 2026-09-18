@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="test1">
+        <program_image path="test" />
+        <irq pcidev="1:2.3" handle="0" vector="0" id="0" />
+        <irq pcidev="1:2.3" handle="1" vector="1" id="1" />
+    </protection_domain>
+</system>
