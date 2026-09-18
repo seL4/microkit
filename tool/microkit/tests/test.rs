@@ -563,6 +563,15 @@ mod protection_domain {
     }
 
     #[test]
+    fn test_irq_ioapic_duplicate_pin() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_ioapic_duplicate_pin.system",
+            "Error: duplicate I/O APIC IRQ chip 0, pin 2 in protection domain: 'test1'",
+        )
+    }
+
+    #[test]
     fn test_irq_ioapic_vector_greater_than_107() {
         check_error(
             &DEFAULT_X86_64_KERNEL_CONFIG,
@@ -658,6 +667,15 @@ mod protection_domain {
             &DEFAULT_X86_64_KERNEL_CONFIG,
             "irq_msi_pci_invalid.system",
             r#"Error: failed to parse attribute `pcidev="0:0:0"` as pci device on element <irq>: expected PCI address in bus:device.function form:"#,
+        )
+    }
+
+    #[test]
+    fn test_irq_msi_pci_duplicate_device() {
+        check_error(
+            &DEFAULT_X86_64_KERNEL_CONFIG,
+            "irq_msi_pci_duplicate_device.system",
+            "Error: duplicate MSI 01:02.3 in protection domain: 'test1'",
         )
     }
 
