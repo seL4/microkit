@@ -77,7 +77,6 @@ const MON_BASE_NOTIFICATION_CAP: u64 = MON_BASE_SCHED_CONTEXT_CAP + 64;
 
 // Where caps must be in a PD's CSpace
 const PD_INPUT_CAP_IDX: u64 = 1;
-const PD_FAULT_EP_CAP_IDX: u64 = 2;
 const PD_VSPACE_CAP_IDX: u64 = 3;
 const PD_REPLY_CAP_IDX: u64 = 4;
 // Valid only if the PD is passive.
@@ -1199,12 +1198,6 @@ pub fn build_capdl_spec(
             pd_fault_ep_obj_id,
             RIGHTS_FAULT_HANDLER_EP,
             pd_fault_ep_badge,
-        );
-
-        pd_shadow_cspace.insert_cap_into_microkit_cnode(
-            &mut spec_container,
-            PD_FAULT_EP_CAP_IDX as u32,
-            pd_fault_ep_cap.clone(),
         );
 
         if let Object::Tcb(pd_tcb) = &mut spec_container
