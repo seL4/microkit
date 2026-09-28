@@ -308,7 +308,6 @@ END_FUNC(el1_mmu_disable)
 
 BEGIN_FUNC(el2_mmu_disable)
     stp     x29, x30, [sp, #-16]!
-    stp     x27, x28, [sp, #-16]!
     mov     x29, sp
 
     /* Disable caches */
@@ -323,14 +322,18 @@ BEGIN_FUNC(el2_mmu_disable)
      */
     bl      invalidate_icache
 
-    ldp     x27, x28, [sp], #16
     ldp     x29, x30, [sp], #16
     ret
 END_FUNC(el2_mmu_disable)
 
+/*
+ * Enables the MMU for EL2.
+ * Takes two arguments the physical address for TTBR0_EL1 (x0) and TTBR1_EL1 (x1).
+ */
 BEGIN_FUNC(el1_mmu_enable)
     stp     x29, x30, [sp, #-16]!
     stp     x27, x28, [sp, #-16]!
+    /* move caller-saved to callee-saved registers */
     mov     x29, sp
     mov     x27, x0
     mov     x28, x1
@@ -358,10 +361,8 @@ BEGIN_FUNC(el1_mmu_enable)
     msr     tcr_el1, x10
 
     /* Setup page tables */
-    adrp    x8, boot_lvl0_lower
-    msr     ttbr0_el1, x8
-    adrp    x8, boot_lvl0_upper
-    msr     ttbr1_el1, x8
+    msr     ttbr0_el1, x27  /* argument 0 */
+    msr     ttbr1_el1, x28  /* argument 1 */
     isb
 
     /* invalidate all TLB entries for EL1 */
@@ -374,12 +375,18 @@ BEGIN_FUNC(el1_mmu_enable)
     ldp     x27, x28, [sp], #16
     ldp     x29, x30, [sp], #16
     ret
-
 END_FUNC(el1_mmu_enable)
 
+/*
+ * Enables the MMU for EL2.
+ * Takes one argument, the physical address for TTBR0_EL2 (x0).
+ */
 BEGIN_FUNC(el2_mmu_enable)
     stp     x29, x30, [sp, #-16]!
+    stp     x27, x28, [sp, #-16]!
+    /* move caller-saved to callee-saved registers */
     mov     x29, sp
+    mov     x28, x0
 
     /* Disable the MMU */
     bl      el2_mmu_disable
@@ -403,8 +410,7 @@ BEGIN_FUNC(el2_mmu_enable)
     isb
 
     /* Setup page tables */
-    adrp    x8, boot_lvl0_lower
-    msr     ttbr0_el2, x8
+    msr     ttbr0_el2, x28  /* argument 0 */
     isb
 
     /* invalidate all TLB entries for EL2 */
@@ -423,9 +429,9 @@ BEGIN_FUNC(el2_mmu_enable)
     dsb     ish
     isb
 
+    ldp     x27, x28, [sp], #16
     ldp     x29, x30, [sp], #16
     ret
-
 END_FUNC(el2_mmu_enable)
 
 .extern arm_secondary_cpu_c_entry

@@ -27,7 +27,7 @@ ifeq ($(ARCH),aarch64)
   TARGET_TRIPLE := aarch64-none-elf
   CFLAGS_ARCH := -mstrict-align
 else ifeq ($(ARCH),riscv64)
-  TARGET_TRIPLE := riscv64-unknown-elf
+  TARGET_TRIPLE := riscv64-none-elf
   CFLAGS_ARCH := -march=rv64imafdc_zicsr_zifencei -mabi=lp64d
 else ifeq ($(ARCH),x86_64)
 	TARGET_TRIPLE := x86_64-linux-gnu
