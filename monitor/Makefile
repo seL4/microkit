@@ -53,7 +53,7 @@ else
 	$(error ARCH is unsupported)
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -Wall $(CFLAGS_TOOLCHAIN) -Werror -I$(SEL4_SDK)/include $(CFLAGS_ARCH) -DARCH_$(ARCH)
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -fno-stack-protector -Wall $(CFLAGS_TOOLCHAIN) -Werror -I$(SEL4_SDK)/include $(CFLAGS_ARCH) -DARCH_$(ARCH)
 
 PROGS := monitor.elf
 OBJECTS := main.o crt0.o util.o

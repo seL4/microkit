@@ -50,6 +50,7 @@ endif
 CFLAGS := -std=gnu11 \
 		  -g -O3 -nostdlib \
 		  -ffreestanding \
+		  -fno-stack-protector \
 		  -Wall $(CFLAGS_TOOLCHAIN) \
 		  -Wno-unused-function -Werror \
 		  -Iinclude -I$(SEL4_SDK)/include \
