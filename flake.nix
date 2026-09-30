@@ -13,6 +13,10 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    microkit-manifest = {
+      url = "github:seL4/microkit-manifest/main";
+      flake = false;
+    };
   };
 
   outputs = { self, nixpkgs, rust-overlay, treefmt-nix, ... }@inputs: inputs.utils.lib.eachSystem [
@@ -75,6 +79,14 @@
         };
       in
       {
+        packages = rec {
+          default = microkit-sdk;
+          microkit-sdk = pkgs.callPackage ./package.nix {
+            inherit rustTool;
+            microkitManifest = inputs.microkit-manifest;
+          };
+        };
+
         # for `nix fmt`
         formatter = treefmtEval.config.build.wrapper;
         # for `nix flake check`
