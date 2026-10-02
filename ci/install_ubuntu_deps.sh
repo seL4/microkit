@@ -7,10 +7,10 @@ set -e
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-rustup install 1.94.0
-rustup default 1.94.0
+rustup install 1.95.0
+rustup default 1.95.0
 rustup target add x86_64-unknown-linux-musl
-rustup component add rust-src --toolchain 1.94.0-x86_64-unknown-linux-gnu
+rustup component add rust-src --toolchain 1.95.0-x86_64-unknown-linux-gnu
 rustup target add aarch64-unknown-none
 rustup target add riscv64gc-unknown-none-elf
 rustup target add x86_64-unknown-none
