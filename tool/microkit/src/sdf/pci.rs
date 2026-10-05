@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Deref;
 
@@ -12,7 +11,7 @@ use sel4_capdl_initializer_types::object;
 
 use super::util::ParseableAttribute;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PciDevice(pub object::PCIDevice);
 
 impl Deref for PciDevice {
@@ -20,29 +19,6 @@ impl Deref for PciDevice {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-// This should be removed once https://github.com/seL4/rust-sel4/pull/374 is merged
-impl Ord for PciDevice {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let object::PCIDevice {
-            bus,
-            device,
-            function,
-        } = &self.0;
-        let object::PCIDevice {
-            bus: other_bus,
-            device: other_device,
-            function: other_function,
-        } = &other.0;
-        (bus, device, function).cmp(&(other_bus, other_device, other_function))
-    }
-}
-
-impl PartialOrd for PciDevice {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
