@@ -15,27 +15,37 @@ SECTIONS
     .text :
     {
         _text = .;
-        *(.text.start)
-        *(.text*)
-        *(.rodata)
+
+        KEEP(*(.text.start))
+        *(.text .text.*)
+
         _text_end = .;
+    } :all
+
+    .rodata :
+    {
+        *(.rodata .rodata.* .rodata..Lanon.*)
     } :all
 
     .data :
     {
         _data = .;
-        *(.data)
+        *(.data .data.*)
+        *(.data.*)
         __global_pointer$ = . + 0x800;
-    *(.srodata)
-    *(.sdata)
-       _data_end = .;
+        *(.srodata .srodata.*)
+        *(.sdata .sdata.*)
+
+        KEEP(*(.data.uart_addr))
+
+        _data_end = .;
     } :all
 
     .bss :
     {
         _bss = .;
-    *(.sbss)
-        *(.bss)
+        *(.sbss .sbss.*)
+        *(.bss .bss.*)
         *(COMMON)
         . = ALIGN(4);
         _bss_end = .;
