@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <!-- moniter that control how the components run -->
+    <protection_domain name="monitor" priority="254">
+        <program_image path="monitor.elf" />
+
+        <!-- tasks that require fast response to IRQ or notification, 1 sc -->
+        <protection_domain name="fast_rt" priority="253" id="1">
+            <program_image path="fast_rt.elf" />
+        </protection_domain>
+
+        <!-- critical tasks with hard deadlines, 1 sc -->
+        <protection_domain name="hard_rt" priority="252" id="2">
+            <program_image path="hard_rt.elf" />
+        </protection_domain>
+
+        <!-- soft deadlines, 1-3 sc -->
+        <protection_domain name="soft_rt" priority="251" id="3">
+            <program_image path="soft_rt.elf" />
+        </protection_domain>
+
+    </protection_domain>
+
+    <!-- passive server -->
+    <protection_domain name="server" priority="253" passive="true">
+        <program_image path="server.elf" />
+    </protection_domain>
+
+    <!-- best-effort tasks, as many as you wants (or maybe just 20-50 sc) -->
+    <protection_domain name="peasant" priority="99" budget="100_000" period="100_000">
+        <program_image path="peasant.elf" />
+    </protection_domain>
+
+    <!-- <channel>
+        <end pd="server" id="0" />
+        <end pd="client" id="0" pp="true" />
+    </channel> -->
+
+</system>
