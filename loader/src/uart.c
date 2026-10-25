@@ -172,7 +172,7 @@ void putc(uint8_t ch)
 #define PL011_CR_UART_EN          (1 << 0)
 #define PL011_CR_TX_EN            (1 << 8)
 
-void uart_init()
+void uart_init(void)
 {
     /* Enable the device and transmit */
     *UART_REG(PL011_TCR) |= (PL011_CR_TX_EN | PL011_CR_UART_EN);
