@@ -48,7 +48,8 @@ uint64_t plat_get_hw_id(int logical_cpu)
 #if defined(CONFIG_PLAT_TQMA8XQP1GB)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_ZYNQMP_ZCU102)
-static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
+/* Only the size is used on Kria K26, where PSCI is unavailable. */
+static const size_t psci_target_cpus[4] __attribute__((unused)) = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_IMX8MM_EVK)
 static const size_t psci_target_cpus[4] = {0x00, 0x01, 0x02, 0x03};
 #elif defined(CONFIG_PLAT_IMX8MQ_EVK) || defined(CONFIG_PLAT_MAAXBOARD)
