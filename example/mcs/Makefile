@@ -48,11 +48,13 @@ endif
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
-RESTARTER_OBJS := restarter.o
-CRASHER_OBJS := crasher.o
-HELLO_OBJS := hello.o
+FEUDAL_LORD_OBJS := feudal_lord.o
+HARD_RT_OBJS := hard_rt.o
+SOFT_RT_OBJS := soft_rt.o
+FAST_RT_OBJS := fast_rt.o
+PEASANT_OBJS := peasant.o
 
-IMAGES := restarter.elf crasher.elf hello.elf
+IMAGES := feudal_lord.elf hard_rt.elf soft_rt.elf fast_rt.elf peasant.elf
 CFLAGS := -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
@@ -68,14 +70,20 @@ $(BUILD_DIR)/%.o: %.c Makefile
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
-$(BUILD_DIR)/restarter.elf: $(addprefix $(BUILD_DIR)/, $(RESTARTER_OBJS))
+$(BUILD_DIR)/feudal_lord.elf: $(addprefix $(BUILD_DIR)/, $(FEUDAL_LORD_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/crasher.elf: $(addprefix $(BUILD_DIR)/, $(CRASHER_OBJS))
+$(BUILD_DIR)/hard_rt.elf: $(addprefix $(BUILD_DIR)/, $(HARD_RT_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/hello.elf: $(addprefix $(BUILD_DIR)/, $(HELLO_OBJS))
+$(BUILD_DIR)/soft_rt.elf: $(addprefix $(BUILD_DIR)/, $(SOFT_RT_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) hierarchy.system
-	$(MICROKIT_TOOL) hierarchy.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+$(BUILD_DIR)/fast_rt.elf: $(addprefix $(BUILD_DIR)/, $(FAST_RT_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/peasant.elf: $(addprefix $(BUILD_DIR)/, $(PEASANT_OBJS))
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) mcs.system
+	$(MICROKIT_TOOL) mcs.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)

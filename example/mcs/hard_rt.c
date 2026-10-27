@@ -6,14 +6,22 @@
 #include <stdint.h>
 #include <microkit.h>
 
+void do_work(void)
+{
+    int i = 0;
+    for (;;) {
+        i++;
+    }
+    return;
+}
+
 void init(void)
 {
-    int *x = 0;
-    microkit_dbg_puts("crasher, starting\n");
-    /* Crash! */
-    *x = 1;
+    microkit_dbg_puts("hard_rt, starting\n");
+    do_work();
 }
 
 void notified(microkit_channel ch)
 {
+    do_work();
 }

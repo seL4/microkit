@@ -6,11 +6,22 @@
 #include <stdint.h>
 #include <microkit.h>
 
+void do_work(void)
+{
+    int i = 0;
+    for (;;) {
+        i++;
+    }
+    return;
+}
+
 void init(void)
 {
-    microkit_dbg_puts("hello, world\n");
+    microkit_dbg_puts("soft_rt, starting\n");
+    do_work();
 }
 
 void notified(microkit_channel ch)
 {
+    do_work();
 }
