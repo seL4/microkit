@@ -2,7 +2,7 @@
 
 ## Release 2.4.0
 
-This release contains security fixes, a bug fix, and an seL4 update.
+This release contains security and bug fixes.
 This release is breaking.
 
 ### Breaking changes
