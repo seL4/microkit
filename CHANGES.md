@@ -1,5 +1,33 @@
 # Revision History for Microkit
 
+## Release 2.4.0
+
+This release contains security fixes, a bug fix, and an seL4 update.
+This release is breaking.
+
+### Breaking changes
+
+* seL4 has been updated from 16.0.0 to 17.0.0, which includes breaking
+  changes for virtual machines. Please see the
+  [kernel's changelog](https://github.com/seL4/seL4/releases/tag/17.0.0)
+  for upgrade notes.
+
+### Security
+
+* Reply capabilities no longer have grant reply permission. Previously a
+  server could send capabilities over a reply.
+* PDs no longer get their parent's fault endpoint capability. Previously,
+  in 2.3.1, a PD could send its parent fake faults with arbitrary messages.
+  In 2.3.0 and earlier, a PD could receive, and so consume, fault IPCs
+  meant for the parent.
+
+### Bug fixes
+
+* VMs on x86-64 now work with more than 1 VM per system and in the SMP
+  configuration of `x86_64_generic_vtx`. This was a known issue in 2.3.1
+  and earlier, caused by a bug in seL4 that was fixed in
+  [PR 1732](https://github.com/seL4/seL4/pull/1732).
+
 ## Release 2.3.1
 
 This release contains a security fix, various bug fixes, and new board support.
