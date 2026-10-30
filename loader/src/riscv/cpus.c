@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../arch.h"
 #include "../cpus.h"
 #include "../cutil.h"
 #include "../loader.h"
@@ -80,6 +81,14 @@ void riscv_secondary_cpu_entry(uint64_t hart_id, int logical_cpu)
     } else if (logical_cpu >= NUM_ACTIVE_CPUS) {
         LDR_PRINT("ERROR", logical_cpu, "secondary CPU should not be >NUM_ACTIVE_CPUS\n");
         goto fail;
+    }
+
+    int r = arch_mmu_enable(logical_cpu);
+    if (r != 0) {
+        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
+        puthex32(r);
+        puts("\n");
+        for (;;) {}
     }
 
     start_kernel(logical_cpu);

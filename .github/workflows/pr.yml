@@ -27,6 +27,8 @@ jobs:
       - name: Run Clippy
         # Make sure CI fails on all warnings, including Clippy lints
         run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-clippy --all-targets --all-features -- -D warnings -Wclippy::get_unwrap"
+      - name: Run Clippy (loader)
+        run: nix develop --ignore-environment -c bash -c 'make -C loader clippy CLIPPY_FLAGS="-D warnings -Wclippy::get_unwrap" BUILD_DIR=$(mktemp -d) RUST_ONLY=True'
 
   rustfmt_check:
     runs-on: [self-hosted, macos, ARM64]
@@ -34,6 +36,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run rustfmt
         run: nix develop --ignore-environment -c bash -c "cd tool/microkit && cargo-fmt --check"
+      - name: Run rustfmt (loader)
+        run: nix develop --ignore-environment -c bash -c 'make -C loader rustfmt-check BUILD_DIR=$(mktemp -d) RUST_ONLY=True'
 
   code:
     name: Freeze Code
