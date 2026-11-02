@@ -100,15 +100,6 @@ static int print_lock = 0;
 
 void start_kernel(int logical_cpu)
 {
-    LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
-    int r = arch_mmu_enable(logical_cpu);
-    if (r != 0) {
-        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
-        puthex32(r);
-        puts("\n");
-        for (;;) {}
-    }
-
     LDR_PRINT("INFO", logical_cpu, "jumping to kernel\n");
 
 #ifdef CONFIG_PRINTING
@@ -174,6 +165,13 @@ int main(void)
     LDR_PRINT("INFO", 0, "active CPUs to start: ");
     puthex32(plat_get_active_cpus());
     puts("\n");
+
+    r = arch_mmu_enable(0);
+    if (r != 0) {
+        LDR_PRINT("ERROR", 0, "failed to enable MMU: ");
+        puthex32(r);
+        fail();
+    }
 
     for (int cpu = 1; cpu < plat_get_active_cpus(); cpu++) {
         r = plat_start_cpu(cpu);
