@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "microkit-manifest": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790579364,
+        "narHash": "sha256-Irwp7Vtjp4s/qI29GK/3zdMFPyHDpEdWmYEpVX4zJic=",
+        "owner": "seL4",
+        "repo": "microkit-manifest",
+        "rev": "bd76a43a4b472204dc6fe1494ed217e479fcdfd8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "seL4",
+        "ref": "main",
+        "repo": "microkit-manifest",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1780145889,
@@ -34,6 +51,7 @@
     },
     "root": {
       "inputs": {
+        "microkit-manifest": "microkit-manifest",
         "nixpkgs": "nixpkgs",
         "rust-overlay": "rust-overlay",
         "treefmt-nix": "treefmt-nix",
