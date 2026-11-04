@@ -28,7 +28,7 @@ _Static_assert(sizeof(uintptr_t) == 8 || sizeof(uintptr_t) == 4, "Expect uintptr
 
 extern char _text;
 extern char _bss_end;
-const struct loader_data *loader_data = (void *) &_bss_end;
+const struct loader_header *loader_data = (void *) &_bss_end;
 
 uint64_t _stack[NUM_ACTIVE_CPUS][STACK_SIZE / sizeof(uint64_t)] ALIGN(16);
 
@@ -66,9 +66,25 @@ static void print_loader_data(void)
     puthex64(loader_data->v_entry);
     puts("\n");
 
-    for (uint32_t i = 0; i < loader_data->num_regions; i++) {
-        const struct region *r = &loader_data->regions[i];
-        puts("LDR|INFO: region: ");
+    for (uint32_t i = 0; i < loader_data->mmu_regions_count; i++) {
+        const struct MmuRegion *regions = get_loader_array(mmu_regions);
+        const struct MmuRegion *r = &regions[i];
+        puts("LDR|INFO: mmu region:    ");
+        puthex32(i);
+        puts("   start: ");
+        puthex64(r->start);
+        puts("   top: ");
+        puthex64(r->top);
+        puts("   is_ram: ");
+        puts(r->arch_attrs.is_ram ? "yes" : "no");
+        puts("\n");
+    }
+
+    for (uint32_t i = 0; i < loader_data->loader_regions_count; i++) {
+        const struct loader_region *regions = get_loader_array(loader_regions);
+        const struct loader_region *r = &regions[i];
+
+        puts("LDR|INFO: loader region: ");
         puthex32(i);
         puts("   addr: ");
         puthex64(r->load_addr);
@@ -84,13 +100,14 @@ static void print_loader_data(void)
 
 static void copy_data(void)
 {
-    const void *base = &loader_data->regions[loader_data->num_regions];
-    for (uint32_t i = 0; i < loader_data->num_regions; i++) {
-        const struct region *r = &loader_data->regions[i];
-        puts("LDR|INFO: copying region ");
+    const struct loader_region *regions = get_loader_array(loader_regions);
+    const void *data_base = &regions[loader_data->loader_regions_count];
+    for (uint32_t i = 0; i < loader_data->loader_regions_count; i++) {
+        const struct loader_region *r = &regions[i];
+        LDR_PRINT("INFO", 0, "copying region ");
         puthex32(i);
         puts("\n");
-        memcpy((void *)(uintptr_t)r->load_addr, base + r->offset, r->size);
+        memcpy((void *)(uintptr_t)r->load_addr, data_base + r->offset, r->size);
     }
 }
 
@@ -100,15 +117,6 @@ static int print_lock = 0;
 
 void start_kernel(int logical_cpu)
 {
-    LDR_PRINT("INFO", logical_cpu, "enabling MMU\n");
-    int r = arch_mmu_enable(logical_cpu);
-    if (r != 0) {
-        LDR_PRINT("ERROR", logical_cpu, "failed to enable MMU: ");
-        puthex32(r);
-        puts("\n");
-        for (;;) {}
-    }
-
     LDR_PRINT("INFO", logical_cpu, "jumping to kernel\n");
 
 #ifdef CONFIG_PRINTING
@@ -165,6 +173,9 @@ int main(void)
     }
 
     print_loader_data();
+
+    /* Enable the MMU after the initial loader messages */
+    arch_mmu_enable(0);
 
     /* past here we have trashed u-boot so any errors should go to the
      * fail label; it's not possible to return to U-boot
