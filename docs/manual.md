@@ -291,7 +291,7 @@ In this case, the channel identifier is effectively a proxy identifier for the o
 So, to extend the prior example, **A** can indirectly refer to **B** via the channel identifier **37**.
 Similarly, **B** can refer to **A** via the channel identifier **42**.
 
-The system supports a maximum of 63 channels and interrupts per protection domain.
+The system supports a maximum of 62 channels and interrupts per protection domain.
 
 ### Protected procedures {#pp}
 
@@ -1029,13 +1029,13 @@ The `map` element has the following attributes:
 The `irq` element has the following attributes on ARM and RISC-V:
 
 * `irq`: The hardware interrupt number.
-* `id`: The channel identifier. Must be at least 0 and less than 63.
+* `id`: The channel identifier. Must be at least 0 and less than 62.
 * `trigger`: (optional) Whether the IRQ is edge triggered ("edge") or level triggered ("level"). Defaults to "level".
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the channel identifier of the IRQ.
 
 The `irq` element has the following attributes when registering x86-64 IOAPIC interrupts:
 
-* `id`: The channel identifier. Must be at least 0 and less than 63.
+* `id`: The channel identifier. Must be at least 0 and less than 62.
 * `pin`: IOAPIC pin that generates the interrupt.
 * `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
 * `ioapic`: (optional) Zero based index of the IOAPIC to get the interrupt from. Defaults to 0.
@@ -1045,7 +1045,7 @@ The `irq` element has the following attributes when registering x86-64 IOAPIC in
 
 The `irq` element has the following attributes when registering x86-64 MSI interrupts:
 
-* `id`: The channel identifier. Must be at least 0 and less than 63.
+* `id`: The channel identifier. Must be at least 0 and less than 62.
 * `pcidev`: The PCI device address of the device that will generate the interrupt in hexadecimal, in BUS:DEV.FUNC notation (e.g. 01:1f.2).
 * `handle`: Value of the handle programmed into the data portion of the MSI.
 * `vector`: CPU vector to deliver the interrupt to. Must be at least 0 and less than 108. A high vector equals to a high priority.
@@ -1053,7 +1053,7 @@ The `irq` element has the following attributes when registering x86-64 MSI inter
 
 The `ioport` element has the following attributes:
 
-* `id`: The I/O port identifier. Must be at least 0 and less than 63.
+* `id`: The I/O port identifier. Must be at least 0 and less than 62.
 * `addr`: The base address of the I/O port.
 * `size`: The size in bytes of the I/O port region.
 * `setvar_id`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the I/O port identifier.
@@ -1233,7 +1233,7 @@ The `channel` element has exactly two `end` children elements for specifying the
 The `end` element has the following attributes:
 
 * `pd`: Name of the protection domain for this end.
-* `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 63.
+* `id`: Channel identifier in the context of the named protection domain. Must be at least 0 and less than 62.
 * `pp`: (optional) Indicates that the protection domain for this end can perform a protected procedure call to the other end; defaults to false.
         Protected procedure calls can only be to PDs of strictly higher priority.
         On x86-64, PDs with virtual machines cannot receive protected procedure calls.
