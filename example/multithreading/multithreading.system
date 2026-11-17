@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2026, Sadiqua Parween
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <memory_region name="shared_mem" size="0x1000" page_size="0x1000" />
+
+    <protection_domain name="pd_a" priority="100">
+        <program_image path="pd.elf" />
+        <map mr="shared_mem" vaddr="0x2000000" perms="rw" cached="true" setvar_vaddr="shared_mem_vaddr" />
+    </protection_domain>
+
+    <protection_domain name="pd_b" priority="100">
+        <program_image path="pd.elf" />
+        <map mr="shared_mem" vaddr="0x2000000" perms="rw" cached="true" setvar_vaddr="shared_mem_vaddr" />
+    </protection_domain>
+</system>
