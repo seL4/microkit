@@ -54,7 +54,7 @@ CFLAGS := -std=gnu11 \
 		  -Wall $(CFLAGS_TOOLCHAIN) \
 		  -Wno-unused-function -Werror \
 		  -Iinclude -I$(SEL4_SDK)/include \
-		  $(CFLAGS_ARCH)
+		  $(CFLAGS_ARCH) $(CFLAGS_PREFIX_MAP)
 
 LIBS := libmicrokit.a
 OBJS := main.o crt0.o dbg.o
@@ -63,7 +63,7 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(CC) -x assembler-with-cpp -c $(CFLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
-	$(AS) -c -g $(ASM_FLAGS) $< -o $@
+	$(AS) -c -g $(ASM_FLAGS) $(ASFLAGS_PREFIX_MAP) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
 	$(CC) -c $(CFLAGS) $< -o $@

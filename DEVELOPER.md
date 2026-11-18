@@ -139,6 +139,27 @@ See the help menu of `build_sdk.py` for configuring how the SDK is built:
 
 During the build process, the seL4 kernel is built from source for each board.
 
+### Remapping source paths
+
+Use `--remap-path-prefix OLD=NEW` to replace `OLD` with `NEW` in source paths
+recorded in the SDK's binaries. This helps make builds reproducible without
+removing debug information.
+
+The option applies to seL4, the loader, monitor, libmicrokit, initialiser and
+Microkit tool. It works with GCC and LLVM for C/assembly, and passes the same
+mappings to Rust through Cargo, including dependencies built from source.
+
+For example, from the Microkit checkout:
+
+```shell
+python build_sdk.py --sel4=../seL4 \
+    --remap-path-prefix "$PWD=." \
+    --remap-path-prefix "$(cd ../seL4 && pwd)=seL4"
+```
+
+Repeat the option to remap multiple prefixes. Use clean build directories when
+changing mappings.
+
 ## Using the SDK
 
 After building the SDK you probably want to build a system!

@@ -53,17 +53,17 @@ else
 	$(error ARCH is unsupported)
 endif
 
-CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -fno-stack-protector -Wall $(CFLAGS_TOOLCHAIN) -Werror -I$(SEL4_SDK)/include $(CFLAGS_ARCH) -DARCH_$(ARCH)
+CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -fno-stack-protector -Wall $(CFLAGS_TOOLCHAIN) -Werror -I$(SEL4_SDK)/include $(CFLAGS_ARCH) -DARCH_$(ARCH) $(CFLAGS_PREFIX_MAP)
 
 PROGS := monitor.elf
 OBJECTS := main.o crt0.o util.o
 LINKSCRIPT := ../libmicrokit/microkit.ld
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
-	$(CC) $(ASM_CPP_FLAGS) $< -o $@
+	$(CC) $(ASM_CPP_FLAGS) $(CFLAGS_PREFIX_MAP) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
-	$(AS) -c -g $(ASM_FLAGS) $< -o $@
+	$(AS) -c -g $(ASM_FLAGS) $(ASFLAGS_PREFIX_MAP) $< -o $@
 
 $(BUILD_DIR)/%.o : src/%.c
 	$(CC) -c $(CFLAGS)  $< -o $@
