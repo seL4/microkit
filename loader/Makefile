@@ -50,9 +50,9 @@ endif
 CFLAGS := -std=gnu11 -g -O3 -nostdlib -ffreestanding -fno-stack-protector \
 					-MP -MD $(CFLAGS_ARCH) -DBOARD_$(BOARD) -I$(SEL4_SDK)/include \
 					-Wall -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
-					-Wundef -Wno-nonnull -Wnested-externs
+					-Wundef -Wno-nonnull -Wnested-externs $(CFLAGS_PREFIX_MAP)
 
-ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include
+ASM_FLAGS := $(ASM_FLAGS_ARCH) -g -MP -MD -I$(SEL4_SDK)/include $(CFLAGS_PREFIX_MAP)
 
 PROGS := loader.elf
 OBJECTS := loader.o crt0.o uart.o cutil.o
@@ -72,7 +72,7 @@ $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(CC) -DLINK_ADDRESS=$(LINK_ADDRESS) -x assembler-with-cpp -c $(ASM_FLAGS) $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.s
-	$(AS) -c $< -o $@
+	$(AS) $(ASFLAGS_PREFIX_MAP) -c $< -o $@
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.c
 	$(CC) -c $(CFLAGS) $< -o $@

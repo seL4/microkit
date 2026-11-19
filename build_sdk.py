@@ -12,7 +12,7 @@ There are just a lot of things that are much easier in Python
 than in make.
 
 """
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 import copy
 from os import popen, system, environ
 import shutil
@@ -24,6 +24,7 @@ import platform as host_platform
 from enum import IntEnum
 import json
 import subprocess
+import shlex
 
 from typing import Any, Dict, Union, List, Tuple, Optional
 
@@ -616,10 +617,70 @@ def test_tool() -> None:
     assert r == 0
 
 
-def build_tool(tool_target: Path, target_triple: str) -> None:
-    r = system(
-        f"cargo build --release --locked --target {target_triple} -p microkit-tool"
+def prefix_map(value: str) -> str:
+    if value.count("=") != 1 or not value.split("=", 1)[0]:
+        raise ArgumentTypeError("expected OLD=NEW with a non-empty OLD prefix")
+    if any(c in value for c in "\n\r\x00"):
+        raise ArgumentTypeError("path prefixes cannot contain newlines or NUL bytes")
+    return value
+
+
+def make_prefix_maps(prefix_maps: List[str], llvm: bool) -> str:
+    if not prefix_maps:
+        return ""
+    # Make expands dollar signs even in environment variables
+    # The remaining quoting is for the shell executing the compiler recipe
+    prefix_maps = [mapping.replace("$", "$$") for mapping in prefix_maps]
+    c_flags = shlex.join(f"-ffile-prefix-map={mapping}" for mapping in prefix_maps)
+    as_option = "-fdebug-prefix-map" if llvm else "--debug-prefix-map"
+    as_flags = shlex.join(f"{as_option}={mapping}" for mapping in prefix_maps)
+    return (
+        f"CFLAGS_PREFIX_MAP={shlex.quote(c_flags)} "
+        f"ASFLAGS_PREFIX_MAP={shlex.quote(as_flags)}"
     )
+
+
+def cargo_build(
+    target: str,
+    args: List[str],
+    prefix_maps: List[str],
+    extra_env: Optional[Dict[str, str]] = None,
+) -> int:
+    """Build the Microkit tool or initialiser with source path remapping."""
+    env = environ.copy()
+    if extra_env is not None:
+        env.update(extra_env)
+
+    cmd = ["cargo", "build", "--release", "--locked", "--target", target]
+    cmd += args
+
+    if prefix_maps:
+        remap_flags = [f"--remap-path-prefix={mapping}" for mapping in prefix_maps]
+        # Preserve Cargo's precedence for explicit global rustflags. Otherwise,
+        # append to the target's flags, including those in .cargo/config.toml.
+        if "CARGO_ENCODED_RUSTFLAGS" in env:
+            # Cargo uses ASCII Unit Separator between encoded arguments.
+            encoded_flags = env["CARGO_ENCODED_RUSTFLAGS"]
+            if encoded_flags:
+                encoded_flags += "\x1f"
+            encoded_flags += "\x1f".join(remap_flags)
+            env["CARGO_ENCODED_RUSTFLAGS"] = encoded_flags
+        elif "RUSTFLAGS" in env:
+            flags = env["RUSTFLAGS"].split()
+            flags += remap_flags
+            env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
+        else:
+            cmd += [
+                "--config",
+                f"target.{target}.rustflags={json.dumps(remap_flags, ensure_ascii=False)}",
+            ]
+
+    r = subprocess.run(cmd, env=env)
+    return r.returncode
+
+
+def build_tool(tool_target: Path, target_triple: str, prefix_maps: List[str]) -> None:
+    r = cargo_build(target_triple, ["-p", "microkit-tool"], prefix_maps)
     assert r == 0
 
     tool_output = f"./target/{target_triple}/release/microkit"
@@ -636,7 +697,8 @@ def build_sel4(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
-    llvm: bool
+    llvm: bool,
+    prefix_maps: List[str],
 ) -> None:
     """Build seL4"""
     build_dir = build_dir / board.name / config.name / "sel4"
@@ -694,6 +756,15 @@ def build_sel4(
         cmd += f" -DTRIPLE={target_triple}"
     else:
         cmd += f" -DCROSS_COMPILER_PREFIX={target_triple}-"
+
+    if prefix_maps:
+        flags = shlex.join(f"-ffile-prefix-map={mapping}" for mapping in prefix_maps)
+        # Ninja expands dollar signs even inside shell-quoted compiler flags.
+        flags = flags.replace("$", "$$")
+        cmd += (
+            f" -DCMAKE_C_FLAGS_INIT={shlex.quote(flags)}"
+            f" -DCMAKE_ASM_FLAGS_INIT={shlex.quote(flags)}"
+        )
 
     r = system(cmd)
     if r != 0:
@@ -804,6 +875,7 @@ def build_elf_component(
     config: ConfigInfo,
     llvm: bool,
     defines: List[Tuple[str, str]],
+    prefix_maps: List[str],
 ) -> None:
     """Build a specific ELF component.
 
@@ -818,6 +890,8 @@ def build_elf_component(
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
+
+    defines_str += " " + make_prefix_maps(prefix_maps, llvm)
 
     r = system(
         f"{defines_str} make -C {component_name} all"
@@ -850,7 +924,8 @@ def build_lib_component(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
-    llvm: bool
+    llvm: bool,
+    prefix_maps: List[str],
 ) -> None:
     """Build a specific library component.
 
@@ -865,6 +940,8 @@ def build_lib_component(
 
     if board.gcc_cpu is not None:
         defines_str += f" GCC_CPU={board.gcc_cpu}"
+
+    defines_str += " " + make_prefix_maps(prefix_maps, llvm)
 
     r = system(
         f"{defines_str} make -C {component_name}"
@@ -907,6 +984,7 @@ def build_initialiser(
     build_dir: Path,
     board: BoardInfo,
     config: ConfigInfo,
+    prefix_maps: List[str],
 ) -> None:
     sel4_src_dir = build_dir / board.name / config.name / "sel4" / "install"
 
@@ -923,16 +1001,15 @@ def build_initialiser(
     component_build_dir = build_dir / board.name / config.name / component_name
     component_build_dir.mkdir(exist_ok=True, parents=True)
 
-    r = system(f"""
-        RUSTC_BOOTSTRAP=1 \
-        SEL4_PREFIX={sel4_src_dir.absolute()} \
-            cargo build \
-                --target {cargo_target} \
-                --locked \
-                --target-dir {rust_target_dir} \
-                --release \
-                -p initialiser
-    """)
+    r = cargo_build(
+        cargo_target,
+        ["--target-dir", str(rust_target_dir), "-p", "initialiser"],
+        prefix_maps,
+        {
+            "RUSTC_BOOTSTRAP": "1",
+            "SEL4_PREFIX": str(sel4_src_dir.absolute()),
+        },
+    )
     if r != 0:
         raise Exception(
             f"Error building: {component_name} for board: {board.name} config: {config.name}"
@@ -966,6 +1043,9 @@ def main() -> None:
                         help="Compile the Microkit tool for this target triple")
     parser.add_argument("--llvm", action="store_true",
                         help="Cross-compile seL4 and Microkit's run-time targets with LLVM")
+    parser.add_argument("--remap-path-prefix", metavar="OLD=NEW", type=prefix_map,
+                        action="append", default=[],
+                        help="Remap compiler source paths in all SDK components; repeat for multiple prefixes")
     parser.add_argument("--boards", metavar="BOARDS",
                         help="Comma-separated list of boards to support. When absent, all boards are supported.")
     parser.add_argument("--configs", metavar="CONFIGS",
@@ -1043,6 +1123,8 @@ def main() -> None:
     if not sel4_dir.exists():
         raise Exception(f"sel4_dir: {sel4_dir} does not exist")
 
+    prefix_maps = args.remap_path_prefix
+
     tool_dir = Path("tool/microkit")
     sdk_dir = Path("release") / f"{NAME}-sdk-{version}"
     tar_file = Path("release") / f"{NAME}-sdk-{version}.tar.gz"
@@ -1087,7 +1169,7 @@ def main() -> None:
     if not args.skip_tool:
         tool_target = sdk_dir / "bin" / "microkit"
         test_tool()
-        build_tool(tool_target, args.tool_target_triple)
+        build_tool(tool_target, args.tool_target_triple, prefix_maps)
 
     if not args.skip_docs:
         build_doc(sdk_dir)
@@ -1097,18 +1179,22 @@ def main() -> None:
         for (board, configs) in build_goals:
             for config in configs:
                 if not args.skip_sel4:
-                    build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config, args.llvm)
+                    build_sel4(sel4_dir, tool_dir, sdk_dir, build_dir, board, config,
+                               args.llvm, prefix_maps)
                 loader_printing = 1 if config.name == "debug" else 0
                 loader_defines = []
                 if not board.arch.is_x86():
                     loader_defines.append(("LINK_ADDRESS", hex(board.loader_link_address)))
                     build_elf_component("loader", sdk_dir, build_dir, board,
-                                        config, args.llvm, loader_defines)
+                                        config, args.llvm, loader_defines, prefix_maps)
 
-                build_elf_component("monitor", sdk_dir, build_dir, board, config, args.llvm, [])
-                build_lib_component("libmicrokit", sdk_dir, build_dir, board, config, args.llvm)
+                build_elf_component("monitor", sdk_dir, build_dir, board, config,
+                                    args.llvm, [], prefix_maps)
+                build_lib_component("libmicrokit", sdk_dir, build_dir, board, config,
+                                    args.llvm, prefix_maps)
                 if not args.skip_initialiser:
-                    build_initialiser("initialiser", sdk_dir, build_dir, board, config)
+                    build_initialiser("initialiser", sdk_dir, build_dir, board,
+                                      config, prefix_maps)
 
     # Setup the examples
     for example, example_path in EXAMPLES.items():
@@ -1145,7 +1231,7 @@ def main() -> None:
             dest.parent.mkdir(exist_ok=True, parents=True)
             dest.unlink(missing_ok=True)
             shutil.copytree(Path("release") / f"{NAME}-sdk-{version}", dest)
-            build_tool(dest / "bin" / "microkit", tool_target)
+            build_tool(dest / "bin" / "microkit", tool_target, prefix_maps)
 
             tar_file = f"{dest}.tar.gz"
             print(f"Generating {tar_file}")
