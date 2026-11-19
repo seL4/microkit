@@ -19,15 +19,16 @@
 
 #include "cpus.h"
 
-
-struct region {
+// Keep in sync with Rust's 'LoaderRegion64'
+struct loader_region {
     uintptr_t load_addr;
     uintptr_t size;
     uintptr_t offset;
     uintptr_t type;
 };
 
-struct loader_data {
+// Keep in sync with Rust's 'LoaderHeader64'
+struct loader_header {
     uintptr_t magic;
     uintptr_t size;
     uintptr_t kernel_entry;
@@ -35,12 +36,22 @@ struct loader_data {
     uintptr_t ui_p_reg_end;
     uintptr_t pv_offset;
     uintptr_t v_entry;
+    uintptr_t kernel_first_vaddr;
+    uintptr_t kernel_first_paddr;
 
-    uintptr_t num_regions;
-    struct region regions[];
+    // Offset from start of loader_header to start of loader metadata regions
+    uintptr_t loader_regions_offset;
+    uintptr_t loader_regions_count;
+
+    // Offset from start of loader_header to start of mmu regions
+    uintptr_t mmu_regions_offset;
+    uintptr_t mmu_regions_count;
 };
 
-extern const struct loader_data *loader_data;
+extern const struct loader_header *loader_data;
+
+#define get_loader_array(name) \
+    (void *)((uintptr_t)(loader_data) + loader_data-> name##_offset);
 
 /* Called from assembly */
 void relocation_failed(void);

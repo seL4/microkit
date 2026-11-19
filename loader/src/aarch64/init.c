@@ -80,36 +80,6 @@ void arch_init(void)
     configure_gicv2();
 #endif
 
-    /* Drop to correct EL before disabling MMU */
-    int r = ensure_correct_el(0);
-    if (r != 0) {
-        puts("LDR|ERROR: failed to ensure correct EL\n");
-        fail();
-    }
-
-    /* Disable the MMU, as U-Boot will start in virtual memory on some platforms
-     * (https://docs.u-boot.org/en/latest/arch/arm64.html), which means that
-     * certain physical memory addresses contain page table information which
-     * the loader doesn't know about and would need to be careful not to
-     * overwrite.
-     *
-     * This also means that we would need to worry about caching.
-     * TODO: should we do that instead?
-     * note the issues where it forces us to flush any shared addresses all the
-     * way to cache as we might have mixed non-cached/cached access.
-     */
-    puts("LDR|INFO: disabling MMU (if it was enabled)\n");
-    enum el el = current_el();
-
-    if (el == EL1) {
-        el1_mmu_disable();
-    } else if (el == EL2) {
-        el2_mmu_disable();
-    } else {
-        puts("LDR|ERROR: unknown EL level for MMU disable\n");
-        fail();
-    }
-
 #if !defined(ARM_PSCI_UNAVAILABLE)
     uint32_t ret = arm_smc32_call(PSCI_FUNCTION_VERSION, /* unused */ 0, 0, 0);
     /* the return value has no error codes, but if we get it wrong this is what we will get */
