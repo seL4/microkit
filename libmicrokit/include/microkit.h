@@ -100,8 +100,11 @@ static inline void microkit_internal_crash(seL4_Error err)
      * `err` as the fault address. A bit of a cute hack. Not a good long term
      * solution but good for now.
      */
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Warray-bounds"
     int *x = (int *)(seL4_Word) err;
     *x = 0;
+    #pragma GCC diagnostic pop
 }
 
 static inline void microkit_notify(microkit_channel ch)

@@ -1484,11 +1484,7 @@ mod system {
 
     #[test]
     fn test_too_many_pds() {
-        check_error(
-            &DEFAULT_AARCH64_KERNEL_CONFIG,
-            "sys_too_many_pds.system",
-            "Error: too many protection domains (64) defined. Maximum is 63.",
-        )
+        check_success(&DEFAULT_AARCH64_KERNEL_CONFIG, "sys_too_many_pds.system")
     }
 
     #[test]

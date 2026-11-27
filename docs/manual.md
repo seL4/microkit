@@ -131,8 +131,6 @@ The isolation provided by the virtual address space is enforced by the underlyin
 The virtual address space for a PD has mappings for the PD's *program image* along with any memory regions that the PD can access.
 The program image is an ELF file containing the code and data which implements the isolated component.
 
-Microkit supports a maximum of 63 protection domains.
-
 ### Entry points
 
 Although a protection domain is somewhat analogous to a process, it has a considerably different program structure and life-cycle.
@@ -1960,9 +1958,6 @@ The limitation on the size of by-value arguments is forced by the (architecture-
 The protected procedure payload should be considered as analogous to function arguments in the C language; similar limitations exist in the C ABIs (Application Binary Interfaces) of various platforms.
 
 ## Limits
-
-The limitation on the number of protection domains in the system is relatively arbitrary.
-Based on experience with the system and the types of systems being built it is possible for this to be increased in the future.
 
 The limitation on the number of channels for a protection domain is based on the size of the notification word in seL4.
 Changing this to be larger than 64 would most likely require changes to seL4. The reason for why the limit is not a

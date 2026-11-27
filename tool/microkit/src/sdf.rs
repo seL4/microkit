@@ -35,7 +35,6 @@ use std::rc::Rc;
 
 use crate::sel4::{Arch, Config};
 use crate::util::ranges_overlap;
-use crate::MAX_PDS;
 
 // Internal imports
 use channels::Channel;
@@ -250,14 +249,6 @@ pub fn parse(
 
     if pds.is_empty() {
         return Err("Error: at least one protection domain must be defined".to_string());
-    }
-
-    if pds.len() > MAX_PDS {
-        return Err(format!(
-            "Error: too many protection domains ({}) defined. Maximum is {}.",
-            pds.len(),
-            MAX_PDS
-        ));
     }
 
     for pd in pds.iter() {

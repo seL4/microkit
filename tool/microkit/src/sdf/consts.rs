@@ -27,6 +27,9 @@ pub const BUDGET_DEFAULT: u64 = 1000;
 
 pub const MONITOR_PD_NAME: &str = "monitor";
 pub const MONITOR_DOMAIN: u8 = 0;
+// We compile the monitor, and we know what libmicrokit.ld looks like, so we
+// can place data at this address with no conflicts or issues.
+pub const MONITOR_PD_INFO_ADDR: u64 = 0x100000;
 
 /// Default to a stack size of 8KiB
 pub const PD_DEFAULT_STACK_SIZE: u64 = 0x2000;

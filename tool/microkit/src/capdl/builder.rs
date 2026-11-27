@@ -26,10 +26,11 @@ use crate::{
     elf::ElfFile,
     sdf::{
         CapMapType, CpuCore, Map, SystemDescription, BUDGET_DEFAULT, MONITOR_DOMAIN,
-        MONITOR_PD_NAME, MONITOR_PRIORITY,
+        MONITOR_PD_INFO_ADDR, MONITOR_PD_NAME, MONITOR_PRIORITY,
     },
     sel4::{Arch, Config, PageSize},
-    util::{ranges_overlap, round_down, round_up},
+    util::{monitor_serialise_names, ranges_overlap, round_down, round_up},
+    PD_MAX_NAME_LENGTH,
 };
 
 const FAULT_BADGE: u64 = 1 << 62;
@@ -71,9 +72,6 @@ const MON_STACK_SIZE: u64 = 0x1000;
 const MON_FAULT_EP_CAP_IDX: u64 = 1;
 const MON_REPLY_CAP_IDX: u64 = 2;
 const MON_BASE_PD_TCB_CAP: u64 = 10;
-const MON_BASE_VM_TCB_CAP: u64 = MON_BASE_PD_TCB_CAP + 64;
-const MON_BASE_SCHED_CONTEXT_CAP: u64 = MON_BASE_VM_TCB_CAP + 64;
-const MON_BASE_NOTIFICATION_CAP: u64 = MON_BASE_SCHED_CONTEXT_CAP + 64;
 
 // Where caps must be in a PD's CSpace
 const PD_INPUT_CAP_IDX: u64 = 1;
@@ -441,6 +439,97 @@ fn map_memory_region<M: Map>(
     Ok(())
 }
 
+fn monitor_map_pd_infos(
+    monitor_elf_spec: &ElfSpecResult,
+    spec_container: &mut CapDLSpecContainer,
+    system: &SystemDescription,
+    kernel_config: &Config,
+) -> Result<(), String> {
+    let pd_names: Vec<Rc<str>> = system
+        .protection_domains
+        .values()
+        .map(|pd| pd.name.clone())
+        .collect();
+    let pd_names_data = monitor_serialise_names(
+        &pd_names,
+        system.protection_domains.len(),
+        PD_MAX_NAME_LENGTH,
+    );
+
+    // TODO: Handle dynamic number of frames etc here properly, and don't give
+    // every PD the same name.
+
+    let addr = MONITOR_PD_INFO_ADDR;
+
+    let names_frame = capdl_util_make_frame_obj(
+        spec_container,
+        Fill {
+            entries: vec![FillEntry {
+                range: Range {
+                    start: 0,
+                    end: pd_names_data.len() as u64,
+                },
+                content: FillEntryContent::Data(FillContent::BytesContent(BytesContent {
+                    bytes: pd_names_data,
+                })),
+            }],
+        },
+        &format!("pd_infos_0"),
+        None,
+        PageSize::Small.fixed_size_bits(kernel_config) as u8,
+    );
+
+    monitor_elf_spec.address_space.map_page(
+        spec_container,
+        kernel_config,
+        capdl_util_make_frame_cap(names_frame, true, false, false, true),
+        PageSize::Small as u64,
+        MONITOR_PD_INFO_ADDR - 0x1000,
+    )?;
+
+    let pd_infos_data: Vec<u8> = system
+        .protection_domains
+        .values()
+        .map(|pd| {
+            [
+                MONITOR_PD_INFO_ADDR - 0x1000,
+                kernel_config.pd_stack_bottom(pd.stack_size),
+            ]
+        })
+        .flatten()
+        .map(|v: u64| v.to_le_bytes())
+        .flatten()
+        .collect();
+
+    let infos_frame = capdl_util_make_frame_obj(
+        spec_container,
+        Fill {
+            entries: vec![FillEntry {
+                range: Range {
+                    start: 0,
+                    end: pd_infos_data.len() as u64,
+                },
+                content: FillEntryContent::Data(FillContent::BytesContent(BytesContent {
+                    bytes: pd_infos_data,
+                })),
+            }],
+        },
+        &format!("pd_infos_1"),
+        None,
+        PageSize::Small.fixed_size_bits(kernel_config) as u8,
+    );
+
+    monitor_elf_spec.address_space.map_page(
+        spec_container,
+        kernel_config,
+        capdl_util_make_frame_cap(infos_frame, true, false, false, true),
+        PageSize::Small as u64,
+        MONITOR_PD_INFO_ADDR,
+    )?;
+
+    Ok(())
+}
+
 /// Build a CapDL Spec according to the System Description File.
 pub fn build_capdl_spec(
     kernel_config: &Config,
@@ -544,6 +633,13 @@ pub fn build_capdl_spec(
             kernel_config.pd_ipc_buffer(),
         )
         .expect("should be able to map the IPC buffer as we checked overlaps in sel4.rs");
+
+    monitor_map_pd_infos(
+        &monitor_elf_spec,
+        &mut spec_container,
+        system,
+        kernel_config,
+    )?;
 
     // At this point, all of the required objects for the monitor have been created and its caps inserted into
     // the correct slot in the CSpace. We need to bind those objects into the TCB for the monitor to use them.
@@ -672,10 +768,6 @@ pub fn build_capdl_spec(
     // This object keeps track of object IDs for various 'important' / nameable kernel objects for
     // each PD so that we can make various references to them at later steps.
     let mut pd_shadow_cspaces: BTreeMap<Rc<str>, PDShadowCspace> = BTreeMap::new();
-
-    // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
-    // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
-    let mut monitor_vcpu_idx = 0;
 
     // Keep tabs on each PD's stack bottom so we can write it out to the monitor for stack overflow detection.
     let mut pd_stack_bottoms: Vec<u64> = Vec::new();
@@ -1053,15 +1145,6 @@ pub fn build_capdl_spec(
                         (PD_BASE_VM_TCB_CAP + vcpu.id) as u32,
                         capdl_util_make_tcb_cap(vm_vcpu_tcb_obj_id),
                     ));
-
-                    // Bind vCPU's TCB to the monitor so that the name can be set at start up in debug config
-                    capdl_util_insert_cap_into_cspace(
-                        &mut spec_container,
-                        mon_cnode_obj_id,
-                        (MON_BASE_VM_TCB_CAP as usize + monitor_vcpu_idx) as u32,
-                        capdl_util_make_tcb_cap(vm_vcpu_tcb_obj_id),
-                    );
-                    monitor_vcpu_idx += 1;
                 }
             }
         }
@@ -1135,22 +1218,6 @@ pub fn build_capdl_spec(
             (MON_BASE_PD_TCB_CAP as usize + pd_global_idx) as u32,
             capdl_util_make_tcb_cap(pd_tcb_obj_id),
         );
-        if pd.passive {
-            // When a PD is passive, it will signal the Monitor once init() returns. The monitor will
-            // then unbind the PD's TCB from its Scheduling Context and bind it to its Notification.
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                mon_cnode_obj_id,
-                (MON_BASE_SCHED_CONTEXT_CAP as usize + pd_global_idx) as u32,
-                capdl_util_make_sc_cap(pd_sc_obj_id),
-            );
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                mon_cnode_obj_id,
-                (MON_BASE_NOTIFICATION_CAP as usize + pd_global_idx) as u32,
-                capdl_util_make_ntfn_cap(pd_ntfn_obj_id, RIGHTS_SC_BIND, 0),
-            );
-        }
 
         pd_shadow_cspaces.insert(
             pd.name.clone(),

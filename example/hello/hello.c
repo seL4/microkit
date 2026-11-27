@@ -9,6 +9,8 @@
 void init(void)
 {
     microkit_dbg_puts("hello, world\n");
+
+    microkit_internal_crash(5);
 }
 
 void notified(microkit_channel ch)

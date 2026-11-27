@@ -8,10 +8,10 @@ use std::{cmp::min, collections::BTreeMap, rc::Rc};
 
 use crate::{
     elf::ElfFile,
-    sdf::{self, SysMemoryRegion, SystemDescription},
+    sdf::{self, SysMemoryRegion, SystemDescription, MONITOR_PD_INFO_ADDR},
     sel4::{Arch, Config},
     util::{monitor_serialise_names, monitor_serialise_u64_vec},
-    MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
+    PD_MAX_NAME_LENGTH,
 };
 
 /// Patch all the required symbols in the Monitor and children PDs according to
@@ -26,61 +26,19 @@ pub fn patch_symbols(
     // *********************************
     let monitor_elf = pd_elf_files.last_mut().unwrap();
 
-    let pd_names: Vec<Rc<str>> = system
-        .protection_domains
-        .values()
-        .map(|pd| pd.name.clone())
-        .collect();
     monitor_elf
         .write_symbol(
-            "pd_names_len",
+            "pd_infos_length",
             &system.protection_domains.len().to_le_bytes(),
         )
-        .unwrap();
+        .expect("symbol 'pd_infos_length' should exist in Microkit monitor");
+
     monitor_elf
         .write_symbol(
-            "pd_names",
-            &monitor_serialise_names(&pd_names, MAX_PDS, PD_MAX_NAME_LENGTH),
+            "pd_infos",
+            &MONITOR_PD_INFO_ADDR.to_le_bytes(),
         )
-        .unwrap();
-
-    let vm_names: Vec<Rc<str>> = system
-        .protection_domains
-        .values()
-        .filter(|pd| pd.virtual_machine.is_some())
-        .flat_map(|pd_with_vm| {
-            let vm = pd_with_vm.virtual_machine.as_ref().unwrap();
-            let num_vcpus = vm.vcpus.len();
-            std::iter::repeat_n(vm.name.clone(), num_vcpus)
-        })
-        .collect();
-
-    let vm_names_len = match kernel_config.arch {
-        Arch::Aarch64 | Arch::Riscv64 => vm_names.len(),
-        // VM on x86 doesn't have a separate TCB.
-        Arch::X86_64 => 0,
-    };
-    monitor_elf
-        .write_symbol("vm_names_len", &vm_names_len.to_le_bytes())
-        .unwrap();
-    monitor_elf
-        .write_symbol(
-            "vm_names",
-            &monitor_serialise_names(&vm_names, MAX_VMS, VM_MAX_NAME_LENGTH),
-        )
-        .unwrap();
-
-    let mut pd_stack_bottoms: Vec<u64> = Vec::new();
-    for pd in system.protection_domains.values() {
-        let cur_stack_vaddr = kernel_config.pd_stack_bottom(pd.stack_size);
-        pd_stack_bottoms.push(cur_stack_vaddr);
-    }
-    monitor_elf
-        .write_symbol(
-            "pd_stack_bottom_addrs",
-            &monitor_serialise_u64_vec(&pd_stack_bottoms),
-        )
-        .unwrap();
+        .expect("symbol 'pd_infos_length' should exist in Microkit monitor");
 
     // *********************************
     // Step 2. Write ELF symbols for each PD

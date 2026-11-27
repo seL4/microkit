@@ -55,7 +55,7 @@ void puthex64(uint64_t val)
 
 void fail(char *s)
 {
-    puts("FAIL: ");
+    puts("MON|FAIL: ");
     puts(s);
     puts("\n");
     for (;;) {}
